@@ -98,11 +98,24 @@ function stubSource(origin: string, names: Set<string>): string {
   const header = `
 const __origin = ${JSON.stringify(origin)};
 const __warned = new Set();
+const __callCounts = new Map();
+// Per-path call cap — when a stub function is called this many times in a
+// row, we throw with the path. Catches infinite loops where control flow
+// routes through a stubbed module's return value.
+const __CALL_CAP = Number(process.env.TRUE_LOVE_STUB_CALL_CAP || 10000);
 function __warn(k) {
   if (__warned.has(k)) return;
   __warned.add(k);
   if (process.env.TRUE_LOVE_QUIET_STUBS !== '1') {
     console.warn('[true-love stub] ' + __origin + '.' + k + ' — feature not available in fork');
+  }
+}
+function __tick(p) {
+  const n = (__callCounts.get(p) || 0) + 1;
+  __callCounts.set(p, n);
+  if (n === __CALL_CAP) {
+    const err = new Error('[true-love stub loop-guard] ' + __origin + '.' + p + ' called ' + n + ' times — likely infinite loop consuming a stub. Replace this with a real implementation or set TRUE_LOVE_STUB_CALL_CAP=0 to disable.');
+    if (process.env.TRUE_LOVE_STUB_CALL_CAP !== '0') throw err;
   }
 }
 function __stub(p) {
@@ -115,10 +128,11 @@ function __stub(p) {
       if (prop === 'then') return undefined;
       if (prop === '__esModule') return true;
       if (typeof prop === 'symbol') return undefined;
+      __tick('get:' + p + '.' + String(prop));
       return __stub(p + '.' + String(prop));
     },
-    apply() { __warn(p + '()'); return __stub(p + '()'); },
-    construct() { __warn('new ' + p); return __stub('new ' + p); },
+    apply() { __warn(p + '()'); __tick('call:' + p); return __stub(p + '()'); },
+    construct() { __warn('new ' + p); __tick('new:' + p); return __stub('new ' + p); },
     has() { return true; },
   });
 }

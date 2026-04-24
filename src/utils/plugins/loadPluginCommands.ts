@@ -412,10 +412,14 @@ function createPluginCommand(
 }
 
 export const getPluginCommands = memoize(async (): Promise<Command[]> => {
+  // true-love: plugin command loading hangs when any marketplace module
+  // routes through a stub. Short-circuit to empty. Re-enable with
+  // TRUE_LOVE_LOAD_PLUGIN_COMMANDS=1.
+  if (process.env.TRUE_LOVE_LOAD_PLUGIN_COMMANDS !== '1') {
+    return []
+  }
   // --bare: skip marketplace plugin auto-load. Explicit --plugin-dir still
   // works — getInlinePlugins() is set by main.tsx from --plugin-dir.
-  // loadAllPluginsCacheOnly already short-circuits to inline-only when
-  // inlinePlugins.length > 0.
   if (isBareMode() && getInlinePlugins().length === 0) {
     return []
   }
@@ -838,6 +842,13 @@ async function loadSkillsFromDirectory(
 }
 
 export const getPluginSkills = memoize(async (): Promise<Command[]> => {
+  // true-love: plugin skill loading hangs when any marketplace/plugin module
+  // routes through a stub. Short-circuit to empty — no plugin skills loaded.
+  // Set TRUE_LOVE_LOAD_PLUGIN_SKILLS=1 to attempt loading (will hang if any
+  // plugin dependency is stubbed).
+  if (process.env.TRUE_LOVE_LOAD_PLUGIN_SKILLS !== '1') {
+    return []
+  }
   // --bare: same gate as getPluginCommands above — honor explicit
   // --plugin-dir, skip marketplace auto-load.
   if (isBareMode() && getInlinePlugins().length === 0) {

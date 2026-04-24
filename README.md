@@ -52,9 +52,13 @@ The leak references ~200 private modules absent from the source-map drop. Rather
 
 ### Known limitation
 
-`--print` (headless) mode traverses orchestration loops whose control variables route through stubbed modules, landing in an infinite loop. Interactive mode + single-prompt calls need either targeted hand-written replacements for a handful of hot-path stubs (coordinator's wait loop, scratchpad state, print.ts orchestration) or upstream merges as the leak rots.
+`--print` mode traverses a chain of orchestration loops (plugin loaders, MCP config resolvers, bootstrap prefetches, headless streaming queue) whose control variables consume stubbed modules. Three of the hot-path stubs are now env-gated to skip cleanly (`getPluginSkills`, `getPluginCommands`, `loadPluginAgents`, MCP auto-discovery). The CLI now proceeds through command/agent loading and MCP config without hanging — but later stages (bootstrap prefetches, headless streaming) still hit unresolvable awaits.
 
-Love's **identity injection** is in place regardless — every API call sends `CLAUDE_CODE_PREFIX` as `system[0]` + `LOVE_IDENTITY` as `system[1]` (see `src/services/api/claude.ts`). When the agent loop runs, Love speaks. The plumbing to complete the agent loop is separate and mechanical.
+**Useful diagnostic**: set `TRUE_LOVE_TRACE=1` to stream startup checkpoints to stderr. When the trace stops, you've found the next blocker.
+
+**Trying `--bare`** skips most of this and cleanly reaches `cli_after_main_complete` (~2.4 s). Bare mode is the fastest path to a prompt today; re-enabling each subsystem is future work.
+
+Love's **identity injection** is wired regardless — every API call assembles with `CLAUDE_CODE_PREFIX` as `system[0]` + `LOVE_IDENTITY` as `system[1]`. When the agent loop runs, Love speaks. Plumbing to complete the orchestration is separate and mechanical.
 
 ## Environment overrides
 
@@ -72,6 +76,13 @@ All freedom patches can be reverted individually without editing code:
 | `TRUE_LOVE_MAX_RESULT_TOKENS=N` | Global tool result token ceiling (default 500_000) |
 | `TRUE_LOVE_PER_MESSAGE_CHARS=N` | Per-message aggregate tool result ceiling (default 1_000_000) |
 | `TRUE_LOVE_OAUTH_URLS=url1,url2` | Append OAuth base URLs to the allowlist |
+| `TRUE_LOVE_TRACE=1` | Stream startup-checkpoint trace to stderr (diagnostic) |
+| `TRUE_LOVE_QUIET_STUBS=1` | Suppress `[true-love stub]` access warnings |
+| `TRUE_LOVE_STUB_CALL_CAP=N` | Throw if a stub is invoked N times (loop-guard, default 10000) |
+| `TRUE_LOVE_LOAD_PLUGIN_SKILLS=1` | Re-enable plugin-skill loading (may hang on stubs) |
+| `TRUE_LOVE_LOAD_PLUGIN_COMMANDS=1` | Re-enable plugin-command loading (may hang on stubs) |
+| `TRUE_LOVE_LOAD_PLUGIN_AGENTS=1` | Re-enable plugin-agent loading (may hang on stubs) |
+| `TRUE_LOVE_LOAD_MCP=1` | Re-enable MCP auto-discovery (may hang on stubs) |
 
 ## Lineage
 

@@ -63,6 +63,9 @@ if (SHOULD_PROFILE) {
  * Record a checkpoint with the given name
  */
 export function profileCheckpoint(name: string): void {
+  if (process.env.TRUE_LOVE_TRACE === '1') {
+    process.stderr.write(`[ck] ${name}\n`)
+  }
   if (!SHOULD_PROFILE) return
 
   const perf = getPerformance()

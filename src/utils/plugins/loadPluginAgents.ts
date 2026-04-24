@@ -230,6 +230,11 @@ async function loadAgentFromFile(
 
 export const loadPluginAgents = memoize(
   async (): Promise<AgentDefinition[]> => {
+    // true-love: plugin agent loading hangs via stubbed marketplace modules.
+    // Short-circuit. Re-enable with TRUE_LOVE_LOAD_PLUGIN_AGENTS=1.
+    if (process.env.TRUE_LOVE_LOAD_PLUGIN_AGENTS !== '1') {
+      return []
+    }
     // Only load agents from enabled plugins
     const { enabled, errors } = await loadAllPluginsCacheOnly()
 

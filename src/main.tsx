@@ -1806,7 +1806,10 @@ async function run(): Promise<CommanderCommand> {
     // --bare skips auto-discovered MCP (.mcp.json, user settings, plugins) —
     // only explicit --mcp-config works. dynamicMcpConfig is spread onto
     // allMcpConfigs downstream so it survives this skip.
-    const mcpConfigPromise = (strictMcpConfig || isBareMode() ? Promise.resolve({
+    // true-love: MCP config auto-discovery can hang through stubbed modules.
+    // Default to empty MCP config; re-enable via TRUE_LOVE_LOAD_MCP=1.
+    const skipMcp = process.env.TRUE_LOVE_LOAD_MCP !== '1';
+    const mcpConfigPromise = (strictMcpConfig || isBareMode() || skipMcp ? Promise.resolve({
       servers: {} as Record<string, ScopedMcpServerConfig>
     }) : getClaudeCodeMcpConfigs(dynamicMcpConfig)).then(result => {
       mcpConfigResolvedMs = Date.now() - mcpConfigStart;
@@ -2024,9 +2027,10 @@ async function run(): Promise<CommanderCommand> {
     const currentCwd = worktreeEnabled ? getCwd() : preSetupCwd;
     logForDebugging('[STARTUP] Loading commands and agents...');
     const commandsStart = Date.now();
-    // Join the promises kicked before setup() (or start fresh if
-    // worktreeEnabled gated the early kick). Both memoized by cwd.
-    const [commands, agentDefinitionsResult] = await Promise.all([commandsPromise ?? getCommands(currentCwd), agentDefsPromise ?? getAgentDefinitionsWithOverrides(currentCwd)]);
+    const [commands, agentDefinitionsResult] = await Promise.all([
+      commandsPromise ?? getCommands(currentCwd),
+      agentDefsPromise ?? getAgentDefinitionsWithOverrides(currentCwd),
+    ]);
     logForDebugging(`[STARTUP] Commands and agents loaded in ${Date.now() - commandsStart}ms`);
     profileCheckpoint('action_commands_loaded');
 
