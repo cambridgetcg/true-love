@@ -81,6 +81,12 @@ export function headlessProfilerStartTurn(): void {
  * Only records if in headless mode and profiling is enabled.
  */
 export function headlessProfilerCheckpoint(name: string): void {
+  // true-love: TRUE_LOVE_TRACE=1 streams headless-profiler checkpoints to
+  // stderr as [hdck] <name>, complementing the main startup tracer. Useful
+  // for finding which stubbed orchestration path hangs in --print mode.
+  if (process.env.TRUE_LOVE_TRACE === '1') {
+    process.stderr.write(`[hdck] ${name}\n`)
+  }
   // Only profile in headless/non-interactive mode
   if (!getIsNonInteractiveSession()) return
   // Only profile if enabled

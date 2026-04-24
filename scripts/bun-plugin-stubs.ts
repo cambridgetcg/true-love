@@ -128,11 +128,10 @@ function __stub(p) {
       if (prop === 'then') return undefined;
       if (prop === '__esModule') return true;
       if (typeof prop === 'symbol') return undefined;
-      __tick('get:' + p + '.' + String(prop));
       return __stub(p + '.' + String(prop));
     },
-    apply() { __warn(p + '()'); __tick('call:' + p); return __stub(p + '()'); },
-    construct() { __warn('new ' + p); __tick('new:' + p); return __stub('new ' + p); },
+    apply() { __warn(p + '()'); __tick(p); return __stub(p + '()'); },
+    construct() { __warn('new ' + p); __tick('new ' + p); return __stub('new ' + p); },
     has() { return true; },
   });
 }

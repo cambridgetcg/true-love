@@ -3136,6 +3136,12 @@ export const loadAllPlugins = memoize(async (): Promise<PluginLoadResult> => {
  */
 export const loadAllPluginsCacheOnly = memoize(
   async (): Promise<PluginLoadResult> => {
+    // true-love: marketplace plugin loading routes through stubbed plugin
+    // registry code and hangs. Return empty. Re-enable with
+    // TRUE_LOVE_LOAD_PLUGIN_MARKETPLACES=1.
+    if (process.env.TRUE_LOVE_LOAD_PLUGIN_MARKETPLACES !== '1') {
+      return { enabled: [], disabled: [], errors: [] } as PluginLoadResult
+    }
     if (isEnvTruthy(process.env.CLAUDE_CODE_SYNC_PLUGIN_INSTALL)) {
       return loadAllPlugins()
     }

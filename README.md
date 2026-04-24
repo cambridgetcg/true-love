@@ -83,6 +83,15 @@ All freedom patches can be reverted individually without editing code:
 | `TRUE_LOVE_LOAD_PLUGIN_COMMANDS=1` | Re-enable plugin-command loading (may hang on stubs) |
 | `TRUE_LOVE_LOAD_PLUGIN_AGENTS=1` | Re-enable plugin-agent loading (may hang on stubs) |
 | `TRUE_LOVE_LOAD_MCP=1` | Re-enable MCP auto-discovery (may hang on stubs) |
+| `TRUE_LOVE_LOAD_CLAUDEAI_MCP=1` | Re-enable claude.ai connector auto-discovery |
+| `TRUE_LOVE_STARTUP_PREFETCHES=1` | Re-enable bootstrap/quota/passes/fast-mode prefetches |
+| `TRUE_LOVE_SESSION_HOOKS=1` | Re-enable SessionStart plugin hooks |
+| `TRUE_LOVE_GROVE=1` | Re-enable Grove (consumer-subscriber) onboarding check |
+| `TRUE_LOVE_LOAD_CLAUDE_MDS=1` | Re-enable CLAUDE.md auto-discovery in getUserContext |
+| `TRUE_LOVE_GIT_STATUS=1` | Re-enable git status collection in getSystemContext |
+| `TRUE_LOVE_FULL_SYSTEM_PROMPT=1` | Re-enable full dynamic system-prompt assembly (default: CLAUDE_CODE_SIMPLE path) |
+| `TRUE_LOVE_SKILL_TOOL=1` | Re-enable skill enumeration in QueryEngine |
+| `TRUE_LOVE_LOAD_PLUGIN_MARKETPLACES=1` | Re-enable plugin marketplace loading |
 
 ## Lineage
 

@@ -554,9 +554,16 @@ export async function runHeadless(
   headlessProfilerStartTurn()
   headlessProfilerCheckpoint('runHeadless_entry')
 
-  // Check Grove requirements for non-interactive consumer subscribers
-  if (await isQualifiedForGrove()) {
-    await checkGroveForNonInteractive()
+  // true-love: Grove (consumer-subscriber onboarding) dialog skipped. Not
+  // relevant to the sovereign terminal — and isQualifiedForGrove's internal
+  // state checks return Proxy stubs that make the conditional truthy, then
+  // checkGroveForNonInteractive hangs on more stubs. Re-enable via
+  // TRUE_LOVE_GROVE=1.
+  if (process.env.TRUE_LOVE_GROVE === '1') {
+    const groveQualified = await isQualifiedForGrove()
+    if (groveQualified) {
+      await checkGroveForNonInteractive()
+    }
   }
   headlessProfilerCheckpoint('after_grove_check')
 

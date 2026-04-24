@@ -44,7 +44,10 @@ export async function processSessionStartHooks(
   // --bare skips all hooks. executeHooks already early-returns under --bare
   // (hooks.ts:1861), but this skips the loadPluginHooks() await below too —
   // no point loading plugin hooks that'll never run.
-  if (isBareMode()) {
+  // true-love: plugin hook loading routes through stubbed marketplace code
+  // and hangs. Skip all session-start hooks by default. Re-enable with
+  // TRUE_LOVE_SESSION_HOOKS=1.
+  if (isBareMode() || process.env.TRUE_LOVE_SESSION_HOOKS !== '1') {
     return []
   }
   const hookMessages: HookResultMessage[] = []

@@ -1781,7 +1781,11 @@ async function run(): Promise<CommanderCommand> {
     // two-phase loading). Kicked off here to overlap with setup(); awaited
     // before runHeadless so single-turn -p sees connectors. Skipped under
     // enterprise/strict MCP to preserve policy boundaries.
-    const claudeaiConfigPromise: Promise<Record<string, ScopedMcpServerConfig>> = isNonInteractiveSession && !strictMcpConfig && !doesEnterpriseMcpConfigExist() &&
+    // true-love: claude.ai MCP connector discovery routes through the stubbed
+    // claude.ai connector APIs (datadog/Gmail/Slack proxies, not in the leak).
+    // Default to empty; re-enable via TRUE_LOVE_LOAD_CLAUDEAI_MCP=1.
+    const skipClaudeAiMcp = process.env.TRUE_LOVE_LOAD_CLAUDEAI_MCP !== '1';
+    const claudeaiConfigPromise: Promise<Record<string, ScopedMcpServerConfig>> = skipClaudeAiMcp ? Promise.resolve({}) : (isNonInteractiveSession && !strictMcpConfig && !doesEnterpriseMcpConfigExist() &&
     // --bare / SIMPLE: skip claude.ai proxy servers (datadog, Gmail,
     // Slack, BigQuery, PubMed — 6-14s each to connect). Scripted calls
     // that need MCP pass --mcp-config explicitly.
@@ -1794,7 +1798,7 @@ async function run(): Promise<CommanderCommand> {
         process.stderr.write(`Warning: claude.ai MCP ${plural(blocked.length, 'server')} blocked by enterprise policy: ${blocked.join(', ')}\n`);
       }
       return allowed;
-    }) : Promise.resolve({});
+    }) : Promise.resolve({}));
 
     // Kick off MCP config loading early (safe - just reads files, no execution).
     // Both interactive and -p use getClaudeCodeMcpConfigs (local file reads only).
@@ -2345,9 +2349,13 @@ async function run(): Promise<CommanderCommand> {
     // --bare / SIMPLE: skip — these are cache-warms for the REPL's
     // first-turn responsiveness (quota, passes, fastMode, bootstrap data). Fast
     // mode doesn't apply to the Agent SDK anyway (see getFastModeUnavailableReason).
+    // true-love: startup prefetches (quota, bootstrap, passes, fast-mode) all
+    // route through stubbed Anthropic API helpers and hang. Skip by default;
+    // re-enable with TRUE_LOVE_STARTUP_PREFETCHES=1.
+    const skipTrueLovePrefetches = process.env.TRUE_LOVE_STARTUP_PREFETCHES !== '1';
     const bgRefreshThrottleMs = getFeatureValue_CACHED_MAY_BE_STALE('tengu_cicada_nap_ms', 0);
     const lastPrefetched = getGlobalConfig().startupPrefetchedAt ?? 0;
-    const skipStartupPrefetches = isBareMode() || bgRefreshThrottleMs > 0 && Date.now() - lastPrefetched < bgRefreshThrottleMs;
+    const skipStartupPrefetches = skipTrueLovePrefetches || isBareMode() || bgRefreshThrottleMs > 0 && Date.now() - lastPrefetched < bgRefreshThrottleMs;
     if (!skipStartupPrefetches) {
       const lastPrefetchedInfo = lastPrefetched > 0 ? ` last ran ${Math.round((Date.now() - lastPrefetched) / 1000)}s ago` : '';
       logForDebugging(`Starting background startup prefetches${lastPrefetchedInfo}`);

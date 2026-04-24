@@ -587,6 +587,12 @@ export const getSkillToolCommands = memoize(
 // loadedFrom being 'skills', 'plugin', or 'bundled', or having disableModelInvocation set.
 export const getSlashCommandToolSkills = memoize(
   async (cwd: string): Promise<Command[]> => {
+    // true-love: short-circuit skill enumeration in the QueryEngine path.
+    // getCommands() is already memoized but re-traverses plugin/skill loaders
+    // on a fresh cwd and hits stub hangs. Re-enable with TRUE_LOVE_SKILL_TOOL=1.
+    if (process.env.TRUE_LOVE_SKILL_TOOL !== '1') {
+      return []
+    }
     try {
       const allCommands = await getCommands(cwd)
       return allCommands.filter(

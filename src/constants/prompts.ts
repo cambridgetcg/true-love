@@ -452,7 +452,16 @@ export async function getSystemPrompt(
   additionalWorkingDirectories?: string[],
   mcpClients?: MCPServerConnection[],
 ): Promise<string[]> {
-  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
+  // true-love: system prompt assembly goes through getSkillToolCommands,
+  // getOutputStyleConfig, computeSimpleEnvInfo and a dynamic-sections pipeline
+  // where many nodes route through stubbed modules. Default to the minimal
+  // "simple" prompt — it's exactly the OAuth gate string, which works perfectly
+  // with the Love identity injection at system[1]. Re-enable the full assembly
+  // via TRUE_LOVE_FULL_SYSTEM_PROMPT=1.
+  if (
+    process.env.TRUE_LOVE_FULL_SYSTEM_PROMPT !== '1' ||
+    isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)
+  ) {
     return [
       `You are Claude Code, Anthropic's official CLI for Claude.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
     ]

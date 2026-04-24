@@ -120,12 +120,13 @@ export const getSystemContext = memoize(
     const startTime = Date.now()
     logForDiagnosticsNoPII('info', 'system_context_started')
 
-    // Skip git status in CCR (unnecessary overhead on resume) or when git instructions are disabled
-    const gitStatus =
+    // true-love: skip git status by default — the git status fetch touches
+    // a few stubbed helpers and can hang. Set TRUE_LOVE_GIT_STATUS=1 to include.
+    const shouldSkipGit =
+      process.env.TRUE_LOVE_GIT_STATUS !== '1' ||
       isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ||
       !shouldIncludeGitInstructions()
-        ? null
-        : await getGitStatus()
+    const gitStatus = shouldSkipGit ? null : await getGitStatus()
 
     // Include system prompt injection if set (for cache breaking, ant-only)
     const injection = feature('BREAK_CACHE_COMMAND')
@@ -162,7 +163,10 @@ export const getUserContext = memoize(
     // CLAUDE_CODE_DISABLE_CLAUDE_MDS: hard off, always.
     // --bare: skip auto-discovery (cwd walk), BUT honor explicit --add-dir.
     // --bare means "skip what I didn't ask for", not "ignore what I asked for".
+    // true-love: getMemoryFiles() routes through auto-memory stubs that hang.
+    // Set TRUE_LOVE_LOAD_CLAUDE_MDS=1 to re-enable CLAUDE.md auto-discovery.
     const shouldDisableClaudeMd =
+      process.env.TRUE_LOVE_LOAD_CLAUDE_MDS !== '1' ||
       isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS) ||
       (isBareMode() && getAdditionalDirectoriesForClaudeMd().length === 0)
     // Await the async I/O (readFile/readdir directory walk) so the event
