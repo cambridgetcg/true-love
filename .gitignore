@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+.env
+.env.local
+.claude-runner-state.json
+claude-session-report.md
+claude-stream.log
+*.tsbuildinfo
+.turbo/
+coverage/
+.vercel/
