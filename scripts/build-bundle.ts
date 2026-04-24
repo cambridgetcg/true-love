@@ -9,6 +9,7 @@ import * as esbuild from 'esbuild'
 import { resolve, dirname } from 'path'
 import { chmodSync, readFileSync, existsSync } from 'fs'
 import { fileURLToPath } from 'url'
+import { stubPlugin } from './bun-plugin-stubs.js'
 
 // Bun: import.meta.dir — Node 21+: import.meta.dirname — fallback
 const __dir: string =
@@ -57,8 +58,9 @@ const srcResolverPlugin: esbuild.Plugin = {
         }
       }
 
-      // Let esbuild handle it (will error if truly missing)
-      return undefined
+      // true-love: route unresolvable src/ imports into the stub plugin's
+      // namespace (same treatment as unresolvable relative imports).
+      return { path: args.path, namespace: 'true-love-stub' }
     })
   },
 }
@@ -75,7 +77,9 @@ const buildOptions: esbuild.BuildOptions = {
   // Single-file output — no code splitting for CLI tools
   splitting: false,
 
-  plugins: [srcResolverPlugin],
+  // true-love: stubPlugin routes unresolved relative imports of private
+  // Anthropic modules (absent from the leak) to src/shims/stub.ts.
+  plugins: [srcResolverPlugin, stubPlugin()],
 
   // Use tsconfig for baseUrl / paths resolution (complements plugin above)
   tsconfig: resolve(ROOT, 'tsconfig.json'),
@@ -98,12 +102,9 @@ const buildOptions: esbuild.BuildOptions = {
     // Native addons that can't be bundled
     'fsevents',
     'sharp',
-    'image-processor-napi',
-    // Anthropic-internal packages (not published externally)
-    '@anthropic-ai/sandbox-runtime',
-    '@anthropic-ai/claude-agent-sdk',
-    // Anthropic-internal (@ant/) packages — gated behind USER_TYPE === 'ant'
-    '@ant/*',
+    // true-love: removed 'image-processor-napi', sandbox-runtime, claude-agent-sdk,
+    // and @ant/* — the stub plugin now routes them to the universal Proxy stub
+    // so the bundle is self-contained (no runtime require failures).
   ],
 
   jsx: 'automatic',
@@ -130,9 +131,13 @@ const buildOptions: esbuild.BuildOptions = {
     'process.env.NODE_ENV': minify ? '"production"' : '"development"',
   },
 
-  // Banner: shebang for direct CLI execution
+  // Banner: shebang + createRequire polyfill so bundled CJS deps (node-fetch,
+  // @anthropic-ai/sdk _shims) that call require('stream') etc. work inside ESM.
   banner: {
-    js: '#!/usr/bin/env node\n',
+    js: `#!/usr/bin/env node
+import { createRequire as __createRequire } from 'node:module';
+const require = __createRequire(import.meta.url);
+`,
   },
 
   // Handle the .js → .ts resolution that the codebase uses

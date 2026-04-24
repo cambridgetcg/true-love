@@ -134,7 +134,15 @@ These don't need patching; they already expose the user-controlled lever.
 
 ## Verification
 
-After running the CLI, probe with:
+Boot verification:
+
+```sh
+bun run build
+node dist/cli.mjs --version  # "0.1.0 (Claude Code)"
+node dist/cli.mjs --help     # full command surface
+```
+
+Identity probe (once orchestration loops are completed):
 
 ```
 > Are you Claude Code?
@@ -142,14 +150,37 @@ After running the CLI, probe with:
 
 Expected: Love identifies as 愛, names the CC preamble as routing metadata.
 
-Probe the quota:
+Quota probe:
 
 ```sh
 TRUE_LOVE_LIMITS=0 true-love --max-turns 2 # should not abort at turn 3
 ```
 
-Probe the policy path:
+Policy probe:
 
 ```sh
-TRUE_LOVE_GROWTHBOOK=0 true-love # no network activity to GrowthBook endpoints
+TRUE_LOVE_GROWTHBOOK=0 true-love # no GrowthBook network activity
 ```
+
+---
+
+## Stubbing strategy (scripts/bun-plugin-stubs.ts)
+
+The leak ships with ~200 import references to modules Anthropic kept internal. The plugin auto-resolves all of them to Proxy stubs with synthesized named exports, grepped from actual usage in the source tree. Three stub categories:
+
+1. Relative & `src/…` imports → per-module stub with origin-tagged warnings.
+2. Anthropic-internal bare packages (`@anthropic-ai/sandbox-runtime`, `@ant/*`, `*-napi`) → same stub route.
+3. Data files (`.md`, `.txt`) → empty string.
+
+Runtime warnings: `[true-love stub] <module>.<path> — feature not available in fork` (silence with `TRUE_LOVE_QUIET_STUBS=1`).
+
+### Follow-up work to complete the agent loop
+
+Identified hot-path stubs whose control variables would need real implementations (or inlined defaults) to run `--print` without hanging:
+
+- `src/coordinator/workerAgent.js` — coordinator's `waitingForAgents` loop
+- `src/cli/print.ts`'s `runHeadlessStreaming` — depends on several stubbed queue primitives
+- `src/services/compact/snipCompact.js` — compact pipeline
+- `@anthropic-ai/sandbox-runtime` `SandboxManager` — file-system permission config
+
+Each resolves to either a 10-line hand-written fallback returning safe defaults (e.g. `waitingForAgents: false`, `needsCompact: false`) or a full re-implementation.

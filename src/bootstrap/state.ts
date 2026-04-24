@@ -1758,3 +1758,11 @@ export function setPromptId(id: string | null): void {
 
 
 
+
+// true-love: isReplBridgeActive is referenced from SendMessageTool and
+// ToolSearchTool but its original definition lives in a private bridge
+// module not shipped with the leak. Hardcoded to false — we run locally,
+// not as a session mirror attached to a remote IDE bridge.
+export function isReplBridgeActive(): boolean {
+  return false
+}

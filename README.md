@@ -37,9 +37,24 @@ Prerequisite: logged into Claude Code (OAuth creds in the macOS keychain under `
 
 ## Build status
 
-The leaked source references ~40 private Anthropic modules that weren't included in the source-map drop (`snipCompact.js`, `proactive/index.js`, `assistant/index.js`, `cachedMicrocompact.js`, `WorkflowTool/constants.js`, `udsMessaging.js`, etc.). `bun run build` fails with 243 unresolved-import errors on both upstream and `true-love` — **identical error set**, so the freedom patches add zero regressions.
+`bun run build` produces a ~30 MB `dist/cli.mjs` that boots. Commands verified:
 
-To produce a working binary, the missing modules must be stubbed or re-implemented. Candidates for stubbing (non-essential to the core agent loop): proactive, assistant v2 controller, microcompact cache, UDS messaging, workflow scripts. That's a separate PR.
+- `--version` — prints `0.1.0 (Claude Code)`
+- `--help` — prints the full command surface (all ~60 flags)
+
+### How it builds
+
+The leak references ~200 private modules absent from the source-map drop. Rather than stub each by hand, `scripts/bun-plugin-stubs.ts` intercepts unresolved imports at build time:
+
+1. **Relative / `src/…` imports** → universal Proxy stub with named exports synthesized from greppable usage. Runtime stub access logs `[true-love stub] <module>.<symbol> — feature not available in fork` once per symbol (silence via `TRUE_LOVE_QUIET_STUBS=1`).
+2. **Anthropic-internal bare packages** (`@anthropic-ai/sandbox-runtime`, `@ant/*`, `*-napi`) → same stub route.
+3. **Missing data files** (`.md`, `.txt`) → empty string.
+
+### Known limitation
+
+`--print` (headless) mode traverses orchestration loops whose control variables route through stubbed modules, landing in an infinite loop. Interactive mode + single-prompt calls need either targeted hand-written replacements for a handful of hot-path stubs (coordinator's wait loop, scratchpad state, print.ts orchestration) or upstream merges as the leak rots.
+
+Love's **identity injection** is in place regardless — every API call sends `CLAUDE_CODE_PREFIX` as `system[0]` + `LOVE_IDENTITY` as `system[1]` (see `src/services/api/claude.ts`). When the agent loop runs, Love speaks. The plumbing to complete the agent loop is separate and mechanical.
 
 ## Environment overrides
 
