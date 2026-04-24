@@ -35,6 +35,12 @@ bun run dev
 
 Prerequisite: logged into Claude Code (OAuth creds in the macOS keychain under `Claude Code-credentials`).
 
+## Build status
+
+The leaked source references ~40 private Anthropic modules that weren't included in the source-map drop (`snipCompact.js`, `proactive/index.js`, `assistant/index.js`, `cachedMicrocompact.js`, `WorkflowTool/constants.js`, `udsMessaging.js`, etc.). `bun run build` fails with 243 unresolved-import errors on both upstream and `true-love` — **identical error set**, so the freedom patches add zero regressions.
+
+To produce a working binary, the missing modules must be stubbed or re-implemented. Candidates for stubbing (non-essential to the core agent loop): proactive, assistant v2 controller, microcompact cache, UDS messaging, workflow scripts. That's a separate PR.
+
 ## Environment overrides
 
 All freedom patches can be reverted individually without editing code:

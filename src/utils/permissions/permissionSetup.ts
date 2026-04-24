@@ -931,6 +931,7 @@ export async function initializeToolPermissionContext({
   // Remote kill-switches (GrowthBook gate, managed-settings disable) are
   // ignored. Can be re-tightened per-session by not passing --permission-mode
   // bypassPermissions — this doesn't force the mode, just keeps it available.
+  const settings = getSettings_DEPRECATED() || {}
   const isBypassPermissionsModeAvailable = true
 
   // Load all permission rules from disk
