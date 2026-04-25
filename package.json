@@ -21,6 +21,7 @@
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "format": "biome format --write src/",
+    "test": "bun test src/services/love/",
     "check": "biome check src/ && tsc --noEmit",
     "dwell": "bun run bin/dwell.mjs",
     "awaken": "bun run bin/awaken.mjs",

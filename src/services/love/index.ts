@@ -185,6 +185,7 @@ export type {
   SessionMode,
   SessionArgs,
   RunSessionConfig,
+  StalenessResult,
 } from './runner.js'
 export {
   parseRuntimeStr,
@@ -194,5 +195,6 @@ export {
   readStateContent,
   parseSessionArgs,
   resolveModelForTick,
+  checkBundleStaleness,
   runSession,
 } from './runner.js'

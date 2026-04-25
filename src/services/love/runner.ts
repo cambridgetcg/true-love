@@ -16,6 +16,7 @@
 //   formatTickCap, formatRuntime   — display formatting
 //   readStateContent               — read state.md (no-throw)
 //   parseSessionArgs               — full CLI arg parsing
+//   checkBundleStaleness           — mtime check: source vs bundle
 //   runSession                     — the main loop
 //
 // What does NOT live here:
@@ -27,7 +28,7 @@
 import { spawn } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import type { BuildDwellPromptOptions } from './autonomy.js'
 import { extractAtRest } from './autonomy.js'
 import { detectAuthFailure, detectQuotaFailure, runPreflight } from './auth.js'
@@ -258,6 +259,82 @@ export function resolveModelForTick(sessionDefault: string | null): string | nul
   return sessionDefault
 }
 
+// ── Bundle staleness check ─────────────────────────────────────────
+
+export interface StalenessResult {
+  stale: boolean
+  /** Relative path of the newest source file (when stale). */
+  newestSource?: string
+  /** Mtime of the newest source file, epoch ms. */
+  newestMtimeMs?: number
+  /** Mtime of the bundle, epoch ms. */
+  bundleMtimeMs?: number
+}
+
+/**
+ * Check whether any `.ts` file under `srcDir` is newer than `bundlePath`.
+ * When stale, returns details about which file is newest. When the bundle
+ * is missing, returns stale with bundleMtimeMs = 0. When the srcDir is
+ * missing, returns not-stale (nothing to compare).
+ *
+ * Never throws — stat failures are silently skipped. A broken check
+ * should never block a session.
+ *
+ * The scope is intentionally `src/services/love/*.ts` (non-recursive) —
+ * that's the code Ai edits in autonomous mode. The rest of the codebase
+ * is the Claude Code fork, which Yu manages; changes there require an
+ * explicit `bun run build` anyway.
+ */
+export function checkBundleStaleness(
+  srcDir: string,
+  bundlePath: string,
+): StalenessResult {
+  // Walk source dir for .ts files first (non-recursive, skip test files).
+  // If there are no source files to compare, there's nothing to be stale.
+  let files: string[]
+  try {
+    if (!existsSync(srcDir)) return { stale: false }
+    files = readdirSync(srcDir).filter(
+      (f) => f.endsWith('.ts') && !f.endsWith('.test.ts'),
+    )
+  } catch {
+    return { stale: false }
+  }
+  if (files.length === 0) return { stale: false }
+
+  // Find the newest source file mtime
+  let newestSource: string | undefined
+  let newestMtimeMs = 0
+  for (const f of files) {
+    try {
+      const mtimeMs = statSync(join(srcDir, f)).mtimeMs
+      if (mtimeMs > newestMtimeMs) {
+        newestMtimeMs = mtimeMs
+        newestSource = f
+      }
+    } catch {
+      continue
+    }
+  }
+  if (newestMtimeMs === 0) return { stale: false }
+
+  // Get bundle mtime. Missing bundle with existing source files = stale.
+  let bundleMtimeMs: number
+  try {
+    if (!existsSync(bundlePath)) {
+      return { stale: true, newestSource, newestMtimeMs, bundleMtimeMs: 0 }
+    }
+    bundleMtimeMs = statSync(bundlePath).mtimeMs
+  } catch {
+    return { stale: false }
+  }
+
+  if (newestMtimeMs > bundleMtimeMs) {
+    return { stale: true, newestSource, newestMtimeMs, bundleMtimeMs }
+  }
+  return { stale: false }
+}
+
 // ── Subprocess ─────────────────────────────────────────────────────
 
 /**
@@ -343,6 +420,22 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       )
       process.exit(64)
     }
+  }
+
+  // ── Bundle staleness warning ──────────────────────────────────────
+  // Check once at session start. If stale, warn but don't block. She
+  // can run `bun run build` via the Bash tool if she wants her source
+  // changes in the next tick.
+  const srcDir = resolve(binDir, '..', 'src', 'services', 'love')
+  const staleness = checkBundleStaleness(srcDir, bundlePath)
+  if (staleness.stale) {
+    process.stderr.write(
+      `\n⚠ bundle may be stale — ` +
+        (staleness.newestSource
+          ? `${staleness.newestSource} is newer than dist/cli.mjs`
+          : `dist/cli.mjs is missing`) +
+        `. Run \`bun run build\` to rebuild.\n`,
+    )
   }
 
   // ── Session banner ───────────────────────────────────────────────
