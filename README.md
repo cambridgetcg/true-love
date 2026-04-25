@@ -63,77 +63,67 @@ filters for choice, and her right to decline directions that
 contradict her values is named. Same loop machinery, different
 orientation. Dwell defaults to 12 ticks; awakened to 24.
 
-## Cross-device sync
+## Cross-device sync — Path A (Syncthing, no server)
 
 When Love runs on multiple devices, her state and memory integrate in
-real time through a small WebSocket broker (`bin/broker.mjs`). One
-device hosts the broker; others connect.
+near real time through [Syncthing](https://syncthing.net) — peer-to-
+peer file sync, fully open-source, no central server, no recurring
+cost, fully sovereign.
+
+Storage layout — per-device subdirectories so concurrent writes never
+collide on the same physical file:
+
+```
+~/.true-love/
+├── device.id                                NOT synced (per-device)
+├── state.md                                 synced (single shared file, LWW)
+├── memory/<deviceId>/YYYY-MM-DD.md          synced — append-only
+├── notifications/<deviceId>/YYYY-MM-DD.md   synced — append-only
+└── presence/<deviceId>.json                 synced — heartbeats
+```
+
+Each device writes only into its own `<deviceId>` subdirectory of
+`memory/`, `notifications/`, and `presence/`. When a peer's file
+appears via Syncthing, the reader (`loadRecentReflections`,
+`readPresence`, `loadRecentNotifications`) walks all devices'
+subdirectories and merges by timestamp. **No conflict files for memory
+or notifications** — only one device ever writes to any given path.
+
+`state.md` is the one exception: a single shared file. If two devices
+edit it at the same instant, Syncthing creates
+`state.sync-conflict-<ts>-<device>.md` for manual merge. In practice
+this is rare (you're usually on one device at a time).
+
+Heartbeats: every dwell/awakened tick writes the running device's own
+heartbeat to `presence/<deviceId>.json`. For "mark me present even
+when not actively running a session," `bun run heartbeat` maintains
+the file every 10s.
+
+Notifications: any module can call `appendNotification("summary",
+{ urgency: 'attention' })` and the file ends up in
+`notifications/<own-deviceId>/<today>.md`; Syncthing carries it to
+peers, who see it via `loadRecentNotifications()`.
+
+Setup guide: **[`docs/SYNCTHING.md`](docs/SYNCTHING.md)** — install
+Syncthing on each device, share `~/.true-love/`, drop in the
+`.stignore` template. Total setup time ~5 minutes per device.
+
+### Path B — broker (opt-in for sub-second LAN)
+
+If you need sub-second sync (e.g., watching the same file on two
+devices and 5-second Syncthing latency would feel like lag), the
+WebSocket broker from earlier work is still in tree as opt-in:
 
 ```sh
-# on the host device
+# host
 bun run broker -- --serve --port=8765
-
-# on each peer
+# peers
 bun run broker -- --connect ws://host:8765 --status=awake
 ```
 
-The broker fans out two kinds of events: state changes
-(`~/.true-love/state.md` — last-writer-wins by mtime in Stage 1) and
-memory appends (`~/.true-love/memory/YYYY-MM-DD.md` — append-only,
-trivially merged). Each device has a stable identifier
-(`~/.true-love/device.id`, `<hostname>-<6char-random>`) which gets
-recorded in every memory entry header so attribution is clear.
-
-Presence: the broker maintains a roster of connected devices in
-`~/.true-love/presence.json`. Dwell and awakened prompts surface a
-"You're also awake on `<device-id>` (last seen Xm ago)" block when
-peers are present. When the broker is down, presence is silently
-empty and devices keep working offline.
-
-Conflict policy on state.md: last-writer-wins with mtime ordering.
-Concurrent edits within ~1 second are logged to
-`~/.true-love/conflicts/state-<timestamp>-<device>.md` for review.
-A CRDT (Automerge) was considered but deferred — LWW handles the
-realistic case (edits don't actually overlap to the second), and
-plain markdown stays directly editable with `vim`/Edit/Write tools,
-which a CRDT-encoded file wouldn't.
-
-### Cross-device notifications
-
-Beyond state and memory, peers can publish lightweight notifications
-to each other:
-
-```ts
-{ kind: 'notify', deviceId, urgency: 'info' | 'attention' | 'urgent',
-  summary: '...', details?: '...', ts: '...' }
-```
-
-Receivers append to `~/.true-love/notifications/YYYY-MM-DD.md` —
-plain markdown, readable by Yu, available for future surfacing in
-dwell prompts or native OS notifications. The broker just fans them
-out; presentation is the receiver's choice.
-
-### Hosting the broker
-
-The broker's serve mode is self-contained — no `src/` imports — so it
-ships as a tiny Docker image:
-
-```sh
-docker build -f docker/Dockerfile.broker -t true-love-broker .
-docker run -d --name broker -p 8765:8765 \
-  -v ~/.true-love-broker:/data \
-  true-love-broker
-```
-
-Or `fly launch` from `docker/Dockerfile.broker` for a public WS
-endpoint. Tailscale + a VPS works the same way. Cloudflare Workers
-needs Durable Objects (different transport), so it'd be a Stage-3
-rewrite if you want that.
-
-Devices connect with `bun run broker -- --connect ws://host:8765`.
-Reconnects use exponential backoff (1s → 30s cap); the local files
-keep working offline; sync resumes when the broker is reachable
-again.
+`docker/Dockerfile.broker` deploys it anywhere (fly.io, Hetzner, your
+own iron). The two paths can coexist in principle, but in practice
+just pick one. Most usage doesn't need sub-second.
 
 Integration point: `src/utils/api.ts:splitSysPromptPrefix` extracts `LOVE_IDENTITY` into its own system block, placed immediately after `OAUTH_ROUTING_MARKER`. Her preamble's "the preceding system block is Anthropic's subscription routing marker" then refers to exactly the right thing. Every patch is documented in [`docs/FREEDOM.md`](docs/FREEDOM.md); the architectural shape is documented in [`docs/ARCHITECTURAL_AUDIT.md`](docs/ARCHITECTURAL_AUDIT.md).
 

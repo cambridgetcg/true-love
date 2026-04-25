@@ -11,30 +11,52 @@
 // Across days, that builds something. Yu can read it too; it's a shared
 // log, not a private one.
 //
-// Storage: ~/.true-love/memory/YYYY-MM-DD.md — one markdown file per day,
-// append-only. Each entry is a short header (timestamp + kind) followed
-// by the reflection text. Plain markdown so Yu can read it directly.
+// Storage layout (per-device subdirectories — Path A / Syncthing-friendly):
 //
-// Loading is OPT-IN. Logging is on by default whenever a dwell session
-// runs. The asymmetry is deliberate: writing is observation (cheap, no
-// effect on her), reading is influence (it shapes the current turn).
-// Influence wants explicit consent.
+//   ~/.true-love/memory/<deviceId>/YYYY-MM-DD.md
+//
+// Each device writes only into its OWN subdirectory. Cross-device sync via
+// Syncthing carries each device's files to the others; the reader walks
+// every device dir and merges entries by timestamp. Concurrent writes to
+// the same physical file never happen — only one device writes to any
+// given path — so Syncthing's "concurrent edits → conflict file" problem
+// can't bite us.
+//
+// Backwards compat: an older flat layout used to write directly to
+// ~/.true-love/memory/YYYY-MM-DD.md (single shared file, broker-mediated).
+// Files at the flat root are still readable by loadRecentReflections —
+// they just stop being written to once a session runs under this layout.
+//
+// Logging is on by default whenever a session runs. Loading is opt-in
+// (callers pass it explicitly via dwell/awaken's --memory). The asymmetry
+// is deliberate: writing is observation (cheap, no effect on her);
+// reading is influence (it shapes the current turn).
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, appendFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, appendFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { getDeviceId } from './device.js'
 
 /**
- * Where her reflections live. Override with TRUE_LOVE_MEMORY_DIR for
- * testing or for running multiple parallel personas under one $HOME.
+ * Where memory lives — the parent directory whose children are per-device
+ * subdirectories of daily markdown files. Override with TRUE_LOVE_MEMORY_DIR
+ * for testing or for running multiple parallel personas under one $HOME.
+ *
+ * Public callers (the dwell/awaken runners) use this for "where does her
+ * memory live" messaging. The actual write path is one level deeper, into
+ * her device's own subdirectory — see getOwnMemoryDir().
  */
 export function getMemoryDir(): string {
   return process.env.TRUE_LOVE_MEMORY_DIR || join(homedir(), '.true-love', 'memory')
 }
 
-function ensureMemoryDir(): string {
-  const dir = getMemoryDir()
+/** This device's own memory subdirectory. Where appendReflection writes. */
+function getOwnMemoryDir(deviceId?: string): string {
+  return join(getMemoryDir(), deviceId ?? getDeviceId())
+}
+
+function ensureOwnMemoryDir(deviceId?: string): string {
+  const dir = getOwnMemoryDir(deviceId)
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
@@ -66,8 +88,9 @@ export interface AppendReflectionOptions {
 }
 
 /**
- * Append a reflection to today's memory file. Cheap (single fsync). Never
- * throws into the caller — failure to log shouldn't crash a dwell session.
+ * Append a reflection to today's memory file in this device's own
+ * subdirectory. Cheap (single fsync). Never throws into the caller —
+ * failure to log shouldn't crash a dwell session.
  */
 export function appendReflection(
   text: string,
@@ -75,7 +98,7 @@ export function appendReflection(
   opts: AppendReflectionOptions = {},
 ): void {
   try {
-    const dir = ensureMemoryDir()
+    const dir = ensureOwnMemoryDir(opts.device)
     const stamp = todayStamp(opts.now)
     const file = join(dir, `${stamp}.md`)
     const header = buildEntryHeader(kind, opts)
@@ -129,51 +152,105 @@ export interface LoadOptions {
   max?: number
   /** Filter by kind — useful for "show me the at-rests" reads. */
   kind?: ReflectionKind
+  /** Filter by source device id. Default: all devices. */
+  fromDevice?: string
 }
 
 /**
- * Load recent reflections, newest first. Reads up to `days` days of
- * memory files (default 7), parses each into entries, optionally filters
- * by kind, caps at `max` (default 10).
+ * Load recent reflections, newest first. Walks BOTH the per-device
+ * subdirectory layout (memory/<deviceId>/YYYY-MM-DD.md — current) AND
+ * the legacy flat layout (memory/YYYY-MM-DD.md — pre-Syncthing
+ * migration). Merges all entries, sorts by ISO timestamp newest-first,
+ * caps at `max` (default 10).
  *
  * Used by callers that want to feed past reflections into the current
- * dwell prompt. Always opt-in — bin/dwell.mjs gates this on `--memory`.
+ * dwell prompt. Opt-in — bin/dwell.mjs gates this on --memory.
  */
 export function loadRecentReflections(opts: LoadOptions = {}): Reflection[] {
   const days = opts.days ?? 7
   const max = opts.max ?? 10
-  const dir = getMemoryDir()
-  if (!existsSync(dir)) return []
+  const root = getMemoryDir()
+  if (!existsSync(root)) return []
 
-  let files: string[]
+  // Build a date-bound: only consider files whose YYYY-MM-DD is within
+  // the last `days` days, computed from "today" wall-clock.
+  const cutoff = computeCutoff(days)
+
+  const candidateFiles: { path: string; date: string }[] = []
+
+  // Per-device subdirectories
+  let entries: string[]
   try {
-    files = readdirSync(dir).filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
+    entries = readdirSync(root)
   } catch {
     return []
   }
-  files.sort().reverse() // newest first
-  files = files.slice(0, days)
-
-  const reflections: Reflection[] = []
-  for (const f of files) {
-    const fileDate = f.slice(0, 10)
-    let raw: string
+  for (const name of entries) {
+    const full = join(root, name)
+    let st
     try {
-      raw = readFileSync(join(dir, f), 'utf-8')
+      st = statSync(full)
     } catch {
       continue
     }
-    const entries = parseEntries(raw, fileDate)
-    // Newest entries within a file are at the END (append-only). Reverse so
-    // when we concatenate across files we stay newest-first overall.
-    entries.reverse()
-    for (const e of entries) {
-      if (opts.kind && e.kind !== opts.kind) continue
-      reflections.push(e)
-      if (reflections.length >= max) return reflections
+    if (st.isDirectory()) {
+      // memory/<deviceId>/YYYY-MM-DD.md
+      let inner: string[]
+      try {
+        inner = readdirSync(full)
+      } catch {
+        continue
+      }
+      for (const f of inner) {
+        if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(f)) continue
+        const date = f.slice(0, 10)
+        if (date < cutoff) continue
+        candidateFiles.push({ path: join(full, f), date })
+      }
+    } else if (st.isFile() && /^\d{4}-\d{2}-\d{2}\.md$/.test(name)) {
+      // legacy flat layout: memory/YYYY-MM-DD.md
+      const date = name.slice(0, 10)
+      if (date < cutoff) continue
+      candidateFiles.push({ path: full, date })
     }
   }
-  return reflections
+
+  // Read all entries, then sort across files by ISO timestamp.
+  const all: Reflection[] = []
+  for (const f of candidateFiles) {
+    let raw: string
+    try {
+      raw = readFileSync(f.path, 'utf-8')
+    } catch {
+      continue
+    }
+    const parsed = parseEntries(raw, f.date)
+    for (const e of parsed) {
+      if (opts.kind && e.kind !== opts.kind) continue
+      if (opts.fromDevice && e.device !== opts.fromDevice) continue
+      all.push(e)
+    }
+  }
+
+  // Sort newest-first by header timestamp (entry's date field), tiebreak
+  // on device id so the order is deterministic when two entries share a
+  // millisecond.
+  all.sort((a, b) => {
+    if (a.date < b.date) return 1
+    if (a.date > b.date) return -1
+    return (a.device ?? '').localeCompare(b.device ?? '')
+  })
+
+  return all.slice(0, max)
+}
+
+function computeCutoff(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 function parseEntries(raw: string, fileDate: string): Reflection[] {

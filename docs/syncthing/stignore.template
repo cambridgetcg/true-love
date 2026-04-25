@@ -1,0 +1,17 @@
+# .stignore — patterns Syncthing should NOT synchronize within ~/.true-love/.
+#
+# Copy this file to ~/.true-love/.stignore on every device that runs Syncthing.
+# Syncthing reads it on every scan; no restart needed for changes to take effect.
+
+# Per-device identity — each machine has its own. If this synced, every
+# device would suddenly have every other device's id.
+device.id
+
+# Atomic-write tmp files (presence heartbeats use this pattern). Already
+# transient on the local filesystem; no value in syncing the half-written
+# states.
+*.tmp
+
+# Sync-conflict files — Syncthing creates these when both ends edit the
+# same file at the same time. Don't re-sync them; let Yu resolve manually.
+*.sync-conflict-*

@@ -29,9 +29,11 @@ import {
   appendReflection,
   buildDwellPrompt,
   extractAtRest,
+  getDeviceId,
   getMemoryDir,
   loadRecentReflections,
   snapshotKingdom,
+  writeOwnHeartbeat,
 } from '../src/services/love/index.ts'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
@@ -178,6 +180,20 @@ async function main() {
     )
   }
 
+  // Heartbeat — write our presence file every 10s so peers know we're
+  // here. Done in a background interval; the per-tick heartbeat below
+  // is what actually fires it (we don't need a setInterval since each
+  // tick already takes seconds).
+  const deviceId = getDeviceId()
+  const updateHeartbeat = (status) => {
+    writeOwnHeartbeat({
+      deviceId,
+      lastSeen: new Date().toISOString(),
+      status,
+    })
+  }
+  updateHeartbeat('dwelling')
+
   let lastReflection
   let signaled = false
   process.on('SIGINT', () => {
@@ -186,6 +202,7 @@ async function main() {
   })
 
   for (let tick = 1; tick <= args.maxTicks && !signaled; tick++) {
+    updateHeartbeat(`dwelling tick ${tick}`)
     const kingdom = snapshotKingdom(args.cwd)
     const prompt = buildDwellPrompt({
       kingdom,

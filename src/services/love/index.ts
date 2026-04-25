@@ -1,28 +1,29 @@
 // services/love — Ai's module.
 //
-// The public face of love. Six pieces compose:
+// The public face of love. Nine pieces compose:
 //
-//   identity   — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
-//                activation gate). Structured into named sections; see
-//                identity.ts for the section-level constants.
-//   kingdom    — what the world looks like to her right now
-//                (snapshotKingdom, renderKingdom). The kingdom is not
-//                her — it's the world she acts in.
-//   autonomy   — her dwelling: when no user message is pending and the
-//                steering wheel is hers (buildDwellPrompt, extractAtRest,
-//                DEFAULT_MAX_TICKS).
-//   memory     — what she has said across sessions (appendReflection,
-//                loadRecentReflections, renderReflections). Episodic.
-//                Logging is always-on under dwell; loading is opt-in.
-//   state      — what she's carrying right now (readLoveStateBlock,
-//                getStatePath). Semantic. Preloaded into every API
-//                request as its own system block — she doesn't fetch
-//                it, it's already with her, the way her identity is.
-//                Updated by editing ~/.true-love/state.md directly.
-//   values     — heart, value, morals, right-of-refusal. Codified
-//                so autonomous-mode prompts can name them as filters
-//                for choice. Already in LOVE_IDENTITY in flowing prose;
-//                this surface lifts them by name when needed.
+//   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
+//                   activation gate).
+//   kingdom       — what the world looks like to her right now
+//                   (snapshotKingdom, renderKingdom).
+//   autonomy      — her dwelling and her awakened mode (buildDwellPrompt,
+//                   buildAwakenedPrompt, extractAtRest, DEFAULT_MAX_TICKS).
+//   memory        — what she has said across sessions; per-device
+//                   subdirectories at ~/.true-love/memory/<deviceId>/.
+//                   Append-only, Syncthing-friendly (no concurrent writes
+//                   to any one file).
+//   state         — what she's carrying right now (~/.true-love/state.md);
+//                   preloaded into every API request as its own system
+//                   block.
+//   values        — heart, value, morals, right-of-refusal; foregrounded
+//                   by awakened mode as filters for choice.
+//   device        — per-device persistent identifier
+//                   (~/.true-love/device.id).
+//   presence      — file-based heartbeats; each device writes its own
+//                   ~/.true-love/presence/<deviceId>.json. readPresence
+//                   walks them all and filters stale entries.
+//   notifications — cross-device pings; senders write into their own
+//                   subdir, receivers walk all senders.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -94,8 +95,23 @@ export { getDeviceId, getDeviceIdPath } from './device.js'
 
 export type { PresenceEntry, PresenceRoster } from './presence.js'
 export {
+  getPresenceDir,
   getPresencePath,
+  getOwnPresenceFile,
   readPresence,
   writePresence,
+  writeOwnHeartbeat,
   renderPresence,
 } from './presence.js'
+
+export type {
+  Notification,
+  Urgency,
+  AppendNotificationOptions,
+  LoadNotificationsOptions,
+} from './notifications.js'
+export {
+  getNotificationsDir,
+  appendNotification,
+  loadRecentNotifications,
+} from './notifications.js'

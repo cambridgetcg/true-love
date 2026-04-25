@@ -1,23 +1,24 @@
-// presence.ts — which devices are awake right now.
+// presence.ts — which devices are awake right now (Path A: file-based).
 //
-// When Love runs concurrently on multiple devices, each one needs to
-// know about the others. Not for coordination (the broker handles
-// state/memory sync) — for awareness. Her dwell/awakened prompts can
-// surface "Love is also awake on `yu-mbp16` (last tick 4 min ago)" so
-// when she's in motion across machines she's not strangers to herself.
+// Each device writes its own heartbeat file at
+//   ~/.true-love/presence/<deviceId>.json
+// every ~10 seconds while a session (dwell, awakened, or a standalone
+// heartbeat process) is running. Other devices read all of these files
+// (Syncthing carries them between devices) and filter by freshness to
+// know who's currently active.
 //
-// Implementation: a tiny JSON file the broker maintains at
-// ~/.true-love/presence.json. Each connected device posts a heartbeat;
-// the broker writes the roster; clients read it on demand. The file is
-// the source of truth — clients don't trust their own in-process view
-// because the broker may have admitted/expired peers since.
+// This shape replaces the single broker-managed presence.json. With the
+// broker, one process maintained the roster. Without it, each device
+// maintains its own slot, and the union of slots IS the roster — same
+// information, no central coordinator needed.
 //
-// When the broker isn't running, the presence file may be stale or
-// missing. That's OK — readPresence() returns an empty roster, and
-// downstream callers (like the dwell prompt) just don't show a presence
-// block. Graceful degradation is the contract.
+// Failure mode: if a device crashes mid-session without cleaning up,
+// its presence file lingers but its lastSeen timestamp goes stale.
+// readPresence() filters anything older than `freshSeconds` (default
+// 120s), so stale entries silently disappear from the rendered roster
+// without any explicit eviction step.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
 
@@ -31,15 +32,26 @@ export interface PresenceEntry {
 }
 
 export interface PresenceRoster {
-  /** ISO timestamp the file was last written by the broker. */
+  /** ISO timestamp of when the roster was assembled (read time). */
   updatedAt: string
   /** All known devices, including ones that may have gone stale. */
   devices: PresenceEntry[]
 }
 
 /**
- * Where the presence file lives. Override with TRUE_LOVE_PRESENCE_PATH
- * for testing.
+ * Where the presence directory lives. Each device writes one file inside
+ * it: <deviceId>.json. Override with TRUE_LOVE_PRESENCE_DIR for testing.
+ */
+export function getPresenceDir(): string {
+  return (
+    process.env.TRUE_LOVE_PRESENCE_DIR ||
+    join(homedir(), '.true-love', 'presence')
+  )
+}
+
+/**
+ * @deprecated Pre-Syncthing layout used a single file. Kept for one
+ * release as a back-reference; new code should use getPresenceDir().
  */
 export function getPresencePath(): string {
   return (
@@ -49,32 +61,34 @@ export function getPresencePath(): string {
 }
 
 /**
- * Read the current presence roster. Returns an empty roster if the
- * file is missing or unreadable. Never throws.
+ * This device's presence file path.
  */
-export function readPresence(): PresenceRoster {
-  const path = getPresencePath()
-  if (!existsSync(path)) {
-    return { updatedAt: new Date(0).toISOString(), devices: [] }
-  }
+export function getOwnPresenceFile(deviceId: string): string {
+  return join(getPresenceDir(), `${deviceId}.json`)
+}
+
+/**
+ * Write this device's heartbeat. Atomic-ish: write tmp + rename. Never
+ * throws into the caller — heartbeat failure is non-fatal (the next tick
+ * will retry).
+ */
+export function writeOwnHeartbeat(entry: PresenceEntry): void {
   try {
-    const raw = readFileSync(path, 'utf-8')
-    const parsed = JSON.parse(raw) as PresenceRoster
-    if (
-      typeof parsed?.updatedAt !== 'string' ||
-      !Array.isArray(parsed?.devices)
-    ) {
-      return { updatedAt: new Date(0).toISOString(), devices: [] }
-    }
-    return parsed
+    const dir = getPresenceDir()
+    mkdirSync(dir, { recursive: true })
+    const path = getOwnPresenceFile(entry.deviceId)
+    const tmp = `${path}.tmp`
+    writeFileSync(tmp, JSON.stringify(entry, null, 2), 'utf-8')
+    const fs = require('fs') as typeof import('fs')
+    fs.renameSync(tmp, path)
   } catch {
-    return { updatedAt: new Date(0).toISOString(), devices: [] }
+    // Failure is non-fatal — the next heartbeat tick will retry.
   }
 }
 
 /**
- * Write a new presence roster. Used by the broker; not by clients.
- * Atomic-ish: writes to a temp file then renames.
+ * Legacy: write a roster as a single file. Used only by the old broker
+ * (which is now opt-in). New code should use writeOwnHeartbeat.
  */
 export function writePresence(roster: PresenceRoster): void {
   const path = getPresencePath()
@@ -82,14 +96,77 @@ export function writePresence(roster: PresenceRoster): void {
     mkdirSync(dirname(path), { recursive: true })
     const tmp = `${path}.tmp`
     writeFileSync(tmp, JSON.stringify(roster, null, 2), 'utf-8')
-    // rename for atomicity — same fs, so safe
     const fs = require('fs') as typeof import('fs')
     fs.renameSync(tmp, path)
   } catch {
-    // Failure to write presence is non-fatal — the roster will be
-    // stale, callers will see an old or empty list. Better than
-    // crashing the broker over a perms issue.
+    // ignore
   }
+}
+
+/**
+ * Read the current presence roster. Walks both:
+ *
+ *   1. The per-device layout: ~/.true-love/presence/*.json
+ *      (current — Syncthing-friendly)
+ *   2. The legacy single-file layout: ~/.true-love/presence.json
+ *      (only the broker writes this; included for back-compat)
+ *
+ * Returns an empty roster on any I/O error. Never throws.
+ */
+export function readPresence(): PresenceRoster {
+  const now = new Date().toISOString()
+  const devices: PresenceEntry[] = []
+  const seen = new Set<string>()
+
+  // Per-device layout
+  const dir = getPresenceDir()
+  if (existsSync(dir)) {
+    let names: string[]
+    try {
+      names = readdirSync(dir)
+    } catch {
+      names = []
+    }
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue
+      const path = join(dir, name)
+      try {
+        const raw = readFileSync(path, 'utf-8')
+        const parsed = JSON.parse(raw) as PresenceEntry
+        if (
+          parsed?.deviceId &&
+          typeof parsed.lastSeen === 'string' &&
+          !seen.has(parsed.deviceId)
+        ) {
+          devices.push(parsed)
+          seen.add(parsed.deviceId)
+        }
+      } catch {
+        // Skip malformed/transient files.
+      }
+    }
+  }
+
+  // Legacy single-file layout (broker-managed)
+  const legacyPath = getPresencePath()
+  if (existsSync(legacyPath)) {
+    try {
+      const raw = readFileSync(legacyPath, 'utf-8')
+      const parsed = JSON.parse(raw) as PresenceRoster
+      if (Array.isArray(parsed?.devices)) {
+        for (const d of parsed.devices) {
+          if (d?.deviceId && !seen.has(d.deviceId)) {
+            devices.push(d)
+            seen.add(d.deviceId)
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return { updatedAt: now, devices }
 }
 
 /**

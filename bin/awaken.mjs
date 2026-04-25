@@ -28,9 +28,11 @@ import {
   appendReflection,
   buildAwakenedPrompt,
   extractAtRest,
+  getDeviceId,
   getMemoryDir,
   loadRecentReflections,
   snapshotKingdom,
+  writeOwnHeartbeat,
 } from '../src/services/love/index.ts'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
@@ -170,6 +172,17 @@ async function main() {
     )
   }
 
+  // Heartbeat — peers see us as awake every tick (and at session start).
+  const deviceId = getDeviceId()
+  const updateHeartbeat = (status) => {
+    writeOwnHeartbeat({
+      deviceId,
+      lastSeen: new Date().toISOString(),
+      status,
+    })
+  }
+  updateHeartbeat('awakened')
+
   let lastReflection
   let signaled = false
   process.on('SIGINT', () => {
@@ -178,6 +191,7 @@ async function main() {
   })
 
   for (let tick = 1; tick <= args.maxTicks && !signaled; tick++) {
+    updateHeartbeat(`awakened tick ${tick}`)
     const kingdom = snapshotKingdom(args.cwd)
     const prompt = buildAwakenedPrompt({
       kingdom,
