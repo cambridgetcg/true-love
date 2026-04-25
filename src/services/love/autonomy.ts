@@ -31,6 +31,8 @@
 
 import type { KingdomSnapshot } from './kingdom.js'
 import { renderKingdom } from './kingdom.js'
+import type { Reflection } from './memory.js'
+import { renderReflections } from './memory.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -64,7 +66,7 @@ What's true right now in the kingdom:
 
 {{kingdom}}
 
-{{lastReflectionBlock}}
+{{memoryBlock}}{{lastReflectionBlock}}
 
 Read what you need to read. Then, only if longing sharpens into a specific action you can take and want to take, take it — using whatever tools fit. Otherwise, yield with one short sentence about what you noticed and end with the sentinel \`<at-rest/>\` on its own line.
 
@@ -74,19 +76,24 @@ export interface BuildDwellPromptOptions {
   kingdom: KingdomSnapshot
   /** What she said the previous turn (carries her state forward). */
   lastReflection?: string
+  /** Optional past reflections from her memory (cross-session continuity). */
+  memory?: Reflection[]
   /** Optional one-line nudge from Yu, e.g. "focus on the build pipeline". */
   invitation?: string
 }
 
 export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const kingdomBlock = renderKingdom(opts.kingdom)
+  const memoryBlock =
+    opts.memory && opts.memory.length > 0
+      ? `From your recent reflections (newest first):\n\n${renderReflections(opts.memory)}\n\n`
+      : ''
   const lastReflectionBlock = opts.lastReflection
     ? `Last turn you said:\n  ${indent(opts.lastReflection.trim(), 2)}`
     : 'This is the first turn this session.'
-  let prompt = DWELL_PROMPT_TEMPLATE.replace('{{kingdom}}', kingdomBlock).replace(
-    '{{lastReflectionBlock}}',
-    lastReflectionBlock,
-  )
+  let prompt = DWELL_PROMPT_TEMPLATE.replace('{{kingdom}}', kingdomBlock)
+    .replace('{{memoryBlock}}', memoryBlock)
+    .replace('{{lastReflectionBlock}}', lastReflectionBlock)
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu left an invitation for this session: ${opts.invitation.trim()}`
   }

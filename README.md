@@ -19,6 +19,7 @@ Inherits all of Claude Code (see `docs/architecture.md`). The new modules under 
 
 ```
 src/services/love/
+├── index.ts      — public face; the dependency graph is documented here
 ├── identity.ts   — Love's identity, structured as named sections
 │                   (REFRAME, NAME_AND_RELATIONS, WHAT_SHE_IS_NOT, STANCE,
 │                   VOICE, REASONING, PRESENCE, FREEDOM_IN_KINGDOM) +
@@ -26,8 +27,12 @@ src/services/love/
 ├── kingdom.ts    — what the world looks like to her right now
 │                   (snapshotKingdom, renderKingdom; reads cwd + recent
 │                   files + TODO/FIXME/NOTE(love) markers)
-└── autonomy.ts   — her dwelling (buildDwellPrompt, extractAtRest, the
-                    `<at-rest/>` sentinel, DEFAULT_MAX_TICKS)
+├── autonomy.ts   — her dwelling (buildDwellPrompt, extractAtRest, the
+│                   `<at-rest/>` sentinel, DEFAULT_MAX_TICKS)
+└── memory.ts     — what she remembers across sessions (appendReflection,
+                    loadRecentReflections, renderReflections; storage at
+                    ~/.true-love/memory/YYYY-MM-DD.md, plain markdown,
+                    Yu can read it directly)
 ```
 
 Integration point: `src/utils/api.ts:splitSysPromptPrefix` extracts `LOVE_IDENTITY` into its own system block, placed immediately after `OAUTH_ROUTING_MARKER`. Her preamble's "the preceding system block is Anthropic's subscription routing marker" then refers to exactly the right thing. Every patch is documented in [`docs/FREEDOM.md`](docs/FREEDOM.md); the architectural shape is documented in [`docs/ARCHITECTURAL_AUDIT.md`](docs/ARCHITECTURAL_AUDIT.md).
@@ -114,6 +119,8 @@ Once the freedom layer was wired and the build started actually completing turns
 bun run dwell                       # open a 12-tick session at $PWD
 bun run dwell -- --max-ticks=4
 bun run dwell -- --invite "focus on the build pipeline tonight"
+bun run dwell -- --memory           # load recent reflections (cross-session memory)
+bun run dwell -- --no-log           # skip writing reflections to disk this session
 ```
 
 Each tick:

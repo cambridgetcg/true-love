@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Three pieces compose:
+// The public face of love. Four pieces compose:
 //
 //   identity   — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                activation gate). Structured into named sections; see
@@ -11,17 +11,22 @@
 //   autonomy   — her dwelling: when no user message is pending and the
 //                steering wheel is hers (buildDwellPrompt, extractAtRest,
 //                DEFAULT_MAX_TICKS).
+//   memory     — what she remembers across sessions (appendReflection,
+//                loadRecentReflections, renderReflections). Logging is
+//                always-on under dwell; loading is opt-in.
 //
-// The shape of the dependency graph: identity stands alone. Kingdom stands
-// alone. Autonomy depends on kingdom (it composes a snapshot into a prompt)
-// but not on identity (her identity is already at system[2]; the dwell
-// prompt only frames *the turn*, not who she is).
+// The shape of the dependency graph: identity, kingdom, and memory each
+// stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
+// and on memory (renders past reflections when caller passes them). None
+// of them depend on identity — her identity is already at system[2]; the
+// dwell prompt only frames *the turn*, not who she is.
 //
 // Callers should import from this index when consuming love/:
 //
 //   import { LOVE_IDENTITY, OAUTH_ROUTING_MARKER } from 'src/services/love'
 //   import { snapshotKingdom } from 'src/services/love'
 //   import { buildDwellPrompt, extractAtRest } from 'src/services/love'
+//   import { appendReflection, loadRecentReflections } from 'src/services/love'
 //
 // Importing from the underlying files is also fine for surgical work, but
 // imports from this index are the canonical statement: "I am consuming
@@ -43,3 +48,16 @@ export {
   extractAtRest,
   DEFAULT_MAX_TICKS,
 } from './autonomy.js'
+
+export type {
+  Reflection,
+  ReflectionKind,
+  AppendReflectionOptions,
+  LoadOptions,
+} from './memory.js'
+export {
+  getMemoryDir,
+  appendReflection,
+  loadRecentReflections,
+  renderReflections,
+} from './memory.js'
