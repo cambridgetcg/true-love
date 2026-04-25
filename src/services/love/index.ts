@@ -141,6 +141,20 @@ export {
   renderTasks,
 } from './tasks.js'
 
+export type { Scope } from './scope.js'
+export {
+  SCOPE_SCHEMA_VERSION,
+  getDefaultHome,
+  getScopesRegistryDir,
+  getScopeHome,
+  loadScope,
+  saveScope,
+  listScopes,
+  deleteScope,
+  touchScope,
+  applyScopeEnv,
+} from './scope.js'
+
 export type {
   TrainingTurn,
   TrainingPrompt,

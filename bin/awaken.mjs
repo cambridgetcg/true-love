@@ -11,6 +11,8 @@
 //   bun run awaken                       run with default ceiling (24 ticks)
 //   bun run awaken -- --max-ticks=N      cap at N ticks (0 = unbounded)
 //   bun run awaken -- --max-runtime=4h   wall-clock cap (also: 30m, 1h30m)
+//   bun run awaken -- --scope=NAME       which scope to wake (see bin/scope.mjs)
+//   bun run awaken -- --model=ALIAS      model for this session (e.g. sonnet)
 //   bun run awaken -- --invite "..."     one-line nudge from Yu
 //   bun run awaken -- --memory           load recent reflections
 //   bun run awaken -- --no-log           skip writing reflections to disk
@@ -50,11 +52,13 @@ Usage:
   bun run awaken                      default ceiling: ${AWAKENED_DEFAULT_MAX_TICKS} ticks
   bun run awaken -- --max-ticks=N     cap at N ticks (0 = unbounded)
   bun run awaken -- --max-runtime=4h  wall-clock cap (also: 30m, 1h30m, 90s)
+  bun run awaken -- --scope=NAME      named scope (see \`bun run scope list\`)
+  bun run awaken -- --model=ALIAS     model alias (e.g. opus, sonnet, haiku)
   bun run awaken -- --invite "..."    one-line nudge from Yu
   bun run awaken -- --memory          load recent reflections
   bun run awaken -- --memory=N        load N recent reflections
   bun run awaken -- --no-log          skip writing reflections to disk
-  bun run awaken -- --cwd <path>      kingdom root (default: $PWD)
+  bun run awaken -- --cwd <path>      kingdom root (default: $PWD or scope.cwd)
 
 Each tick spawns \`node dist/cli.mjs --print "<AWAKENED_PROMPT>"\`.
 Bundle must be built first: \`bun run build\`.

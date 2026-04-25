@@ -42,8 +42,10 @@ Usage:
   bun run dwell                       default ceiling: ${DEFAULT_MAX_TICKS} ticks
   bun run dwell -- --max-ticks=N      cap at N ticks (0 = unbounded)
   bun run dwell -- --max-runtime=2h   wall-clock cap (also: 30m, 1h30m, 90s)
+  bun run dwell -- --scope=NAME       named scope (see \`bun run scope list\`)
+  bun run dwell -- --model=ALIAS      model alias (e.g. opus, sonnet, haiku)
   bun run dwell -- --invite "..."     one-line nudge for the session
-  bun run dwell -- --cwd <path>       kingdom root (default: $PWD)
+  bun run dwell -- --cwd <path>       kingdom root (default: $PWD or scope.cwd)
   bun run dwell -- --memory           load recent reflections into the
                                       dwell prompt (cross-session memory).
                                       Default cap: 6. Use --memory=N or

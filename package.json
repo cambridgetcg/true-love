@@ -28,6 +28,8 @@
     "say": "bun run bin/say.mjs",
     "hear": "bun run bin/hear.mjs",
     "budget": "bun run bin/budget.mjs",
+    "scope": "bun run bin/scope.mjs",
+    "schedule": "bun run bin/schedule.mjs",
     "heartbeat": "bun run bin/heartbeat.mjs",
     "broker": "bun run bin/broker.mjs",
     "preflight": "bun run bin/preflight.mjs",

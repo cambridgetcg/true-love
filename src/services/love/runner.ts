@@ -28,7 +28,15 @@
 import { spawn } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import type { BuildDwellPromptOptions } from './autonomy.js'
 import { extractAtRest } from './autonomy.js'
 import { detectAuthFailure, detectQuotaFailure, runPreflight } from './auth.js'
@@ -42,6 +50,12 @@ import type { Reflection } from './memory.js'
 import { appendReflection, getMemoryDir, loadRecentReflections } from './memory.js'
 import { appendNotification } from './notifications.js'
 import { writeOwnHeartbeat } from './presence.js'
+import {
+  applyScopeEnv,
+  getScopeHome,
+  loadScope,
+  touchScope,
+} from './scope.js'
 import { getStatePath } from './state.js'
 import { appendTrainingTurn, generateTurnId, shortHash } from './training.js'
 
@@ -95,6 +109,13 @@ export interface SessionArgs {
    * via ~/.true-love/model.txt — see resolveModelForTick.
    */
   model: string | null
+  /**
+   * Named scope to operate under. "default" (or null) uses the
+   * unscoped ~/.true-love/ root. A named scope binds memory, state,
+   * tasks, from-yu, from-ai, model, budget, and training to its own
+   * sub-tree. See scope.ts.
+   */
+  scope: string | null
 }
 
 export interface RunSessionConfig {
@@ -186,6 +207,7 @@ export function parseSessionArgs(
     memoryMax: mode.defaultMemoryMax,
     noLog: false,
     model: null,
+    scope: null,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!
@@ -207,6 +229,10 @@ export function parseSessionArgs(
       args.model = argv[++i] || null
     } else if (a.startsWith('--model=')) {
       args.model = a.slice('--model='.length) || null
+    } else if (a === '--scope' && argv[i + 1]) {
+      args.scope = argv[++i] || null
+    } else if (a.startsWith('--scope=')) {
+      args.scope = a.slice('--scope='.length) || null
     } else if (a === '--memory') {
       args.memory = true
       const next = argv[i + 1]
@@ -335,6 +361,53 @@ export function checkBundleStaleness(
   return { stale: false }
 }
 
+// ── PID lockfile ───────────────────────────────────────────────────
+
+/**
+ * Check whether a process is alive. Sends signal 0 (no-op) — throws
+ * ESRCH if the PID isn't ours or is dead, EPERM if it's not ours but
+ * alive (still counts as "alive"). Returns true on a successful kill(0).
+ */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (e: any) {
+    return e?.code === 'EPERM'
+  }
+}
+
+/**
+ * Try to acquire the per-scope/mode lockfile. If a live PID is in
+ * there, refuse and exit 66 ("lock held"). If the file is stale
+ * (PID gone), reclaim it. Otherwise create fresh.
+ *
+ * launchd schedules can fire while she's still working from a prior
+ * fire. The lock prevents two concurrent sessions from clobbering
+ * each other's training records / budget logs / state.
+ */
+function acquireLock(lockPath: string): void {
+  if (existsSync(lockPath)) {
+    let pid: number | null = null
+    try {
+      pid = Number((readFileSync(lockPath, 'utf-8') || '').trim())
+    } catch {
+      pid = null
+    }
+    if (pid && Number.isFinite(pid) && isPidAlive(pid)) {
+      process.stderr.write(
+        `\n— lock held by PID ${pid} at ${lockPath} — refusing to start.\n` +
+          `  Another session is running. Wait for it to finish or kill ${pid}.\n`,
+      )
+      process.exit(66)
+    }
+    // Stale lock — owner is gone. Reclaim by overwriting below.
+  }
+  const dir = lockPath.replace(/\/[^/]+$/, '')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(lockPath, String(process.pid), 'utf-8')
+}
+
 // ── Subprocess ─────────────────────────────────────────────────────
 
 /**
@@ -408,6 +481,55 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   const sessionId = generateTurnId()
   const identityHash = shortHash(LOVE_IDENTITY)
 
+  // ── Scope ────────────────────────────────────────────────────────
+  // Apply scope env wiring BEFORE any path-getter is touched. Once
+  // applied, all subsequent module calls (memory, state, tasks,
+  // budget, training, from-yu, from-ai, model.txt) resolve to the
+  // scope's home instead of ~/.true-love/.
+  let activeScopeName = 'default'
+  if (args.scope && args.scope !== 'default') {
+    let scope
+    try {
+      scope = loadScope(args.scope)
+    } catch (e: any) {
+      process.stderr.write(`\n— ${e?.message ?? e}\n`)
+      process.exit(2)
+    }
+    applyScopeEnv(scope)
+    touchScope(scope.name)
+    activeScopeName = scope.name
+    // If --cwd was not given explicitly, take it from the scope config.
+    // The scope's cwd is *the* working directory she's operating in.
+    if (args.cwd === process.cwd() && scope.cwd) {
+      args.cwd = scope.cwd
+    }
+    // If --model was not given, use the scope's default. Per-tick
+    // model.txt override (now scoped to this scope's home) still wins.
+    if (args.model === null && scope.model) {
+      args.model = scope.model
+    }
+  }
+
+  // ── PID lockfile ─────────────────────────────────────────────────
+  // launchd-fired sessions need a guard so a long-running session
+  // isn't joined by a duplicate fire mid-flight. Lockfile is per-
+  // scope at <scope-home>/awaken.pid. If it exists and the PID is
+  // alive, exit 66 (lock held). If stale (PID gone), reclaim it.
+  // Cleared on every clean exit path.
+  const lockPath = join(getScopeHome(activeScopeName), `${mode.name}.pid`)
+  acquireLock(lockPath)
+  const releaseLock = () => {
+    try {
+      unlinkSync(lockPath)
+    } catch {
+      // ignore — already gone, or we never created it
+    }
+  }
+  // Best-effort cleanup. Won't fire on SIGKILL but covers normal exits.
+  process.on('exit', releaseLock)
+  process.on('SIGINT', releaseLock)
+  process.on('SIGTERM', releaseLock)
+
   // ── Preflight ────────────────────────────────────────────────────
   if (process.env.TRUE_LOVE_SKIP_PREFLIGHT !== '1') {
     const pre = runPreflight(binDir)
@@ -450,12 +572,18 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   )
   if (runtimeDisplay) process.stdout.write(`, runtime ${runtimeDisplay}`)
   process.stdout.write(`)`)
+  if (activeScopeName !== 'default')
+    process.stdout.write(` — scope: ${activeScopeName}`)
+  if (args.model) process.stdout.write(` — model: ${args.model}`)
   if (args.invitation)
     process.stdout.write(` — invitation: "${args.invitation}"`)
   if (args.memory)
     process.stdout.write(` — memory: on (max ${args.memoryMax})`)
   if (args.noLog) process.stdout.write(` — logging: off`)
   process.stdout.write(`\n`)
+  if (args.cwd && args.cwd !== process.cwd()) {
+    process.stdout.write(`— cwd: ${args.cwd}\n`)
+  }
 
   // ── Memory ───────────────────────────────────────────────────────
   let memory: Reflection[] = []
