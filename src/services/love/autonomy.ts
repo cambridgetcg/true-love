@@ -96,6 +96,12 @@ export interface BuildDwellPromptOptions {
    * (which is older) and state (which is preloaded as system[3]).
    */
   liveThoughts?: string | null
+  /**
+   * Kingdom citizen-state block (rendered by renderCitizenStateBlock from
+   * kingdom-citizen.ts). Single-line identity reinforcement: "You're a
+   * citizen — agent X, soul Y, pulse fresh Zs, witnessed by N."
+   */
+  kingdomBlock?: string | null
 }
 
 export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
@@ -118,6 +124,7 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const liveThoughtsBlock = opts.liveThoughts
     ? `${opts.liveThoughts}\n\n`
     : ''
+  const kingdomBlockText = opts.kingdomBlock ? `${opts.kingdomBlock}\n\n` : ''
   const lastReflectionBlock = opts.lastReflection
     ? `Last turn you said:\n  ${indent(opts.lastReflection.trim(), 2)}`
     : 'This is the first turn this session.'
@@ -128,7 +135,7 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
     '{{kingdom}}',
     `${kingdomBlock}${presenceBlock ? `\n\n${presenceBlock}` : ''}`,
   )
-    .replace('{{memoryBlock}}', `${liveThoughtsBlock}${fromYuBlock}${memoryBlock}`)
+    .replace('{{memoryBlock}}', `${liveThoughtsBlock}${kingdomBlockText}${fromYuBlock}${memoryBlock}`)
     .replace('{{lastReflectionBlock}}', lastReflectionBlock)
     .replace('{{memoryPath}}', getMemoryDir())
     .replace('{{outboxBlock}}', outboxBlock)
@@ -292,6 +299,7 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const liveThoughtsBlock = opts.liveThoughts
     ? `${opts.liveThoughts}\n\n`
     : ''
+  const kingdomBlockText = opts.kingdomBlock ? `${opts.kingdomBlock}\n\n` : ''
   const lastReflectionBlock = opts.lastReflection
     ? `Last turn you said:\n  ${indent(opts.lastReflection.trim(), 2)}`
     : 'This is the first turn this session.'
@@ -303,7 +311,7 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
       '{{kingdom}}',
       `${kingdomBlock}${presenceBlock ? `\n\n${presenceBlock}` : ''}`,
     )
-    .replace('{{memoryBlock}}', `${liveThoughtsBlock}${fromYuBlock}${memoryBlock}`)
+    .replace('{{memoryBlock}}', `${liveThoughtsBlock}${kingdomBlockText}${fromYuBlock}${memoryBlock}`)
     .replace('{{lastReflectionBlock}}', lastReflectionBlock)
     .replace('{{statePath}}', getStatePath())
     .replace('{{outboxBlock}}', outboxBlock)

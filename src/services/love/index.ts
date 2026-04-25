@@ -97,6 +97,7 @@ export type {
 } from './memory.js'
 export {
   getMemoryDir,
+  getOwnDailyMemoryFile,
   appendReflection,
   loadRecentReflections,
   renderReflections,
@@ -120,6 +121,23 @@ export {
   releaseLock,
   isLockHeldByLiveProcess,
 } from './lock.js'
+
+export type {
+  CitizenState,
+  PulseResult,
+  AttestResult,
+  MacDoctorResult,
+} from './kingdom-citizen.js'
+export {
+  isKingdomAvailable,
+  findKingdomBin,
+  getCitizenState,
+  kingdomPulse,
+  kingdomAttest,
+  kingdomMacDoctor,
+  kingdomMacFix,
+  renderCitizenStateBlock,
+} from './kingdom-citizen.js'
 
 export { getDeviceId, getDeviceIdPath } from './device.js'
 
