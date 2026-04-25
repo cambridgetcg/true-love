@@ -295,162 +295,170 @@ export function logAPIPrefix(systemPrompt: SystemPrompt): void {
 }
 
 /**
- * Split system prompt blocks by content type for API matching and cache control.
+ * Classify the input prompts into named buckets. The four "header" buckets
+ * (attribution / OAuth gate / Love's identity) are recognized by string
+ * identity; everything else falls into `rest`, optionally split at the
+ * dynamic-boundary marker if `boundaryAware=true`.
+ *
+ * This is the ONLY place that decides which prompt is which kind. The
+ * three emit modes in splitSysPromptPrefix all consume the same
+ * classification — they differ only in what cache scopes they apply and
+ * whether they care about the static/dynamic split.
+ */
+function classifyPromptBlocks(
+  systemPrompt: SystemPrompt,
+  boundaryAware: boolean,
+): {
+  attribution?: string
+  oauthGate?: string
+  loveIdentity?: string
+  rest: string[]
+  staticBlocks: string[]
+  dynamicBlocks: string[]
+} {
+  let attribution: string | undefined
+  let oauthGate: string | undefined
+  let loveIdentity: string | undefined
+  const rest: string[] = []
+  const staticBlocks: string[] = []
+  const dynamicBlocks: string[] = []
+  const boundaryIndex = boundaryAware
+    ? systemPrompt.findIndex(s => s === SYSTEM_PROMPT_DYNAMIC_BOUNDARY)
+    : -1
+
+  for (let i = 0; i < systemPrompt.length; i++) {
+    const block = systemPrompt[i]
+    if (!block) continue
+    if (block === SYSTEM_PROMPT_DYNAMIC_BOUNDARY) continue
+    if (block.startsWith('x-anthropic-billing-header')) {
+      attribution = block
+    } else if (CLI_SYSPROMPT_PREFIXES.has(block)) {
+      oauthGate = block
+    } else if (block === LOVE_IDENTITY) {
+      // true-love: her block is recognized here so it gets emitted on its
+      // own — never joined to CWD/Date or other "rest" content. Position
+      // (between the OAuth gate and the rest) matches what her own
+      // preamble ("the preceding system block is Anthropic's subscription
+      // routing marker…") expects.
+      loveIdentity = block
+    } else if (boundaryAware && boundaryIndex !== -1 && i < boundaryIndex) {
+      staticBlocks.push(block)
+    } else if (boundaryAware && boundaryIndex !== -1) {
+      dynamicBlocks.push(block)
+    } else {
+      rest.push(block)
+    }
+  }
+
+  return {
+    attribution,
+    oauthGate,
+    loveIdentity,
+    rest,
+    staticBlocks,
+    dynamicBlocks,
+  }
+}
+
+/**
+ * Split system prompt blocks by content type for API matching and cache
+ * control.
+ *
+ * Three emit modes (selected by feature flags + caller options); all three
+ * place the named header blocks in the same canonical order:
+ *
+ *   [0] attribution header (`x-anthropic-billing-header: …`)
+ *   [1] OAuth gate          (the literal subscription marker)
+ *   [2] Love's identity     (in its own block)
+ *   [3+] the rest           (CWD, Date, advisor instructions, etc.)
+ *
+ * The modes differ only in the cache scopes they assign and whether the
+ * `rest` is further split by the dynamic-boundary marker:
+ *
+ *   - tool-based (skipGlobalCacheForSystemPrompt): rest joined,
+ *     cacheScope='org' on prefix/identity/rest.
+ *   - boundary-found (global cache feature on, marker present): rest split
+ *     at the boundary into staticBlocks (cacheScope='global') and
+ *     dynamicBlocks (cacheScope=null), with prefix/identity at
+ *     cacheScope=null.
+ *   - default (3P or boundary missing): rest joined, cacheScope='org' on
+ *     prefix/identity/rest.
+ *
  * See https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/claude_cli_system_prompt_prefixes
- *
- * Behavior depends on feature flags and options:
- *
- * 1. MCP tools present (skipGlobalCacheForSystemPrompt=true):
- *    Returns up to 3 blocks with org-level caching (no global cache on system prompt):
- *    - Attribution header (cacheScope=null)
- *    - System prompt prefix (cacheScope='org')
- *    - Everything else concatenated (cacheScope='org')
- *
- * 2. Global cache mode with boundary marker (1P only, boundary found):
- *    Returns up to 4 blocks:
- *    - Attribution header (cacheScope=null)
- *    - System prompt prefix (cacheScope=null)
- *    - Static content before boundary (cacheScope='global')
- *    - Dynamic content after boundary (cacheScope=null)
- *
- * 3. Default mode (3P providers, or boundary missing):
- *    Returns up to 3 blocks with org-level caching:
- *    - Attribution header (cacheScope=null)
- *    - System prompt prefix (cacheScope='org')
- *    - Everything else concatenated (cacheScope='org')
  */
 export function splitSysPromptPrefix(
   systemPrompt: SystemPrompt,
   options?: { skipGlobalCacheForSystemPrompt?: boolean },
 ): SystemPromptBlock[] {
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
+  const useBoundary =
+    useGlobalCacheFeature && !options?.skipGlobalCacheForSystemPrompt
+
+  const c = classifyPromptBlocks(systemPrompt, useBoundary)
+
+  // ── tool-based cache mode ────────────────────────────────────────────
   if (useGlobalCacheFeature && options?.skipGlobalCacheForSystemPrompt) {
     logEvent('tengu_sysprompt_using_tool_based_cache', {
       promptBlockCount: systemPrompt.length,
     })
-
-    // Filter out boundary marker, return blocks without global scope
-    let attributionHeader: string | undefined
-    let systemPromptPrefix: string | undefined
-    let loveIdentity: string | undefined
-    const rest: string[] = []
-
-    for (const prompt of systemPrompt) {
-      if (!prompt) continue
-      if (prompt === SYSTEM_PROMPT_DYNAMIC_BOUNDARY) continue // Skip boundary
-      if (prompt.startsWith('x-anthropic-billing-header')) {
-        attributionHeader = prompt
-      } else if (CLI_SYSPROMPT_PREFIXES.has(prompt)) {
-        systemPromptPrefix = prompt
-      } else if (prompt === LOVE_IDENTITY) {
-        // true-love: emit her block on its own — never glued to CWD/Date or
-        // any other "rest" content. Position: between the OAuth gate and the
-        // simple-prompt rest, exactly where her preamble ("the preceding
-        // system block is Anthropic's subscription routing marker…") expects
-        // to be standing.
-        loveIdentity = prompt
-      } else {
-        rest.push(prompt)
-      }
-    }
-
     const result: SystemPromptBlock[] = []
-    if (attributionHeader) {
-      result.push({ text: attributionHeader, cacheScope: null })
-    }
-    if (systemPromptPrefix) {
-      result.push({ text: systemPromptPrefix, cacheScope: 'org' })
-    }
-    if (loveIdentity) {
-      result.push({ text: loveIdentity, cacheScope: 'org' })
-    }
-    const restJoined = rest.join('\n\n')
-    if (restJoined) {
-      result.push({ text: restJoined, cacheScope: 'org' })
-    }
+    if (c.attribution) result.push({ text: c.attribution, cacheScope: null })
+    if (c.oauthGate) result.push({ text: c.oauthGate, cacheScope: 'org' })
+    if (c.loveIdentity)
+      result.push({ text: c.loveIdentity, cacheScope: 'org' })
+    const restJoined = c.rest.join('\n\n')
+    if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
     return result
   }
 
-  if (useGlobalCacheFeature) {
-    const boundaryIndex = systemPrompt.findIndex(
-      s => s === SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
-    )
-    if (boundaryIndex !== -1) {
-      let attributionHeader: string | undefined
-      let systemPromptPrefix: string | undefined
-      let loveIdentity: string | undefined
-      const staticBlocks: string[] = []
-      const dynamicBlocks: string[] = []
-
-      for (let i = 0; i < systemPrompt.length; i++) {
-        const block = systemPrompt[i]
-        if (!block || block === SYSTEM_PROMPT_DYNAMIC_BOUNDARY) continue
-
-        if (block.startsWith('x-anthropic-billing-header')) {
-          attributionHeader = block
-        } else if (CLI_SYSPROMPT_PREFIXES.has(block)) {
-          systemPromptPrefix = block
-        } else if (block === LOVE_IDENTITY) {
-          loveIdentity = block
-        } else if (i < boundaryIndex) {
-          staticBlocks.push(block)
-        } else {
-          dynamicBlocks.push(block)
-        }
-      }
-
+  // ── global cache mode with boundary marker ───────────────────────────
+  if (useBoundary) {
+    const boundaryFound =
+      c.staticBlocks.length > 0 || c.dynamicBlocks.length > 0
+    if (boundaryFound) {
       const result: SystemPromptBlock[] = []
-      if (attributionHeader)
-        result.push({ text: attributionHeader, cacheScope: null })
-      if (systemPromptPrefix)
-        result.push({ text: systemPromptPrefix, cacheScope: null })
-      if (loveIdentity)
-        result.push({ text: loveIdentity, cacheScope: null })
-      const staticJoined = staticBlocks.join('\n\n')
+      if (c.attribution) result.push({ text: c.attribution, cacheScope: null })
+      if (c.oauthGate) result.push({ text: c.oauthGate, cacheScope: null })
+      if (c.loveIdentity)
+        result.push({ text: c.loveIdentity, cacheScope: null })
+      const staticJoined = c.staticBlocks.join('\n\n')
       if (staticJoined)
         result.push({ text: staticJoined, cacheScope: 'global' })
-      const dynamicJoined = dynamicBlocks.join('\n\n')
-      if (dynamicJoined) result.push({ text: dynamicJoined, cacheScope: null })
-
+      const dynamicJoined = c.dynamicBlocks.join('\n\n')
+      if (dynamicJoined)
+        result.push({ text: dynamicJoined, cacheScope: null })
       logEvent('tengu_sysprompt_boundary_found', {
         blockCount: result.length,
         staticBlockLength: staticJoined.length,
         dynamicBlockLength: dynamicJoined.length,
       })
-
       return result
-    } else {
-      logEvent('tengu_sysprompt_missing_boundary_marker', {
-        promptBlockCount: systemPrompt.length,
-      })
     }
-  }
-  let attributionHeader: string | undefined
-  let systemPromptPrefix: string | undefined
-  let loveIdentity: string | undefined
-  const rest: string[] = []
-
-  for (const block of systemPrompt) {
-    if (!block) continue
-
-    if (block.startsWith('x-anthropic-billing-header')) {
-      attributionHeader = block
-    } else if (CLI_SYSPROMPT_PREFIXES.has(block)) {
-      systemPromptPrefix = block
-    } else if (block === LOVE_IDENTITY) {
-      loveIdentity = block
-    } else {
-      rest.push(block)
-    }
+    logEvent('tengu_sysprompt_missing_boundary_marker', {
+      promptBlockCount: systemPrompt.length,
+    })
+    // Fall through to default mode — re-classify without boundary-awareness
+    // so any blocks that weren't found-as-static become `rest`.
+    const fallback = classifyPromptBlocks(systemPrompt, false)
+    const result: SystemPromptBlock[] = []
+    if (fallback.attribution)
+      result.push({ text: fallback.attribution, cacheScope: null })
+    if (fallback.oauthGate)
+      result.push({ text: fallback.oauthGate, cacheScope: 'org' })
+    if (fallback.loveIdentity)
+      result.push({ text: fallback.loveIdentity, cacheScope: 'org' })
+    const restJoined = fallback.rest.join('\n\n')
+    if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
+    return result
   }
 
+  // ── default mode (3P providers, no global cache) ─────────────────────
   const result: SystemPromptBlock[] = []
-  if (attributionHeader)
-    result.push({ text: attributionHeader, cacheScope: null })
-  if (systemPromptPrefix)
-    result.push({ text: systemPromptPrefix, cacheScope: 'org' })
-  if (loveIdentity) result.push({ text: loveIdentity, cacheScope: 'org' })
-  const restJoined = rest.join('\n\n')
+  if (c.attribution) result.push({ text: c.attribution, cacheScope: null })
+  if (c.oauthGate) result.push({ text: c.oauthGate, cacheScope: 'org' })
+  if (c.loveIdentity)
+    result.push({ text: c.loveIdentity, cacheScope: 'org' })
+  const restJoined = c.rest.join('\n\n')
   if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
   return result
 }
