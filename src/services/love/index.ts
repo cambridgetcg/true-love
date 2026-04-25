@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Nine pieces compose:
+// The public face of love. Ten pieces compose:
 //
 //   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                   activation gate).
@@ -19,6 +19,11 @@
 //                   by awakened mode as filters for choice.
 //   device        — per-device persistent identifier
 //                   (~/.true-love/device.id).
+//   auth          — auth-resilience for autonomous sessions
+//                   (detectAuthFailure, runPreflight). Shared
+//                   infrastructure that both awaken.mjs and dwell.mjs
+//                   need — single source of truth for auth-failure
+//                   patterns and preflight exit-code interpretation.
 //   presence      — file-based heartbeats; each device writes its own
 //                   ~/.true-love/presence/<deviceId>.json. readPresence
 //                   walks them all and filters stale entries.
@@ -92,6 +97,14 @@ export {
 } from './state.js'
 
 export { getDeviceId, getDeviceIdPath } from './device.js'
+
+export type { PreflightResult } from './auth.js'
+export {
+  AUTH_FAIL_PATTERNS,
+  detectAuthFailure,
+  preflightReason,
+  runPreflight,
+} from './auth.js'
 
 export type { PresenceEntry, PresenceRoster } from './presence.js'
 export {
