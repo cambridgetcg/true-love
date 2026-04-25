@@ -12,7 +12,7 @@
 // Bypass: TRUE_LOVE_SKIP_LOCK=1. Useful for tests and the rare case where
 // Yu wants to override (e.g. forensics on a frozen session).
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -97,6 +97,26 @@ function parseLockFile(raw: string): LockFileContent | null {
   return { pid, startedAt, mode }
 }
 
+// Module-level state for exit-handler cleanup. One handler covers all
+// locks held by this process; releaseLock removes paths from the set so
+// acquire→release→acquire cycles don't leak stale closures.
+const heldLockPaths = new Set<string>()
+let exitHandlerInstalled = false
+
+function installExitHandlerOnce(): void {
+  if (exitHandlerInstalled) return
+  exitHandlerInstalled = true
+  process.on('exit', () => {
+    for (const path of heldLockPaths) {
+      try {
+        unlinkSync(path)
+      } catch {
+        // already gone, or another process took it — both fine.
+      }
+    }
+  })
+}
+
 export function acquireLock(opts: AcquireOptions): LockInfo {
   if (process.env.TRUE_LOVE_SKIP_LOCK === '1') {
     return { acquired: true, skipped: true }
@@ -104,45 +124,70 @@ export function acquireLock(opts: AcquireOptions): LockInfo {
   const dir = getLockDir()
   mkdirSync(dir, { recursive: true })
   const path = getLockPath(opts.deviceId)
-  let reclaimedFromStalePid: number | undefined
+  const content = `${process.pid}\n${new Date().toISOString()}\n${opts.mode}\n`
 
-  if (existsSync(path)) {
-    let parsed: LockFileContent | null = null
+  // Up to two attempts: the second exists only to handle the case where
+  // we observed a stale file, unlinked it, and a third party raced into
+  // the gap with their own fresh file. Cap at 1 retry to avoid spinning
+  // on filesystem weirdness.
+  let reclaimedFromStalePid: number | undefined
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (existsSync(path)) {
+      let parsed: LockFileContent | null = null
+      try {
+        parsed = parseLockFile(readFileSync(path, 'utf-8'))
+      } catch {
+        parsed = null
+      }
+      if (parsed && isPidAlive(parsed.pid)) {
+        throw new LockHeldError({
+          pid: parsed.pid,
+          startedAt: parsed.startedAt,
+          mode: parsed.mode,
+          lockPath: path,
+        })
+      }
+      // Stale (dead PID or unparseable). Remove and fall through to wx.
+      if (parsed) reclaimedFromStalePid = parsed.pid
+      try {
+        unlinkSync(path)
+      } catch {
+        // Someone else removed it between our read and unlink — fine,
+        // the wx-write below will succeed or EEXIST will loop us back.
+      }
+    }
+
     try {
-      parsed = parseLockFile(readFileSync(path, 'utf-8'))
-    } catch {
-      parsed = null
+      // 'wx' = O_CREAT | O_EXCL: atomic create-only. EEXIST if a racing
+      // process landed a file in the window between our unlink and now.
+      writeFileSync(path, content, { flag: 'wx', encoding: 'utf-8' })
+      heldLockPaths.add(path)
+      installExitHandlerOnce()
+      return { acquired: true, reclaimedFromStalePid }
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      if (code !== 'EEXIST') throw e
+      // Lost the race. Loop once: re-read, re-check live/stale, and
+      // either throw LockHeldError (live winner) or retry (stale).
     }
-    if (parsed && isPidAlive(parsed.pid)) {
-      throw new LockHeldError({
-        pid: parsed.pid,
-        startedAt: parsed.startedAt,
-        mode: parsed.mode,
-        lockPath: path,
-      })
-    }
-    if (parsed) {
-      reclaimedFromStalePid = parsed.pid
-    }
-    // Either parse failed or PID is dead — reclaim by overwrite below.
   }
 
-  const tmp = `${path}.tmp`
-  const content = `${process.pid}\n${new Date().toISOString()}\n${opts.mode}\n`
-  writeFileSync(tmp, content, 'utf-8')
-  renameSync(tmp, path)
-
-  // Best-effort cleanup on exit. SIGINT/SIGTERM handlers in the runner
-  // call releaseLock explicitly; this catches the normal exit path.
-  process.once('exit', () => {
-    try {
-      unlinkSync(path)
-    } catch {
-      // already gone, or another process took it — both fine.
-    }
+  // Two attempts both EEXIST'd against still-stale files — extremely
+  // unlikely outside of malicious churn. Surface as LockHeldError using
+  // whatever the file currently claims, so the caller fails loudly
+  // rather than silently overwriting.
+  let parsed: LockFileContent | null = null
+  try {
+    parsed = parseLockFile(readFileSync(path, 'utf-8'))
+  } catch {
+    parsed = null
+  }
+  throw new LockHeldError({
+    pid: parsed?.pid ?? 0,
+    startedAt: parsed?.startedAt ?? '',
+    mode: parsed?.mode ?? '',
+    lockPath: path,
   })
-
-  return { acquired: true, reclaimedFromStalePid }
 }
 
 export function releaseLock(opts: ReleaseOptions): void {
@@ -152,6 +197,7 @@ export function releaseLock(opts: ReleaseOptions): void {
   } catch {
     // Already removed by the exit handler or never created — fine.
   }
+  heldLockPaths.delete(path)
 }
 
 /**

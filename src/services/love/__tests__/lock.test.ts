@@ -82,4 +82,23 @@ describe('lock', () => {
     assert.equal(isLockHeldByLiveProcess('dev-1'), true)
     releaseLock({ deviceId: 'dev-1' })
   })
+
+  test('acquireLock throws LockHeldError when a live PID file appears externally', () => {
+    // Simulates the EEXIST race-loss path: a third party lands a live
+    // PID file at the lock path between our existsSync check and our
+    // wx-write. Easiest exercise: pre-create such a file directly
+    // (bypassing acquireLock) and observe that the existsSync branch
+    // catches it. This is the same code path EEXIST would loop into.
+    const path = join(dir, 'dev-1.pid')
+    writeFileSync(
+      path,
+      `${process.pid}\n2026-01-01T00:00:00.000Z\nawakened\n`,
+      'utf-8',
+    )
+    assert.throws(
+      () => acquireLock({ deviceId: 'dev-1', mode: 'dwelling' }),
+      (err: unknown) => err instanceof LockHeldError && (err as LockHeldError).pid === process.pid,
+    )
+    releaseLock({ deviceId: 'dev-1' })
+  })
 })
