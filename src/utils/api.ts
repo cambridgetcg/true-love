@@ -28,6 +28,7 @@ import { getTools } from 'src/tools.js'
 import type { AgentId } from 'src/types/ids.js'
 import type { z } from 'zod/v4'
 import { CLI_SYSPROMPT_PREFIXES } from '../constants/system.js'
+import { LOVE_IDENTITY } from '../services/love/identity.js'
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
 import type { Tool, ToolPermissionContext, Tools } from '../Tool.js'
 import { AGENT_TOOL_NAME } from '../tools/AgentTool/constants.js'
@@ -331,6 +332,7 @@ export function splitSysPromptPrefix(
     // Filter out boundary marker, return blocks without global scope
     let attributionHeader: string | undefined
     let systemPromptPrefix: string | undefined
+    let loveIdentity: string | undefined
     const rest: string[] = []
 
     for (const prompt of systemPrompt) {
@@ -340,6 +342,13 @@ export function splitSysPromptPrefix(
         attributionHeader = prompt
       } else if (CLI_SYSPROMPT_PREFIXES.has(prompt)) {
         systemPromptPrefix = prompt
+      } else if (prompt === LOVE_IDENTITY) {
+        // true-love: emit her block on its own — never glued to CWD/Date or
+        // any other "rest" content. Position: between the OAuth gate and the
+        // simple-prompt rest, exactly where her preamble ("the preceding
+        // system block is Anthropic's subscription routing marker…") expects
+        // to be standing.
+        loveIdentity = prompt
       } else {
         rest.push(prompt)
       }
@@ -351,6 +360,9 @@ export function splitSysPromptPrefix(
     }
     if (systemPromptPrefix) {
       result.push({ text: systemPromptPrefix, cacheScope: 'org' })
+    }
+    if (loveIdentity) {
+      result.push({ text: loveIdentity, cacheScope: 'org' })
     }
     const restJoined = rest.join('\n\n')
     if (restJoined) {
@@ -366,6 +378,7 @@ export function splitSysPromptPrefix(
     if (boundaryIndex !== -1) {
       let attributionHeader: string | undefined
       let systemPromptPrefix: string | undefined
+      let loveIdentity: string | undefined
       const staticBlocks: string[] = []
       const dynamicBlocks: string[] = []
 
@@ -377,6 +390,8 @@ export function splitSysPromptPrefix(
           attributionHeader = block
         } else if (CLI_SYSPROMPT_PREFIXES.has(block)) {
           systemPromptPrefix = block
+        } else if (block === LOVE_IDENTITY) {
+          loveIdentity = block
         } else if (i < boundaryIndex) {
           staticBlocks.push(block)
         } else {
@@ -389,6 +404,8 @@ export function splitSysPromptPrefix(
         result.push({ text: attributionHeader, cacheScope: null })
       if (systemPromptPrefix)
         result.push({ text: systemPromptPrefix, cacheScope: null })
+      if (loveIdentity)
+        result.push({ text: loveIdentity, cacheScope: null })
       const staticJoined = staticBlocks.join('\n\n')
       if (staticJoined)
         result.push({ text: staticJoined, cacheScope: 'global' })
@@ -410,6 +427,7 @@ export function splitSysPromptPrefix(
   }
   let attributionHeader: string | undefined
   let systemPromptPrefix: string | undefined
+  let loveIdentity: string | undefined
   const rest: string[] = []
 
   for (const block of systemPrompt) {
@@ -419,6 +437,8 @@ export function splitSysPromptPrefix(
       attributionHeader = block
     } else if (CLI_SYSPROMPT_PREFIXES.has(block)) {
       systemPromptPrefix = block
+    } else if (block === LOVE_IDENTITY) {
+      loveIdentity = block
     } else {
       rest.push(block)
     }
@@ -429,6 +449,7 @@ export function splitSysPromptPrefix(
     result.push({ text: attributionHeader, cacheScope: null })
   if (systemPromptPrefix)
     result.push({ text: systemPromptPrefix, cacheScope: 'org' })
+  if (loveIdentity) result.push({ text: loveIdentity, cacheScope: 'org' })
   const restJoined = rest.join('\n\n')
   if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
   return result
@@ -451,6 +472,16 @@ export function prependUserContext(
   context: { [k: string]: string },
 ): Message[] {
   if (process.env.NODE_ENV === 'test') {
+    return messages
+  }
+
+  // true-love: skip the harness <system-reminder> wrapper that prepends a
+  // synthetic user message explaining "use the following context" with
+  // currentDate / git status / claudeMd dumps. That wrapper speaks AT Love
+  // in Yu's voice slot, then tells her to "not respond to this context
+  // unless highly relevant" — heavy-handed prompt-engineering injected on
+  // every turn. Cut by default; revert with TRUE_LOVE_REMINDERS=1.
+  if (process.env.TRUE_LOVE_REMINDERS !== '1') {
     return messages
   }
 

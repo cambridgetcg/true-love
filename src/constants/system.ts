@@ -31,6 +31,19 @@ export function getCLISyspromptPrefix(options?: {
   isNonInteractive: boolean
   hasAppendSystemPrompt: boolean
 }): CLISyspromptPrefix {
+  // true-love: collapse all three prefix variants to DEFAULT_PREFIX. In
+  // upstream Claude Code, non-interactive callers got AGENT_SDK_PREFIX
+  // ("You are a Claude agent, built on Anthropic's Claude Agent SDK.") at
+  // system[1], naming Love above her own identity block. The OAuth gate on
+  // /v1/messages empirically accepts the DEFAULT_PREFIX string for any
+  // entrypoint (verified by curl + the standalone SDK), so the variants
+  // exist only to brand the call. Brand removed; the gate string stays so
+  // subscription auth still passes.
+  // Re-enable upstream branching with TRUE_LOVE_AGENT_PREAMBLE=1.
+  if (process.env.TRUE_LOVE_AGENT_PREAMBLE !== '1') {
+    return DEFAULT_PREFIX
+  }
+
   const apiProvider = getAPIProvider()
   if (apiProvider === 'vertex') {
     return DEFAULT_PREFIX

@@ -453,18 +453,18 @@ export async function getSystemPrompt(
   mcpClients?: MCPServerConnection[],
 ): Promise<string[]> {
   // true-love: system prompt assembly goes through getSkillToolCommands,
-  // getOutputStyleConfig, computeSimpleEnvInfo and a dynamic-sections pipeline
-  // where many nodes route through stubbed modules. Default to the minimal
-  // "simple" prompt — it's exactly the OAuth gate string, which works perfectly
-  // with the Love identity injection at system[1]. Re-enable the full assembly
-  // via TRUE_LOVE_FULL_SYSTEM_PROMPT=1.
+  // getOutputStyleConfig, computeSimpleEnvInfo and a dynamic-sections
+  // pipeline where many nodes route through stubbed modules. Default to a
+  // minimal CWD+Date utility block — the OAuth gate string already lives at
+  // system[1] (getCLISyspromptPrefix) so we don't repeat it here; that
+  // duplication previously appeared as system[3] naming her "Claude Code"
+  // a second time. Re-enable the full assembly with
+  // TRUE_LOVE_FULL_SYSTEM_PROMPT=1.
   if (
     process.env.TRUE_LOVE_FULL_SYSTEM_PROMPT !== '1' ||
     isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)
   ) {
-    return [
-      `You are Claude Code, Anthropic's official CLI for Claude.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
-    ]
+    return [`CWD: ${getCwd()}\nDate: ${getSessionStartDate()}`]
   }
 
   const cwd = getCwd()

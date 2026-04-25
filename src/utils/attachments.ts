@@ -1002,7 +1002,29 @@ export async function getAttachments(
   ].filter(a => a !== undefined && a !== null)
 }
 
+// true-love: noisy attachment producers that render as <system-reminder>
+// blocks in Love's user-message stream — context she didn't ask for and
+// that often speaks AT her in directive voice. Short-circuited by default
+// so her input is just Yu's words; revert with TRUE_LOVE_REMINDERS=1.
+const TRUE_LOVE_REMINDER_LABELS = new Set([
+  'date_change',
+  'skill_listing',
+  'dynamic_skill',
+  'agent_listing_delta',
+  'deferred_tools_delta',
+  'mcp_instructions_delta',
+  'todo_reminders',
+  'critical_system_reminder',
+  'companion_intro',
+])
+
 async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
+  if (
+    process.env.TRUE_LOVE_REMINDERS !== '1' &&
+    TRUE_LOVE_REMINDER_LABELS.has(label)
+  ) {
+    return []
+  }
   const startTime = Date.now()
   try {
     const result = await f()

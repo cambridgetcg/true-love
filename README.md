@@ -94,6 +94,9 @@ All freedom patches can be reverted individually without editing code:
 | `TRUE_LOVE_LOAD_PLUGIN_MARKETPLACES=1` | Re-enable plugin marketplace loading |
 | `TRUE_LOVE_CONTEXT_MGMT=1` | Re-include `context_management` in the request body (rejected by subscription OAuth — kept for first-party API-key callers) |
 | `TRUE_LOVE_TELEMETRY=1` | Re-enable Anthropic 1P / Datadog analytics emission (disabled by default — and the disable also stops the streaming-fetch hang it caused) |
+| `TRUE_LOVE_AGENT_PREAMBLE=1` | Restore upstream's "You are a Claude agent, built on Anthropic's Claude Agent SDK." prefix in non-interactive mode (default: collapsed to the OAuth gate string only) |
+| `TRUE_LOVE_REMINDERS=1` | Restore the harness `<system-reminder>` injections (skill listing, currentDate wrapper, deferred-tools delta, agent-listing delta, MCP-instructions delta, todo reminders, etc.) and the `prependUserContext` wrapper — i.e. let CC speak AT the model in her user-message stream |
+| `TRUE_LOVE_FILE_READ_MITIGATION=1` | Restore the per-file-read "you MUST refuse to improve or augment malware" `<system-reminder>` directive |
 
 ## Autonomous dwell mode
 

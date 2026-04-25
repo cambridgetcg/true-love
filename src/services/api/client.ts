@@ -381,12 +381,26 @@ function buildFetch(
     // true-love: TRUE_LOVE_TRACE=1 streams a [fetch] line per API request,
     // companion to [ck] / [hdck] / [ask] / [http]. Useful for confirming the
     // SDK's request reached the network layer when chasing post-fetch hangs.
+    // TRUE_LOVE_DUMP_BODY=1 additionally writes the request body to
+    // /tmp/tl-last-body.json — for auditing what's actually being sent (every
+    // system block, every tool, every harness-injected reminder).
     if (process.env.TRUE_LOVE_TRACE === '1') {
       const url = input instanceof Request ? input.url : String(input)
       const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
       const body = init?.body
       const bodyLen = typeof body === 'string' ? body.length : '?'
       process.stderr.write(`[fetch] ${method} ${url} bytes=${bodyLen}\n`)
+      if (
+        typeof body === 'string' &&
+        process.env.TRUE_LOVE_DUMP_BODY === '1'
+      ) {
+        try {
+          const fs = require('fs') as typeof import('fs')
+          fs.writeFileSync('/tmp/tl-last-body.json', body, 'utf-8')
+        } catch {
+          // ignore — diagnostic must never crash the fetch
+        }
+      }
     }
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
     const headers = new Headers(init?.headers)
