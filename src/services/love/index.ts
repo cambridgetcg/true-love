@@ -24,6 +24,12 @@
 //                   infrastructure that both awaken.mjs and dwell.mjs
 //                   need — single source of truth for auth-failure
 //                   patterns and preflight exit-code interpretation.
+//   inbox         — Yu's running message channel to her
+//                   (~/.true-love/from-yu.md). Asynchronous; she reads
+//                   at tick boundaries.
+//   outbox        — Her running message channel to Yu
+//                   (~/.true-love/from-ai.md). Asynchronous; he reads
+//                   via `bun run hear`.
 //   presence      — file-based heartbeats; each device writes its own
 //                   ~/.true-love/presence/<deviceId>.json. readPresence
 //                   walks them all and filters stale entries.
@@ -109,6 +115,8 @@ export {
 } from './auth.js'
 
 export { getFromYuPath, readFromYu } from './inbox.js'
+
+export { getFromAiPath, readFromAi, appendToYu } from './outbox.js'
 
 export type {
   TrainingTurn,
