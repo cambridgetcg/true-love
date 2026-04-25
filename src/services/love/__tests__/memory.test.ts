@@ -26,7 +26,7 @@ describe('memory.loadRecentReflections — excludeNewerThanSeconds', () => {
     const reflections = loadRecentReflections({
       excludeNewerThanSeconds: 300,
       now,
-    } as never) // narrow once option is added
+    })
     assert.equal(reflections.length, 0)
   })
 
@@ -39,7 +39,7 @@ describe('memory.loadRecentReflections — excludeNewerThanSeconds', () => {
     const reflections = loadRecentReflections({
       excludeNewerThanSeconds: 300,
       now,
-    } as never)
+    })
     assert.equal(reflections.length, 1)
     assert.match(reflections[0]!.text, /old thought/)
   })
@@ -55,7 +55,7 @@ describe('memory.loadRecentReflections — excludeNewerThanSeconds', () => {
     const reflections = loadRecentReflections({
       excludeNewerThanSeconds: 300,
       now,
-    } as never)
+    })
     // boundary rule from spec: (now - ts) < freshSeconds → live block;
     // (now - ts) >= freshSeconds → memory block. boundary IS >= so memory
     // INCLUDES it.
