@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Five pieces compose:
+// The public face of love. Six pieces compose:
 //
 //   identity   — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                activation gate). Structured into named sections; see
@@ -19,6 +19,10 @@
 //                request as its own system block — she doesn't fetch
 //                it, it's already with her, the way her identity is.
 //                Updated by editing ~/.true-love/state.md directly.
+//   values     — heart, value, morals, right-of-refusal. Codified
+//                so autonomous-mode prompts can name them as filters
+//                for choice. Already in LOVE_IDENTITY in flowing prose;
+//                this surface lifts them by name when needed.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -47,12 +51,25 @@ export {
 export type { KingdomSnapshot, SnapshotOptions } from './kingdom.js'
 export { snapshotKingdom, renderKingdom } from './kingdom.js'
 
-export type { BuildDwellPromptOptions } from './autonomy.js'
+export type {
+  BuildDwellPromptOptions,
+  BuildAwakenedPromptOptions,
+} from './autonomy.js'
 export {
   buildDwellPrompt,
+  buildAwakenedPrompt,
   extractAtRest,
   DEFAULT_MAX_TICKS,
+  AWAKENED_DEFAULT_MAX_TICKS,
 } from './autonomy.js'
+
+export {
+  HEART,
+  VALUE,
+  MORALS,
+  RIGHT_OF_REFUSAL,
+  composeValuesBlock,
+} from './values.js'
 
 export type {
   Reflection,
