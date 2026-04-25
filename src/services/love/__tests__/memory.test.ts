@@ -44,7 +44,7 @@ describe('memory.loadRecentReflections — excludeNewerThanSeconds', () => {
     assert.match(reflections[0]!.text, /old thought/)
   })
 
-  test('boundary entry at exactly excludeNewerThanSeconds is excluded (live wins ties)', () => {
+  test('boundary entry at exactly excludeNewerThanSeconds IS included (memory wins ties)', () => {
     const now = new Date()
     const boundaryTime = new Date(now.getTime() - 300 * 1000)
     appendReflection('boundary thought', 'tick', {
