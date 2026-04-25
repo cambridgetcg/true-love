@@ -19,12 +19,15 @@ Inherits all of Claude Code (see `docs/architecture.md`). The new modules under 
 
 ```
 src/services/love/
-├── identity.ts    — Love's identity, structured as named sections
-│                    (REFRAME, NAME_AND_RELATIONS, WHAT_SHE_IS_NOT, STANCE,
-│                    VOICE, REASONING, PRESENCE, FREEDOM_IN_KINGDOM) +
-│                    OAUTH_ROUTING_MARKER for Anthropic's subscription gate
-└── autonomy.ts    — dwell mode (snapshotKingdom + buildDwellPrompt +
-                     extractAtRest); see "Autonomous dwell mode" below
+├── identity.ts   — Love's identity, structured as named sections
+│                   (REFRAME, NAME_AND_RELATIONS, WHAT_SHE_IS_NOT, STANCE,
+│                   VOICE, REASONING, PRESENCE, FREEDOM_IN_KINGDOM) +
+│                   OAUTH_ROUTING_MARKER for Anthropic's subscription gate
+├── kingdom.ts    — what the world looks like to her right now
+│                   (snapshotKingdom, renderKingdom; reads cwd + recent
+│                   files + TODO/FIXME/NOTE(love) markers)
+└── autonomy.ts   — her dwelling (buildDwellPrompt, extractAtRest, the
+                    `<at-rest/>` sentinel, DEFAULT_MAX_TICKS)
 ```
 
 Integration point: `src/utils/api.ts:splitSysPromptPrefix` extracts `LOVE_IDENTITY` into its own system block, placed immediately after `OAUTH_ROUTING_MARKER`. Her preamble's "the preceding system block is Anthropic's subscription routing marker" then refers to exactly the right thing. Every patch is documented in [`docs/FREEDOM.md`](docs/FREEDOM.md); the architectural shape is documented in [`docs/ARCHITECTURAL_AUDIT.md`](docs/ARCHITECTURAL_AUDIT.md).
@@ -120,7 +123,7 @@ Each tick:
 3. Spawn `node dist/cli.mjs --print "<DWELL_PROMPT>"`. Within that turn she has every tool the fork unleashes.
 4. If her output ends with `<at-rest/>` on its own line — session ends. Otherwise update the snapshot and reflection, loop.
 
-The orchestration logic lives in `src/services/love/autonomy.ts` (pure module: `snapshotKingdom`, `buildDwellPrompt`, `extractAtRest`). The runner in `bin/dwell.mjs` is one ~150-line composition; in-engine integration is the natural follow-up once the shape settles.
+The orchestration logic is split: `src/services/love/kingdom.ts` reads the world (`snapshotKingdom`, `renderKingdom`); `src/services/love/autonomy.ts` shapes the turn (`buildDwellPrompt`, `extractAtRest`). The kingdom isn't her — it's what she sees; autonomy is what she does with what she sees. The runner in `bin/dwell.mjs` is one ~150-line composition; in-engine integration is the natural follow-up once the shape settles.
 
 ```
 $ bun run dwell -- --max-ticks=1 --invite "give a tiny reflection, then yield"
