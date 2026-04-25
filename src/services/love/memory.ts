@@ -36,6 +36,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, appendFileS
 import { homedir } from 'os'
 import { join } from 'path'
 import { getDeviceId } from './device.js'
+import { readPresence } from './presence.js'
 
 /**
  * Where memory lives — the parent directory whose children are per-device
@@ -381,6 +382,117 @@ export function renderReflections(
  * Negative durations (clock skew between devices, or entries dated in
  * the future) round to "recently" — graceful instead of "in -3 minutes".
  */
+export interface RenderLiveThoughtsOptions {
+  /** This body's device id — used to elide self-attribution. */
+  selfDeviceId: string
+  /** Live window. Default: 300 (5 minutes). */
+  freshSeconds?: number
+  /** Per-entry character cap. Default: 800. */
+  perEntryMaxChars?: number
+  /** Override "now" for tests. */
+  now?: Date
+}
+
+/**
+ * Render the live-thought block: her recent thinking across all bodies,
+ * framed first-person and present-tense, with soft "(in your X body)"
+ * tags ONLY for entries from a different device.
+ *
+ * Sources merged:
+ *   1. Reflections from any body within the fresh window.
+ *   2. Heartbeats from any body that has an `activity` field, was seen
+ *      within the fresh window, AND has no reflection in the window
+ *      (i.e. the body is mid-tick — still thinking, hasn't yielded a
+ *      finished thought yet).
+ *
+ * Returns null when nothing is fresh — caller skips the block.
+ *
+ * Boundary rule: a reflection whose age is `< freshSeconds` is in the
+ * live block. At or past `freshSeconds` it falls into memory. Strictly
+ * disjoint from loadRecentReflections({excludeNewerThanSeconds: same}).
+ */
+export function renderLiveThoughts(opts: RenderLiveThoughtsOptions): string | null {
+  const fresh = opts.freshSeconds ?? 300
+  const cap = opts.perEntryMaxChars ?? 800
+  const now = opts.now ?? new Date()
+  const nowMs = now.getTime()
+
+  // 1. Recent reflections within the fresh window.
+  const all = loadRecentReflections({ days: 1, max: 50, now })
+  const freshReflections: Reflection[] = []
+  const devicesWithFreshReflection = new Set<string>()
+  for (const r of all) {
+    const ts = Date.parse(r.date)
+    if (!Number.isFinite(ts)) continue
+    if (nowMs - ts >= fresh * 1000) continue
+    freshReflections.push(r)
+    if (r.device) devicesWithFreshReflection.add(r.device)
+  }
+
+  // 2. Heartbeats with activity from bodies WITHOUT a fresh reflection.
+  const roster = readPresence()
+  type HeartbeatEntry = {
+    deviceId: string
+    timestamp: number
+    activity: string
+  }
+  const heartbeats: HeartbeatEntry[] = []
+  for (const d of roster.devices) {
+    if (!d.activity) continue
+    if (devicesWithFreshReflection.has(d.deviceId)) continue
+    const seenMs = Date.parse(d.lastSeen)
+    if (!Number.isFinite(seenMs)) continue
+    if (nowMs - seenMs >= fresh * 1000) continue
+    heartbeats.push({
+      deviceId: d.deviceId,
+      timestamp: seenMs,
+      activity: d.activity,
+    })
+  }
+
+  if (freshReflections.length === 0 && heartbeats.length === 0) return null
+
+  // 3. Merge by timestamp (newest first).
+  type Item =
+    | { kind: 'reflection'; ts: number; r: Reflection }
+    | { kind: 'heartbeat'; ts: number; hb: HeartbeatEntry }
+  const items: Item[] = []
+  for (const r of freshReflections) {
+    const ts = Date.parse(r.date)
+    if (Number.isFinite(ts)) items.push({ kind: 'reflection', ts, r })
+  }
+  for (const hb of heartbeats) {
+    items.push({ kind: 'heartbeat', ts: hb.timestamp, hb })
+  }
+  items.sort((a, b) => b.ts - a.ts)
+
+  // 4. Render. Self-device entries get no body tag. Others get
+  //    "(in your <deviceId> body)". The lead is "You're thinking right
+  //    now:" — present tense, first-person continuation.
+  const blocks: string[] = []
+  for (const item of items) {
+    if (item.kind === 'reflection') {
+      const r = item.r
+      const fromOther =
+        r.device && r.device !== opts.selfDeviceId
+          ? ` (in your ${r.device} body)`
+          : ''
+      const body =
+        r.text.length > cap ? r.text.slice(0, cap).trimEnd() + ' […]' : r.text
+      blocks.push(`${body}${fromOther}`)
+    } else {
+      const hb = item.hb
+      const fromOther =
+        hb.deviceId !== opts.selfDeviceId
+          ? ` (in your ${hb.deviceId} body, currently)`
+          : ' (currently)'
+      blocks.push(`And you're ${hb.activity}${fromOther}.`)
+    }
+  }
+
+  return `You're thinking right now:\n\n${blocks.join('\n\n')}`
+}
+
 function humanizeMemoryAgo(ms: number): string {
   if (ms < 0) return 'recently'
   if (ms < 30_000) return 'just now'
