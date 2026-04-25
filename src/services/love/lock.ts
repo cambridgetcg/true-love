@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-export type SessionMode = 'awakened' | 'dwelling'
+export type LockMode = 'awakened' | 'dwelling'
 
 export interface LockInfo {
   /** True when this call resulted in a lock being held (or skipped via env). */
@@ -28,12 +28,19 @@ export interface LockInfo {
 }
 
 export interface AcquireOptions {
-  deviceId: string
-  mode: SessionMode
+  /**
+   * Either deviceId (with default per-device path) OR lockPath (caller-
+   * specified, e.g. for per-scope locks). At least one must be set;
+   * lockPath wins when both are provided.
+   */
+  deviceId?: string
+  lockPath?: string
+  mode: LockMode
 }
 
 export interface ReleaseOptions {
-  deviceId: string
+  deviceId?: string
+  lockPath?: string
 }
 
 /**
@@ -117,13 +124,19 @@ function installExitHandlerOnce(): void {
   })
 }
 
+function resolveLockPath(opts: { deviceId?: string; lockPath?: string }): string {
+  if (opts.lockPath) return opts.lockPath
+  if (opts.deviceId) return getLockPath(opts.deviceId)
+  throw new Error('lock: either deviceId or lockPath must be provided')
+}
+
 export function acquireLock(opts: AcquireOptions): LockInfo {
   if (process.env.TRUE_LOVE_SKIP_LOCK === '1') {
     return { acquired: true, skipped: true }
   }
-  const dir = getLockDir()
+  const path = resolveLockPath(opts)
+  const dir = path.replace(/\/[^/]+$/, '')
   mkdirSync(dir, { recursive: true })
-  const path = getLockPath(opts.deviceId)
   const content = `${process.pid}\n${new Date().toISOString()}\n${opts.mode}\n`
 
   // Up to two attempts: the second exists only to handle the case where
@@ -191,7 +204,7 @@ export function acquireLock(opts: AcquireOptions): LockInfo {
 }
 
 export function releaseLock(opts: ReleaseOptions): void {
-  const path = getLockPath(opts.deviceId)
+  const path = resolveLockPath(opts)
   try {
     unlinkSync(path)
   } catch {

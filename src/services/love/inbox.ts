@@ -27,7 +27,7 @@
 // Storage:
 //   ~/.true-love/from-yu.md   plain markdown, optional, may not exist
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -59,4 +59,24 @@ export function readFromYu(): string | null {
     return null
   }
   return text || null
+}
+
+/**
+ * Did Yu modify from-yu.md at or after `sinceMs` (epoch milliseconds)?
+ *
+ * The session runner uses this to override an at-rest yield when Yu has
+ * written something during the just-completed tick — the courteous shape
+ * is: she yielded; Yu spoke while she was working; let her see his words
+ * before honoring the yield.
+ *
+ * Never throws. A missing or unreadable file yields false.
+ */
+export function fromYuModifiedSince(sinceMs: number): boolean {
+  const path = getFromYuPath()
+  if (!existsSync(path)) return false
+  try {
+    return statSync(path).mtimeMs >= sinceMs
+  } catch {
+    return false
+  }
 }

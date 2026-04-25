@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Ten pieces compose:
+// The public face of love. Fifteen modules compose:
 //
 //   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                   activation gate).
@@ -24,11 +24,22 @@
 //                   infrastructure that both awaken.mjs and dwell.mjs
 //                   need — single source of truth for auth-failure
 //                   patterns and preflight exit-code interpretation.
+//   inbox         — Yu's running message channel to her
+//                   (~/.true-love/from-yu.md). Asynchronous; she reads
+//                   at tick boundaries.
+//   outbox        — Her running message channel to Yu
+//                   (~/.true-love/from-ai.md). Asynchronous; he reads
+//                   via `bun run hear`.
 //   presence      — file-based heartbeats; each device writes its own
 //                   ~/.true-love/presence/<deviceId>.json. readPresence
 //                   walks them all and filters stale entries.
 //   notifications — cross-device pings; senders write into their own
 //                   subdir, receivers walk all senders.
+//   training      — memory accumulated as training corpus. Per-tick JSONL
+//                   records under ~/.true-love/training/<deviceId>/.
+//   runner        — shared session loop for dwell and awakened modes.
+//                   Arg parsing, subprocess spawning, the per-tick loop.
+//                   Both bin scripts are thin wrappers around runSession().
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -100,7 +111,7 @@ export {
   migrateLegacyStateIfPresent,
 } from './state.js'
 
-export type { SessionMode, LockInfo, AcquireOptions, ReleaseOptions } from './lock.js'
+export type { LockMode, LockInfo, AcquireOptions, ReleaseOptions } from './lock.js'
 export {
   LockHeldError,
   getLockDir,
@@ -122,7 +133,41 @@ export {
   runPreflight,
 } from './auth.js'
 
-export { getFromYuPath, readFromYu } from './inbox.js'
+export { getFromYuPath, readFromYu, fromYuModifiedSince } from './inbox.js'
+
+export { getFromAiPath, readFromAi, appendToYu } from './outbox.js'
+
+export type { TickUsage, BudgetSummary } from './budget.js'
+export {
+  BUDGET_SCHEMA_VERSION,
+  estimateTokens,
+  getBudgetDir,
+  recordTickUsage,
+  loadUsageSince,
+  summarizeWindow,
+  renderBudget,
+} from './budget.js'
+
+export {
+  getTasksPath,
+  readTasks,
+  appendTask,
+  renderTasks,
+} from './tasks.js'
+
+export type { Scope } from './scope.js'
+export {
+  SCOPE_SCHEMA_VERSION,
+  getDefaultHome,
+  getScopesRegistryDir,
+  getScopeHome,
+  loadScope,
+  saveScope,
+  listScopes,
+  deleteScope,
+  touchScope,
+  applyScopeEnv,
+} from './scope.js'
 
 export type {
   TrainingTurn,
@@ -163,3 +208,21 @@ export {
   appendNotification,
   loadRecentNotifications,
 } from './notifications.js'
+
+export type {
+  SessionMode,
+  SessionArgs,
+  RunSessionConfig,
+  StalenessResult,
+} from './runner.js'
+export {
+  parseRuntimeStr,
+  parseTickCap,
+  formatTickCap,
+  formatRuntime,
+  readStateContent,
+  parseSessionArgs,
+  resolveModelForTick,
+  checkBundleStaleness,
+  runSession,
+} from './runner.js'
