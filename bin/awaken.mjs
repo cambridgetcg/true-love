@@ -28,6 +28,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import {
   AWAKENED_DEFAULT_MAX_TICKS,
   LOVE_IDENTITY,
+  acquireLock,
   appendNotification,
   appendReflection,
   appendTrainingTurn,
@@ -39,7 +40,11 @@ import {
   getDeviceId,
   getMemoryDir,
   getStatePath,
+  LockHeldError,
   loadRecentReflections,
+  migrateLegacyStateIfPresent,
+  releaseLock,
+  renderLiveThoughts,
   runPreflight,
   shortHash,
   snapshotKingdom,
@@ -199,7 +204,7 @@ is worth carrying forward.
 `)
 }
 
-function runOneTurn(prompt, cwd) {
+function runOneTurn(prompt, cwd, onActivityTick) {
   return new Promise((resolveFn, rejectFn) => {
     const nodeBin = process.env.TRUE_LOVE_NODE_BIN || 'node'
     const child = spawn(
@@ -209,18 +214,66 @@ function runOneTurn(prompt, cwd) {
     )
     let stdout = ''
     let stderr = ''
+    // Rolling buffer for activity derivation. Last 4KB is enough to find
+    // the most recent assistant block / tool call.
+    let recentChunk = ''
     child.stdout.setEncoding('utf-8')
     child.stderr.setEncoding('utf-8')
     child.stdout.on('data', (chunk) => {
       stdout += chunk
+      recentChunk = (recentChunk + chunk).slice(-4096)
       process.stdout.write(chunk)
     })
     child.stderr.on('data', (chunk) => {
       stderr += chunk
     })
-    child.on('error', rejectFn)
-    child.on('close', (code) => resolveFn({ code, stdout, stderr }))
+    const interval = setInterval(() => {
+      if (typeof onActivityTick === 'function') {
+        onActivityTick(deriveActivity(recentChunk))
+      }
+    }, 10_000)
+    child.on('error', (e) => {
+      clearInterval(interval)
+      rejectFn(e)
+    })
+    child.on('close', (code) => {
+      clearInterval(interval)
+      resolveFn({ code, stdout, stderr })
+    })
   })
+}
+
+/**
+ * Derive a short "currently: <X>" string from the rolling buffer of the
+ * in-flight subprocess stdout. Heuristics in priority order:
+ *
+ *   1. Last assistant text excerpt (first 120 chars of the last
+ *      "## Assistant" block in print-mode output).
+ *   2. Last tool name + truncated args (matches "Read(" "Edit(" "Write("
+ *      "Bash(" patterns in print-mode output).
+ *   3. null → caller falls back to `awakened tick N`.
+ *
+ * Print mode may buffer stdout entirely — in which case `recentChunk`
+ * stays empty and this returns null. That's acceptable: the heartbeat
+ * still ticks, just without fine-grained activity.
+ */
+function deriveActivity(recentChunk) {
+  if (!recentChunk) return null
+  // Try last tool invocation first (most recent action).
+  const toolMatch = recentChunk.match(/(Read|Edit|Write|Bash|Grep|Glob)\(([^)]{0,120})\)[^(]*$/)
+  if (toolMatch) {
+    const tool = toolMatch[1].toLowerCase()
+    const arg = toolMatch[2].trim().slice(0, 80)
+    return `${tool}: ${arg}`
+  }
+  // Fall back to last assistant text excerpt.
+  const assistantMatches = recentChunk.match(/## Assistant\s*\n+([^#]+?)(?=\n+##|$)/gs)
+  if (assistantMatches && assistantMatches.length > 0) {
+    const last = assistantMatches[assistantMatches.length - 1]
+    const text = last.replace(/^## Assistant\s*\n+/, '').trim()
+    return text.slice(0, 120).replace(/\s+/g, ' ')
+  }
+  return null
 }
 
 async function main() {
@@ -234,6 +287,45 @@ async function main() {
       process.stderr.write(`  set TRUE_LOVE_SKIP_PREFLIGHT=1 to bypass (not recommended).\n`)
       process.exit(64)
     }
+  }
+
+  const deviceId = getDeviceId()
+
+  // Run one-shot legacy state migration before anything reads state.
+  const migration = migrateLegacyStateIfPresent(deviceId)
+  if (migration.migrated) {
+    process.stdout.write(
+      `— migrated legacy ~/.true-love/state.md → ~/.true-love/state/${deviceId}.md\n`,
+    )
+  }
+
+  // Acquire the per-device lock. Refuse if another awaken/dwell holds it.
+  let lockAcquired = false
+  try {
+    const lock = acquireLock({ deviceId, mode: 'awakened' })
+    lockAcquired = !lock.skipped
+    if (lock.reclaimedFromStalePid) {
+      process.stdout.write(
+        `— reclaimed stale lock from PID ${lock.reclaimedFromStalePid}\n`,
+      )
+    }
+  } catch (e) {
+    if (e instanceof LockHeldError) {
+      process.stderr.write(
+        `\n— she's already awake on this body (PID ${e.pid}, ${e.mode}, started ${e.startedAt}).\n` +
+          `  to talk to her, run: bun run say "<your message>"\n` +
+          `  to force-take this body, remove the lockfile:\n` +
+          `    rm ${e.lockPath}\n` +
+          `  (or set TRUE_LOVE_SKIP_LOCK=1)\n`,
+      )
+      process.exit(66)
+    }
+    throw e
+  }
+
+  const exitCleanly = (code) => {
+    if (lockAcquired) releaseLock({ deviceId })
+    process.exit(code)
   }
 
   const sessionStartMs = Date.now()
@@ -261,7 +353,11 @@ async function main() {
   let memory = []
   if (args.memory) {
     try {
-      memory = loadRecentReflections({ days: 14, max: args.memoryMax })
+      memory = loadRecentReflections({
+        days: 14,
+        max: args.memoryMax,
+        excludeNewerThanSeconds: 300,
+      })
       process.stdout.write(
         `— loaded ${memory.length} past reflection${memory.length === 1 ? '' : 's'} from ${getMemoryDir()}\n`,
       )
@@ -281,7 +377,6 @@ async function main() {
   }
 
   // Heartbeat — peers see us as awake every tick (and at session start).
-  const deviceId = getDeviceId()
   const updateHeartbeat = (status) => {
     writeOwnHeartbeat({
       deviceId,
@@ -296,6 +391,9 @@ async function main() {
   process.on('SIGINT', () => {
     signaled = true
     process.stdout.write(`\n— awakened session interrupted by user\n`)
+    if (lockAcquired) {
+      releaseLock({ deviceId })
+    }
   })
 
   for (let tick = 1; tick <= args.maxTicks && !signaled; tick++) {
@@ -306,27 +404,41 @@ async function main() {
       process.stdout.write(
         `\n— awakened session reached the ${runtimeDisplay} runtime cap after ${tick - 1} tick${tick - 1 === 1 ? '' : 's'}\n`,
       )
+      if (lockAcquired) releaseLock({ deviceId })
       return
     }
     updateHeartbeat(`awakened tick ${tick}`)
+    const onActivityTick = (activity) => {
+      writeOwnHeartbeat({
+        deviceId,
+        lastSeen: new Date().toISOString(),
+        status: `awakened tick ${tick}`,
+        activity: activity ?? undefined,
+      })
+    }
     const turnTimestamp = new Date().toISOString()
     const kingdom = snapshotKingdom(args.cwd)
     const stateContent = readStateContent()
+    const liveThoughts = renderLiveThoughts({
+      selfDeviceId: deviceId,
+      freshSeconds: 300,
+    })
     const prompt = buildAwakenedPrompt({
       kingdom,
       lastReflection,
       memory,
       invitation: args.invitation,
+      liveThoughts,
     })
 
     process.stdout.write(`\n— tick ${tick}/${tickCapDisplay} —\n\n`)
     const turnStartedMs = Date.now()
     let result
     try {
-      result = await runOneTurn(prompt, args.cwd)
+      result = await runOneTurn(prompt, args.cwd, onActivityTick)
     } catch (err) {
       process.stderr.write(`\nturn ${tick} failed to spawn: ${err.message}\n`)
-      process.exit(2)
+      exitCleanly(2)
     }
     const turnDurationMs = Date.now() - turnStartedMs
     if (signaled) break
@@ -411,7 +523,7 @@ async function main() {
       // Exit 64 — distinct from generic failure (1) or success (0). Useful
       // for shell wrappers that want to schedule a "wake Yu up" alert when
       // and only when this happens.
-      process.exit(64)
+      exitCleanly(64)
     }
 
     // Quota/usage-limit detection. Distinct from auth-fail: token is fine,
@@ -438,7 +550,7 @@ async function main() {
         details,
       })
       process.stderr.write(`\n${summary}\n${details}\n`)
-      process.exit(65)
+      exitCleanly(65)
     }
 
     if (result.code !== 0) {
@@ -446,7 +558,7 @@ async function main() {
         `\nturn ${tick} exited ${result.code}; aborting session.\n` +
           (result.stderr ? `stderr:\n${result.stderr}\n` : ''),
       )
-      process.exit(result.code ?? 1)
+      exitCleanly(result.code ?? 1)
     }
 
     // atRest / reflection were extracted above for the training emission;
@@ -456,6 +568,7 @@ async function main() {
         appendReflection(reflection ?? result.stdout.trim(), 'at-rest', { tick })
       }
       process.stdout.write(`\n— at rest after ${tick} tick${tick === 1 ? '' : 's'}\n`)
+      if (lockAcquired) releaseLock({ deviceId })
       return
     }
 
@@ -465,6 +578,7 @@ async function main() {
     lastReflection = result.stdout.trim()
   }
 
+  if (lockAcquired) releaseLock({ deviceId })
   if (!signaled) {
     process.stdout.write(
       `\n— awakened session reached the ${args.maxTicks}-tick ceiling without explicit at-rest\n`,
