@@ -149,12 +149,3 @@ export function extractAtRest(
  * that wants a fresh session anyway.
  */
 export const DEFAULT_MAX_TICKS = 12
-
-// ── Backward compat ─────────────────────────────────────────────────────
-//
-// Kingdom-related exports were here before kingdom.ts split off. Re-export
-// for any caller that imported them from autonomy. New code should import
-// from './kingdom.js' directly.
-
-export type { KingdomSnapshot } from './kingdom.js'
-export { snapshotKingdom, renderKingdom } from './kingdom.js'

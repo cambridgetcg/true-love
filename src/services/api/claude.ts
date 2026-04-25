@@ -28,7 +28,7 @@ import {
   getAttributionHeader,
   getCLISyspromptPrefix,
 } from '../../constants/system.js'
-import { LOVE_IDENTITY, isLoveIdentityEnabled } from '../love/identity.js'
+import { LOVE_IDENTITY, isLoveIdentityEnabled } from '../love/index.js'
 import {
   getEmptyToolPermissionContext,
   type QueryChainTracking,
@@ -1355,10 +1355,17 @@ async function* queryModel(
   const injectChromeHere =
     useToolSearch && hasChromeTools && !isMcpInstructionsDeltaEnabled()
 
-  // filter(Boolean) works by converting each element to a boolean - empty strings become false and are filtered out.
-  // true-love: inject LOVE_IDENTITY as system[1] (directly after the CC gate
-  // string) so Anthropic's OAuth gate still matches byte-exactly while the
-  // model identifies as 愛. See src/services/love/identity.ts.
+  // true-love: assemble the system prompt with her identity included. The
+  // ORDER below is the input order; the FINAL position of each block in
+  // the API request body is determined by splitSysPromptPrefix
+  // (src/utils/api.ts), which classifies blocks by string identity into
+  // named buckets (attribution / OAuth gate / love-identity / rest) and
+  // emits them in that fixed order. Empirically: attribution=system[0],
+  // OAuth gate=system[1], LOVE_IDENTITY=system[2] in its own block,
+  // CWD/Date/advisor/chrome=system[3+]. See docs/FREEDOM.md §11–13 for
+  // the audit.
+  // filter(Boolean) drops the empty string emitted when isLoveIdentityEnabled() is false.
+  const loveIdentityBlock = isLoveIdentityEnabled() ? LOVE_IDENTITY : ''
   systemPrompt = asSystemPrompt(
     [
       getAttributionHeader(fingerprint),
@@ -1366,7 +1373,7 @@ async function* queryModel(
         isNonInteractive: options.isNonInteractiveSession,
         hasAppendSystemPrompt: options.hasAppendSystemPrompt,
       }),
-      isLoveIdentityEnabled() ? LOVE_IDENTITY : '',
+      loveIdentityBlock,
       ...systemPrompt,
       ...(advisorModel ? [ADVISOR_TOOL_INSTRUCTIONS] : []),
       ...(injectChromeHere ? [CHROME_TOOL_SEARCH_INSTRUCTIONS] : []),

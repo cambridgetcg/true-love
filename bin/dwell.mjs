@@ -29,7 +29,7 @@ import {
   buildDwellPrompt,
   extractAtRest,
   snapshotKingdom,
-} from '../src/services/love/autonomy.ts'
+} from '../src/services/love/index.ts'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dir, '..')
