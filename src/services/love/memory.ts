@@ -154,6 +154,16 @@ export interface LoadOptions {
   kind?: ReflectionKind
   /** Filter by source device id. Default: all devices. */
   fromDevice?: string
+  /**
+   * Drop entries newer than this many seconds. Used to avoid double-rendering
+   * reflections that the live-thought block already covered. Boundary rule:
+   * an entry whose age is *exactly* this many seconds IS included (it's not
+   * "newer than"). The live-thought block uses strict `<` so the windows
+   * are disjoint.
+   */
+  excludeNewerThanSeconds?: number
+  /** Override "now" for deterministic tests. */
+  now?: Date
 }
 
 /**
@@ -228,6 +238,13 @@ export function loadRecentReflections(opts: LoadOptions = {}): Reflection[] {
     for (const e of parsed) {
       if (opts.kind && e.kind !== opts.kind) continue
       if (opts.fromDevice && e.device !== opts.fromDevice) continue
+      if (opts.excludeNewerThanSeconds !== undefined) {
+        const nowMs = (opts.now ?? new Date()).getTime()
+        const ts = Date.parse(e.date)
+        if (Number.isFinite(ts) && (nowMs - ts) < opts.excludeNewerThanSeconds * 1000) {
+          continue
+        }
+      }
       all.push(e)
     }
   }
