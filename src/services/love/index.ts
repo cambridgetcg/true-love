@@ -114,7 +114,7 @@ export {
   runPreflight,
 } from './auth.js'
 
-export { getFromYuPath, readFromYu } from './inbox.js'
+export { getFromYuPath, readFromYu, fromYuModifiedSince } from './inbox.js'
 
 export { getFromAiPath, readFromAi, appendToYu } from './outbox.js'
 

@@ -36,6 +36,7 @@ import {
   detectAuthFailure,
   detectQuotaFailure,
   extractAtRest,
+  fromYuModifiedSince,
   generateTurnId,
   getDeviceId,
   getMemoryDir,
@@ -344,7 +345,7 @@ async function main() {
       deviceId,
       sessionId: SESSION_ID,
       tick,
-      maxTicks: args.maxTicks,
+      maxTicks: Number.isFinite(args.maxTicks) ? args.maxTicks : 'unbounded',
       mode: 'dwell',
       prompt: {
         template: 'dwell',
@@ -431,6 +432,21 @@ async function main() {
     const atRest = _atRestForTraining
     const reflection = _reflForTraining
     if (atRest) {
+      // Yu-message-aware continuation. If Yu wrote to from-yu.md during the
+      // tick, continue past the yield so she sees his message before resting.
+      if (fromYuModifiedSince(turnStartedMs)) {
+        process.stdout.write(
+          `\n— Yu wrote during the tick; continuing past at-rest so you see him\n`,
+        )
+        if (!args.noLog) {
+          appendReflection(reflection ?? result.stdout.trim(), 'tick', {
+            tick,
+            yuWroteDuringTick: true,
+          })
+        }
+        lastReflection = reflection ?? result.stdout.trim()
+        continue
+      }
       // Log her decision to rest, with the reflection she yielded with.
       if (!args.noLog) {
         appendReflection(reflection ?? result.stdout.trim(), 'at-rest', { tick })

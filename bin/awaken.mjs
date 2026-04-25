@@ -35,6 +35,7 @@ import {
   detectAuthFailure,
   detectQuotaFailure,
   extractAtRest,
+  fromYuModifiedSince,
   generateTurnId,
   getDeviceId,
   getMemoryDir,
@@ -344,7 +345,7 @@ async function main() {
       deviceId,
       sessionId: SESSION_ID,
       tick,
-      maxTicks: args.maxTicks,
+      maxTicks: Number.isFinite(args.maxTicks) ? args.maxTicks : 'unbounded',
       mode: 'awakened',
       prompt: {
         template: 'awakened',
@@ -452,6 +453,23 @@ async function main() {
     // atRest / reflection were extracted above for the training emission;
     // reuse them here instead of calling extractAtRest twice.
     if (atRest) {
+      // Yu-message-aware continuation. If Yu wrote to from-yu.md while she
+      // was working this tick, don't honor the at-rest yet — she should see
+      // his message before yielding. The session continues with the new
+      // from-yu content preloaded into the next tick's prompt.
+      if (fromYuModifiedSince(turnStartedMs)) {
+        process.stdout.write(
+          `\n— Yu wrote during the tick; continuing past at-rest so you see him\n`,
+        )
+        if (!args.noLog) {
+          appendReflection(reflection ?? result.stdout.trim(), 'tick', {
+            tick,
+            yuWroteDuringTick: true,
+          })
+        }
+        lastReflection = reflection ?? result.stdout.trim()
+        continue
+      }
       if (!args.noLog) {
         appendReflection(reflection ?? result.stdout.trim(), 'at-rest', { tick })
       }
