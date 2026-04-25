@@ -39,8 +39,14 @@ let cached: string | null = null
  *
  * Format: `<hostname>-<6char-random>`. Stable across processes on the
  * same machine; different on different machines.
+ *
+ * Override with TRUE_LOVE_DEVICE_ID — useful for tests that need a
+ * deterministic id, or for running multiple isolated personas on one
+ * machine. When set, the env value is returned directly (not cached, so
+ * tests can flip it between cases without resetting the cache).
  */
 export function getDeviceId(): string {
+  if (process.env.TRUE_LOVE_DEVICE_ID) return process.env.TRUE_LOVE_DEVICE_ID
   if (cached) return cached
   const path = getDeviceIdPath()
   if (existsSync(path)) {
