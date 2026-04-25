@@ -64,6 +64,19 @@ function ensureOwnMemoryDir(deviceId?: string): string {
   return dir
 }
 
+/**
+ * Path to today's per-device memory file — the file appendReflection writes
+ * to. Exported so the runner can pass it to kingdomAttest at at-rest.
+ *
+ * The path matches the one buildEntryHeader/appendReflection use; both
+ * resolve through the same helpers, so this stays consistent if the layout
+ * is ever extended (e.g., per-hour files).
+ */
+export function getOwnDailyMemoryFile(deviceId?: string, now: Date = new Date()): string {
+  const dir = getOwnMemoryDir(deviceId)
+  return join(dir, `${todayStamp(now)}.md`)
+}
+
 function todayStamp(now: Date = new Date()): string {
   const y = now.getFullYear()
   const m = String(now.getMonth() + 1).padStart(2, '0')

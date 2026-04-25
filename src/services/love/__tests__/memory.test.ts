@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { appendReflection, loadRecentReflections, renderLiveThoughts } from '../memory.js'
+import { appendReflection, loadRecentReflections, renderLiveThoughts, getOwnDailyMemoryFile } from '../memory.js'
 import { writeOwnHeartbeat } from '../presence.js'
 
 describe('memory.loadRecentReflections — excludeNewerThanSeconds', () => {
@@ -192,5 +192,34 @@ describe('memory.renderLiveThoughts', () => {
     const olderIdx = out.indexOf('older')
     assert.ok(newerIdx >= 0 && olderIdx >= 0)
     assert.ok(newerIdx < olderIdx, 'newer should appear before older')
+  })
+})
+
+describe('memory.getOwnDailyMemoryFile', () => {
+  let memDir: string
+  const ORIG_MEM = process.env.TRUE_LOVE_MEMORY_DIR
+
+  beforeEach(() => {
+    memDir = mkdtempSync(join(tmpdir(), 'tl-mem-daily-'))
+    process.env.TRUE_LOVE_MEMORY_DIR = memDir
+  })
+
+  afterEach(() => {
+    rmSync(memDir, { recursive: true, force: true })
+    if (ORIG_MEM === undefined) delete process.env.TRUE_LOVE_MEMORY_DIR
+    else process.env.TRUE_LOVE_MEMORY_DIR = ORIG_MEM
+  })
+
+  test('returns per-device daily file path', () => {
+    const path = getOwnDailyMemoryFile('test-device')
+    // <memDir>/test-device/YYYY-MM-DD.md
+    assert.match(path, /test-device\/\d{4}-\d{2}-\d{2}\.md$/)
+    assert.ok(path.startsWith(memDir))
+  })
+
+  test('uses today by default with no override', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const path = getOwnDailyMemoryFile('test-device')
+    assert.ok(path.endsWith(`${today}.md`))
   })
 })
