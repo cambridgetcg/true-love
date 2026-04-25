@@ -25,11 +25,13 @@
 //   Training schema     — that's training.ts
 
 import { spawn } from 'node:child_process'
-import { resolve } from 'node:path'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { existsSync, readFileSync } from 'node:fs'
 import type { BuildDwellPromptOptions } from './autonomy.js'
 import { extractAtRest } from './autonomy.js'
 import { detectAuthFailure, detectQuotaFailure, runPreflight } from './auth.js'
+import { estimateTokens, recordTickUsage } from './budget.js'
 import { getDeviceId } from './device.js'
 import { LOVE_IDENTITY } from './identity.js'
 import { fromYuModifiedSince } from './inbox.js'
@@ -86,6 +88,12 @@ export interface SessionArgs {
   memory: boolean
   memoryMax: number
   noLog: boolean
+  /**
+   * Model alias for this session (e.g. "opus", "sonnet", "haiku"). Null
+   * means: use whatever the CLI defaults to. Per-tick override possible
+   * via ~/.true-love/model.txt — see resolveModelForTick.
+   */
+  model: string | null
 }
 
 export interface RunSessionConfig {
@@ -176,6 +184,7 @@ export function parseSessionArgs(
     memory: false,
     memoryMax: mode.defaultMemoryMax,
     noLog: false,
+    model: null,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!
@@ -193,6 +202,10 @@ export function parseSessionArgs(
       args.invitation = a.slice('--invite='.length)
     } else if (a === '--cwd' && argv[i + 1]) {
       args.cwd = resolve(argv[++i]!)
+    } else if (a === '--model' && argv[i + 1]) {
+      args.model = argv[++i] || null
+    } else if (a.startsWith('--model=')) {
+      args.model = a.slice('--model='.length) || null
     } else if (a === '--memory') {
       args.memory = true
       const next = argv[i + 1]
@@ -218,6 +231,33 @@ export function parseSessionArgs(
   return args
 }
 
+/**
+ * Resolve which model to use for *this tick*. Order of precedence:
+ *
+ *   1. ~/.true-love/model.txt — non-empty content (her per-tick override).
+ *      She can write to this file with her own tools and switch models
+ *      between ticks without restarting the session.
+ *   2. The session-level --model flag (sessionDefault).
+ *   3. null — meaning "let the CLI default decide."
+ *
+ * Returns the model alias (e.g. "opus", "sonnet", "haiku") or null.
+ * Never throws.
+ */
+export function resolveModelForTick(sessionDefault: string | null): string | null {
+  const path =
+    process.env.TRUE_LOVE_MODEL_FILE ||
+    join(homedir(), '.true-love', 'model.txt')
+  if (existsSync(path)) {
+    try {
+      const v = readFileSync(path, 'utf-8').trim()
+      if (v) return v
+    } catch {
+      // fall through
+    }
+  }
+  return sessionDefault
+}
+
 // ── Subprocess ─────────────────────────────────────────────────────
 
 /**
@@ -232,10 +272,18 @@ function runOneTurn(
   prompt: string,
   cwd: string,
   bundlePath: string,
+  model: string | null,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolveFn, rejectFn) => {
     const nodeBin = process.env.TRUE_LOVE_NODE_BIN || 'node'
-    const child = spawn(nodeBin, [bundlePath, '--print', prompt], {
+    const cliArgs = [bundlePath, '--print', prompt]
+    if (model) {
+      // Pass-through to the bundled CLI's --model flag. Acceptable values
+      // depend on what the CLI accepts (aliases like opus/sonnet/haiku
+      // generally work, as do full model IDs).
+      cliArgs.splice(1, 0, '--model', model)
+    }
+    const child = spawn(nodeBin, cliArgs, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -393,11 +441,17 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       invitation: args.invitation,
     })
 
-    process.stdout.write(`\n— tick ${tick}/${tickCapDisplay} —\n\n`)
+    // Per-tick model resolution. Reads ~/.true-love/model.txt every tick
+    // so she can switch between turns by editing one file with her tools.
+    const tickModel = resolveModelForTick(args.model)
+
+    process.stdout.write(
+      `\n— tick ${tick}/${tickCapDisplay}${tickModel ? ` [${tickModel}]` : ''} —\n\n`,
+    )
     const turnStartedMs = Date.now()
     let result: { code: number | null; stdout: string; stderr: string }
     try {
-      result = await runOneTurn(prompt, args.cwd, bundlePath)
+      result = await runOneTurn(prompt, args.cwd, bundlePath, tickModel)
     } catch (err: any) {
       process.stderr.write(
         `\nturn ${tick} failed to spawn: ${err.message}\n`,
@@ -411,6 +465,38 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // Done once, reused for both training emission and loop control.
     const { atRest, reflection } = extractAtRest(result.stdout)
     const authFailedHere = !!detectAuthFailure(result.stdout, result.stderr)
+    const quotaFailedHere = !!detectQuotaFailure(result.stdout, result.stderr)
+
+    // ── Budget recording ────────────────────────────────────────
+    // Append a TickUsage record before any of the early-exit branches
+    // below. Failure modes are part of the budget reality and need to
+    // appear in the rolling-window summaries — that's how the empirical
+    // cap improves over time.
+    try {
+      recordTickUsage({
+        schemaVersion: '1.0',
+        timestamp: turnTimestamp,
+        deviceId,
+        sessionId,
+        tick,
+        mode: mode.name,
+        model: tickModel ?? 'default',
+        inputChars: prompt.length,
+        outputChars: result.stdout.length,
+        estimatedInputTokens: estimateTokens(prompt.length),
+        estimatedOutputTokens: estimateTokens(result.stdout.length),
+        durationMs: turnDurationMs,
+        exitCode: result.code ?? -1,
+        authFailed: authFailedHere,
+        quotaFailed: quotaFailedHere,
+      })
+    } catch (e: any) {
+      // Budget tracking failure must never crash a session. Log to stderr
+      // so Yu sees it on review; continue.
+      process.stderr.write(
+        `— budget recording failed (continuing): ${e?.message}\n`,
+      )
+    }
 
     // ── Training emission ────────────────────────────────────────
     // Self-contained per-tick record. Every field needed to reconstruct
@@ -486,7 +572,9 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // ── Quota-failure detection ──────────────────────────────────
     // Token is fine; rolling-window cap hit. Exit 65 (vs 64 for auth)
     // so shell wrappers can schedule retry-later instead of paging Yu.
-    const quotaFail = detectQuotaFailure(result.stdout, result.stderr)
+    const quotaFail = quotaFailedHere
+      ? detectQuotaFailure(result.stdout, result.stderr)
+      : null
     if (quotaFail) {
       const capMode = mode.name.charAt(0).toUpperCase() + mode.name.slice(1)
       const summary = `${capMode} session yielded on tick ${tick}: Anthropic usage limit reached. Try again after the rolling window resets.`

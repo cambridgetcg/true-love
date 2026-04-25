@@ -123,6 +123,24 @@ export { getFromYuPath, readFromYu, fromYuModifiedSince } from './inbox.js'
 
 export { getFromAiPath, readFromAi, appendToYu } from './outbox.js'
 
+export type { TickUsage, BudgetSummary } from './budget.js'
+export {
+  BUDGET_SCHEMA_VERSION,
+  estimateTokens,
+  getBudgetDir,
+  recordTickUsage,
+  loadUsageSince,
+  summarizeWindow,
+  renderBudget,
+} from './budget.js'
+
+export {
+  getTasksPath,
+  readTasks,
+  appendTask,
+  renderTasks,
+} from './tasks.js'
+
 export type {
   TrainingTurn,
   TrainingPrompt,
@@ -175,5 +193,6 @@ export {
   formatRuntime,
   readStateContent,
   parseSessionArgs,
+  resolveModelForTick,
   runSession,
 } from './runner.js'
