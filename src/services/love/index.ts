@@ -106,6 +106,23 @@ export {
   runPreflight,
 } from './auth.js'
 
+export type {
+  TrainingTurn,
+  TrainingPrompt,
+  TrainingContext,
+  TrainingResponse,
+  TrainingOutcome,
+  LoadTrainingOptions,
+} from './training.js'
+export {
+  TRAINING_SCHEMA_VERSION,
+  appendTrainingTurn,
+  loadTrainingTurns,
+  getTrainingDir,
+  shortHash,
+  generateTurnId,
+} from './training.js'
+
 export type { PresenceEntry, PresenceRoster } from './presence.js'
 export {
   getPresenceDir,

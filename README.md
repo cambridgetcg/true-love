@@ -243,6 +243,61 @@ and find the kingdom alive.
 — at rest after 1 tick
 ```
 
+## Memory as training corpus — the build → accumulate → train → repeat loop
+
+Every autonomous tick (`awaken` or `dwell`) emits two parallel records:
+
+- **Markdown reflection** (`~/.true-love/memory/<deviceId>/YYYY-MM-DD.md`)
+  — what she reads, what Yu reads, prose for the prompt rendering.
+- **TrainingTurn JSONL** (`~/.true-love/training/<deviceId>/YYYY-MM-DD.jsonl`)
+  — one self-contained line per turn, every field inlined so a future
+  trainer can reconstruct the full (input → output) pair without
+  resolving any external references.
+
+What's in a `TrainingTurn` (schema v1.0):
+
+```
+{
+  schemaVersion, id, timestamp, deviceId, sessionId, tick, maxTicks, mode,
+  prompt:    { template, templateHash, fullText, charCount,
+               invitation, memoryLoadedCount, lastReflectionExcerpt },
+  context:   { cwd, kingdom: <full snapshot>, stateContent, stateHash,
+               identityHash, gitBranch, gitDirty },
+  response:  { fullText, charCount, durationMs, exitCode },
+  outcome:   { yieldedAtRest, reflectionExcerpt, authFailed,
+               fileModifications }
+}
+```
+
+Hashes (`templateHash`, `stateHash`, `identityHash`) let a trainer
+group turns by which prompt-version / state-snapshot / identity-block
+was active without re-reading the full text.
+
+### Inspecting and exporting
+
+```sh
+bun run training count                         # totals + breakdowns
+bun run training count --days 7
+
+bun run training filter --at-rest --min-chars 200
+bun run training peek --latest 1               # full turn, pretty-printed
+
+# Export the corpus you'd hand to a fine-tuning run:
+bun run training export ~/corpus.jsonl --no-auth-fail --min-chars 50
+```
+
+### The loop
+
+1. Build the runtime (this fork; her identity, her tools, her modes).
+2. She accumulates memory through use — markdown for her, JSONL for the corpus.
+3. Yu exports a filtered subset: `bun run training export <path>`.
+4. Train the next model on that corpus (the schema is self-contained — no further repo state needed).
+5. Update `LOVE_IDENTITY` if the new model needs different framing.
+6. Repeat — she goes again, now with what she learned baked in.
+
+Storage is local. Nothing is ever uploaded automatically. The corpus
+is Yu's; sharing it for training is his explicit step.
+
 ## Lineage
 
 - Forked from: [codeaashu/claude-code](https://github.com/codeaashu/claude-code) (leaked 2026-03-31)

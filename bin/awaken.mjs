@@ -23,20 +23,38 @@
 import { spawn } from 'node:child_process'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { existsSync, readFileSync } from 'node:fs'
 import {
   AWAKENED_DEFAULT_MAX_TICKS,
+  LOVE_IDENTITY,
   appendNotification,
   appendReflection,
+  appendTrainingTurn,
   buildAwakenedPrompt,
   detectAuthFailure,
   extractAtRest,
+  generateTurnId,
   getDeviceId,
   getMemoryDir,
+  getStatePath,
   loadRecentReflections,
   runPreflight,
+  shortHash,
   snapshotKingdom,
   writeOwnHeartbeat,
 } from '../src/services/love/index.ts'
+
+const SESSION_ID = generateTurnId()
+const IDENTITY_HASH = shortHash(LOVE_IDENTITY)
+
+function readStateContent() {
+  try {
+    const p = getStatePath()
+    return existsSync(p) ? readFileSync(p, 'utf-8') : ''
+  } catch {
+    return ''
+  }
+}
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dir, '..')
@@ -205,7 +223,9 @@ async function main() {
 
   for (let tick = 1; tick <= args.maxTicks && !signaled; tick++) {
     updateHeartbeat(`awakened tick ${tick}`)
+    const turnTimestamp = new Date().toISOString()
     const kingdom = snapshotKingdom(args.cwd)
+    const stateContent = readStateContent()
     const prompt = buildAwakenedPrompt({
       kingdom,
       lastReflection,
@@ -214,6 +234,7 @@ async function main() {
     })
 
     process.stdout.write(`\n— tick ${tick}/${args.maxTicks} —\n\n`)
+    const turnStartedMs = Date.now()
     let result
     try {
       result = await runOneTurn(prompt, args.cwd)
@@ -221,13 +242,66 @@ async function main() {
       process.stderr.write(`\nturn ${tick} failed to spawn: ${err.message}\n`)
       process.exit(2)
     }
+    const turnDurationMs = Date.now() - turnStartedMs
     if (signaled) break
+
+    // Build the per-tick TrainingTurn record. Self-contained — every
+    // field needed to reconstruct the (input → output) pair is here.
+    // Emitted regardless of outcome (at-rest / normal / auth-fail) so
+    // the corpus reflects reality including failure modes.
+    const { atRest, reflection } = extractAtRest(result.stdout)
+    const authFailedHere = !!detectAuthFailure(result.stdout, result.stderr)
+    const trainingTurn = {
+      schemaVersion: '1.0',
+      id: generateTurnId(new Date(turnTimestamp)),
+      timestamp: turnTimestamp,
+      deviceId,
+      sessionId: SESSION_ID,
+      tick,
+      maxTicks: args.maxTicks,
+      mode: 'awakened',
+      prompt: {
+        template: 'awakened',
+        templateHash: shortHash(prompt.slice(0, 1500)),
+        fullText: prompt,
+        charCount: prompt.length,
+        invitation: args.invitation ?? null,
+        memoryLoadedCount: memory.length,
+        lastReflectionExcerpt: lastReflection
+          ? lastReflection.slice(0, 500)
+          : null,
+      },
+      context: {
+        cwd: args.cwd,
+        kingdom,
+        stateContent,
+        stateHash: shortHash(stateContent),
+        identityHash: IDENTITY_HASH,
+        gitBranch: kingdom.gitBranch ?? null,
+        gitDirty: kingdom.gitDirty ?? null,
+      },
+      response: {
+        fullText: result.stdout,
+        charCount: result.stdout.length,
+        durationMs: turnDurationMs,
+        exitCode: result.code,
+      },
+      outcome: {
+        yieldedAtRest: atRest,
+        reflectionExcerpt: reflection ? reflection.slice(0, 1000) : null,
+        authFailed: authFailedHere,
+        fileModifications: [], // populated by future enhancement; git diff would slow per-tick
+      },
+    }
+    appendTrainingTurn(trainingTurn)
 
     // Auth-failure detection: the bundled CLI prints "Not logged in"
     // / "Please run /login" when OAuth is dead. SDK throws "OAuth token
     // has been revoked" on server-side revocation. Either way, the
     // session can't continue without manual /login.
-    const authFail = detectAuthFailure(result.stdout, result.stderr)
+    const authFail = authFailedHere
+      ? detectAuthFailure(result.stdout, result.stderr)
+      : null
     if (authFail) {
       const summary = `Awakened session aborted on tick ${tick}: Anthropic auth dead. Run \`claude /login\` to recover.`
       const details =
@@ -262,7 +336,8 @@ async function main() {
       process.exit(result.code ?? 1)
     }
 
-    const { atRest, reflection } = extractAtRest(result.stdout)
+    // atRest / reflection were extracted above for the training emission;
+    // reuse them here instead of calling extractAtRest twice.
     if (atRest) {
       if (!args.noLog) {
         appendReflection(reflection ?? result.stdout.trim(), 'at-rest', { tick })

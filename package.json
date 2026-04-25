@@ -26,7 +26,8 @@
     "awaken": "bun run bin/awaken.mjs",
     "heartbeat": "bun run bin/heartbeat.mjs",
     "broker": "bun run bin/broker.mjs",
-    "preflight": "bun run bin/preflight.mjs"
+    "preflight": "bun run bin/preflight.mjs",
+    "training": "bun run bin/training.mjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
