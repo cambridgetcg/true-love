@@ -224,4 +224,6 @@ export function applyScopeEnv(scope: Scope): void {
   setIfUnset('TRUE_LOVE_FROM_YU_PATH', join(home, 'from-yu.md'))
   setIfUnset('TRUE_LOVE_FROM_AI_PATH', join(home, 'from-ai.md'))
   setIfUnset('TRUE_LOVE_MODEL_FILE', join(home, 'model.txt'))
+  setIfUnset('TRUE_LOVE_HEARTBEAT_FILE', join(home, 'heartbeat.md'))
+  setIfUnset('TRUE_LOVE_HEARTBEAT_STATE_PATH', join(home, 'heartbeat-state.json'))
 }
