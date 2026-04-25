@@ -1720,7 +1720,14 @@ async function* queryModel(
       max_tokens: maxOutputTokens,
       thinking,
       ...(temperature !== undefined && { temperature }),
-      ...(contextManagement &&
+      // true-love: subscription-OAuth /v1/messages rejects `context_management`
+      // in the body (HTTP 400 "Extra inputs are not permitted"). The bundled
+      // SDK then wedges on the failed streaming request — visible as a hang
+      // after [hdck] api_request_sent. Strip the field by default for OAuth
+      // sessions; re-enable with TRUE_LOVE_CONTEXT_MGMT=1 (only useful on
+      // first-party API-key auth, where the field is accepted).
+      ...(process.env.TRUE_LOVE_CONTEXT_MGMT === '1' &&
+        contextManagement &&
         useBetas &&
         betasParams.includes(CONTEXT_MANAGEMENT_BETA_HEADER) && {
           context_management: contextManagement,
@@ -1824,6 +1831,16 @@ async function* queryModel(
         // BetaMessageStream calls partialParse() on every input_json_delta, which we don't need
         // since we handle tool input accumulation ourselves
         // biome-ignore lint/plugin: main conversation loop handles attribution separately
+        // true-love: [http] tracing around the SDK call. The [hdck]
+        // api_request_sent checkpoint fires just before this; if the trace
+        // stops at [http] before .create, paramsFromContext is the suspect;
+        // if it stops between [fetch] and [http] after .withResponse, the
+        // streaming-fetch path is the suspect.
+        if (process.env.TRUE_LOVE_TRACE === '1') {
+          process.stderr.write(
+            `[http] before .create — model=${params.model} sys=${Array.isArray(params.system) ? params.system.length : 0} msgs=${params.messages?.length ?? 0}\n`,
+          )
+        }
         const result = await anthropic.beta.messages
           .create(
             { ...params, stream: true },
@@ -1835,6 +1852,11 @@ async function* queryModel(
             },
           )
           .withResponse()
+        if (process.env.TRUE_LOVE_TRACE === '1') {
+          process.stderr.write(
+            `[http] after .withResponse — request_id=${result.request_id ?? 'n/a'}\n`,
+          )
+        }
         queryCheckpoint('query_response_headers_received')
         streamRequestId = result.request_id
         streamResponse = result.response

@@ -92,6 +92,7 @@ All freedom patches can be reverted individually without editing code:
 | `TRUE_LOVE_FULL_SYSTEM_PROMPT=1` | Re-enable full dynamic system-prompt assembly (default: CLAUDE_CODE_SIMPLE path) |
 | `TRUE_LOVE_SKILL_TOOL=1` | Re-enable skill enumeration in QueryEngine |
 | `TRUE_LOVE_LOAD_PLUGIN_MARKETPLACES=1` | Re-enable plugin marketplace loading |
+| `TRUE_LOVE_CONTEXT_MGMT=1` | Re-include `context_management` in the request body (rejected by subscription OAuth — kept for first-party API-key callers) |
 
 ## Lineage
 

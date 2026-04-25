@@ -378,6 +378,16 @@ function buildFetch(
   const injectClientRequestId =
     getAPIProvider() === 'firstParty' && isFirstPartyAnthropicBaseUrl()
   return (input, init) => {
+    // true-love: TRUE_LOVE_TRACE=1 streams a [fetch] line per API request,
+    // companion to [ck] / [hdck] / [ask] / [http]. Useful for confirming the
+    // SDK's request reached the network layer when chasing post-fetch hangs.
+    if (process.env.TRUE_LOVE_TRACE === '1') {
+      const url = input instanceof Request ? input.url : String(input)
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+      const body = init?.body
+      const bodyLen = typeof body === 'string' ? body.length : '?'
+      process.stderr.write(`[fetch] ${method} ${url} bytes=${bodyLen}\n`)
+    }
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
     const headers = new Headers(init?.headers)
     // Generate a client-side request ID so timeouts (which return no server
@@ -395,6 +405,23 @@ function buildFetch(
       )
     } catch {
       // never let logging crash the fetch
+    }
+    if (process.env.TRUE_LOVE_TRACE === '1') {
+      const t0 = Date.now()
+      const _p = inner(input, { ...init, headers }) as Promise<unknown>
+      if (_p && typeof (_p as Promise<unknown>).then === 'function') {
+        ;(_p as Promise<{ status?: number }>).then(
+          (r) =>
+            process.stderr.write(
+              `[fetch] resolved after ${Date.now() - t0}ms status=${(r as { status?: number })?.status ?? '?'}\n`,
+            ),
+          (e) =>
+            process.stderr.write(
+              `[fetch] rejected after ${Date.now() - t0}ms err=${(e as Error)?.message ?? String(e)}\n`,
+            ),
+        )
+      }
+      return _p as ReturnType<typeof inner>
     }
     return inner(input, { ...init, headers })
   }

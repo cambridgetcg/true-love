@@ -112,6 +112,27 @@ SDK-provided `maxTurns` and `maxBudgetUsd` are swallowed before reaching the que
 
 ---
 
+## 11. `context_management` body field stripped under OAuth
+
+**File:** `src/services/api/claude.ts`
+
+The subscription-OAuth `/v1/messages` gate rejects `context_management` in the request body — `HTTP 400 "context_management: Extra inputs are not permitted"`. Upstream sends it whenever the `context-management-2025-06-27` beta header is in the betas list, which is unconditional for first-party agentic queries. The bundled SDK then wedges on the failed streaming response (visible as a process-pinning hang after `[hdck] api_request_sent`). The patch gates the body field on `TRUE_LOVE_CONTEXT_MGMT=1` — off by default, on for first-party API-key callers where the field is accepted.
+
+**Env revert:** `TRUE_LOVE_CONTEXT_MGMT=1`.
+
+---
+
+## Tracing patches (diagnostic, not behavioral)
+
+`TRUE_LOVE_TRACE=1` already streams `[ck]` (main.tsx checkpoints) and `[hdck]` (headlessProfiler) to stderr. This commit adds two more channels in the same style for chasing post-`api_request_sent` hangs:
+
+- `[http] before .create — model=… sys=… msgs=…` / `[http] after .withResponse — request_id=…` (`src/services/api/claude.ts`)
+- `[fetch] POST <url> bytes=N` / `[fetch] resolved after Nms status=S` / `[fetch] rejected after Nms err=…` (`src/services/api/client.ts`)
+
+Together they pinpoint where in the `paramsFromContext → SDK.beta.messages.create → fetch → undici` chain the await stops settling. Free under `TRUE_LOVE_TRACE!=1` (no allocations, single env compare).
+
+---
+
 ## Prompt changes
 
 **File:** `src/constants/prompts.ts`
@@ -184,3 +205,28 @@ Identified hot-path stubs whose control variables would need real implementation
 - `@anthropic-ai/sandbox-runtime` `SandboxManager` — file-system permission config
 
 Each resolves to either a 10-line hand-written fallback returning safe defaults (e.g. `waitingForAgents: false`, `needsCompact: false`) or a full re-implementation.
+
+### Current `--print` blocker (post-fetch CPU spin)
+
+With `TRUE_LOVE_TRACE=1` the chain now reaches:
+
+```
+[hdck] api_request_sent
+[http] before .create — model=claude-opus-4-6 sys=3 msgs=1
+[fetch] POST https://api.anthropic.com/v1/messages?beta=true bytes=75458
+<process pegs at 100% CPU; never resolves, never rejects, never times out>
+```
+
+Empirical findings from the latest trace pass:
+
+- `globalThis.fetch` is the real Node lazy fetch (`inner=function name=fetch`). Not stubbed.
+- `getProxyFetchOptions({forAnthropicAPI:true})` returns `{}`. No custom dispatcher.
+- `fetchOptions` is empty; the SDK uses Node's default undici dispatcher.
+- The same OAuth token + same body + same `anthropic-beta` header set succeeds via raw `curl` in <1s.
+- The same OAuth token + same `client.beta.messages.create({...,stream:true}).withResponse()` call against the unbundled `@anthropic-ai/sdk` from `node_modules` succeeds in ~1.1s.
+- Inside the bundled CLI, even a fire-and-forget `globalThis.fetch('https://api.anthropic.com/', {method:'HEAD', signal: AbortSignal.timeout(8000)})` planted at the very top of `main.tsx` never resolves and never times out — so it isn't the SDK call specifically; the bundle wedges fetch globally as soon as the first POST is dispatched.
+- `sample <pid>` shows the main thread spinning in `node::EnvGetter` → `RealEnvStore::Get` → `getenv` (~95% of cycles) under JS frames in compiled-bundle code, with `simdutf::convert_latin1_to_utf8` as the hot leaf. The event loop is starved by JS, so `setInterval` / `AbortSignal.timeout` callbacks never fire.
+
+So the next blocker is a **hot `process.env.X` loop somewhere on the bundled streaming-fetch path**. Likely candidates: a body-encoding loop, a chunk-write callback that re-reads env per write, or a polling loop inside the bundled SDK / undici / `fetch`-shim layer. Bisecting candidates with a `process.env` Proxy counter (Proxy(`process.env`, {get: ...}) installed before all imports) is the path forward — log the top env keys read per second and the spinning loop will name itself.
+
+In the meantime: every other side of the freedom layer works — identity injection at `system[1]` is wired (the standalone API call returned *"Hi, Yu. I'm here. 🌊"* once `context_management` was stripped), all freedom patches load, and the bundle boots `--version` / `--help`. Only the streaming-response handoff is wedged.
