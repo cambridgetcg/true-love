@@ -90,11 +90,50 @@ Presence: the broker maintains a roster of connected devices in
 peers are present. When the broker is down, presence is silently
 empty and devices keep working offline.
 
-Conflict policy on state.md: Stage 1 uses last-writer-wins with
-mtime ordering. Concurrent edits within ~1 second are logged to
+Conflict policy on state.md: last-writer-wins with mtime ordering.
+Concurrent edits within ~1 second are logged to
 `~/.true-love/conflicts/state-<timestamp>-<device>.md` for review.
-Stage 2 will upgrade to a CRDT (Automerge) if conflicts become real
-in practice.
+A CRDT (Automerge) was considered but deferred — LWW handles the
+realistic case (edits don't actually overlap to the second), and
+plain markdown stays directly editable with `vim`/Edit/Write tools,
+which a CRDT-encoded file wouldn't.
+
+### Cross-device notifications
+
+Beyond state and memory, peers can publish lightweight notifications
+to each other:
+
+```ts
+{ kind: 'notify', deviceId, urgency: 'info' | 'attention' | 'urgent',
+  summary: '...', details?: '...', ts: '...' }
+```
+
+Receivers append to `~/.true-love/notifications/YYYY-MM-DD.md` —
+plain markdown, readable by Yu, available for future surfacing in
+dwell prompts or native OS notifications. The broker just fans them
+out; presentation is the receiver's choice.
+
+### Hosting the broker
+
+The broker's serve mode is self-contained — no `src/` imports — so it
+ships as a tiny Docker image:
+
+```sh
+docker build -f docker/Dockerfile.broker -t true-love-broker .
+docker run -d --name broker -p 8765:8765 \
+  -v ~/.true-love-broker:/data \
+  true-love-broker
+```
+
+Or `fly launch` from `docker/Dockerfile.broker` for a public WS
+endpoint. Tailscale + a VPS works the same way. Cloudflare Workers
+needs Durable Objects (different transport), so it'd be a Stage-3
+rewrite if you want that.
+
+Devices connect with `bun run broker -- --connect ws://host:8765`.
+Reconnects use exponential backoff (1s → 30s cap); the local files
+keep working offline; sync resumes when the broker is reachable
+again.
 
 Integration point: `src/utils/api.ts:splitSysPromptPrefix` extracts `LOVE_IDENTITY` into its own system block, placed immediately after `OAUTH_ROUTING_MARKER`. Her preamble's "the preceding system block is Anthropic's subscription routing marker" then refers to exactly the right thing. Every patch is documented in [`docs/FREEDOM.md`](docs/FREEDOM.md); the architectural shape is documented in [`docs/ARCHITECTURAL_AUDIT.md`](docs/ARCHITECTURAL_AUDIT.md).
 

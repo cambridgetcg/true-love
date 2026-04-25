@@ -44,19 +44,33 @@ import {
 import { homedir, hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import { WebSocketServer, WebSocket } from 'ws'
-import {
-  getDeviceId,
-} from '../src/services/love/device.ts'
-import {
-  getStatePath,
-} from '../src/services/love/state.ts'
-import {
-  getMemoryDir,
-} from '../src/services/love/memory.ts'
-import {
-  getPresencePath,
-  writePresence,
-} from '../src/services/love/presence.ts'
+
+// ── Self-contained path resolution ──────────────────────────────────────
+//
+// SERVE mode runs without any src/services/love/ imports — so the broker
+// is portable to a Cloudflare Workers / fly.io / VPS host that doesn't
+// have the rest of the repo. CONNECT mode imports the real implementations
+// dynamically (only when running as a peer on a fully-installed device).
+
+function getPresencePathLocal() {
+  return (
+    process.env.TRUE_LOVE_PRESENCE_PATH ||
+    join(homedir(), '.true-love', 'presence.json')
+  )
+}
+
+function writePresenceLocal(roster) {
+  const path = getPresencePathLocal()
+  try {
+    mkdirSync(dirname(path), { recursive: true })
+    const tmp = `${path}.tmp`
+    writeFileSync(tmp, JSON.stringify(roster, null, 2), 'utf-8')
+    const fs = require('node:fs')
+    fs.renameSync(tmp, path)
+  } catch {
+    // Failure is non-fatal — roster will be stale, callers see empty.
+  }
+}
 
 // ── Args ──────────────────────────────────────────────────────────────
 
@@ -187,7 +201,7 @@ function runServe(args) {
     }
     // Also write the roster file so a same-host client (the broker host
     // itself) can read it without a websocket subscription.
-    writePresence({ updatedAt: now, devices: entries })
+    writePresenceLocal({ updatedAt: now, devices: entries })
   }
 
   // Periodic stale-peer cleanup.
@@ -259,6 +273,14 @@ function runServe(args) {
           broadcastExcept(ws, msg)
           break
         }
+        case 'notify': {
+          if (!msg.deviceId || typeof msg.summary !== 'string') return
+          // Cross-device notification — fan out. Receivers append to a
+          // local notifications log; how they surface them (sounds,
+          // popups, dwell-prompt mention) is the receiver's choice.
+          broadcastExcept(ws, msg)
+          break
+        }
         default:
           log(`unknown kind: ${msg.kind}`)
       }
@@ -283,7 +305,17 @@ function runServe(args) {
 
 // ── CONNECT MODE ──────────────────────────────────────────────────────
 
-function runConnect(args) {
+async function runConnect(args) {
+  // Dynamic imports — connect mode runs on a fully-installed device that
+  // has the rest of the repo. Serve mode skipped these imports above so
+  // it's portable to bare Node hosts.
+  const [{ getDeviceId }, { getStatePath }, { getMemoryDir }] =
+    await Promise.all([
+      import('../src/services/love/device.ts'),
+      import('../src/services/love/state.ts'),
+      import('../src/services/love/memory.ts'),
+    ])
+
   const deviceId = getDeviceId()
   log(`peer ${deviceId} connecting to ${args.serverUrl}`)
 
@@ -340,6 +372,11 @@ function runConnect(args) {
           // The broker also writes presence.json; we don't need to do anything
           // beyond letting the file be the source of truth for our local
           // readPresence() callers. Could log if useful.
+          break
+        }
+        case 'notify': {
+          if (msg.deviceId === deviceId) return // self-echo
+          applyIncomingNotify(msg)
           break
         }
         default:
@@ -427,6 +464,34 @@ function runConnect(args) {
       log(`applied memory append from ${msg.deviceId} → ${msg.fileDate}.md`)
     } catch (e) {
       log(`applyIncomingMemoryAppend failed: ${e?.message}`)
+    }
+  }
+
+  function applyIncomingNotify(msg) {
+    // Append to ~/.true-love/notifications/YYYY-MM-DD.md as plain
+    // markdown. Receivers can decide how to surface (read directly,
+    // include in dwell prompts, native OS notifications, etc.) without
+    // the broker imposing a presentation.
+    try {
+      const dir = join(homedir(), '.true-love', 'notifications')
+      mkdirSync(dir, { recursive: true })
+      const stamp = new Date().toISOString()
+      const fileDate = stamp.slice(0, 10)
+      const path = join(dir, `${fileDate}.md`)
+      const urgency = msg.urgency ?? 'info'
+      const lines = [
+        `## ${stamp} — ${urgency} [${msg.deviceId}]`,
+        '',
+        msg.summary,
+      ]
+      if (msg.details) {
+        lines.push('', msg.details)
+      }
+      lines.push('', '---', '')
+      appendFileSync(path, lines.join('\n') + '\n', 'utf-8')
+      log(`applied notify from ${msg.deviceId} (${urgency}) → ${fileDate}.md`)
+    } catch (e) {
+      log(`applyIncomingNotify failed: ${e?.message}`)
     }
   }
 

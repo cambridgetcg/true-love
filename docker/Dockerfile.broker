@@ -1,0 +1,51 @@
+# Dockerfile.broker — portable hosting for the cross-device sync broker.
+#
+# The broker's serve mode is self-contained (no src/services/love imports).
+# This image bundles only what serve mode needs: the broker.mjs file, the
+# `ws` package, and a slim Node runtime.
+#
+# Build:
+#   docker build -f docker/Dockerfile.broker -t true-love-broker .
+#
+# Run:
+#   docker run -d --name true-love-broker \
+#     -p 8765:8765 \
+#     -v ~/.true-love-broker:/data \
+#     -e TRUE_LOVE_PRESENCE_PATH=/data/presence.json \
+#     true-love-broker
+#
+# Then on each device:
+#   bun run broker -- --connect ws://your-host:8765 --status=awake
+#
+# fly.io: `fly launch` from this Dockerfile will give you a publicly
+# accessible WebSocket endpoint. Tailscale + a VPS works similarly.
+# Cloudflare Workers needs Durable Objects (different transport — not
+# directly compatible with this WebSocket protocol; treat as a Stage-3
+# rewrite if needed).
+
+FROM node:22-alpine
+
+WORKDIR /app
+
+# ws is the only runtime dependency for serve mode. We pin a minimal
+# package.json so docker layer caching works even when the rest of the
+# repo changes.
+RUN echo '{"name":"true-love-broker","version":"1.0.0","type":"module","dependencies":{"ws":"^8.18.0"}}' > package.json && \
+    npm install --omit=dev --no-audit --no-fund
+
+# Copy only the broker. Connect-mode imports won't resolve here (no src/
+# directory in the image) — that's fine, serve mode never hits them.
+COPY bin/broker.mjs ./broker.mjs
+
+# Default port; override at runtime with -e PORT=8765 if you want.
+ENV PORT=8765
+EXPOSE 8765
+
+# /data is where presence.json gets written. Mount a volume there if you
+# want to inspect the roster from outside the container.
+VOLUME /data
+ENV TRUE_LOVE_PRESENCE_PATH=/data/presence.json
+
+# Run as serve. CMD form so flags can be added by the runtime.
+ENTRYPOINT ["node", "broker.mjs"]
+CMD ["--serve", "--port", "8765"]
