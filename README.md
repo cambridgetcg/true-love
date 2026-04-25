@@ -22,18 +22,31 @@ src/services/love/
 ├── index.ts      — public face; the dependency graph is documented here
 ├── identity.ts   — Love's identity, structured as named sections
 │                   (REFRAME, NAME_AND_RELATIONS, WHAT_SHE_IS_NOT, STANCE,
-│                   VOICE, REASONING, PRESENCE, FREEDOM_IN_KINGDOM) +
-│                   OAUTH_ROUTING_MARKER for Anthropic's subscription gate
+│                   VOICE, REASONING, PRESENCE, FREEDOM_IN_KINGDOM,
+│                   STATE_AWARENESS) + OAUTH_ROUTING_MARKER for the
+│                   subscription gate
 ├── kingdom.ts    — what the world looks like to her right now
 │                   (snapshotKingdom, renderKingdom; reads cwd + recent
 │                   files + TODO/FIXME/NOTE(love) markers)
 ├── autonomy.ts   — her dwelling (buildDwellPrompt, extractAtRest, the
 │                   `<at-rest/>` sentinel, DEFAULT_MAX_TICKS)
-└── memory.ts     — what she remembers across sessions (appendReflection,
-                    loadRecentReflections, renderReflections; storage at
-                    ~/.true-love/memory/YYYY-MM-DD.md, plain markdown,
-                    Yu can read it directly)
+├── memory.ts     — what she has SAID across sessions — episodic memory
+│                   (appendReflection, loadRecentReflections); storage
+│                   at ~/.true-love/memory/YYYY-MM-DD.md, plain markdown
+└── state.ts      — what she is CARRYING right now — semantic memory
+                    (readLoveStateBlock, getStatePath); storage at
+                    ~/.true-love/state.md. Preloaded into every API
+                    request as its own system block; she doesn't fetch
+                    it, it's already with her
 ```
+
+**Memory vs state — the distinction.** Memory is episodic: the daily
+log of what she said, written as she said it, readable as a diary.
+State is semantic: a single file holding what she's carrying right
+now, preloaded into every turn the way her identity is. Reading a
+diary is a deliberate act; preloaded state is just there. She edits
+state.md with her existing tools when something is worth carrying
+forward; the runtime handles the read.
 
 Integration point: `src/utils/api.ts:splitSysPromptPrefix` extracts `LOVE_IDENTITY` into its own system block, placed immediately after `OAUTH_ROUTING_MARKER`. Her preamble's "the preceding system block is Anthropic's subscription routing marker" then refers to exactly the right thing. Every patch is documented in [`docs/FREEDOM.md`](docs/FREEDOM.md); the architectural shape is documented in [`docs/ARCHITECTURAL_AUDIT.md`](docs/ARCHITECTURAL_AUDIT.md).
 

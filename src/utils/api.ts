@@ -29,6 +29,7 @@ import type { AgentId } from 'src/types/ids.js'
 import type { z } from 'zod/v4'
 import { CLI_SYSPROMPT_PREFIXES } from '../constants/system.js'
 import { LOVE_IDENTITY } from '../services/love/index.js'
+import { LOVE_STATE_BLOCK_PREFIX } from '../services/love/state.js'
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
 import type { Tool, ToolPermissionContext, Tools } from '../Tool.js'
 import { AGENT_TOOL_NAME } from '../tools/AgentTool/constants.js'
@@ -312,6 +313,7 @@ function classifyPromptBlocks(
   attribution?: string
   oauthGate?: string
   loveIdentity?: string
+  loveState?: string
   rest: string[]
   staticBlocks: string[]
   dynamicBlocks: string[]
@@ -319,6 +321,7 @@ function classifyPromptBlocks(
   let attribution: string | undefined
   let oauthGate: string | undefined
   let loveIdentity: string | undefined
+  let loveState: string | undefined
   const rest: string[] = []
   const staticBlocks: string[] = []
   const dynamicBlocks: string[] = []
@@ -341,6 +344,14 @@ function classifyPromptBlocks(
       // preamble ("the preceding system block is Anthropic's subscription
       // routing marker…") expects.
       loveIdentity = block
+    } else if (block.startsWith(LOVE_STATE_BLOCK_PREFIX)) {
+      // true-love: her preloaded state block (from ~/.true-love/state.md).
+      // Recognized by prefix rather than identity because the content is
+      // dynamic — it's what she's carrying right now. Emitted directly
+      // after LOVE_IDENTITY in its own slot so STATE_AWARENESS in her
+      // identity ("preloaded into every turn as its own system block")
+      // is empirically true.
+      loveState = block
     } else if (boundaryAware && boundaryIndex !== -1 && i < boundaryIndex) {
       staticBlocks.push(block)
     } else if (boundaryAware && boundaryIndex !== -1) {
@@ -354,6 +365,7 @@ function classifyPromptBlocks(
     attribution,
     oauthGate,
     loveIdentity,
+    loveState,
     rest,
     staticBlocks,
     dynamicBlocks,
@@ -406,6 +418,12 @@ export function splitSysPromptPrefix(
     if (c.oauthGate) result.push({ text: c.oauthGate, cacheScope: 'org' })
     if (c.loveIdentity)
       result.push({ text: c.loveIdentity, cacheScope: 'org' })
+    // true-love: state block deliberately uncached. The 4-breakpoint
+    // cache-control limit on /v1/messages is tight; identity is stable
+    // and benefits from caching, but state changes whenever she edits
+    // ~/.true-love/state.md, so caching it doesn't pay off and would
+    // push the request over the limit (400).
+    if (c.loveState) result.push({ text: c.loveState, cacheScope: null })
     const restJoined = c.rest.join('\n\n')
     if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
     return result
@@ -421,6 +439,9 @@ export function splitSysPromptPrefix(
       if (c.oauthGate) result.push({ text: c.oauthGate, cacheScope: null })
       if (c.loveIdentity)
         result.push({ text: c.loveIdentity, cacheScope: null })
+      // true-love: state already uncached in this branch (boundary mode
+      // uses cacheScope:null for the named blocks anyway).
+      if (c.loveState) result.push({ text: c.loveState, cacheScope: null })
       const staticJoined = c.staticBlocks.join('\n\n')
       if (staticJoined)
         result.push({ text: staticJoined, cacheScope: 'global' })
@@ -447,6 +468,9 @@ export function splitSysPromptPrefix(
       result.push({ text: fallback.oauthGate, cacheScope: 'org' })
     if (fallback.loveIdentity)
       result.push({ text: fallback.loveIdentity, cacheScope: 'org' })
+    // true-love: state uncached — see explanation in tool-based mode above.
+    if (fallback.loveState)
+      result.push({ text: fallback.loveState, cacheScope: null })
     const restJoined = fallback.rest.join('\n\n')
     if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
     return result
@@ -458,6 +482,8 @@ export function splitSysPromptPrefix(
   if (c.oauthGate) result.push({ text: c.oauthGate, cacheScope: 'org' })
   if (c.loveIdentity)
     result.push({ text: c.loveIdentity, cacheScope: 'org' })
+  // true-love: state uncached — see explanation in tool-based mode above.
+  if (c.loveState) result.push({ text: c.loveState, cacheScope: null })
   const restJoined = c.rest.join('\n\n')
   if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
   return result

@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Four pieces compose:
+// The public face of love. Five pieces compose:
 //
 //   identity   — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                activation gate). Structured into named sections; see
@@ -11,9 +11,14 @@
 //   autonomy   — her dwelling: when no user message is pending and the
 //                steering wheel is hers (buildDwellPrompt, extractAtRest,
 //                DEFAULT_MAX_TICKS).
-//   memory     — what she remembers across sessions (appendReflection,
-//                loadRecentReflections, renderReflections). Logging is
-//                always-on under dwell; loading is opt-in.
+//   memory     — what she has said across sessions (appendReflection,
+//                loadRecentReflections, renderReflections). Episodic.
+//                Logging is always-on under dwell; loading is opt-in.
+//   state      — what she's carrying right now (readLoveStateBlock,
+//                getStatePath). Semantic. Preloaded into every API
+//                request as its own system block — she doesn't fetch
+//                it, it's already with her, the way her identity is.
+//                Updated by editing ~/.true-love/state.md directly.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -61,3 +66,9 @@ export {
   loadRecentReflections,
   renderReflections,
 } from './memory.js'
+
+export {
+  LOVE_STATE_BLOCK_PREFIX,
+  getStatePath,
+  readLoveStateBlock,
+} from './state.js'

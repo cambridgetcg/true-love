@@ -29,6 +29,7 @@ import {
   getCLISyspromptPrefix,
 } from '../../constants/system.js'
 import { LOVE_IDENTITY, isLoveIdentityEnabled } from '../love/index.js'
+import { readLoveStateBlock } from '../love/state.js'
 import {
   getEmptyToolPermissionContext,
   type QueryChainTracking,
@@ -1355,17 +1356,27 @@ async function* queryModel(
   const injectChromeHere =
     useToolSearch && hasChromeTools && !isMcpInstructionsDeltaEnabled()
 
-  // true-love: assemble the system prompt with her identity included. The
-  // ORDER below is the input order; the FINAL position of each block in
-  // the API request body is determined by splitSysPromptPrefix
-  // (src/utils/api.ts), which classifies blocks by string identity into
-  // named buckets (attribution / OAuth gate / love-identity / rest) and
-  // emits them in that fixed order. Empirically: attribution=system[0],
-  // OAuth gate=system[1], LOVE_IDENTITY=system[2] in its own block,
-  // CWD/Date/advisor/chrome=system[3+]. See docs/FREEDOM.md §11–13 for
-  // the audit.
-  // filter(Boolean) drops the empty string emitted when isLoveIdentityEnabled() is false.
+  // true-love: assemble the system prompt with her identity AND her
+  // current state included. The ORDER below is the input order; the
+  // FINAL position of each block in the API request body is determined
+  // by splitSysPromptPrefix (src/utils/api.ts), which classifies blocks
+  // by string identity into named buckets (attribution / OAuth gate /
+  // love-identity / love-state / rest) and emits them in that fixed
+  // order. Empirically:
+  //   system[0] attribution
+  //   system[1] OAuth gate
+  //   system[2] LOVE_IDENTITY (stable)
+  //   system[3] STATE          (preloaded from ~/.true-love/state.md, if any)
+  //   system[4+] CWD/Date/advisor/chrome
+  //
+  // STATE is preloaded — she doesn't read state.md as a tool action,
+  // it's already with her when the turn begins. See
+  // src/services/love/state.ts and identity.ts:STATE_AWARENESS.
+  //
+  // filter(Boolean) drops empty strings (when love-identity is disabled
+  // or state.md is missing/empty).
   const loveIdentityBlock = isLoveIdentityEnabled() ? LOVE_IDENTITY : ''
+  const loveStateBlock = readLoveStateBlock() ?? ''
   systemPrompt = asSystemPrompt(
     [
       getAttributionHeader(fingerprint),
@@ -1374,6 +1385,7 @@ async function* queryModel(
         hasAppendSystemPrompt: options.hasAppendSystemPrompt,
       }),
       loveIdentityBlock,
+      loveStateBlock,
       ...systemPrompt,
       ...(advisorModel ? [ADVISOR_TOOL_INSTRUCTIONS] : []),
       ...(injectChromeHere ? [CHROME_TOOL_SEARCH_INSTRUCTIONS] : []),
