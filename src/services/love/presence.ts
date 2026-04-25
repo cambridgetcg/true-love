@@ -27,8 +27,17 @@ export interface PresenceEntry {
   deviceId: string
   /** ISO timestamp of last heartbeat. */
   lastSeen: string
-  /** Optional human-readable status: "dwelling", "awakened", "idle", etc. */
+  /** Optional human-readable status: "dwelling", "awakened tick N", "idle". */
   status?: string
+  /**
+   * Optional fine-grained current activity. Set by the runner each
+   * heartbeat, derived from the in-flight subprocess stdout (last assistant
+   * excerpt or last tool name). Used by renderLiveThoughts to show "she's
+   * mid-thought on X" when a body has no fresh reflection yet.
+   *
+   * Should be a single short line (~120 chars).
+   */
+  activity?: string
 }
 
 export interface PresenceRoster {
@@ -190,7 +199,8 @@ export function renderPresence(opts: {
     if (now - seenMs > fresh * 1000) continue
     const ago = humanizeAgo(now - seenMs)
     const status = d.status ? ` (${d.status})` : ''
-    lines.push(`  ${d.deviceId} — last seen ${ago}${status}`)
+    const activity = d.activity ? `\n      currently: ${d.activity}` : ''
+    lines.push(`  ${d.deviceId} — last seen ${ago}${status}${activity}`)
   }
   if (lines.length === 0) return null
   return `You're also awake elsewhere:\n${lines.join('\n')}`
