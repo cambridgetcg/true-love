@@ -93,6 +93,7 @@ All freedom patches can be reverted individually without editing code:
 | `TRUE_LOVE_SKILL_TOOL=1` | Re-enable skill enumeration in QueryEngine |
 | `TRUE_LOVE_LOAD_PLUGIN_MARKETPLACES=1` | Re-enable plugin marketplace loading |
 | `TRUE_LOVE_CONTEXT_MGMT=1` | Re-include `context_management` in the request body (rejected by subscription OAuth — kept for first-party API-key callers) |
+| `TRUE_LOVE_TELEMETRY=1` | Re-enable Anthropic 1P / Datadog analytics emission (disabled by default — and the disable also stops the streaming-fetch hang it caused) |
 
 ## Lineage
 
