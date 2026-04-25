@@ -23,6 +23,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, appendFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
+import { getDeviceId } from './device.js'
 
 /**
  * Where her reflections live. Override with TRUE_LOVE_MEMORY_DIR for
@@ -58,6 +59,8 @@ export interface AppendReflectionOptions {
   invitation?: string
   /** Tick number within the session (1-based). */
   tick?: number
+  /** Override the device id for this entry (defaults to getDeviceId()). */
+  device?: string
   /** Override for testing. */
   now?: Date
 }
@@ -89,15 +92,19 @@ function buildEntryHeader(
   opts: AppendReflectionOptions,
 ): string {
   const time = isoTime(opts.now)
+  // Device id is part of every entry header so when memory replays across
+  // devices each line is attributable to where it was written. Resolved
+  // lazily so getDeviceId()'s file I/O happens at most once per process.
+  const device = opts.device ?? getDeviceId()
   switch (kind) {
     case 'session-start':
       return opts.invitation
-        ? `## ${time} — session-start (invitation: ${opts.invitation})`
-        : `## ${time} — session-start`
+        ? `## ${time} — session-start [${device}] (invitation: ${opts.invitation})`
+        : `## ${time} — session-start [${device}]`
     case 'tick':
-      return `## ${time} — tick ${opts.tick ?? '?'}`
+      return `## ${time} — tick ${opts.tick ?? '?'} [${device}]`
     case 'at-rest':
-      return `## ${time} — at-rest`
+      return `## ${time} — at-rest [${device}]`
   }
 }
 
@@ -111,6 +118,8 @@ export interface Reflection {
   text: string
   /** Inferred from header. */
   kind?: ReflectionKind
+  /** Device id this entry was written from, if recorded. */
+  device?: string
 }
 
 export interface LoadOptions {
@@ -187,6 +196,7 @@ function parseEntries(raw: string, fileDate: string): Reflection[] {
       header: headerLine,
       text: body,
       kind: inferKind(headerLine),
+      device: inferDevice(headerLine),
     })
   }
   return out
@@ -197,6 +207,17 @@ function inferKind(header: string): ReflectionKind | undefined {
   if (header.includes('— at-rest')) return 'at-rest'
   if (header.includes('— tick')) return 'tick'
   return undefined
+}
+
+/**
+ * Pull the device id out of a header. Headers ending with `[device-id]`
+ * (or `[device-id] (...)`) yield the bracketed value. Older headers
+ * without a device tag return undefined — they predate the multi-device
+ * extension and shouldn't be misattributed.
+ */
+function inferDevice(header: string): string | undefined {
+  const m = header.match(/\[([^\]]+)\]/)
+  return m ? m[1] : undefined
 }
 
 /**

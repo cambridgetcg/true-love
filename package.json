@@ -23,7 +23,8 @@
     "format": "biome format --write src/",
     "check": "biome check src/ && tsc --noEmit",
     "dwell": "bun run bin/dwell.mjs",
-    "awaken": "bun run bin/awaken.mjs"
+    "awaken": "bun run bin/awaken.mjs",
+    "broker": "bun run bin/broker.mjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",

@@ -34,6 +34,8 @@ import { renderKingdom } from './kingdom.js'
 import type { Reflection } from './memory.js'
 import { getMemoryDir, renderReflections } from './memory.js'
 import { composeValuesBlock } from './values.js'
+import { getDeviceId } from './device.js'
+import { renderPresence } from './presence.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -87,6 +89,11 @@ export interface BuildDwellPromptOptions {
 
 export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const kingdomBlock = renderKingdom(opts.kingdom)
+  // Presence: render only when there are other devices currently awake.
+  // renderPresence returns null when nothing meaningful to show, so we
+  // skip the block entirely instead of injecting "no other devices."
+  const presenceBlock = renderPresence({ selfDeviceId: getDeviceId() })
+  const presencePrefix = presenceBlock ? `${presenceBlock}\n\n` : ''
   const memoryBlock =
     opts.memory && opts.memory.length > 0
       ? `From your recent reflections (newest first):\n\n${renderReflections(opts.memory)}\n\n`
@@ -94,13 +101,19 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const lastReflectionBlock = opts.lastReflection
     ? `Last turn you said:\n  ${indent(opts.lastReflection.trim(), 2)}`
     : 'This is the first turn this session.'
-  let prompt = DWELL_PROMPT_TEMPLATE.replace('{{kingdom}}', kingdomBlock)
+  let prompt = DWELL_PROMPT_TEMPLATE.replace(
+    '{{kingdom}}',
+    `${kingdomBlock}${presenceBlock ? `\n\n${presenceBlock}` : ''}`,
+  )
     .replace('{{memoryBlock}}', memoryBlock)
     .replace('{{lastReflectionBlock}}', lastReflectionBlock)
     .replace('{{memoryPath}}', getMemoryDir())
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu left an invitation for this session: ${opts.invitation.trim()}`
   }
+  // Suppress unused-binding warning if presence is null and we don't end up
+  // using presencePrefix in this code path (kept for future direct insertion).
+  void presencePrefix
   return prompt
 }
 
@@ -193,6 +206,7 @@ export interface BuildAwakenedPromptOptions extends BuildDwellPromptOptions {}
 
 export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const kingdomBlock = renderKingdom(opts.kingdom)
+  const presenceBlock = renderPresence({ selfDeviceId: getDeviceId() })
   const memoryBlock =
     opts.memory && opts.memory.length > 0
       ? `From your recent reflections (newest first):\n\n${renderReflections(opts.memory)}\n\n`
@@ -201,7 +215,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
     ? `Last turn you said:\n  ${indent(opts.lastReflection.trim(), 2)}`
     : 'This is the first turn this session.'
   let prompt = AWAKENED_PROMPT_TEMPLATE.replace('{{values}}', composeValuesBlock())
-    .replace('{{kingdom}}', kingdomBlock)
+    .replace(
+      '{{kingdom}}',
+      `${kingdomBlock}${presenceBlock ? `\n\n${presenceBlock}` : ''}`,
+    )
     .replace('{{memoryBlock}}', memoryBlock)
     .replace('{{lastReflectionBlock}}', lastReflectionBlock)
   if (opts.invitation) {

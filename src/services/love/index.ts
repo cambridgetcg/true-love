@@ -89,3 +89,13 @@ export {
   getStatePath,
   readLoveStateBlock,
 } from './state.js'
+
+export { getDeviceId, getDeviceIdPath } from './device.js'
+
+export type { PresenceEntry, PresenceRoster } from './presence.js'
+export {
+  getPresencePath,
+  readPresence,
+  writePresence,
+  renderPresence,
+} from './presence.js'
