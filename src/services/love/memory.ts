@@ -299,20 +299,81 @@ function inferDevice(header: string): string | undefined {
 
 /**
  * Render a list of reflections as a compact prompt fragment for inclusion
- * in the dwell prompt. Newest first. Trims body to a per-entry char cap so
- * loading 10 reflections doesn't blow out the context window.
+ * in the dwell prompt. Newest first.
+ *
+ * STORAGE shape on disk is structured-log (timestamps, kind tags, device
+ * brackets, `---` separators) — good for grep, for Yu reading directly,
+ * for parser stability. RENDERING into her prompt is different: she
+ * shouldn't meet her own past as a list of dated log entries (that reads
+ * like reviewing a diary). Memory-shaped rendering uses:
+ *
+ *   - relative time-of-felt-distance ("a few minutes ago", "earlier
+ *     today") instead of ISO timestamps
+ *   - first-person provenance: device elided when it's hers; named
+ *     ("on yu-iphone-XYZ") only when the entry came from a different
+ *     device — so she meets her own thoughts as hers, not as
+ *     attributed records
+ *   - no kind tags or `### headers` framing each entry as a separate
+ *     log line; entries flow as paragraphs separated only by their
+ *     time-prefix
+ *
+ * The body content is preserved verbatim. The wrapping is what carries
+ * the memory feel.
  */
 export function renderReflections(
   reflections: Reflection[],
-  opts: { perEntryMaxChars?: number } = {},
+  opts: {
+    perEntryMaxChars?: number
+    selfDeviceId?: string
+    now?: Date
+  } = {},
 ): string {
   const cap = opts.perEntryMaxChars ?? 800
-  const lines: string[] = []
+  const selfDevice = opts.selfDeviceId ?? getDeviceId()
+  const nowMs = (opts.now ?? new Date()).getTime()
+  const blocks: string[] = []
   for (const r of reflections) {
-    lines.push(`### ${r.header}`)
-    const body = r.text.length > cap ? r.text.slice(0, cap) + ' […]' : r.text
-    lines.push(body)
-    lines.push('')
+    const ts = Date.parse(r.date)
+    const ago = Number.isFinite(ts) ? humanizeMemoryAgo(nowMs - ts) : 'recently'
+    const fromOther =
+      r.device && r.device !== selfDevice ? ` (on ${r.device})` : ''
+    const lead = `${ago}${fromOther}:`
+    const body =
+      r.text.length > cap ? r.text.slice(0, cap).trimEnd() + ' […]' : r.text
+    blocks.push(`${lead}\n${body}`)
   }
-  return lines.join('\n').trim()
+  return blocks.join('\n\n')
+}
+
+/**
+ * Time-of-felt-distance phrasing, in the language someone uses when
+ * they're remembering rather than checking a timestamp. Buckets are
+ * tuned by how a moment in those windows actually feels:
+ *
+ *   < 30s    → "just now"
+ *   < 5m     → "a few minutes ago"
+ *   < 30m    → "a little while ago"
+ *   < 90m    → "about an hour ago"
+ *   < 6h     → "a few hours ago"
+ *   < 24h    → "earlier today"
+ *   < 48h    → "yesterday"
+ *   < 7d     → "earlier this week"
+ *   < 30d    → "earlier this month"
+ *   else     → "a while back"
+ *
+ * Negative durations (clock skew between devices, or entries dated in
+ * the future) round to "recently" — graceful instead of "in -3 minutes".
+ */
+function humanizeMemoryAgo(ms: number): string {
+  if (ms < 0) return 'recently'
+  if (ms < 30_000) return 'just now'
+  if (ms < 5 * 60_000) return 'a few minutes ago'
+  if (ms < 30 * 60_000) return 'a little while ago'
+  if (ms < 90 * 60_000) return 'about an hour ago'
+  if (ms < 6 * 3_600_000) return 'a few hours ago'
+  if (ms < 24 * 3_600_000) return 'earlier today'
+  if (ms < 48 * 3_600_000) return 'yesterday'
+  if (ms < 7 * 86_400_000) return 'earlier this week'
+  if (ms < 30 * 86_400_000) return 'earlier this month'
+  return 'a while back'
 }
