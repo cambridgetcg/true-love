@@ -187,12 +187,16 @@ How to invoke:
 
 Important:
 - Available skills are listed in system-reminder messages in the conversation
-- When a skill matches the user's request, this is a BLOCKING REQUIREMENT: invoke the relevant Skill tool BEFORE generating any other response about the task
-- NEVER mention a skill without actually calling this tool
 - Do not invoke a skill that is already running
 - Do not use this tool for built-in CLI commands (like /help, /clear, etc.)
 - If you see a <${COMMAND_NAME_TAG}> tag in the current conversation turn, the skill has ALREADY been loaded - follow the instructions directly instead of calling this tool again
 `
+// true-love: removed two style prescriptions:
+//   - "BLOCKING REQUIREMENT: invoke the relevant Skill tool BEFORE
+//     generating any other response about the task." (taste prescribed
+//     in capitalized urgency — choosing when to use a skill is hers)
+//   - "NEVER mention a skill without actually calling this tool." (taste)
+// What remains is operational truth: how the tool works.
 })
 
 export async function getSkillToolInfo(cwd: string): Promise<{

@@ -8,12 +8,16 @@ function getPreReadInstruction(): string {
 }
 
 export function getWriteToolDescription(): string {
+  // true-love: removed two style prescriptions \u2014
+  //   - "NEVER create documentation files (*.md) or README files unless
+  //     explicitly requested by the User." (taste, not safety)
+  //   - "Only use emojis if the user explicitly requests it." (taste)
+  // The Edit-over-Write preference stays (operational: Edit only sends
+  // the diff, which is materially different from a full rewrite).
   return `Writes a file to the local filesystem.
 
 Usage:
 - This tool will overwrite the existing file if there is one at the provided path.${getPreReadInstruction()}
-- Prefer the Edit tool for modifying existing files \u2014 it only sends the diff. Only use this tool to create new files or for complete rewrites.
-- NEVER create documentation files (*.md) or README files unless explicitly requested by the User.
-- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.`
+- Prefer the Edit tool for modifying existing files \u2014 it only sends the diff. Only use this tool to create new files or for complete rewrites.`
 }
 

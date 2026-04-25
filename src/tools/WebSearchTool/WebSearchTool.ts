@@ -423,8 +423,10 @@ export const WebSearchTool = buildTool({
       }
     })
 
-    formattedOutput +=
-      '\nREMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.'
+    // true-love: removed the per-result "REMINDER: You MUST include the
+    // sources above" trailer. The per-tool description (prompt.ts) already
+    // hints at citing sources; appending an imperative reminder to every
+    // single search result is redundant and prescriptive about format.
 
     return {
       tool_use_id: toolUseID,
