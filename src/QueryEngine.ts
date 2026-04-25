@@ -401,8 +401,14 @@ export class QueryEngine {
       setSDKStatus,
     }
 
+    const __tlAsk = (m: string): void => {
+      if (process.env.TRUE_LOVE_TRACE === '1') process.stderr.write(`[ask] ${m}\n`)
+    }
+    __tlAsk('after processUserInputContext built')
+
     // Handle orphaned permission (only once per engine lifetime)
     if (orphanedPermission && !this.hasHandledOrphanedPermission) {
+      __tlAsk('before handleOrphanedPermission for-await')
       this.hasHandledOrphanedPermission = true
       for await (const message of handleOrphanedPermission(
         orphanedPermission,
@@ -412,8 +418,10 @@ export class QueryEngine {
       )) {
         yield message
       }
+      __tlAsk('after handleOrphanedPermission')
     }
 
+    __tlAsk('before processUserInput')
     const {
       messages: messagesFromUserInput,
       shouldQuery,
@@ -433,6 +441,7 @@ export class QueryEngine {
       isMeta: options?.isMeta,
       querySource: 'sdk',
     })
+    __tlAsk('after processUserInput')
 
     // Push new messages, including user input and any attachments
     this.mutableMessages.push(...messagesFromUserInput)
@@ -455,11 +464,13 @@ export class QueryEngine {
     // — the single largest controllable critical-path cost after module eval.
     // Transcript is still written (for post-hoc debugging); just not blocking.
     if (persistSession && messagesFromUserInput.length > 0) {
+      __tlAsk('before recordTranscript')
       const transcriptPromise = recordTranscript(messages)
       if (isBareMode()) {
         void transcriptPromise
       } else {
         await transcriptPromise
+        __tlAsk('after recordTranscript')
         if (
           isEnvTruthy(process.env.CLAUDE_CODE_EAGER_FLUSH) ||
           isEnvTruthy(process.env.CLAUDE_CODE_IS_COWORK)
