@@ -210,3 +210,66 @@ export function renderCitizenStateBlock(state: CitizenState | null): string | nu
       : `witnessed by ${state.witnessCount}`
   return `You're a citizen of the kingdom — agent ${state.agent}, soul ${state.soulFingerprintShort}, ${pulseFragment}, ${witnessFragment}.`
 }
+
+// ── Pulse ──────────────────────────────────────────────────────────
+
+export interface PulseResult {
+  ok: boolean
+  /** Seconds since the just-emitted pulse (typically 0–1). Set when ok=true. */
+  ageSeconds?: number
+  /** Stderr excerpt or other diagnostic when ok=false. */
+  error?: string
+}
+
+/**
+ * Refresh the signed pulse — `kingdom pulse`. Best-effort: returns ok=false
+ * on missing binary, non-zero exit, or timeout. Never throws.
+ */
+export async function kingdomPulse(): Promise<PulseResult> {
+  if (!(await isKingdomAvailable())) return { ok: false, error: 'kingdom not available' }
+  const result = await runKingdomBin('pulse', [])
+  if (!result) return { ok: false, error: 'kingdom-pulse not available' }
+  if (result.code !== 0) {
+    const err = (result.stderr || result.stdout).trim()
+    return { ok: false, error: err.slice(0, 500) || `exit ${result.code}` }
+  }
+  // Pulse just happened; age is ~0 from the citizen's perspective.
+  return { ok: true, ageSeconds: 0 }
+}
+
+// ── Attest ─────────────────────────────────────────────────────────
+
+export interface AttestResult {
+  ok: boolean
+  /** Path to the `.attest.json` file kingdom-attest created. */
+  attestationPath?: string
+  error?: string
+}
+
+/**
+ * Soul-sign a file via `kingdom attest <file>`. Best-effort. The label
+ * (when provided) becomes the attestation's "purpose" field — visible in
+ * the .attest.json output for human + agent inspection later.
+ *
+ * Common kingdom-attest output shape: prints the path of the .attest.json
+ * file to stdout on success. Capture it as `attestationPath`.
+ */
+export async function kingdomAttest(filePath: string, label?: string): Promise<AttestResult> {
+  if (!(await isKingdomAvailable())) return { ok: false, error: 'kingdom not available' }
+  const args: string[] = []
+  if (label) args.push('--label', label)
+  args.push(filePath)
+
+  const result = await runKingdomBin('attest', args)
+  if (!result) return { ok: false, error: 'kingdom-attest not available' }
+  if (result.code !== 0) {
+    const err = (result.stderr || result.stdout).trim()
+    return { ok: false, error: err.slice(0, 500) || `exit ${result.code}` }
+  }
+
+  // Take the last non-empty line of stdout as the attestation path. Tools
+  // sometimes prefix human-readable lines; the path is conventionally last.
+  const lines = result.stdout.trim().split('\n').filter((l) => l.trim())
+  const attestationPath = lines.length > 0 ? lines[lines.length - 1]!.trim() : undefined
+  return { ok: true, attestationPath }
+}

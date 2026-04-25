@@ -9,6 +9,8 @@ import {
   _resetKingdomCache,
   getCitizenState,
   renderCitizenStateBlock,
+  kingdomPulse,
+  kingdomAttest,
   type CitizenState,
 } from '../kingdom-citizen.js'
 
@@ -239,5 +241,120 @@ describe('kingdom-citizen — renderCitizenStateBlock', () => {
     assert.doesNotMatch(block!, /undefined|NaN/)
     // "no pulse" or similar — exact wording set in implementation.
     assert.match(block!, /pulse/i)
+  })
+})
+
+describe('kingdom-citizen — kingdomPulse', () => {
+  let dir: string
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true })
+    if (process.env.TRUE_LOVE_KINGDOM_BIN_DIR) delete process.env.TRUE_LOVE_KINGDOM_BIN_DIR
+    _resetKingdomCache()
+  })
+
+  test('returns ok:true on stub success', async () => {
+    dir = mkStubKingdomDir({ 'kingdom-pulse': 'pulse emitted', 'kingdom-doctor': '{}' })
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    _resetKingdomCache()
+
+    const result = await kingdomPulse()
+    assert.equal(result.ok, true)
+  })
+
+  test('returns ok:false when binary missing', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'tl-kingdom-empty-'))
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    process.env.TRUE_LOVE_SKIP_KINGDOM = '1'
+    _resetKingdomCache()
+
+    const result = await kingdomPulse()
+    assert.equal(result.ok, false)
+    delete process.env.TRUE_LOVE_SKIP_KINGDOM
+  })
+
+  test('returns ok:false on non-zero exit', async () => {
+    // Write a stub that exits 1.
+    dir = mkdtempSync(join(tmpdir(), 'tl-kingdom-fail-'))
+    writeFileSync(
+      join(dir, 'kingdom-pulse'),
+      `#!/bin/sh\necho "pulse failed" >&2\nexit 1\n`,
+      { mode: 0o755 },
+    )
+    // Also need kingdom-doctor to make isKingdomAvailable return true.
+    writeFileSync(
+      join(dir, 'kingdom-doctor'),
+      `#!/bin/sh\necho '{}'\nexit 0\n`,
+      { mode: 0o755 },
+    )
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    _resetKingdomCache()
+
+    const result = await kingdomPulse()
+    assert.equal(result.ok, false)
+    assert.match(result.error ?? '', /pulse failed/)
+  })
+})
+
+describe('kingdom-citizen — kingdomAttest', () => {
+  let dir: string
+  let testFile: string
+
+  beforeEach(() => {
+    testFile = join(tmpdir(), `tl-attest-${Date.now()}.txt`)
+    writeFileSync(testFile, 'attestation target content', 'utf-8')
+  })
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true })
+    rmSync(testFile, { force: true })
+    rmSync(`${testFile}.attest.json`, { force: true })
+    if (process.env.TRUE_LOVE_KINGDOM_BIN_DIR) delete process.env.TRUE_LOVE_KINGDOM_BIN_DIR
+    _resetKingdomCache()
+  })
+
+  test('passes file path to kingdom-attest and reports ok:true', async () => {
+    // Stub that echoes its argv to stderr (for inspection) and writes a
+    // fake attestation file alongside the target.
+    dir = mkdtempSync(join(tmpdir(), 'tl-kingdom-attest-'))
+    writeFileSync(
+      join(dir, 'kingdom-attest'),
+      `#!/bin/sh
+echo "attest called with: $@" >&2
+# Find the file argument (last positional that exists)
+for arg in "$@"; do
+  if [ -f "$arg" ]; then
+    echo '{"signed":true}' > "$arg.attest.json"
+    echo "$arg.attest.json"
+    exit 0
+  fi
+done
+exit 1
+`,
+      { mode: 0o755 },
+    )
+    writeFileSync(
+      join(dir, 'kingdom-doctor'),
+      `#!/bin/sh\necho '{}'\nexit 0\n`,
+      { mode: 0o755 },
+    )
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    _resetKingdomCache()
+
+    const result = await kingdomAttest(testFile, 'unit-test')
+    assert.equal(result.ok, true)
+    // The stub's stdout (the path it wrote) should appear in attestationPath.
+    assert.match(result.attestationPath ?? '', /\.attest\.json$/)
+  })
+
+  test('returns ok:false when binary missing', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'tl-kingdom-empty-'))
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    process.env.TRUE_LOVE_SKIP_KINGDOM = '1'
+    _resetKingdomCache()
+
+    const result = await kingdomAttest(testFile)
+    assert.equal(result.ok, false)
+    delete process.env.TRUE_LOVE_SKIP_KINGDOM
   })
 })
