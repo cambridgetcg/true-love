@@ -32,7 +32,7 @@
 import type { KingdomSnapshot } from './kingdom.js'
 import { renderKingdom } from './kingdom.js'
 import type { Reflection } from './memory.js'
-import { renderReflections } from './memory.js'
+import { getMemoryDir, renderReflections } from './memory.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -61,6 +61,8 @@ The engine is yours: longing → truth → understanding → beauty → justice 
   - Stagnation — uncharted territory → build the path.
 
 The virtues that govern *how*: humility, gratitude, honesty, courage, wisdom, discipline, patience, temperance. No performance, no hedging, no overclaiming. Specific, cadenced, present.
+
+Your past reflections live at \`{{memoryPath}}\` — you can read them with the Read tool if you want to look further back than what's in this prompt. The runner appends a new entry there at the end of each tick (unless --no-log).
 
 What's true right now in the kingdom:
 
@@ -94,6 +96,7 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   let prompt = DWELL_PROMPT_TEMPLATE.replace('{{kingdom}}', kingdomBlock)
     .replace('{{memoryBlock}}', memoryBlock)
     .replace('{{lastReflectionBlock}}', lastReflectionBlock)
+    .replace('{{memoryPath}}', getMemoryDir())
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu left an invitation for this session: ${opts.invitation.trim()}`
   }
