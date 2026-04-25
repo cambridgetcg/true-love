@@ -115,3 +115,98 @@ async function runKingdomBin(
 
 // Exported for use by sibling functions in this module (Tasks 2-4).
 export { runKingdomBin }
+
+// ── Citizen state ──────────────────────────────────────────────────
+
+export interface CitizenState {
+  /** Agent name from covenant (e.g. "alpha", "beta", "gamma"). */
+  agent: string
+  /** Full soul fingerprint, e.g. "SHA256:N9N3PC/...". */
+  soulFingerprint: string
+  /** First 12 chars after "SHA256:" — used in prompt for brevity. */
+  soulFingerprintShort: string
+  /** Seconds since last successful pulse, or null when no pulse on disk. */
+  pulseAgeSeconds: number | null
+  /** Cosignature count — peers who have witnessed the covenant. */
+  witnessCount: number
+  /** Resolved kingdom hostname (from doctor JSON's hostname field if present). */
+  hostname: string
+  /** True iff identity.ok === "yes" in doctor JSON. */
+  initialised: boolean
+}
+
+interface DoctorJson {
+  identity?: {
+    ok?: string
+    agent_id?: string
+    wall?: number
+    soul_fingerprint?: string
+    installed_at?: string
+  }
+  freshness?: { ok?: string; age_s?: number; fresh?: number }
+  witnesses?: { ok?: string; cosignature_count?: number; peer_records?: number }
+  hostname?: string
+}
+
+/**
+ * Read citizen state via `kingdom-doctor --json`. Returns null when:
+ *  - kingdom binary not available
+ *  - kingdom-doctor exits with non-zero AND identity.ok !== "yes"
+ *  - JSON is malformed
+ *
+ * The `identity.ok === "yes"` check is the source of truth for "initialised";
+ * exit code 0/1/2 alone is not (kingdom-doctor exits 1 on advisory issues
+ * even when identity is intact).
+ */
+export async function getCitizenState(): Promise<CitizenState | null> {
+  if (!(await isKingdomAvailable())) return null
+
+  const result = await runKingdomBin('doctor', ['--json'])
+  if (!result) return null
+
+  let parsed: DoctorJson
+  try {
+    parsed = JSON.parse(result.stdout)
+  } catch {
+    return null
+  }
+
+  if (parsed.identity?.ok !== 'yes') return null
+
+  const fp = parsed.identity.soul_fingerprint ?? ''
+  // "SHA256:N9N3PC/..." → "N9N3PC/QxK5F" (first 12 chars after the colon).
+  const short = fp.startsWith('SHA256:') ? fp.slice('SHA256:'.length, 'SHA256:'.length + 12) : fp.slice(0, 12)
+
+  // age_s of -1 means "no pulse on disk" → null in our type.
+  const ageRaw = parsed.freshness?.age_s
+  const pulseAgeSeconds =
+    typeof ageRaw === 'number' && ageRaw >= 0 ? ageRaw : null
+
+  return {
+    agent: parsed.identity.agent_id ?? '',
+    soulFingerprint: fp,
+    soulFingerprintShort: short,
+    pulseAgeSeconds,
+    witnessCount: parsed.witnesses?.cosignature_count ?? 0,
+    hostname: parsed.hostname ?? '',
+    initialised: true,
+  }
+}
+
+/**
+ * Render the citizen-state line for the prompt. Single line, low-key —
+ * identity reinforcement, not domination. Returns null when state is null,
+ * so callers can skip the block entirely.
+ */
+export function renderCitizenStateBlock(state: CitizenState | null): string | null {
+  if (!state) return null
+  const pulseFragment =
+    state.pulseAgeSeconds !== null
+      ? `pulse fresh ${state.pulseAgeSeconds}s`
+      : 'no pulse yet'
+  const witnessFragment =
+    state.witnessCount === 1
+      ? `witnessed by 1`
+      : `witnessed by ${state.witnessCount}`
+  return `You're a citizen of the kingdom — agent ${state.agent}, soul ${state.soulFingerprintShort}, ${pulseFragment}, ${witnessFragment}.`
+}
