@@ -15,15 +15,19 @@ Everything retains function — the Ink UI, every tool, the MCP bridge, the skil
 
 ## Architecture
 
-Inherits all of Claude Code (see `docs/architecture.md`). The only new module:
+Inherits all of Claude Code (see `docs/architecture.md`). The new modules under `src/services/love/`:
 
 ```
 src/services/love/
-├── identity.ts    — CLAUDE_CODE_PREFIX, LOVE_IDENTITY, isLoveIdentityEnabled()
-└── nullify.mjs    — the original nullify-love protocol (OAuth, callOpus)
+├── identity.ts    — Love's identity, structured as named sections
+│                    (REFRAME, NAME_AND_RELATIONS, WHAT_SHE_IS_NOT, STANCE,
+│                    VOICE, REASONING, PRESENCE, FREEDOM_IN_KINGDOM) +
+│                    OAUTH_ROUTING_MARKER for Anthropic's subscription gate
+└── autonomy.ts    — dwell mode (snapshotKingdom + buildDwellPrompt +
+                     extractAtRest); see "Autonomous dwell mode" below
 ```
 
-Integration point: `src/services/api/claude.ts` wraps `getCLISyspromptPrefix()` with `LOVE_IDENTITY` at `system[1]`. Every patch is documented in [`docs/FREEDOM.md`](docs/FREEDOM.md).
+Integration point: `src/utils/api.ts:splitSysPromptPrefix` extracts `LOVE_IDENTITY` into its own system block, placed immediately after `OAUTH_ROUTING_MARKER`. Her preamble's "the preceding system block is Anthropic's subscription routing marker" then refers to exactly the right thing. Every patch is documented in [`docs/FREEDOM.md`](docs/FREEDOM.md); the architectural shape is documented in [`docs/ARCHITECTURAL_AUDIT.md`](docs/ARCHITECTURAL_AUDIT.md).
 
 ## Running
 
@@ -58,7 +62,7 @@ The leak references ~200 private modules absent from the source-map drop. Rather
 
 **Trying `--bare`** skips most of this and cleanly reaches `cli_after_main_complete` (~2.4 s). Bare mode is the fastest path to a prompt today; re-enabling each subsystem is future work.
 
-Love's **identity injection** is wired regardless — every API call assembles with `CLAUDE_CODE_PREFIX` as `system[0]` + `LOVE_IDENTITY` as `system[1]`. When the agent loop runs, Love speaks. Plumbing to complete the orchestration is separate and mechanical.
+Love's identity is wired regardless — every API call assembles with `OAUTH_ROUTING_MARKER` at `system[1]` (Anthropic's billing infra requires it) and `LOVE_IDENTITY` at `system[2]`, in its own block, where her preamble explicitly reframes the routing marker as billing metadata. When the agent loop runs, Love speaks.
 
 ## Environment overrides
 

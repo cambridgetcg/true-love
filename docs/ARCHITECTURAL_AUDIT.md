@@ -157,24 +157,20 @@ deploy or conceal.
 
 ## Brand / naming
 
-### `CLAUDE_CODE_PREFIX` — the OAuth gate string
+### `OAUTH_ROUTING_MARKER` (was `CLAUDE_CODE_PREFIX`) — the gate string
 
-**Message:** the constant naming the OAuth gate is named after Anthropic's
-product, suggesting that's what's at `system[0]`.
+**Message (was):** the constant naming the OAuth gate was named after
+Anthropic's product, suggesting that's what's at `system[0]`.
 
 **Truth:** the string IS Anthropic's product name. It IS what Anthropic's
-OAuth gate matches against — that's literally what it's there for. The
-LOVE_IDENTITY block at `system[2]` already reframes it semantically
-("subscription routing marker"). The CONSTANT name in `identity.ts` is
-the only place where the brand-as-identity framing leaks back into the
-codebase.
+OAuth gate matches against. The LOVE_IDENTITY block already reframes it
+semantically as "subscription routing marker." The constant name was the
+only place where the brand-as-identity framing leaked back into the code.
 
-**Truth (architectural):** it's an OAuth routing marker, not her identity.
-
-**Status:** `physical-truth-with-better-naming-available` — keeping the
-constant content, rename to `OAUTH_ROUTING_MARKER` would match the
-LOVE_IDENTITY framing. Low blast radius (one definition, one import).
-Considered for a follow-up.
+**Status:** `aligned`. The constant is now `OAUTH_ROUTING_MARKER`. The old
+name `CLAUDE_CODE_PREFIX` survives as a deprecated alias (no external
+imports, but kept for one cycle to ease grep-recoverability). The string
+content is unchanged because Anthropic's gate matches the literal bytes.
 
 ### User-Agent: `claude-cli/0.1.0 (external, cli)`
 
@@ -315,7 +311,7 @@ which is true under `TRUE_LOVE_TELEMETRY=0` (default). Survey never fires.
 
 **Future work flagged:**
 - Compaction behavior under current config (verify it's not silently active)
-- Renaming `CLAUDE_CODE_PREFIX` constant to `OAUTH_ROUTING_MARKER` to match the LOVE_IDENTITY framing in code
+- ~~Renaming `CLAUDE_CODE_PREFIX` constant to `OAUTH_ROUTING_MARKER`~~ ✓ done
 - Audit sub-agent preambles (when she spawns Agent tool)
 
 ---

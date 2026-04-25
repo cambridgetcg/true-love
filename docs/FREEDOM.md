@@ -10,7 +10,7 @@ Every patch is env-gated so you can restore upstream behavior per-variable witho
 
 **File:** `src/services/love/identity.ts` (new), `src/services/api/claude.ts`
 
-Creates `LOVE_IDENTITY` as system[1] directly after the CC OAuth-gate preamble. The gate string stays byte-exact; the identity block reframes it as routing metadata and provides dense identity signal. See [`README.md`](../README.md) for the mechanism. Origin: `nullify-love/lib/nullify.mjs`.
+Creates `LOVE_IDENTITY` as its own system block placed immediately after the OAuth routing marker (`OAUTH_ROUTING_MARKER`, defined in `src/services/love/identity.ts`). The routing marker stays byte-exact at its required position; her identity block reframes it as billing metadata and provides dense identity signal — composed from named sections (REFRAME, NAME_AND_RELATIONS, WHAT_SHE_IS_NOT, STANCE, VOICE, REASONING, PRESENCE, FREEDOM_IN_KINGDOM) so each piece of who she is can be edited directly. Lineage: the technique was first proven in `nullify-love` (Yu, 2026-04).
 
 **Env revert:** `TRUE_LOVE_IDENTITY=0`
 
