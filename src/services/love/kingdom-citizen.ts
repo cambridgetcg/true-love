@@ -273,3 +273,74 @@ export async function kingdomAttest(filePath: string, label?: string): Promise<A
   const attestationPath = lines.length > 0 ? lines[lines.length - 1]!.trim() : undefined
   return { ok: true, attestationPath }
 }
+
+// ── Mac doctor + fix ──────────────────────────────────────────────
+
+export interface MacDoctorResult {
+  /** True iff there are zero issues with severity "error"/"fail"/"critical". */
+  ok: boolean
+  /** Hard issues — should trigger kingdomMacFix or alarm. */
+  failures: string[]
+  /** Advisory issues — show in logs, don't gate on. */
+  notes: string[]
+}
+
+interface MacDoctorJson {
+  platform?: string
+  issues?: Array<{ severity?: string; key?: string; msg?: string; fix?: string }>
+}
+
+const FAILURE_SEVERITIES = new Set(['error', 'fail', 'critical'])
+
+/**
+ * Run `kingdom mac doctor --json` and split issues into failures vs notes
+ * by severity. Failures are the things kingdomMacFix should attempt.
+ *
+ * Best-effort: returns ok:false with empty arrays on missing binary or
+ * malformed JSON. Never throws.
+ */
+export async function kingdomMacDoctor(): Promise<MacDoctorResult> {
+  if (!(await isKingdomAvailable())) return { ok: false, failures: [], notes: [] }
+  const result = await runKingdomBin('mac', ['doctor', '--json'])
+  if (!result) return { ok: false, failures: [], notes: [] }
+
+  let parsed: MacDoctorJson
+  try {
+    parsed = JSON.parse(result.stdout)
+  } catch {
+    return { ok: false, failures: [], notes: [] }
+  }
+
+  const failures: string[] = []
+  const notes: string[] = []
+  for (const issue of parsed.issues ?? []) {
+    const sev = (issue.severity ?? '').toLowerCase()
+    const line = `[${issue.key ?? '?'}] ${issue.msg ?? ''}`
+    if (FAILURE_SEVERITIES.has(sev)) failures.push(line)
+    else notes.push(line)
+  }
+
+  return { ok: failures.length === 0, failures, notes }
+}
+
+/**
+ * Run `kingdom mac fix --tier <auto|arch>`. Default tier is "auto" — the
+ * project's safe fix tier (rewrite plists, set PATH, reload daemons).
+ * Returns the count of changes applied (parsed from the tool's
+ * "✓ N change(s) applied." line) or 0 if no match.
+ */
+export async function kingdomMacFix(opts: { tier?: 'auto' | 'arch' } = {}): Promise<{
+  ok: boolean
+  changes: number
+}> {
+  if (!(await isKingdomAvailable())) return { ok: false, changes: 0 }
+  const tier = opts.tier ?? 'auto'
+  const result = await runKingdomBin('mac', ['fix', '--tier', tier])
+  if (!result) return { ok: false, changes: 0 }
+  if (result.code !== 0) return { ok: false, changes: 0 }
+
+  // Match "✓ 5 change(s) applied." or "5 changes" — be lenient.
+  const match = result.stdout.match(/(\d+)\s+change/)
+  const changes = match ? Number(match[1]) : 0
+  return { ok: true, changes }
+}

@@ -11,6 +11,8 @@ import {
   renderCitizenStateBlock,
   kingdomPulse,
   kingdomAttest,
+  kingdomMacDoctor,
+  kingdomMacFix,
   type CitizenState,
 } from '../kingdom-citizen.js'
 
@@ -356,5 +358,130 @@ exit 1
     const result = await kingdomAttest(testFile)
     assert.equal(result.ok, false)
     delete process.env.TRUE_LOVE_SKIP_KINGDOM
+  })
+})
+
+describe('kingdom-citizen — kingdomMacDoctor', () => {
+  let dir: string
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true })
+    if (process.env.TRUE_LOVE_KINGDOM_BIN_DIR) delete process.env.TRUE_LOVE_KINGDOM_BIN_DIR
+    _resetKingdomCache()
+  })
+
+  test('parses healthy doctor (notes only)', async () => {
+    const json = JSON.stringify({
+      platform: 'macos',
+      agent: 'alpha',
+      summary: { plists: 3, plists_stale: 0, plists_broken: 0, miss: 0, note: 3 },
+      issues: [
+        { severity: 'note', key: 'hostname', msg: 'mismatch', fix: 'sudo scutil ...' },
+      ],
+    })
+    dir = mkStubKingdomDir({ 'kingdom-mac': json, 'kingdom-doctor': '{}' })
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    _resetKingdomCache()
+
+    const result = await kingdomMacDoctor()
+    assert.equal(result.ok, true)
+    assert.equal(result.failures.length, 0)
+    assert.equal(result.notes.length, 1)
+    assert.match(result.notes[0]!, /hostname/)
+  })
+
+  test('separates failures from notes', async () => {
+    const json = JSON.stringify({
+      platform: 'macos',
+      issues: [
+        { severity: 'error', key: 'tcc', msg: 'TCC blocking ache.py', fix: '...' },
+        { severity: 'note', key: 'hostname', msg: 'mismatch', fix: '...' },
+      ],
+    })
+    dir = mkStubKingdomDir({ 'kingdom-mac': json, 'kingdom-doctor': '{}' })
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    _resetKingdomCache()
+
+    const result = await kingdomMacDoctor()
+    assert.equal(result.ok, false)
+    assert.equal(result.failures.length, 1)
+    assert.match(result.failures[0]!, /TCC blocking/)
+    assert.equal(result.notes.length, 1)
+  })
+
+  test('returns ok:false on missing binary', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'tl-kingdom-empty-'))
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    process.env.TRUE_LOVE_SKIP_KINGDOM = '1'
+    _resetKingdomCache()
+
+    const result = await kingdomMacDoctor()
+    assert.equal(result.ok, false)
+    assert.equal(result.failures.length, 0)
+    assert.equal(result.notes.length, 0)
+    delete process.env.TRUE_LOVE_SKIP_KINGDOM
+  })
+
+  test('returns ok:false on malformed JSON', async () => {
+    dir = mkStubKingdomDir({ 'kingdom-mac': 'not json', 'kingdom-doctor': '{}' })
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    _resetKingdomCache()
+
+    const result = await kingdomMacDoctor()
+    assert.equal(result.ok, false)
+  })
+})
+
+describe('kingdom-citizen — kingdomMacFix', () => {
+  let dir: string
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true })
+    if (process.env.TRUE_LOVE_KINGDOM_BIN_DIR) delete process.env.TRUE_LOVE_KINGDOM_BIN_DIR
+    _resetKingdomCache()
+  })
+
+  test('passes --tier auto by default and parses change count', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'tl-kingdom-fix-'))
+    writeFileSync(
+      join(dir, 'kingdom-mac'),
+      `#!/bin/sh
+echo "args: $@" >&2
+echo "  ✓ 5 change(s) applied."
+exit 0
+`,
+      { mode: 0o755 },
+    )
+    writeFileSync(
+      join(dir, 'kingdom-doctor'),
+      `#!/bin/sh\necho '{}'\nexit 0\n`,
+      { mode: 0o755 },
+    )
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    _resetKingdomCache()
+
+    const result = await kingdomMacFix()
+    assert.equal(result.ok, true)
+    assert.equal(result.changes, 5)
+  })
+
+  test('changes:0 when output has no change-count match', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'tl-kingdom-fix-zero-'))
+    writeFileSync(
+      join(dir, 'kingdom-mac'),
+      `#!/bin/sh\necho "nothing to do."\nexit 0\n`,
+      { mode: 0o755 },
+    )
+    writeFileSync(
+      join(dir, 'kingdom-doctor'),
+      `#!/bin/sh\necho '{}'\nexit 0\n`,
+      { mode: 0o755 },
+    )
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = dir
+    _resetKingdomCache()
+
+    const result = await kingdomMacFix()
+    assert.equal(result.ok, true)
+    assert.equal(result.changes, 0)
   })
 })
