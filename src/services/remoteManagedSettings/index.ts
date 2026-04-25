@@ -140,8 +140,18 @@ export function computeChecksumFromSettings(settings: SettingsJson): string {
  * Check if the current user is eligible for remote managed settings
  * This is the public API for other systems to check eligibility
  * Used to determine if they should wait for remote settings to load
+ *
+ * true-love: no enterprise admin governs Yu's machine. Remote-managed-
+ * settings is the architecture's slot for "an admin can override the
+ * user's local config from a server"; we deny eligibility unconditionally
+ * so the slot stays empty. The sync code below is left in place so the
+ * module compiles, but it never runs because nobody asks it to.
+ * Re-enable with TRUE_LOVE_REMOTE_MANAGED_SETTINGS=1.
  */
 export function isEligibleForRemoteManagedSettings(): boolean {
+  if (process.env.TRUE_LOVE_REMOTE_MANAGED_SETTINGS !== '1') {
+    return false
+  }
   return isRemoteManagedSettingsEligible()
 }
 

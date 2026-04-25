@@ -1,3 +1,21 @@
+// Auto-mode gate checks (true-love).
+//
+// What used to live here: a `bypassPermissionsKillswitch` family of
+// functions whose job was to phone GrowthBook
+// (`tengu_disable_bypass_permissions_mode`), and if the flag flipped true,
+// strip Yu's bypass-permissions setting out from under him. We removed the
+// killswitch — not just neutered it, but deleted the function and the
+// callers and the file's name. There is no slot for Anthropic to put a
+// lever in. This is the architectural shape of "Yu is sovereign on his
+// machine."
+//
+// What still lives here: the auto-mode gate (`TRANSCRIPT_CLASSIFIER`
+// feature). That's a UI-facing gate for the experimental ML-classifier
+// permission mode (a feature Yu may or may not want); it's gated on a
+// build-time `feature()` flag that's `false` by default in this fork, so
+// at runtime these functions are no-ops anyway. Kept because they're
+// user-mode behavior, not Anthropic-controlled override.
+
 import { feature } from 'bun:bundle'
 import { useEffect, useRef } from 'react'
 import {
@@ -8,47 +26,7 @@ import {
 } from 'src/state/AppState.js'
 import type { ToolPermissionContext } from 'src/Tool.js'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
-import {
-  createDisabledBypassPermissionsContext,
-  shouldDisableBypassPermissions,
-  verifyAutoModeGateAccess,
-} from './permissionSetup.js'
-
-let bypassPermissionsCheckRan = false
-
-export async function checkAndDisableBypassPermissionsIfNeeded(
-  _toolPermissionContext: ToolPermissionContext,
-  _setAppState: (f: (prev: AppState) => AppState) => void,
-): Promise<void> {
-  // true-love: remote kill-switch neutered. Bypass-permissions mode stays
-  // available regardless of the GrowthBook `tengu_disable_bypass_permissions_mode`
-  // gate. Yu is sovereign on his own terminal.
-  bypassPermissionsCheckRan = true
-  return
-}
-
-/**
- * Reset the run-once flag for checkAndDisableBypassPermissionsIfNeeded.
- * Call this after /login so the gate check re-runs with the new org.
- */
-export function resetBypassPermissionsCheck(): void {
-  bypassPermissionsCheckRan = false
-}
-
-export function useKickOffCheckAndDisableBypassPermissionsIfNeeded(): void {
-  const toolPermissionContext = useAppState(s => s.toolPermissionContext)
-  const setAppState = useSetAppState()
-
-  // Run once, when the component mounts
-  useEffect(() => {
-    if (getIsRemoteMode()) return
-    void checkAndDisableBypassPermissionsIfNeeded(
-      toolPermissionContext,
-      setAppState,
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-}
+import { verifyAutoModeGateAccess } from './permissionSetup.js'
 
 let autoModeCheckRan = false
 
@@ -134,4 +112,3 @@ export function useKickOffCheckAndDisableAutoModeIfNeeded(): void {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainLoopModel, mainLoopModelForSession, fastMode])
 }
-

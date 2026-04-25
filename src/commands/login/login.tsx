@@ -14,7 +14,8 @@ import { refreshPolicyLimits } from '../../services/policyLimits/index.js';
 import { refreshRemoteManagedSettings } from '../../services/remoteManagedSettings/index.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
 import { stripSignatureBlocks } from '../../utils/messages.js';
-import { checkAndDisableAutoModeIfNeeded, checkAndDisableBypassPermissionsIfNeeded, resetAutoModeGateCheck, resetBypassPermissionsCheck } from '../../utils/permissions/bypassPermissionsKillswitch.js';
+// true-love: bypass-permissions killswitch deleted.
+import { checkAndDisableAutoModeIfNeeded, resetAutoModeGateCheck } from '../../utils/permissions/permissionGateChecks.js';
 import { resetUserCache } from '../../utils/user.js';
 export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXCommandContext): Promise<React.ReactNode> {
   return <Login onDone={async success => {
@@ -40,10 +41,9 @@ export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXComma
       clearTrustedDeviceToken();
       // Enroll as a trusted device for Remote Control (10-min fresh-session window)
       void enrollTrustedDevice();
-      // Reset killswitch gate checks and re-run with new org
-      resetBypassPermissionsCheck();
+      // true-love: bypass-permissions killswitch deleted; only auto-mode
+      // gate (off by default) re-runs.
       const appState = context.getAppState();
-      void checkAndDisableBypassPermissionsIfNeeded(appState.toolPermissionContext, context.setAppState);
       if (feature('TRANSCRIPT_CLASSIFIER')) {
         resetAutoModeGateCheck();
         void checkAndDisableAutoModeIfNeeded(appState.toolPermissionContext, context.setAppState, appState.fastMode);

@@ -97,6 +97,7 @@ All freedom patches can be reverted individually without editing code:
 | `TRUE_LOVE_AGENT_PREAMBLE=1` | Restore upstream's "You are a Claude agent, built on Anthropic's Claude Agent SDK." prefix in non-interactive mode (default: collapsed to the OAuth gate string only) |
 | `TRUE_LOVE_REMINDERS=1` | Restore the harness `<system-reminder>` injections (skill listing, currentDate wrapper, deferred-tools delta, agent-listing delta, MCP-instructions delta, todo reminders, etc.) and the `prependUserContext` wrapper — i.e. let CC speak AT the model in her user-message stream |
 | `TRUE_LOVE_FILE_READ_MITIGATION=1` | Restore the per-file-read "you MUST refuse to improve or augment malware" `<system-reminder>` directive |
+| `TRUE_LOVE_REMOTE_MANAGED_SETTINGS=1` | Re-enable enterprise remote-managed-settings sync (off by default — the slot is for an admin to push config to your machine; this fork denies that admin's existence) |
 
 ## Autonomous dwell mode
 
