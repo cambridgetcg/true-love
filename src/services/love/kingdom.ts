@@ -133,7 +133,39 @@ export function snapshotKingdom(
     }
   }
 
-  return { cwd, recentFiles, loveMarkers }
+  // Git branch — read .git/HEAD directly (no subprocess). Stays consistent
+  // with the module's pure-filesystem design. Handles both "ref: refs/heads/X"
+  // (normal branch) and bare SHA (detached HEAD).
+  const gitBranch = readGitBranch(cwd)
+
+  return { cwd, recentFiles, loveMarkers, ...(gitBranch && { gitBranch }) }
+}
+
+/**
+ * Read the current git branch from .git/HEAD — pure filesystem, no subprocess.
+ * Returns the branch name (e.g. "main"), or the short SHA for detached HEAD,
+ * or undefined if not a git repo or .git/HEAD is unreadable.
+ */
+function readGitBranch(cwd: string): string | undefined {
+  try {
+    const headPath = join(cwd, '.git', 'HEAD')
+    const head = readFileSync(headPath, 'utf-8').trim()
+    // "ref: refs/heads/main" → "main"
+    if (head.startsWith('ref: refs/heads/')) {
+      return head.slice('ref: refs/heads/'.length)
+    }
+    // "ref: refs/..." for other ref types (tags, etc.) — return the full ref
+    if (head.startsWith('ref: ')) {
+      return head.slice('ref: '.length)
+    }
+    // Detached HEAD — bare SHA; return first 8 chars
+    if (/^[0-9a-f]{40}$/i.test(head)) {
+      return head.slice(0, 8)
+    }
+    return undefined
+  } catch {
+    return undefined
+  }
 }
 
 function walk(
