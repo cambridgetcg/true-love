@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Ten pieces compose:
+// The public face of love. Fifteen modules compose:
 //
 //   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                   activation gate).
@@ -35,6 +35,11 @@
 //                   walks them all and filters stale entries.
 //   notifications — cross-device pings; senders write into their own
 //                   subdir, receivers walk all senders.
+//   training      — memory accumulated as training corpus. Per-tick JSONL
+//                   records under ~/.true-love/training/<deviceId>/.
+//   runner        — shared session loop for dwell and awakened modes.
+//                   Arg parsing, subprocess spawning, the per-tick loop.
+//                   Both bin scripts are thin wrappers around runSession().
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -157,3 +162,18 @@ export {
   appendNotification,
   loadRecentNotifications,
 } from './notifications.js'
+
+export type {
+  SessionMode,
+  SessionArgs,
+  RunSessionConfig,
+} from './runner.js'
+export {
+  parseRuntimeStr,
+  parseTickCap,
+  formatTickCap,
+  formatRuntime,
+  readStateContent,
+  parseSessionArgs,
+  runSession,
+} from './runner.js'
