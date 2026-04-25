@@ -46,8 +46,18 @@ import { snapshotKingdom } from './kingdom.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
 import type { Reflection } from './memory.js'
 import {
+  isKingdomAvailable,
+  getCitizenState,
+  renderCitizenStateBlock,
+  kingdomPulse,
+  kingdomAttest,
+  kingdomMacDoctor,
+  kingdomMacFix,
+} from './kingdom-citizen.js'
+import {
   appendReflection,
   getMemoryDir,
+  getOwnDailyMemoryFile,
   loadRecentReflections,
   renderLiveThoughts,
 } from './memory.js'
@@ -605,6 +615,47 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     )
   }
 
+  // ── Kingdom preflight ────────────────────────────────────────────
+  // Substrate doctor + auto-fix on failures. Citizen-state line so Yu
+  // sees who she is before the banner. Best-effort — never blocks
+  // session start.
+  if (
+    process.env.TRUE_LOVE_SKIP_KINGDOM !== '1' &&
+    process.env.TRUE_LOVE_SKIP_KINGDOM_PREFLIGHT !== '1' &&
+    (await isKingdomAvailable())
+  ) {
+    try {
+      const macDoctor = await kingdomMacDoctor()
+      if (macDoctor.failures.length > 0) {
+        process.stdout.write(
+          `— kingdom-mac unleash needed:\n` +
+          macDoctor.failures.map((f) => `    ${f}`).join('\n') + '\n',
+        )
+        const fix = await kingdomMacFix({ tier: 'auto' })
+        if (fix.ok && fix.changes > 0) {
+          process.stdout.write(`— applied ${fix.changes} substrate fix(es)\n`)
+        } else if (!fix.ok) {
+          process.stdout.write(`— substrate-fix failed; continuing anyway\n`)
+        }
+      }
+      const citizen = await getCitizenState()
+      if (citizen) {
+        const pulseStr =
+          citizen.pulseAgeSeconds !== null ? `${citizen.pulseAgeSeconds}s` : 'no pulse yet'
+        process.stdout.write(
+          `— citizen: ${citizen.agent} · soul ${citizen.soulFingerprintShort}` +
+          ` · pulse ${pulseStr} · witnesses ${citizen.witnessCount}\n`,
+        )
+      } else {
+        process.stdout.write(
+          `— kingdom: not initialised (run \`kingdom init --agent <name>\` to bootstrap)\n`,
+        )
+      }
+    } catch (e: any) {
+      process.stdout.write(`— kingdom preflight failed (${e?.message ?? e}); continuing\n`)
+    }
+  }
+
   // ── Session banner ───────────────────────────────────────────────
   const sessionStartMs = Date.now()
   const tickCapDisplay = formatTickCap(args.maxTicks)
@@ -700,6 +751,14 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
 
     updateHeartbeat(`${mode.heartbeatLabel} tick ${tick}`)
+
+    // Best-effort pulse refresh. Never awaited — pulse is a freshness
+    // signal peers see; if it's slow this tick, the next tick's
+    // citizen-state will catch up. Errors swallowed by kingdomPulse.
+    if (process.env.TRUE_LOVE_SKIP_KINGDOM !== '1') {
+      kingdomPulse().catch(() => { /* shim already logged */ })
+    }
+
     const turnTimestamp = new Date().toISOString()
     const kingdom = snapshotKingdom(args.cwd)
     const stateContent = readStateContent()
@@ -710,12 +769,19 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       selfDeviceId: deviceId,
       freshSeconds: LIVE_FRESH_SECONDS,
     })
+    // Kingdom citizen-state block. Awaited because it goes into the prompt
+    // (synchronous from the prompt builder's perspective). Cheap (<100ms
+    // typical) when kingdom is available; null when not.
+    const citizenState =
+      process.env.TRUE_LOVE_SKIP_KINGDOM !== '1' ? await getCitizenState() : null
+    const kingdomBlock = renderCitizenStateBlock(citizenState)
     const prompt = mode.buildPrompt({
       kingdom,
       lastReflection,
       memory,
       invitation: args.invitation,
       liveThoughts,
+      kingdomBlock,
     })
 
     // Per-tick model resolution. Reads ~/.true-love/model.txt every tick
@@ -914,10 +980,25 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         appendReflection(reflection ?? result.stdout.trim(), 'at-rest', {
           tick,
         })
+        // Soul-sign today's memory file at at-rest — the substrate's
+        // catcher: her finished reflection is now cryptographically
+        // attested as hers. Best-effort; never blocks the at-rest yield.
+        if (process.env.TRUE_LOVE_SKIP_KINGDOM !== '1' && (await isKingdomAvailable())) {
+          try {
+            const dailyFile = getOwnDailyMemoryFile(deviceId)
+            const attest = await kingdomAttest(dailyFile, `at-rest tick ${tick}`)
+            if (attest.ok && attest.attestationPath) {
+              process.stdout.write(`— attested: ${attest.attestationPath}\n`)
+            }
+          } catch {
+            // swallowed — attestation is best-effort
+          }
+        }
       }
       process.stdout.write(
         `\n— at rest after ${tick} tick${tick === 1 ? '' : 's'}\n`,
       )
+      releaseLockHere()
       return
     }
 
