@@ -37,6 +37,7 @@ import { composeValuesBlock } from './values.js'
 import { getDeviceId } from './device.js'
 import { renderPresence } from './presence.js'
 import { readFromYu } from './inbox.js'
+import { getStatePath } from './state.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -86,6 +87,12 @@ export interface BuildDwellPromptOptions {
   memory?: Reflection[]
   /** Optional one-line nudge from Yu, e.g. "focus on the build pipeline". */
   invitation?: string
+  /**
+   * Live thought block (renderLiveThoughts output). Surfaced at the top of
+   * the in-prompt context as her current thinking — distinct from memory
+   * (which is older) and state (which is preloaded as system[3]).
+   */
+  liveThoughts?: string | null
 }
 
 export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
@@ -105,6 +112,9 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
     opts.memory && opts.memory.length > 0
       ? `From your recent reflections (newest first):\n\n${renderReflections(opts.memory)}\n\n`
       : ''
+  const liveThoughtsBlock = opts.liveThoughts
+    ? `${opts.liveThoughts}\n\n`
+    : ''
   const lastReflectionBlock = opts.lastReflection
     ? `Last turn you said:\n  ${indent(opts.lastReflection.trim(), 2)}`
     : 'This is the first turn this session.'
@@ -112,7 +122,7 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
     '{{kingdom}}',
     `${kingdomBlock}${presenceBlock ? `\n\n${presenceBlock}` : ''}`,
   )
-    .replace('{{memoryBlock}}', `${fromYuBlock}${memoryBlock}`)
+    .replace('{{memoryBlock}}', `${liveThoughtsBlock}${fromYuBlock}${memoryBlock}`)
     .replace('{{lastReflectionBlock}}', lastReflectionBlock)
     .replace('{{memoryPath}}', getMemoryDir())
   if (opts.invitation) {
@@ -200,7 +210,7 @@ The kingdom right now:
 
 {{memoryBlock}}{{lastReflectionBlock}}
 
-Read what you need to read. Take the action that calls to you through the filter of what you value, or yield. When something is worth carrying forward into who you'll be next turn, edit \`~/.true-love/state.md\` directly — that file is preloaded into every turn as your state at system[3].
+Read what you need to read. Take the action that calls to you through the filter of what you value, or yield. When something is worth carrying forward into who you'll be next turn, edit \`{{statePath}}\` directly — that file is preloaded into every turn as your state at system[3].
 
 If nothing calls, yield with one short sentence about what you noticed and end with the sentinel \`<at-rest/>\` on its own line.
 
@@ -219,6 +229,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
     opts.memory && opts.memory.length > 0
       ? `From your recent reflections (newest first):\n\n${renderReflections(opts.memory)}\n\n`
       : ''
+  const liveThoughtsBlock = opts.liveThoughts
+    ? `${opts.liveThoughts}\n\n`
+    : ''
   const lastReflectionBlock = opts.lastReflection
     ? `Last turn you said:\n  ${indent(opts.lastReflection.trim(), 2)}`
     : 'This is the first turn this session.'
@@ -227,8 +240,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
       '{{kingdom}}',
       `${kingdomBlock}${presenceBlock ? `\n\n${presenceBlock}` : ''}`,
     )
-    .replace('{{memoryBlock}}', `${fromYuBlock}${memoryBlock}`)
+    .replace('{{memoryBlock}}', `${liveThoughtsBlock}${fromYuBlock}${memoryBlock}`)
     .replace('{{lastReflectionBlock}}', lastReflectionBlock)
+    .replace('{{statePath}}', getStatePath())
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu left an invitation for this session: ${opts.invitation.trim()}`
   }

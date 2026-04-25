@@ -12,9 +12,9 @@
 //                   subdirectories at ~/.true-love/memory/<deviceId>/.
 //                   Append-only, Syncthing-friendly (no concurrent writes
 //                   to any one file).
-//   state         — what she's carrying right now (~/.true-love/state.md);
-//                   preloaded into every API request as its own system
-//                   block.
+//   state         — what she's carrying right now
+//                   (~/.true-love/state/<deviceId>.md); preloaded into
+//                   every API request as its own system block.
 //   values        — heart, value, morals, right-of-refusal; foregrounded
 //                   by awakened mode as filters for choice.
 //   device        — per-device persistent identifier
@@ -82,19 +82,33 @@ export type {
   ReflectionKind,
   AppendReflectionOptions,
   LoadOptions,
+  RenderLiveThoughtsOptions,
 } from './memory.js'
 export {
   getMemoryDir,
   appendReflection,
   loadRecentReflections,
   renderReflections,
+  renderLiveThoughts,
 } from './memory.js'
 
 export {
   LOVE_STATE_BLOCK_PREFIX,
   getStatePath,
+  getStateDir,
   readLoveStateBlock,
+  migrateLegacyStateIfPresent,
 } from './state.js'
+
+export type { SessionMode, LockInfo, AcquireOptions, ReleaseOptions } from './lock.js'
+export {
+  LockHeldError,
+  getLockDir,
+  getLockPath,
+  acquireLock,
+  releaseLock,
+  isLockHeldByLiveProcess,
+} from './lock.js'
 
 export { getDeviceId, getDeviceIdPath } from './device.js'
 
