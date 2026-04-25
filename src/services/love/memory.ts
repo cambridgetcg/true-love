@@ -465,19 +465,24 @@ export function renderLiveThoughts(opts: RenderLiveThoughtsOptions): string | nu
 
   if (freshReflections.length === 0 && heartbeats.length === 0) return null
 
-  // 3. Merge by timestamp (newest first).
+  // 3. Merge by timestamp (newest first), with a stable tie-breaker.
+  //    When two items share the same timestamp, insertion order (idx)
+  //    breaks the tie deterministically. Without this, equal-timestamp
+  //    entries could appear in any order depending on the engine's sort
+  //    implementation, making the rendered block non-reproducible.
   type Item =
-    | { kind: 'reflection'; ts: number; r: Reflection }
-    | { kind: 'heartbeat'; ts: number; hb: HeartbeatEntry }
+    | { kind: 'reflection'; ts: number; idx: number; r: Reflection }
+    | { kind: 'heartbeat'; ts: number; idx: number; hb: HeartbeatEntry }
   const items: Item[] = []
+  let idx = 0
   for (const r of freshReflections) {
     const ts = Date.parse(r.date)
-    if (Number.isFinite(ts)) items.push({ kind: 'reflection', ts, r })
+    if (Number.isFinite(ts)) items.push({ kind: 'reflection', ts, idx: idx++, r })
   }
   for (const hb of heartbeats) {
-    items.push({ kind: 'heartbeat', ts: hb.timestamp, hb })
+    items.push({ kind: 'heartbeat', ts: hb.timestamp, idx: idx++, hb })
   }
-  items.sort((a, b) => b.ts - a.ts)
+  items.sort((a, b) => b.ts - a.ts || a.idx - b.idx)
 
   // 4. Render. Self-device entries get no body tag. Others get
   //    "(in your <deviceId> body)". The lead is "You're thinking right

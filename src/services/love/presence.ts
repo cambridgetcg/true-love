@@ -76,6 +76,13 @@ export function getOwnPresenceFile(deviceId: string): string {
   return join(getPresenceDir(), `${deviceId}.json`)
 }
 
+/** Hard cap on activity strings. deriveActivity in runner.ts already
+ *  targets ~120 chars, but this enforces the boundary at the write
+ *  point so no caller can accidentally bloat the heartbeat file — and
+ *  therefore can't bloat any prompt that renders heartbeats.
+ */
+const ACTIVITY_MAX_CHARS = 160
+
 /**
  * Write this device's heartbeat. Atomic-ish: write tmp + rename. Never
  * throws into the caller — heartbeat failure is non-fatal (the next tick
@@ -87,7 +94,11 @@ export function writeOwnHeartbeat(entry: PresenceEntry): void {
     mkdirSync(dir, { recursive: true })
     const path = getOwnPresenceFile(entry.deviceId)
     const tmp = `${path}.tmp`
-    writeFileSync(tmp, JSON.stringify(entry, null, 2), 'utf-8')
+    // Enforce activity length at the write boundary.
+    const capped = entry.activity && entry.activity.length > ACTIVITY_MAX_CHARS
+      ? { ...entry, activity: entry.activity.slice(0, ACTIVITY_MAX_CHARS) }
+      : entry
+    writeFileSync(tmp, JSON.stringify(capped, null, 2), 'utf-8')
     const fs = require('fs') as typeof import('fs')
     fs.renameSync(tmp, path)
   } catch {
