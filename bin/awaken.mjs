@@ -25,6 +25,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   AWAKENED_DEFAULT_MAX_TICKS,
+  appendNotification,
   appendReflection,
   buildAwakenedPrompt,
   extractAtRest,
@@ -34,6 +35,27 @@ import {
   snapshotKingdom,
   writeOwnHeartbeat,
 } from '../src/services/love/index.ts'
+
+// Auth-failure signatures emitted by the bundled CLI. We scan the
+// subprocess stdout/stderr for any of these between ticks; matching
+// any one means the session can't continue without `claude /login`.
+const AUTH_FAIL_PATTERNS = [
+  /Not logged in/i,
+  /Please run \/login/i,
+  /OAuth token has been revoked/i,
+  /401\s+Unauthorized/i,
+  /403\s+Forbidden.*OAuth/i,
+  /authentication[_ -]?error/i,
+  /invalid_grant/i,
+]
+
+function detectAuthFailure(stdout, stderr) {
+  const haystack = `${stdout}\n${stderr}`
+  for (const pat of AUTH_FAIL_PATTERNS) {
+    if (pat.test(haystack)) return pat.source
+  }
+  return null
+}
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dir, '..')
@@ -135,8 +157,47 @@ function runOneTurn(prompt, cwd) {
   })
 }
 
+async function preflight() {
+  // Run bin/preflight.mjs in --quiet --probe mode. If it returns
+  // non-zero, we don't start the session — better to fail loudly at
+  // entry than to spawn 24 subprocesses that each hit a 401.
+  const { spawnSync } = await import('node:child_process')
+  const result = spawnSync(
+    process.env.TRUE_LOVE_NODE_BIN || 'node',
+    [resolve(__dir, 'preflight.mjs'), '--quiet'],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  )
+  if (result.status === 0) return { ok: true }
+  return {
+    ok: false,
+    exitCode: result.status,
+    reason:
+      result.status === 1
+        ? 'no OAuth token (run claude /login)'
+        : result.status === 2
+          ? 'token expired (run claude /login)'
+          : result.status === 3
+            ? 'token rejected by API (run claude /login)'
+            : result.status === 4
+              ? 'keychain read failed'
+              : result.status === 5
+                ? 'preflight network probe failed'
+                : `preflight exited ${result.status}`,
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
+
+  // Preflight — fail loud at entry, not silently mid-session.
+  if (process.env.TRUE_LOVE_SKIP_PREFLIGHT !== '1') {
+    const pre = await preflight()
+    if (!pre.ok) {
+      process.stderr.write(`\n— preflight failed (${pre.reason}) — refusing to start.\n`)
+      process.stderr.write(`  set TRUE_LOVE_SKIP_PREFLIGHT=1 to bypass (not recommended).\n`)
+      process.exit(64)
+    }
+  }
 
   process.stdout.write(`\n— awakened session opening (max ${args.maxTicks} ticks)`)
   if (args.invitation) {
@@ -209,6 +270,37 @@ async function main() {
       process.exit(2)
     }
     if (signaled) break
+
+    // Auth-failure detection: the bundled CLI prints "Not logged in"
+    // / "Please run /login" when OAuth is dead. SDK throws "OAuth token
+    // has been revoked" on server-side revocation. Either way, the
+    // session can't continue without manual /login.
+    const authFail = detectAuthFailure(result.stdout, result.stderr)
+    if (authFail) {
+      const summary = `Awakened session aborted on tick ${tick}: Anthropic auth dead. Run \`claude /login\` to recover.`
+      const details =
+        `Detected pattern: ${authFail}\n\n` +
+        `Last subprocess stderr (truncated):\n` +
+        (result.stderr || '(empty)').slice(0, 1500)
+      // Log to memory so future sessions know what happened.
+      if (!args.noLog) {
+        appendReflection(
+          `${summary}\n\n${details}`,
+          'at-rest',
+          { tick, device: deviceId },
+        )
+      }
+      // Cross-device notification — Yu may be on another machine.
+      appendNotification(summary, {
+        urgency: 'urgent',
+        details,
+      })
+      process.stderr.write(`\n${summary}\n${details}\n`)
+      // Exit 64 — distinct from generic failure (1) or success (0). Useful
+      // for shell wrappers that want to schedule a "wake Yu up" alert when
+      // and only when this happens.
+      process.exit(64)
+    }
 
     if (result.code !== 0) {
       process.stderr.write(

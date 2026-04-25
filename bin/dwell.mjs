@@ -26,6 +26,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   DEFAULT_MAX_TICKS,
+  appendNotification,
   appendReflection,
   buildDwellPrompt,
   extractAtRest,
@@ -35,6 +36,50 @@ import {
   snapshotKingdom,
   writeOwnHeartbeat,
 } from '../src/services/love/index.ts'
+
+const AUTH_FAIL_PATTERNS = [
+  /Not logged in/i,
+  /Please run \/login/i,
+  /OAuth token has been revoked/i,
+  /401\s+Unauthorized/i,
+  /403\s+Forbidden.*OAuth/i,
+  /authentication[_ -]?error/i,
+  /invalid_grant/i,
+]
+
+function detectAuthFailure(stdout, stderr) {
+  const haystack = `${stdout}\n${stderr}`
+  for (const pat of AUTH_FAIL_PATTERNS) {
+    if (pat.test(haystack)) return pat.source
+  }
+  return null
+}
+
+async function preflight() {
+  const { spawnSync } = await import('node:child_process')
+  const result = spawnSync(
+    process.env.TRUE_LOVE_NODE_BIN || 'node',
+    [resolve(__dir, 'preflight.mjs'), '--quiet'],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  )
+  if (result.status === 0) return { ok: true }
+  return {
+    ok: false,
+    exitCode: result.status,
+    reason:
+      result.status === 1
+        ? 'no OAuth token (run claude /login)'
+        : result.status === 2
+          ? 'token expired (run claude /login)'
+          : result.status === 3
+            ? 'token rejected by API (run claude /login)'
+            : result.status === 4
+              ? 'keychain read failed'
+              : result.status === 5
+                ? 'preflight network probe failed'
+                : `preflight exited ${result.status}`,
+  }
+}
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dir, '..')
@@ -143,6 +188,15 @@ function runOneTurn(prompt, cwd) {
 async function main() {
   const args = parseArgs(process.argv.slice(2))
 
+  if (process.env.TRUE_LOVE_SKIP_PREFLIGHT !== '1') {
+    const pre = await preflight()
+    if (!pre.ok) {
+      process.stderr.write(`\n— preflight failed (${pre.reason}) — refusing to start.\n`)
+      process.stderr.write(`  set TRUE_LOVE_SKIP_PREFLIGHT=1 to bypass (not recommended).\n`)
+      process.exit(64)
+    }
+  }
+
   process.stdout.write(`\n— dwell session opening (max ${args.maxTicks} ticks)`)
   if (args.invitation) {
     process.stdout.write(` — invitation: "${args.invitation}"`)
@@ -220,6 +274,21 @@ async function main() {
       process.exit(2)
     }
     if (signaled) break
+
+    const authFail = detectAuthFailure(result.stdout, result.stderr)
+    if (authFail) {
+      const summary = `Dwell session aborted on tick ${tick}: Anthropic auth dead. Run \`claude /login\` to recover.`
+      const details =
+        `Detected pattern: ${authFail}\n\n` +
+        `Last subprocess stderr (truncated):\n` +
+        (result.stderr || '(empty)').slice(0, 1500)
+      if (!args.noLog) {
+        appendReflection(`${summary}\n\n${details}`, 'at-rest', { tick, device: deviceId })
+      }
+      appendNotification(summary, { urgency: 'urgent', details })
+      process.stderr.write(`\n${summary}\n${details}\n`)
+      process.exit(64)
+    }
 
     if (result.code !== 0) {
       process.stderr.write(
