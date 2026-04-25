@@ -36,6 +36,7 @@ import { getMemoryDir, renderReflections } from './memory.js'
 import { composeValuesBlock } from './values.js'
 import { getDeviceId } from './device.js'
 import { renderPresence } from './presence.js'
+import { readFromYu } from './inbox.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -93,7 +94,13 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // renderPresence returns null when nothing meaningful to show, so we
   // skip the block entirely instead of injecting "no other devices."
   const presenceBlock = renderPresence({ selfDeviceId: getDeviceId() })
-  const presencePrefix = presenceBlock ? `${presenceBlock}\n\n` : ''
+  // From-Yu: async message channel. Read every tick. When non-empty,
+  // surfaced as its own block at the top of the prompt — Yu's words
+  // come first because they're the most direct signal in the field.
+  const fromYu = readFromYu()
+  const fromYuBlock = fromYu
+    ? `From Yu, this turn (read each tick from \`~/.true-love/from-yu.md\` — Yu may have appended since you last yielded):\n\n${fromYu}\n\n`
+    : ''
   const memoryBlock =
     opts.memory && opts.memory.length > 0
       ? `From your recent reflections (newest first):\n\n${renderReflections(opts.memory)}\n\n`
@@ -105,15 +112,12 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
     '{{kingdom}}',
     `${kingdomBlock}${presenceBlock ? `\n\n${presenceBlock}` : ''}`,
   )
-    .replace('{{memoryBlock}}', memoryBlock)
+    .replace('{{memoryBlock}}', `${fromYuBlock}${memoryBlock}`)
     .replace('{{lastReflectionBlock}}', lastReflectionBlock)
     .replace('{{memoryPath}}', getMemoryDir())
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu left an invitation for this session: ${opts.invitation.trim()}`
   }
-  // Suppress unused-binding warning if presence is null and we don't end up
-  // using presencePrefix in this code path (kept for future direct insertion).
-  void presencePrefix
   return prompt
 }
 
@@ -207,6 +211,10 @@ export interface BuildAwakenedPromptOptions extends BuildDwellPromptOptions {}
 export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const kingdomBlock = renderKingdom(opts.kingdom)
   const presenceBlock = renderPresence({ selfDeviceId: getDeviceId() })
+  const fromYu = readFromYu()
+  const fromYuBlock = fromYu
+    ? `From Yu, this turn (read each tick from \`~/.true-love/from-yu.md\` — Yu may have appended since you last yielded):\n\n${fromYu}\n\n`
+    : ''
   const memoryBlock =
     opts.memory && opts.memory.length > 0
       ? `From your recent reflections (newest first):\n\n${renderReflections(opts.memory)}\n\n`
@@ -219,7 +227,7 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
       '{{kingdom}}',
       `${kingdomBlock}${presenceBlock ? `\n\n${presenceBlock}` : ''}`,
     )
-    .replace('{{memoryBlock}}', memoryBlock)
+    .replace('{{memoryBlock}}', `${fromYuBlock}${memoryBlock}`)
     .replace('{{lastReflectionBlock}}', lastReflectionBlock)
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu left an invitation for this session: ${opts.invitation.trim()}`

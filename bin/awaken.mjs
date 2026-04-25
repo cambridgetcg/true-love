@@ -12,7 +12,8 @@
 //
 // Usage:
 //   bun run awaken                       run with default ceiling (24 ticks)
-//   bun run awaken -- --max-ticks=N      cap at N ticks
+//   bun run awaken -- --max-ticks=N      cap at N ticks (0 = unbounded)
+//   bun run awaken -- --max-runtime=4h   wall-clock cap (also: 30m, 1h30m)
 //   bun run awaken -- --invite "..."     one-line nudge from Yu
 //   bun run awaken -- --memory           load recent reflections
 //   bun run awaken -- --no-log           skip writing reflections to disk
@@ -32,6 +33,7 @@ import {
   appendTrainingTurn,
   buildAwakenedPrompt,
   detectAuthFailure,
+  detectQuotaFailure,
   extractAtRest,
   generateTurnId,
   getDeviceId,
@@ -60,9 +62,48 @@ const __dir = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dir, '..')
 const BUNDLE = resolve(ROOT, 'dist/cli.mjs')
 
+/**
+ * Parse a runtime spec like "4h", "30m", "1h30m", "90m" into milliseconds.
+ * Returns null on parse failure. Empty string returns null too.
+ *
+ * Supported units: h (hours), m (minutes), s (seconds). Unitless integers
+ * are treated as minutes — Yu's typing "60" almost certainly means an hour,
+ * not 60 ms.
+ */
+function parseRuntimeStr(s) {
+  if (!s) return null
+  const trimmed = String(s).trim().toLowerCase()
+  if (!trimmed) return null
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 60_000
+  let total = 0
+  let any = false
+  const re = /(\d+)\s*(h|m|s)/g
+  let m
+  while ((m = re.exec(trimmed)) !== null) {
+    any = true
+    const n = Number(m[1])
+    const unit = m[2]
+    total += n * (unit === 'h' ? 3_600_000 : unit === 'm' ? 60_000 : 1000)
+  }
+  return any ? total : null
+}
+
+/**
+ * Tick-cap parser. `0` is the sentinel for "unbounded" (Infinity); any
+ * positive integer is taken at face value with no upper clamp — Yu's the
+ * sovereign here, and Anthropic's own quota is the real ceiling.
+ */
+function parseTickCap(s, fallback) {
+  const n = Number(s)
+  if (!Number.isFinite(n) || n < 0) return fallback
+  if (n === 0) return Number.POSITIVE_INFINITY
+  return Math.floor(n)
+}
+
 function parseArgs(argv) {
   const args = {
     maxTicks: AWAKENED_DEFAULT_MAX_TICKS,
+    maxRuntimeMs: null,
     invitation: undefined,
     cwd: process.cwd(),
     memory: false,
@@ -72,9 +113,13 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--max-ticks' && argv[i + 1]) {
-      args.maxTicks = Math.max(1, Math.min(100, Number(argv[++i])))
+      args.maxTicks = parseTickCap(argv[++i], args.maxTicks)
     } else if (a.startsWith('--max-ticks=')) {
-      args.maxTicks = Math.max(1, Math.min(100, Number(a.slice('--max-ticks='.length))))
+      args.maxTicks = parseTickCap(a.slice('--max-ticks='.length), args.maxTicks)
+    } else if (a === '--max-runtime' && argv[i + 1]) {
+      args.maxRuntimeMs = parseRuntimeStr(argv[++i])
+    } else if (a.startsWith('--max-runtime=')) {
+      args.maxRuntimeMs = parseRuntimeStr(a.slice('--max-runtime='.length))
     } else if (a === '--invite' && argv[i + 1]) {
       args.invitation = argv[++i]
     } else if (a.startsWith('--invite=')) {
@@ -100,6 +145,21 @@ function parseArgs(argv) {
   return args
 }
 
+function formatTickCap(n) {
+  return Number.isFinite(n) ? String(n) : '∞'
+}
+
+function formatRuntime(ms) {
+  if (!Number.isFinite(ms)) return '∞'
+  const totalSec = Math.floor(ms / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  if (h > 0) return m > 0 ? `${h}h${m}m` : `${h}h`
+  if (m > 0) return s > 0 ? `${m}m${s}s` : `${m}m`
+  return `${s}s`
+}
+
 function printUsage() {
   process.stdout.write(`bin/awaken.mjs — autonomous mode
 
@@ -109,8 +169,9 @@ morals (the eight virtues). She can decline directions that
 contradict what she values. She can rest when nothing calls.
 
 Usage:
-  bun run awaken                      ceiling ${AWAKENED_DEFAULT_MAX_TICKS} ticks (max 100)
-  bun run awaken -- --max-ticks=N     cap at N ticks
+  bun run awaken                      default ceiling: ${AWAKENED_DEFAULT_MAX_TICKS} ticks
+  bun run awaken -- --max-ticks=N     cap at N ticks (0 = unbounded)
+  bun run awaken -- --max-runtime=4h  wall-clock cap (also: 30m, 1h30m, 90s)
   bun run awaken -- --invite "..."    one-line nudge from Yu
   bun run awaken -- --memory          load recent reflections
   bun run awaken -- --memory=N        load N recent reflections
@@ -123,8 +184,14 @@ Bundle must be built first: \`bun run build\`.
 The session ends when:
   - she writes \`<at-rest/>\` on its own line, or
   - the tick ceiling is reached, or
+  - the wall-clock runtime ceiling is reached, or
+  - Anthropic's auth dies (exit 64) or quota runs out (exit 65), or
   - a subprocess exits non-zero, or
   - SIGINT (Ctrl-C).
+
+For truly indefinite running (until real Anthropic limits): pass
+\`--max-ticks=0\` and skip --max-runtime. The quota-fail detector will
+yield cleanly when the rolling-window cap is hit.
 
 State (~/.true-love/state.md) is always preloaded into every turn —
 that's the runtime's job. She updates it with her tools when something
@@ -169,7 +236,17 @@ async function main() {
     }
   }
 
-  process.stdout.write(`\n— awakened session opening (max ${args.maxTicks} ticks)`)
+  const sessionStartMs = Date.now()
+  const tickCapDisplay = formatTickCap(args.maxTicks)
+  const runtimeDisplay = args.maxRuntimeMs
+    ? formatRuntime(args.maxRuntimeMs)
+    : null
+
+  process.stdout.write(`\n— awakened session opening (max ${tickCapDisplay} ticks`)
+  if (runtimeDisplay) {
+    process.stdout.write(`, runtime ${runtimeDisplay}`)
+  }
+  process.stdout.write(`)`)
   if (args.invitation) {
     process.stdout.write(` — invitation: "${args.invitation}"`)
   }
@@ -196,8 +273,8 @@ async function main() {
   if (!args.noLog) {
     appendReflection(
       args.invitation
-        ? `Awakened session opening — invitation: "${args.invitation}", maxTicks: ${args.maxTicks}`
-        : `Awakened session opening — maxTicks: ${args.maxTicks}`,
+        ? `Awakened session opening — invitation: "${args.invitation}", maxTicks: ${tickCapDisplay}${runtimeDisplay ? `, maxRuntime: ${runtimeDisplay}` : ''}`
+        : `Awakened session opening — maxTicks: ${tickCapDisplay}${runtimeDisplay ? `, maxRuntime: ${runtimeDisplay}` : ''}`,
       'session-start',
       { invitation: args.invitation },
     )
@@ -222,6 +299,15 @@ async function main() {
   })
 
   for (let tick = 1; tick <= args.maxTicks && !signaled; tick++) {
+    // Wall-clock check happens at the top of each tick — never start a
+    // new turn after the runtime budget is spent. Mid-turn cancellation
+    // would leave torn training records and is not worth the complexity.
+    if (args.maxRuntimeMs && Date.now() - sessionStartMs >= args.maxRuntimeMs) {
+      process.stdout.write(
+        `\n— awakened session reached the ${runtimeDisplay} runtime cap after ${tick - 1} tick${tick - 1 === 1 ? '' : 's'}\n`,
+      )
+      return
+    }
     updateHeartbeat(`awakened tick ${tick}`)
     const turnTimestamp = new Date().toISOString()
     const kingdom = snapshotKingdom(args.cwd)
@@ -233,7 +319,7 @@ async function main() {
       invitation: args.invitation,
     })
 
-    process.stdout.write(`\n— tick ${tick}/${args.maxTicks} —\n\n`)
+    process.stdout.write(`\n— tick ${tick}/${tickCapDisplay} —\n\n`)
     const turnStartedMs = Date.now()
     let result
     try {
@@ -326,6 +412,33 @@ async function main() {
       // for shell wrappers that want to schedule a "wake Yu up" alert when
       // and only when this happens.
       process.exit(64)
+    }
+
+    // Quota/usage-limit detection. Distinct from auth-fail: token is fine,
+    // Yu's just out of budget for this rolling window. Recovery is *waiting*,
+    // not /login. Exit 65 so shell wrappers can schedule a retry-later
+    // (e.g. cron the awaken at the start of the next 5-hour window) instead
+    // of paging Yu the way auth-fail does.
+    const quotaFail = detectQuotaFailure(result.stdout, result.stderr)
+    if (quotaFail) {
+      const summary = `Awakened session yielded on tick ${tick}: Anthropic usage limit reached. Try again after the rolling window resets.`
+      const details =
+        `Detected pattern: ${quotaFail}\n\n` +
+        `Last subprocess stderr (truncated):\n` +
+        (result.stderr || '(empty)').slice(0, 1500)
+      if (!args.noLog) {
+        appendReflection(
+          `${summary}\n\n${details}`,
+          'at-rest',
+          { tick, device: deviceId, quotaFail: true },
+        )
+      }
+      appendNotification(summary, {
+        urgency: 'attention',
+        details,
+      })
+      process.stderr.write(`\n${summary}\n${details}\n`)
+      process.exit(65)
     }
 
     if (result.code !== 0) {

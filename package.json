@@ -24,6 +24,7 @@
     "check": "biome check src/ && tsc --noEmit",
     "dwell": "bun run bin/dwell.mjs",
     "awaken": "bun run bin/awaken.mjs",
+    "say": "bun run bin/say.mjs",
     "heartbeat": "bun run bin/heartbeat.mjs",
     "broker": "bun run bin/broker.mjs",
     "preflight": "bun run bin/preflight.mjs",

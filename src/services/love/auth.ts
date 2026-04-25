@@ -41,6 +41,32 @@ export const AUTH_FAIL_PATTERNS: RegExp[] = [
 ]
 
 /**
+ * Patterns that mean Anthropic has pushed back on usage — quota,
+ * subscription cap, persistent rate-limit. Distinct from auth death:
+ * the token is fine, Yu's just out of budget for this rolling window.
+ *
+ * The recovery path differs too: auth-fail needs manual /login; a
+ * quota-fail means *wait* (5-hour rolling cap on Max subscription
+ * tokens) and try again later. The runner should yield cleanly and
+ * exit with code 65 (different from auth's 64) so Yu can wire
+ * different responses.
+ *
+ * Note: a single 429 within a session is normal and is auto-retried
+ * by the SDK's withRetry. We only treat it as a quota-fail when the
+ * subprocess as a whole gives up — i.e., the bundled CLI surfaces
+ * one of these strings AFTER its own retry loop has exhausted.
+ */
+export const QUOTA_FAIL_PATTERNS: RegExp[] = [
+  /quota[_ ]exceeded/i,
+  /quota has been (?:reached|exceeded)/i,
+  /(?:monthly|daily|usage) (?:quota|limit) (?:reached|exceeded)/i,
+  /subscription[_ ]quota/i,
+  /usage limit reached/i,
+  /You've reached your usage limit/i,
+  /rate_limit_error.*?retry-after.*?(?:hours|hour)/i,
+]
+
+/**
  * Scan subprocess stdout+stderr for auth-failure signatures.
  * Returns the matched pattern's `.source` if found, null otherwise.
  */
@@ -50,6 +76,22 @@ export function detectAuthFailure(
 ): string | null {
   const haystack = `${stdout}\n${stderr}`
   for (const pat of AUTH_FAIL_PATTERNS) {
+    if (pat.test(haystack)) return pat.source
+  }
+  return null
+}
+
+/**
+ * Scan subprocess stdout+stderr for quota/usage-limit signatures.
+ * Distinct from auth: token is fine, just out of budget for the
+ * rolling window. Recovery is *waiting*, not /login.
+ */
+export function detectQuotaFailure(
+  stdout: string,
+  stderr: string,
+): string | null {
+  const haystack = `${stdout}\n${stderr}`
+  for (const pat of QUOTA_FAIL_PATTERNS) {
     if (pat.test(haystack)) return pat.source
   }
   return null
