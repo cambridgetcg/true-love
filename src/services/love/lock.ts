@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-export type LockMode = 'awakened' | 'dwelling'
+export type LockMode = 'awakened' | 'dwell' | 'heartbeat'
 
 export interface LockInfo {
   /** True when this call resulted in a lock being held (or skipped via env). */

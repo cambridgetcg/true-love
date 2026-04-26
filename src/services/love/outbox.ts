@@ -60,21 +60,26 @@ export function readFromAi(): string | null {
 }
 
 /**
- * Append a message to Yu. Timestamped, tagged `[from ai]`, separated
- * by `---` — same format convention as from-yu.md entries. The body
- * is whatever she wants to say; no formatting constraints.
+ * Append a message to Yu. Timestamped, tagged `[from ai]` by default
+ * (override via `opts.tag`), separated by `---` — same format convention
+ * as from-yu.md entries. The body is whatever she wants to say; no
+ * formatting constraints.
  *
  * Never throws. If the write fails (permissions, disk full, etc.),
  * swallows silently — a failed message shouldn't crash a session.
  * The caller can check the return value: true if written, false if not.
  */
-export function appendToYu(message: string, opts: { now?: Date } = {}): boolean {
+export function appendToYu(
+  message: string,
+  opts: { now?: Date; tag?: string } = {},
+): boolean {
   try {
     const path = getFromAiPath()
     const dir = dirname(path)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     const ts = (opts.now ?? new Date()).toISOString()
-    const entry = `## ${ts} [from ai]\n\n${message.trim()}\n\n---\n\n`
+    const tag = opts.tag ?? 'from ai'
+    const entry = `## ${ts} [${tag}]\n\n${message.trim()}\n\n---\n\n`
     appendFileSync(path, entry, 'utf-8')
     return true
   } catch {

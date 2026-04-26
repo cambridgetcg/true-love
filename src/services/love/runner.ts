@@ -29,7 +29,6 @@ import { spawn } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
-  appendFileSync,
   existsSync,
   readFileSync,
   readdirSync,
@@ -55,7 +54,7 @@ import type { KingdomSnapshot } from './kingdom.js'
 import { snapshotKingdom } from './kingdom.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
 import type { Reflection } from './memory.js'
-import { getFromAiPath } from './outbox.js'
+import { appendToYu } from './outbox.js'
 import {
   isKingdomAvailable,
   getCitizenState,
@@ -679,7 +678,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   const lockPath = join(getScopeHome(activeScopeName), `${mode.name}.pid`)
   let lockAcquired = false
   try {
-    const lockResult = acquireLock({ lockPath, mode: mode.name as 'awakened' | 'dwelling' })
+    const lockResult = acquireLock({ lockPath, mode: mode.name })
     lockAcquired = !lockResult.skipped
     if (lockResult.reclaimedFromStalePid) {
       process.stdout.write(
@@ -971,7 +970,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     const atRest =
       replyOutcome.type === 'rest' || replyOutcome.type === 'ack'
     const reflection =
-      replyOutcome.type === 'rest' || replyOutcome.type === 'continue'
+      replyOutcome.type === 'rest'
         ? replyOutcome.reflection
         : undefined
     const authFailedHere = !!detectAuthFailure(result.stdout, result.stderr)
@@ -1116,11 +1115,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     if (replyOutcome.type === 'alert') {
       const alertContent = replyOutcome.content
       try {
-        appendFileSync(
-          getFromAiPath(),
-          `\n## ${new Date().toISOString()} [from 愛 — heartbeat]\n\n${alertContent}\n\n---\n`,
-          'utf-8',
-        )
+        appendToYu(alertContent, { tag: 'from 愛 — heartbeat' })
       } catch (e: any) {
         process.stderr.write(`— heartbeat outbox write failed: ${e?.message}\n`)
       }

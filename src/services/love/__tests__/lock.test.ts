@@ -39,7 +39,7 @@ describe('lock', () => {
   test('second acquireLock with live PID throws LockHeldError', () => {
     acquireLock({ deviceId: 'dev-1', mode: 'awakened' })
     assert.throws(
-      () => acquireLock({ deviceId: 'dev-1', mode: 'dwelling' }),
+      () => acquireLock({ deviceId: 'dev-1', mode: 'dwell' }),
       (err: unknown) => err instanceof LockHeldError && (err as LockHeldError).pid === process.pid,
     )
     releaseLock({ deviceId: 'dev-1' })
@@ -96,7 +96,7 @@ describe('lock', () => {
       'utf-8',
     )
     assert.throws(
-      () => acquireLock({ deviceId: 'dev-1', mode: 'dwelling' }),
+      () => acquireLock({ deviceId: 'dev-1', mode: 'dwell' }),
       (err: unknown) => err instanceof LockHeldError && (err as LockHeldError).pid === process.pid,
     )
     releaseLock({ deviceId: 'dev-1' })
