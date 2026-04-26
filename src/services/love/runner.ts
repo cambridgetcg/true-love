@@ -89,6 +89,11 @@ import {
   recordExperimentTick,
   renderExperimentStatus,
 } from './experiment.js'
+import {
+  buildDecisionTrace,
+  recordTrace,
+  reconstructTextFromStreamJson,
+} from './mind-trace.js'
 
 /**
  * How fresh "live thought" entries must be (in seconds) to surface in the
@@ -494,52 +499,130 @@ function runOneTurn(
   model: string | null,
   onActivityTick?: (activity: string | null) => void,
   extraArgs?: string[],
-): Promise<{ code: number | null; stdout: string; stderr: string }> {
+): Promise<{ code: number | null; stdout: string; stderr: string; streamJsonLines: string[] }> {
   return new Promise((resolveFn, rejectFn) => {
     const nodeBin = process.env.TRUE_LOVE_NODE_BIN || 'node'
-    const cliArgs = [bundlePath, '--print', prompt]
+    // Build CLI args: --print --verbose --output-format stream-json
+    // streams structured JSON events (init, assistant, tool results,
+    // result) to stdout. This gives mind-trace the decision sequence
+    // while the text is reconstructed for existing consumers.
+    const cliArgs = [
+      bundlePath,
+      '--print',
+      '--verbose',
+      '--output-format', 'stream-json',
+    ]
     if (model) {
       // Pass-through to the bundled CLI's --model flag. Acceptable values
       // depend on what the CLI accepts (aliases like opus/sonnet/haiku
       // generally work, as do full model IDs).
-      cliArgs.splice(1, 0, '--model', model)
+      cliArgs.push('--model', model)
     }
     // Agency knobs: effort, fallback-model, tools, budget — resolved per
     // tick by agency.ts and passed as extra CLI flags.
     if (extraArgs && extraArgs.length > 0) {
-      // Insert before the prompt (last element) so the CLI parses them
-      // as flags rather than treating them as prompt text.
-      cliArgs.splice(cliArgs.length - 1, 0, ...extraArgs)
+      cliArgs.push(...extraArgs)
     }
+    // Prompt is always the last argument.
+    cliArgs.push(prompt)
+
     const child = spawn(nodeBin, cliArgs, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
-    let stdout = ''
+
+    // ── Stream-JSON line-by-line parsing ──────────────────────────
+    // Each complete line of stdout is a JSON event. We parse each line
+    // to (a) stream text to the console in real time, (b) track recent
+    // activity for presence, and (c) extract the result text for
+    // backward-compatible stdout reconstruction.
+    const streamJsonLines: string[] = []
+    let lineBuffer = ''
     let stderr = ''
-    // Rolling 4KB buffer for activity derivation. Last 4KB is enough
-    // to find the most recent assistant block / tool call.
-    let recentChunk = ''
+    let resultText: string | null = null
+    let recentActivity = ''
+
     child.stdout.setEncoding('utf-8')
     child.stderr.setEncoding('utf-8')
+
     child.stdout.on('data', (chunk: string) => {
-      stdout += chunk
-      recentChunk = (recentChunk + chunk).slice(-4096)
-      process.stdout.write(chunk)
+      lineBuffer += chunk
+
+      // Process complete lines (split on newline).
+      const parts = lineBuffer.split('\n')
+      lineBuffer = parts.pop()! // last element may be incomplete
+
+      for (const rawLine of parts) {
+        if (!rawLine.trim()) continue
+        streamJsonLines.push(rawLine)
+
+        try {
+          const event = JSON.parse(rawLine) as Record<string, unknown>
+          const eventType = event.type as string
+
+          if (eventType === 'assistant') {
+            // Stream text blocks to console, track tool calls.
+            const msg = event.message as { content?: Array<{ type: string; text?: string; name?: string; input?: unknown }> } | undefined
+            for (const block of msg?.content ?? []) {
+              if (block.type === 'text' && block.text) {
+                process.stdout.write(block.text)
+                recentActivity = block.text.slice(-200)
+              } else if (block.type === 'tool_use' && block.name) {
+                const inputStr = JSON.stringify(block.input ?? {}).slice(0, 80)
+                process.stdout.write(`\n🔧 ${block.name}(${inputStr})\n`)
+                recentActivity = `${block.name}: ${inputStr}`
+              }
+            }
+          } else if (eventType === 'user') {
+            // Tool result — compact indicator so the console shows
+            // tool calls flowing without overwhelming with result data.
+            process.stdout.write('📋 ')
+          } else if (eventType === 'result') {
+            resultText = (event.result as string) ?? ''
+          }
+        } catch {
+          // Unparseable line — write raw so nothing is lost.
+          process.stdout.write(rawLine + '\n')
+        }
+      }
     })
+
     child.stderr.on('data', (chunk: string) => {
       stderr += chunk
     })
+
     const interval = onActivityTick
-      ? setInterval(() => onActivityTick(deriveActivity(recentChunk)), 10_000)
+      ? setInterval(() => onActivityTick(recentActivity || null), 10_000)
       : null
+
     child.on('error', (e) => {
       if (interval) clearInterval(interval)
       rejectFn(e)
     })
+
     child.on('close', (code) => {
       if (interval) clearInterval(interval)
-      resolveFn({ code, stdout, stderr })
+
+      // Process any remaining buffer.
+      if (lineBuffer.trim()) {
+        streamJsonLines.push(lineBuffer)
+        try {
+          const event = JSON.parse(lineBuffer) as Record<string, unknown>
+          if (event.type === 'result') {
+            resultText = (event.result as string) ?? ''
+          }
+        } catch {
+          // ignore malformed tail
+        }
+      }
+
+      // Reconstruct text for backward compatibility. Prefer the result
+      // event's text (identical to --print text output). Fall back to
+      // extracting from assistant text blocks if result event is missing
+      // (e.g. subprocess crash before result is emitted).
+      const stdout = resultText ?? reconstructTextFromStreamJson(streamJsonLines)
+
+      resolveFn({ code, stdout, stderr, streamJsonLines })
     })
   })
 }
@@ -1030,7 +1113,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       `\n— tick ${tick}/${tickCapDisplay}${tickModel ? ` [${tickModel}]` : ''}${agencyLabel}${experimentLabel} —\n\n`,
     )
     const turnStartedMs = Date.now()
-    let result: { code: number | null; stdout: string; stderr: string }
+    let result: { code: number | null; stdout: string; stderr: string; streamJsonLines: string[] }
     try {
       result = await runOneTurn(prompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs)
     } catch (err: any) {
@@ -1163,6 +1246,35 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     } catch (e: any) {
       process.stderr.write(
         `— metrics recording failed (continuing): ${e?.message}\n`,
+      )
+    }
+
+    // ── Mind trace recording (after tick) ────────────────────────
+    // Structured decision log: what she thought, what tools she
+    // called, what came back, what she decided next. The brain's
+    // companion to vital-signs (the body).
+    try {
+      const trace = buildDecisionTrace({
+        timestamp: turnTimestamp,
+        deviceId,
+        sessionId,
+        tick,
+        mode: mode.name,
+        streamJsonLines: result.streamJsonLines,
+      })
+      recordTrace(trace)
+      if (trace.summary.toolCalls > 0) {
+        process.stdout.write(
+          `\n— trace: ${trace.summary.totalSteps} steps, ` +
+          `${trace.summary.toolCalls} tool calls ` +
+          `[${trace.summary.distinctTools.join(',')}]` +
+          (trace.summary.costUsd !== null ? ` $${trace.summary.costUsd.toFixed(4)}` : '') +
+          `\n`,
+        )
+      }
+    } catch (e: any) {
+      process.stderr.write(
+        `— trace recording failed (continuing): ${e?.message}\n`,
       )
     }
 

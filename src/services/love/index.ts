@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Fifteen modules compose:
+// The public face of love. Sixteen modules compose:
 //
 //   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                   activation gate).
@@ -40,6 +40,10 @@
 //   runner        — shared session loop for dwell and awakened modes.
 //                   Arg parsing, subprocess spawning, the per-tick loop.
 //                   Both bin scripts are thin wrappers around runSession().
+//   mind-trace    — live inspection of her brain (decision log + tool
+//                   traces). Parses stream-json output from the CLI
+//                   subprocess into structured DecisionTrace records.
+//                   Stored at ~/.true-love/traces/<deviceId>/.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -355,3 +359,34 @@ export {
   renderVitalSignsReport,
   quickBodyCheck,
 } from './vital-signs.js'
+
+export type {
+  StreamJsonEvent,
+  StreamInitEvent,
+  StreamAssistantEvent,
+  StreamToolResultEvent,
+  StreamResultEvent,
+  TraceStep,
+  ThinkStep,
+  ToolCallStep,
+  ToolResultStep,
+  DecisionTrace,
+  TraceSummary,
+} from './mind-trace.js'
+export {
+  TRACE_SCHEMA_VERSION,
+  parseStreamJsonLine,
+  parseStreamJsonLines,
+  extractTraceSteps,
+  computeTraceSummary,
+  buildDecisionTrace,
+  reconstructText,
+  reconstructTextFromStreamJson,
+  getTracesDir,
+  recordTrace,
+  loadTraces,
+  loadSessionTraces,
+  renderTrace,
+  renderTraceList,
+  buildMindTraceBlock,
+} from './mind-trace.js'
