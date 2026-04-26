@@ -56,6 +56,12 @@
 //                   loud. Upstream of self-initiation; downstream
 //                   modules (naming, framing, etc.) shape candidates
 //                   into mission drafts.
+//   naming          — the articulation layer (step 2 of mission-creation).
+//                   Turns a NoticingCandidate into a Named — title,
+//                   slug, justification. Quality gate catches generic
+//                   verb-prefixed names, duplicates, missing rationale.
+//                   The creative judgment (finding the word that rings)
+//                   stays with the agent.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -448,3 +454,21 @@ export {
   notice,
   renderNoticingBlock,
 } from './noticing.js'
+
+export type {
+  Named,
+  NameQuality,
+  NamingOptions,
+  NameCandidateResult,
+} from './naming.js'
+export {
+  nameCandidate,
+  forceNameCandidate,
+  assessNameQuality,
+  qualityPasses,
+  qualityFailures,
+  hasVerbPrefix,
+  generateSlug,
+  renderNamingBlock,
+  renderQualityFailures,
+} from './naming.js'
