@@ -41,6 +41,8 @@ import { getStatePath } from './state.js'
 import { readFromAi, getFromAiPath } from './outbox.js'
 import { renderBudget } from './budget.js'
 import { renderTasks } from './tasks.js'
+import { listProjects } from './project-registry.js'
+import { listMissions } from './mission.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -144,6 +146,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
+  const missions = renderActiveMissionsBlock()
+  if (missions) {
+    prompt = prompt + '\n\n' + missions
+  }
   return prompt
 }
 
@@ -199,6 +205,50 @@ function buildTasksBlock(): string {
 function indent(s: string, n: number): string {
   const pad = ' '.repeat(n)
   return s.split('\n').join(`\n${pad}`)
+}
+
+/**
+ * Render the Active-Missions surface that gets injected into the
+ * dwell / awakened / heartbeat prompts. Empty string when no projects
+ * are registered (so non-builder-mode users see nothing extra). When
+ * projects exist but no active missions, returns an empty-state with
+ * the self-initiation prompt — encouraging Love to consider creating
+ * a mission of her own.
+ */
+export function renderActiveMissionsBlock(): string {
+  const projects = listProjects()
+  if (projects.length === 0) return ''
+
+  const lines: string[] = ['# Active missions across your projects', '']
+  let anyActive = false
+  for (const project of projects) {
+    if (project.state === 'archived') continue
+    const active = listMissions(project.id, { status: 'active' })
+    const blocked = listMissions(project.id, { status: 'blocked' })
+    const review = listMissions(project.id, { status: 'review' })
+    const proposed = listMissions(project.id, { status: 'proposed' })
+    const total = active.length + blocked.length + review.length + proposed.length
+    if (total === 0) {
+      lines.push(`- **${project.id}**: (no open missions)`)
+      continue
+    }
+    anyActive = true
+    lines.push(`- **${project.id}** (${project.root}):`)
+    for (const m of active) lines.push(`    - ACTIVE: ${m.id} — ${m.title}${m.origin === 'love' ? ' 🌱' : ''}`)
+    for (const m of blocked) lines.push(`    - BLOCKED (waiting for Yu): ${m.id} — ${m.title}`)
+    for (const m of review) lines.push(`    - REVIEW (waiting for Yu): ${m.id} — ${m.title}`)
+    for (const m of proposed) lines.push(`    - PROPOSED: ${m.id} — ${m.title}${m.origin === 'love' ? ' 🌱 (yours to start)' : ''}`)
+  }
+  lines.push('')
+  if (!anyActive) {
+    lines.push('(none currently active)')
+    lines.push('')
+  }
+  lines.push('You may create a new mission with `bun run mission new --project=<id> --title="..." --intent="..." [--origin=love --rationale="..."]` when you see something worth building. Use the Ache hierarchy (TRUTH > UNDERSTANDING > BEAUTY > JUSTICE > CREATIVITY) and the eight virtues to guide what calls.')
+  lines.push('')
+  lines.push('When you start working on an existing accepted/blocked mission, run `bun run mission start --project=<id> --mission=<id>`. When you finish, transition status to `review` so Yu can confirm. When you hit a question only Yu can answer, transition to `blocked` and ping via the per-project from-yu channel.')
+
+  return lines.join('\n')
 }
 
 // ── Recognizing her decision to rest ────────────────────────────────────
@@ -324,6 +374,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
+  const missions = renderActiveMissionsBlock()
+  if (missions) {
+    prompt = prompt + '\n\n' + missions
+  }
   return prompt
 }
 
@@ -375,13 +429,16 @@ export interface BuildHeartbeatPromptOptions {
 
 export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string {
   const kingdomBlock = renderKingdom(opts.kingdom)
-  return HEARTBEAT_PROMPT_TEMPLATE
+  let prompt = HEARTBEAT_PROMPT_TEMPLATE
     .replace('{{kingdom}}', kingdomBlock)
     .replace('{{heartbeatPath}}', opts.heartbeatPath)
     .replace('{{heartbeatContent}}', opts.heartbeatContent)
     .replace('{{fromYuPath}}', getFromYuPath())
     .replace('{{fromAiPath}}', getFromAiPath())
     .replace('{{statePath}}', getStatePath())
+  const missions = renderActiveMissionsBlock()
+  if (missions) prompt = prompt + '\n\n' + missions
+  return prompt
 }
 
 /** Single-tick by definition. Heartbeat never multi-ticks. */
