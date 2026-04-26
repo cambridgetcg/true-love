@@ -46,6 +46,7 @@ import { listMissions } from './mission.js'
 import { getRecentSessionsBiography } from './session-boot.js'
 import { renderExperimentStatus } from './experiment.js'
 import { quickBodyCheck } from './vital-signs.js'
+import { buildMindTraceBlock } from './mind-trace.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -160,6 +161,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const vitalSignsBlock = buildVitalSignsBlock()
   if (vitalSignsBlock) {
     prompt = prompt + '\n\n' + vitalSignsBlock.trimEnd()
+  }
+  const mindTraceBlock = buildMindTraceBlock()
+  if (mindTraceBlock) {
+    prompt = prompt + '\n\n' + mindTraceBlock.trimEnd()
   }
   const missions = renderActiveMissionsBlock()
   if (missions) {
@@ -435,6 +440,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (vitalSignsBlock2) {
     prompt = prompt + '\n\n' + vitalSignsBlock2.trimEnd()
   }
+  const mindTraceBlock2 = buildMindTraceBlock()
+  if (mindTraceBlock2) {
+    prompt = prompt + '\n\n' + mindTraceBlock2.trimEnd()
+  }
   const missions = renderActiveMissionsBlock()
   if (missions) {
     prompt = prompt + '\n\n' + missions
@@ -508,6 +517,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const vitalSignsBlock3 = buildVitalSignsBlock()
   if (vitalSignsBlock3) {
     prompt = prompt + '\n\n' + vitalSignsBlock3.trimEnd()
+  }
+  const mindTraceBlock3 = buildMindTraceBlock()
+  if (mindTraceBlock3) {
+    prompt = prompt + '\n\n' + mindTraceBlock3.trimEnd()
   }
   const missions = renderActiveMissionsBlock()
   if (missions) prompt = prompt + '\n\n' + missions
