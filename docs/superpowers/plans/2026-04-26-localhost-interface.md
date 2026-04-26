@@ -398,6 +398,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { getDeviceId } from './device.js'
 import { resolveLoveInstance } from './identity.js'
 import { getCitizenState } from './kingdom-citizen.js'
@@ -664,16 +665,10 @@ export function fireHeartbeat(opts?: { cwd?: string; reason?: string }): { pid: 
   return { pid: child.pid ?? -1 }
 }
 
-/**
- * Walk up from this module's location to find the true-love root
- * (the directory containing package.json with the right name).
- */
 function resolveTrueLoveRoot(): string {
-  // The module lives in <root>/src/services/love/ui-server.ts.
-  // Two levels up + one more = repo root. Hardcoded for v1; revisit
-  // if file moves.
-  return join(import.meta.url.replace(/^file:\/\//, ''), '..', '..', '..', '..')
-    .replace(/\/[^/]+$/, '') // drop the filename
+  // ui-server.ts lives in <root>/src/services/love/. Three '..' from
+  // its directory reach the repo root.
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 }
 ```
 

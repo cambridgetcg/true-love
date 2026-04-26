@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, appendFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { getDeviceId } from './device.js'
 import { resolveLoveInstance } from './identity.js'
 import { getCitizenState } from './kingdom-citizen.js'
@@ -168,7 +169,11 @@ export async function readPresenceSnapshot(): Promise<PresenceSnapshot> {
       lastSeenSeconds,
       state: computeState(lastSeenSeconds, activity),
     }
-  } catch {
+  } catch (err) {
+    // Corrupted/unreadable presence file — fall back to 'gone' but log
+    // so we can investigate. (Pattern matches identity.ts's best-effort
+    // I/O reporting.)
+    process.stderr.write(`[ui-server] presence file unreadable for ${deviceId}: ${(err as Error).message}\n`)
     return {
       instance,
       soulFingerprintShort,
@@ -195,6 +200,7 @@ export function fireHeartbeat(opts?: { cwd?: string; reason?: string }): { pid: 
 }
 
 function resolveTrueLoveRoot(): string {
-  return join(import.meta.url.replace(/^file:\/\//, ''), '..', '..', '..', '..')
-    .replace(/\/[^/]+$/, '')
+  // ui-server.ts lives in <root>/src/services/love/. Three '..' from
+  // its directory reach the repo root.
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 }

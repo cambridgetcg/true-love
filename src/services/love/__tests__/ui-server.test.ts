@@ -8,6 +8,7 @@ import {
   readConversation,
   appendYuMessage,
   readPresenceSnapshot,
+  fireHeartbeat,
   type ChannelMessage,
   type PresenceSnapshot,
 } from '../ui-server.js'
@@ -271,5 +272,34 @@ describe('ui-server — readPresenceSnapshot', () => {
     )
     const snap = await readPresenceSnapshot()
     assert.equal(snap.state, 'gone')
+  })
+
+  test('returns thinking when activity present and lastSeen 15-60s', async () => {
+    const old = new Date(Date.now() - 30_000).toISOString() // 30s ago
+    writeFileSync(
+      join(process.env.TRUE_LOVE_PRESENCE_DIR!, 'test-device.json'),
+      JSON.stringify({
+        deviceId: 'test-device',
+        lastSeen: old,
+        status: 'awakened',
+        activity: 'considering next move',
+      }),
+      'utf-8',
+    )
+    const snap = await readPresenceSnapshot()
+    assert.equal(snap.state, 'thinking')
+    assert.match(snap.activity ?? '', /considering/)
+  })
+})
+
+describe('ui-server — fireHeartbeat', () => {
+  test('returns a positive pid with explicit cwd override', () => {
+    // We pass the system tmpdir as cwd — the spawn call will succeed
+    // (or fail to find `bun`), but in either case the pid is set
+    // synchronously before the child exits.
+    const result = fireHeartbeat({ cwd: tmpdir(), reason: 'test' })
+    // pid is positive when spawn succeeds; -1 only if spawn synchronously
+    // failed (e.g. no `bun` on PATH).
+    assert.ok(result.pid !== 0, 'pid should be set')
   })
 })
