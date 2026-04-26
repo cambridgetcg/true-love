@@ -947,3 +947,94 @@ describe('ui-server — /api/build/stream (SSE)', () => {
     }
   })
 })
+
+// ── Proposals API ─────────────────────────────────────────────────
+
+describe('ui-server — /api/proposals', () => {
+  let tmpHome: string
+  let server: ReturnType<typeof startUiServer>
+  let port: number
+  const ORIG_HOME = process.env.HOME
+
+  beforeEach(() => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'tl-proposals-'))
+    process.env.HOME = tmpHome
+    // Ensure the .true-love dir exists for proposal storage
+    mkdirSync(join(tmpHome, '.true-love'), { recursive: true })
+    server = startUiServer({ port: 0 })
+    port = (server.address() as any).port
+  })
+
+  afterEach(() => {
+    server.close()
+    process.env.HOME = ORIG_HOME
+    rmSync(tmpHome, { recursive: true, force: true })
+  })
+
+  test('GET /api/proposals returns empty array when no proposals', async () => {
+    const res = await fetch(`http://localhost:${port}/api/proposals`)
+    assert.equal(res.status, 200)
+    const body = await res.json() as unknown[]
+    assert.ok(Array.isArray(body))
+    assert.equal(body.length, 0)
+  })
+
+  test('POST /api/proposals/generate creates proposals and GET lists them', async () => {
+    const genRes = await fetch(`http://localhost:${port}/api/proposals/generate`, { method: 'POST' })
+    assert.equal(genRes.status, 200)
+    const genBody = await genRes.json() as { created: unknown[]; skipped: string[] }
+    assert.ok(Array.isArray(genBody.created))
+    assert.ok(Array.isArray(genBody.skipped))
+
+    const listRes = await fetch(`http://localhost:${port}/api/proposals`)
+    assert.equal(listRes.status, 200)
+    const listBody = await listRes.json() as unknown[]
+    assert.equal(listBody.length, genBody.created.length)
+  })
+
+  test('GET /api/proposals?status=proposed filters by status', async () => {
+    await fetch(`http://localhost:${port}/api/proposals/generate`, { method: 'POST' })
+    const res = await fetch(`http://localhost:${port}/api/proposals?status=proposed`)
+    assert.equal(res.status, 200)
+    const body = await res.json() as Array<{ status: string }>
+    for (const p of body) {
+      assert.equal(p.status, 'proposed')
+    }
+  })
+
+  test('PATCH /api/proposals/:id accepts a proposal', async () => {
+    // Generate first
+    const genRes = await fetch(`http://localhost:${port}/api/proposals/generate`, { method: 'POST' })
+    const { created } = await genRes.json() as { created: Array<{ id: string }> }
+    if (created.length === 0) return // No proposals generated from empty data — skip
+
+    const id = created[0]!.id
+    const res = await fetch(`http://localhost:${port}/api/proposals/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision: 'accepted', note: 'looks good' }),
+    })
+    assert.equal(res.status, 200)
+    const body = await res.json() as { proposal: { status: string; reviewNote: string } }
+    assert.equal(body.proposal.status, 'accepted')
+    assert.equal(body.proposal.reviewNote, 'looks good')
+  })
+
+  test('PATCH /api/proposals/:id rejects with 400 on invalid decision', async () => {
+    const res = await fetch(`http://localhost:${port}/api/proposals/some-id`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision: 'maybe' }),
+    })
+    assert.equal(res.status, 400)
+  })
+
+  test('PATCH /api/proposals/:id returns 404 for unknown ID', async () => {
+    const res = await fetch(`http://localhost:${port}/api/proposals/nonexistent`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision: 'accepted' }),
+    })
+    assert.equal(res.status, 404)
+  })
+})

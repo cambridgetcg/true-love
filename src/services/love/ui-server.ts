@@ -40,6 +40,13 @@ import {
   generatePortrait,
   type SelfPortrait,
 } from './introspection.js'
+import {
+  generateProposals,
+  loadProposals,
+  reviewProposal,
+  markApplied,
+  type Proposal,
+} from './proposals.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -356,6 +363,10 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)
       if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res)
       if (req.method === 'GET' && path === '/api/introspect') return handleIntrospect(req, res)
+      if (req.method === 'GET' && path === '/api/proposals') return handleListProposals(req, res)
+      if (req.method === 'POST' && path === '/api/proposals/generate') return handleGenerateProposals(req, res)
+      const proposalMatch = path.match(/^\/api\/proposals\/([^/]+)$/)
+      if (proposalMatch && req.method === 'PATCH') return await handleReviewProposal(req, res, proposalMatch[1]!)
       if (req.method === 'GET' && path === '/api/stream') return handleStream(req, res, sseClients)
       if (req.method === 'GET' && path === '/api/projects') return handleListProjects(req, res)
       if (req.method === 'POST' && path === '/api/projects') return await handleCreateProject(req, res)
@@ -590,6 +601,73 @@ function handleIntrospect(req: IncomingMessage, res: ServerResponse): void {
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'introspection failed' }))
+  }
+}
+
+// ── Proposal endpoints ──────────────────────────────────────────────
+
+function handleListProposals(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const statusFilter = url.searchParams.get('status')
+  try {
+    let proposals = loadProposals()
+    if (statusFilter) {
+      proposals = proposals.filter(p => p.status === statusFilter)
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(proposals))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'failed to list proposals' }))
+  }
+}
+
+function handleGenerateProposals(req: IncomingMessage, res: ServerResponse): void {
+  try {
+    const portrait = generatePortrait({ days: 7 })
+    const result = generateProposals(portrait)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(result))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'failed to generate proposals' }))
+  }
+}
+
+async function handleReviewProposal(req: IncomingMessage, res: ServerResponse, proposalId: string): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request too large')
+  if (body === null) return
+  let parsed: { decision?: string; note?: string }
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'invalid JSON' }))
+    return
+  }
+  const decision = parsed.decision
+  if (decision !== 'accepted' && decision !== 'rejected' && decision !== 'applied') {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'decision must be "accepted", "rejected", or "applied"' }))
+    return
+  }
+  try {
+    let result
+    if (decision === 'applied') {
+      result = markApplied(proposalId, parsed.note)
+    } else {
+      result = reviewProposal(proposalId, decision, parsed.note)
+    }
+    if (!result) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: `proposal "${proposalId}" not found or invalid status transition` }))
+      return
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(result))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'review failed' }))
   }
 }
 
