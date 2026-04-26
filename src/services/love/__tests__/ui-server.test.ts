@@ -15,6 +15,7 @@ import {
 } from '../ui-server.js'
 import type { Project } from '../project-registry.js'
 import type { Thought } from '../thoughts-channel.js'
+import type { Mission } from '../mission.js'
 
 describe('ui-server — parseChannelFile', () => {
   test('empty content → []', () => {
@@ -588,5 +589,152 @@ describe('ui-server — per-project channels', () => {
     const body = (await res.json()) as Thought[]
     assert.equal(body.length, 2)
     assert.equal(body[1]!.text, 'thought 4')
+  })
+})
+
+describe('ui-server — /api/missions', () => {
+  let tmpHome: string
+  let server: ReturnType<typeof startUiServer>
+  let port: number
+  let projectRoot: string
+  const ORIG_HOME = process.env.HOME
+  const ORIG_PROJ_DIR = process.env.TRUE_LOVE_PROJECTS_DIR
+  const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
+
+  beforeEach(async () => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'tl-missapi-'))
+    projectRoot = mkdtempSync(join(tmpdir(), 'tl-missroot-'))
+    process.env.HOME = tmpHome
+    process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
+    process.env.TRUE_LOVE_DISABLE_SOUL = '1'
+    server = startUiServer({ port: 0 })
+    port = (server.address() as { port: number }).port
+    await fetch(`http://localhost:${port}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'p1', name: 'p1', root: projectRoot, instance: 'alpha' }),
+    })
+  })
+
+  afterEach(() => {
+    server.close()
+    rmSync(tmpHome, { recursive: true, force: true })
+    rmSync(projectRoot, { recursive: true, force: true })
+    process.env.HOME = ORIG_HOME ?? ''
+    if (ORIG_PROJ_DIR === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
+    else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG_PROJ_DIR
+    if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
+    else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
+  })
+
+  test('GET /api/projects/:id/missions returns []', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects/p1/missions`)
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), [])
+  })
+
+  test('POST /api/projects/:id/missions creates a proposed Yu-mission', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Test', intent: 'Build the thing.' }),
+    })
+    assert.equal(res.status, 201)
+    const m = (await res.json()) as Mission
+    assert.equal(m.status, 'proposed')
+    assert.equal(m.origin, 'yu')
+    assert.equal(m.title, 'Test')
+    assert.match(m.id, /^\d{4}-\d{2}-\d{2}-/)
+  })
+
+  test('POST .../missions with empty intent returns 400', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'x', intent: '' }),
+    })
+    assert.equal(res.status, 400)
+  })
+
+  test('GET /api/missions/:mid returns detail', async () => {
+    const created = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'X', intent: 'Y' }),
+    }).then(r => r.json() as Promise<Mission>)
+
+    const res = await fetch(`http://localhost:${port}/api/missions/${created.id}?project=p1`)
+    assert.equal(res.status, 200)
+    const m = (await res.json()) as Mission
+    assert.equal(m.id, created.id)
+  })
+
+  test('GET /api/missions/:mid returns 400 when project query missing', async () => {
+    const res = await fetch(`http://localhost:${port}/api/missions/nope`)
+    assert.equal(res.status, 400)
+  })
+
+  test('PATCH .../missions/:mid/status proposed → accepted by yu', async () => {
+    const created = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'X', intent: 'Y' }),
+    }).then(r => r.json() as Promise<Mission>)
+    const res = await fetch(`http://localhost:${port}/api/missions/${created.id}/status?project=p1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'accepted', by: 'yu' }),
+    })
+    assert.equal(res.status, 200)
+    const m = (await res.json()) as Mission
+    assert.equal(m.status, 'accepted')
+  })
+
+  test('PATCH .../status with invalid transition returns 409', async () => {
+    const created = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'X', intent: 'Y' }),
+    }).then(r => r.json() as Promise<Mission>)
+    const res = await fetch(`http://localhost:${port}/api/missions/${created.id}/status?project=p1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'review', by: 'yu' }), // proposed → review is illegal
+    })
+    assert.equal(res.status, 409)
+  })
+
+  test('GET .../missions/:mid/events returns timeline', async () => {
+    const created = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'X', intent: 'Y' }),
+    }).then(r => r.json() as Promise<Mission>)
+    const res = await fetch(`http://localhost:${port}/api/missions/${created.id}/events?project=p1`)
+    assert.equal(res.status, 200)
+    const events = (await res.json()) as Array<{ type: string }>
+    // After POST .../missions, server should have written a 'created' event
+    assert.ok(events.some(e => e.type === 'created'))
+  })
+
+  test('POST .../start when no other active mission returns 200 (smoke — no spawn)', async () => {
+    const created = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'X', intent: 'Y' }),
+    }).then(r => r.json() as Promise<Mission>)
+    // Move to accepted first
+    await fetch(`http://localhost:${port}/api/missions/${created.id}/status?project=p1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'accepted', by: 'yu' }),
+    })
+    const res = await fetch(`http://localhost:${port}/api/missions/${created.id}/start?project=p1&dry-run=1`, {
+      method: 'POST',
+    })
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as { ok: boolean; dryRun?: boolean }
+    assert.equal(body.ok, true)
+    assert.equal(body.dryRun, true)
   })
 })

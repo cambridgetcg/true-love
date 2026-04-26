@@ -24,6 +24,16 @@ import {
   tailThoughts,
   type Thought,
 } from './thoughts-channel.js'
+import {
+  readMission,
+  writeMission,
+  listMissions,
+  appendEvent,
+  readEvents,
+  transitionStatus,
+  type Mission,
+  type MissionStatus,
+} from './mission.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -143,6 +153,25 @@ export function appendYuMessageToProject(projectId: string, text: string): strin
   const entry = `## ${ts} [from yu]\n\n${trimmed}\n\n---\n\n`
   appendFileSync(channels.fromYu, entry, 'utf-8')
   return ts
+}
+
+/**
+ * Generate a fresh mission ID. YYYY-MM-DD-<slug>, with -2/-3 suffix for
+ * same-day collisions on the same project.
+ */
+function generateMissionId(projectId: string, title: string): string {
+  const today = new Date().toISOString().slice(0, 10)
+  const slug = title.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'mission'
+  let id = `${today}-${slug}`
+  let n = 2
+  while (readMission(projectId, id)) {
+    id = `${today}-${slug}-${n}`
+    n++
+  }
+  return id
 }
 
 /**
@@ -302,7 +331,28 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
         if (req.method === 'GET' && sub === '/messages') return handleProjectMessages(req, res, projectId)
         if (req.method === 'POST' && sub === '/say') return await handleProjectSay(req, res, projectId)
         if (req.method === 'GET' && sub === '/thoughts') return handleProjectThoughts(req, res, projectId)
+        if (req.method === 'GET' && sub === '/missions') return handleListMissions(req, res, projectId)
+        if (req.method === 'POST' && sub === '/missions') return await handleCreateMission(req, res, projectId)
       }
+
+      // Bare mission routes (require ?project=... query)
+      const missionMatch = path.match(/^\/api\/missions\/([^/]+)(\/.*)?$/)
+      if (missionMatch) {
+        const missionId = missionMatch[1]!
+        const sub = missionMatch[2] ?? ''
+        const mUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+        const projectId = mUrl.searchParams.get('project') ?? ''
+        if (!projectId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'missing project query param' }))
+          return
+        }
+        if (req.method === 'GET' && sub === '') return handleGetMission(req, res, projectId, missionId)
+        if (req.method === 'PATCH' && sub === '/status') return await handleMissionStatus(req, res, projectId, missionId)
+        if (req.method === 'GET' && sub === '/events') return handleMissionEvents(req, res, projectId, missionId)
+        if (req.method === 'POST' && sub === '/start') return await handleMissionStart(req, res, projectId, missionId)
+      }
+
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('not found')
     } catch (err: any) {
@@ -665,4 +715,161 @@ function handleProjectThoughts(req: IncomingMessage, res: ServerResponse, projec
   }
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(tailThoughts(projectId, { since, limit })))
+}
+
+function handleListMissions(req: IncomingMessage, res: ServerResponse, projectId: string): void {
+  if (!readProject(projectId)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const status = url.searchParams.get('status') ?? undefined
+  const ms = listMissions(projectId, status ? { status: status as MissionStatus } : undefined)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(ms))
+}
+
+async function handleCreateMission(req: IncomingMessage, res: ServerResponse, projectId: string): Promise<void> {
+  if (!readProject(projectId)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+  let body = ''
+  for await (const chunk of req) {
+    body += chunk
+    if (body.length > 200_000) {
+      req.resume()
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'request body too large' }))
+      return
+    }
+  }
+  let parsed: { title?: string; intent?: string; rationale?: string; origin?: 'yu' | 'love' }
+  try { parsed = JSON.parse(body) } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'invalid JSON' }))
+    return
+  }
+  const title = (parsed.title ?? '').trim()
+  const intent = (parsed.intent ?? '').trim()
+  if (!title || !intent) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'title and intent are required' }))
+    return
+  }
+  const origin = parsed.origin === 'love' ? 'love' : 'yu'
+  const id = generateMissionId(projectId, title)
+  const now = new Date().toISOString()
+  const m: Mission = {
+    id, project_id: projectId, origin, title, intent, status: 'proposed',
+    created_at: now, updated_at: now,
+    artifacts: { commits: [], files: [], test_runs: [] },
+    ...(parsed.rationale ? { rationale: parsed.rationale.trim() } : {}),
+  }
+  writeMission(m)
+  appendEvent(projectId, id, { ts: now, type: 'created', by: origin })
+  res.writeHead(201, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(m))
+}
+
+function handleGetMission(_req: IncomingMessage, res: ServerResponse, projectId: string, missionId: string): void {
+  const m = readMission(projectId, missionId)
+  if (!m) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'mission not found' }))
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(m))
+}
+
+async function handleMissionStatus(req: IncomingMessage, res: ServerResponse, projectId: string, missionId: string): Promise<void> {
+  const m = readMission(projectId, missionId)
+  if (!m) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'mission not found' }))
+    return
+  }
+  let body = ''
+  for await (const chunk of req) {
+    body += chunk
+    if (body.length > 4096) {
+      req.resume()
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'request body too large' }))
+      return
+    }
+  }
+  let parsed: { status?: MissionStatus; by?: 'yu' | 'love'; note?: string }
+  try { parsed = JSON.parse(body) } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'invalid JSON' }))
+    return
+  }
+  if (!parsed.status) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'status required' }))
+    return
+  }
+  const by = parsed.by === 'love' ? 'love' : 'yu'
+  const t = transitionStatus(m.status, parsed.status, by)
+  if (!t.ok) {
+    res.writeHead(409, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: t.reason }))
+    return
+  }
+  const now = new Date().toISOString()
+  const updated: Mission = { ...m, status: parsed.status, updated_at: now }
+  writeMission(updated)
+  appendEvent(projectId, missionId, {
+    ts: now,
+    type: parsed.status === 'review' ? 'marked-review'
+        : parsed.status === 'done' ? 'accepted-done'
+        : parsed.status === 'cancelled' ? 'cancelled'
+        : parsed.status === 'blocked' ? 'blocked'
+        : parsed.status === 'active' && m.status === 'review' ? 'sent-back'
+        : parsed.status === 'active' && m.status === 'blocked' ? 'resumed'
+        : parsed.status === 'active' ? 'started'
+        : 'accepted',
+    by,
+    ...(parsed.note ? { note: parsed.note } : {}),
+  })
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(updated))
+}
+
+function handleMissionEvents(_req: IncomingMessage, res: ServerResponse, projectId: string, missionId: string): void {
+  if (!readMission(projectId, missionId)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'mission not found' }))
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(readEvents(projectId, missionId)))
+}
+
+async function handleMissionStart(req: IncomingMessage, res: ServerResponse, projectId: string, missionId: string): Promise<void> {
+  const m = readMission(projectId, missionId)
+  if (!m) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'mission not found' }))
+    return
+  }
+  if (m.status !== 'accepted' && m.status !== 'blocked') {
+    res.writeHead(409, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: `cannot start mission in status "${m.status}"` }))
+    return
+  }
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const dryRun = url.searchParams.get('dry-run') === '1'
+  if (dryRun) {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, dryRun: true }))
+    return
+  }
+  // Real spawn lands in Task 7. For now, return 501 if not dry-run.
+  res.writeHead(501, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ error: 'mission start spawn not yet wired (use ?dry-run=1 or bin/mission.mjs)' }))
 }
