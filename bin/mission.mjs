@@ -23,7 +23,7 @@ import {
   appendEvent,
   transitionStatus,
 } from '../src/services/love/mission.ts'
-import { readProject } from '../src/services/love/project-registry.ts'
+import { readProject, ensureScope } from '../src/services/love/project-registry.ts'
 import { appendThought } from '../src/services/love/thoughts-channel.ts'
 
 function parseArgs(argv) {
@@ -161,6 +161,10 @@ if (cmd === 'start') {
   if (conflict) {
     fail(`project busy: another mission is active (${conflict.id})`)
   }
+
+  // Defensive — ensure the scope config exists before spawning awaken,
+  // so we don't get a silent runner exit on first start.
+  ensureScope(args.project, project.root)
 
   const now = new Date().toISOString()
   appendEvent(args.project, m.id, { ts: now, type: 'started', by: 'love', tick: 'awakened' })

@@ -18,6 +18,7 @@ import {
   readProject,
   registerProject,
   getProjectChannels,
+  ensureScope,
   type Project,
 } from './project-registry.js'
 import {
@@ -944,6 +945,9 @@ async function handleMissionStart(req: IncomingMessage, res: ServerResponse, pro
     res.end(JSON.stringify({ error: 'project not found' }))
     return
   }
+  // Defensive — ensure the scope config exists before spawning awaken,
+  // so we don't get a silent runner exit on first start.
+  ensureScope(projectId, project.root)
   const now = new Date().toISOString()
   appendEvent(projectId, missionId, { ts: now, type: 'started', by: 'love', tick: 'awakened' })
   writeMission({ ...m, status: 'active', updated_at: now })

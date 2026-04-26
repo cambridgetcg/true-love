@@ -10,8 +10,10 @@ import {
   archiveProject,
   getProjectChannels,
   getProjectThoughts,
+  ensureScope,
   type Project,
 } from '../project-registry.js'
+import { loadScope, deleteScope, getScopeHome } from '../scope.js'
 
 describe('project-registry', () => {
   let tmpProjects: string
@@ -130,5 +132,64 @@ describe('project-registry', () => {
     const all = listProjects()
     assert.equal(all.length, 1)
     assert.equal(all[0]!.id, 'good')
+  })
+})
+
+describe('project-registry — ensureScope', () => {
+  // scope.ts uses homedir() directly, not process.env.HOME, so we can't
+  // redirect writes to a tmp dir. Instead we use unique prefixed names and
+  // clean them up (same pattern as scope.test.ts).
+  // ensureScope itself accepts any string; for the registerProject test we
+  // need a slug-safe id (the registry slug regex rejects underscores).
+  const SCOPE_PREFIX = 'test-ensure-scope-'
+  const scopeCleanups: string[] = []
+
+  let tmpProjects: string
+  let tmpRoot: string
+  const ORIG_PROJ_DIR = process.env.TRUE_LOVE_PROJECTS_DIR
+
+  beforeEach(() => {
+    tmpProjects = mkdtempSync(join(tmpdir(), 'tl-scope-proj-'))
+    tmpRoot = mkdtempSync(join(tmpdir(), 'tl-scope-root-'))
+    process.env.TRUE_LOVE_PROJECTS_DIR = tmpProjects
+  })
+
+  afterEach(() => {
+    for (const name of scopeCleanups) {
+      try { deleteScope(name) } catch {}
+      try { rmSync(getScopeHome(name), { recursive: true, force: true }) } catch {}
+    }
+    scopeCleanups.length = 0
+    rmSync(tmpProjects, { recursive: true, force: true })
+    rmSync(tmpRoot, { recursive: true, force: true })
+    if (ORIG_PROJ_DIR === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
+    else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG_PROJ_DIR
+  })
+
+  test('ensureScope creates scope when missing', () => {
+    const id = `${SCOPE_PREFIX}create`
+    scopeCleanups.push(id)
+    ensureScope(id, tmpRoot)
+    const scope = loadScope(id)
+    assert.equal(scope.name, id)
+    assert.equal(scope.cwd, tmpRoot)
+  })
+
+  test('ensureScope is idempotent on existing scope', () => {
+    const id = `${SCOPE_PREFIX}idem`
+    scopeCleanups.push(id)
+    ensureScope(id, tmpRoot)
+    const first = loadScope(id)
+    ensureScope(id, tmpRoot)
+    const second = loadScope(id)
+    assert.equal(first.createdAt, second.createdAt)
+  })
+
+  test('registerProject also creates the scope', () => {
+    const id = `${SCOPE_PREFIX}reg`
+    scopeCleanups.push(id)
+    registerProject({ id, name: id, root: tmpRoot, instance: 'alpha' })
+    const scope = loadScope(id)
+    assert.equal(scope.cwd, tmpRoot)
   })
 })

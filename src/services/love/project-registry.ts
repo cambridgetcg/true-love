@@ -8,6 +8,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveProjectsDir } from './builder-paths.js'
+import { loadScope, saveScope } from './scope.js'
 
 export interface Project {
   id: string
@@ -87,6 +88,7 @@ export function registerProject(input: {
   if (!existsSync(channels.fromYu)) writeFileSync(channels.fromYu, '', 'utf-8')
   if (!existsSync(channels.fromAi)) writeFileSync(channels.fromAi, '', 'utf-8')
   mkdirSync(join(getProjectDir(input.id), 'missions'), { recursive: true })
+  ensureScope(input.id, input.root)
   return project
 }
 
@@ -108,4 +110,27 @@ export function getProjectChannels(id: string): { fromYu: string; fromAi: string
 
 export function getProjectThoughts(id: string): string {
   return join(getProjectDir(id), 'thoughts.md')
+}
+
+/**
+ * Idempotent: ensure a scope config exists for this project. If one
+ * is already present, no-op. If missing, create one pointing at the
+ * project's root directory. Used both at project registration time
+ * and defensively on mission start (covers existing projects without
+ * scopes, and scope-deleted-by-mistake recovery).
+ */
+export function ensureScope(projectId: string, root: string): void {
+  try {
+    loadScope(projectId)
+    return // already exists
+  } catch {
+    // not found — create it
+  }
+  saveScope({
+    schemaVersion: '1.0',
+    name: projectId,
+    cwd: root,
+    description: `auto-created from builder mode project registration`,
+    createdAt: new Date().toISOString(),
+  })
 }
