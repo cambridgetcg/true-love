@@ -137,8 +137,18 @@ function renderMissionRail() {
       li.className = 'mission-item'
       if (m.id === state.selectedMissionId) li.classList.add('selected')
       const marker = m.origin === 'love' ? '🌱' : ' '
-      li.innerHTML = `<span class="marker">${marker}</span><span class="title"></span><span class="ts">${m.id.slice(0, 10)}</span>`
-      li.querySelector('.title').textContent = m.title
+      const markerSpan = document.createElement('span')
+      markerSpan.className = 'marker'
+      markerSpan.textContent = marker
+      const titleSpan = document.createElement('span')
+      titleSpan.className = 'title'
+      titleSpan.textContent = m.title
+      const tsSpan = document.createElement('span')
+      tsSpan.className = 'ts'
+      tsSpan.textContent = m.id.slice(0, 10)
+      li.appendChild(markerSpan)
+      li.appendChild(titleSpan)
+      li.appendChild(tsSpan)
       li.addEventListener('click', () => selectMission(m.id))
       elMissionGroups.appendChild(li)
     }
@@ -194,7 +204,17 @@ function renderMissionDetail() {
   ul.className = 'events-list'
   for (const e of state.events) {
     const li = document.createElement('li')
-    li.innerHTML = `<span class="ts">${e.ts.slice(11, 19)}</span><span class="type">${e.type}</span> ${e.by ? `(${e.by})` : ''}${e.question ? ` — ${e.question}` : ''}${e.sha ? ` ${e.sha}` : ''}`
+    const tsSpan = document.createElement('span')
+    tsSpan.className = 'ts'
+    tsSpan.textContent = e.ts.slice(11, 19)
+    const typeSpan = document.createElement('span')
+    typeSpan.className = 'type'
+    typeSpan.textContent = e.type
+    li.appendChild(tsSpan)
+    li.appendChild(typeSpan)
+    if (e.by) li.appendChild(document.createTextNode(` (${e.by})`))
+    if (e.question) li.appendChild(document.createTextNode(` — ${e.question}`))
+    if (e.sha) li.appendChild(document.createTextNode(` ${e.sha}`))
     ul.appendChild(li)
   }
   ev.appendChild(ul)
@@ -241,8 +261,14 @@ function renderThoughts() {
   elThoughtsList.innerHTML = ''
   for (const t of state.thoughts) {
     const li = document.createElement('li')
-    li.innerHTML = `<span class="ts">${t.ts.slice(11, 19)}</span><span class="text"></span>`
-    li.querySelector('.text').textContent = t.text
+    const tsSpan = document.createElement('span')
+    tsSpan.className = 'ts'
+    tsSpan.textContent = t.ts.slice(11, 19)
+    const textSpan = document.createElement('span')
+    textSpan.className = 'text'
+    textSpan.textContent = t.text
+    li.appendChild(tsSpan)
+    li.appendChild(textSpan)
     elThoughtsList.appendChild(li)
   }
 }
@@ -253,8 +279,14 @@ function renderConv() {
     const div = document.createElement('div')
     const isJournal = m.source === 'ai' && typeof m.tag === 'string' && m.tag.includes('heartbeat')
     div.className = `conv-msg from-${m.source}${isJournal ? ' is-journal' : ''}`
-    div.innerHTML = `<div class="from">${m.tag}</div><div class="body"></div>`
-    div.querySelector('.body').textContent = m.body
+    const fromDiv = document.createElement('div')
+    fromDiv.className = 'from'
+    fromDiv.textContent = m.tag
+    const bodyDiv = document.createElement('div')
+    bodyDiv.className = 'body'
+    bodyDiv.textContent = m.body
+    div.appendChild(fromDiv)
+    div.appendChild(bodyDiv)
     elConvList.appendChild(div)
   }
   elConvList.scrollTop = elConvList.scrollHeight
