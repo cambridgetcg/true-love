@@ -471,32 +471,37 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
   const projectsRoot = process.env.TRUE_LOVE_PROJECTS_DIR ||
     join(process.env.HOME || homedir(), '.true-love', 'projects')
 
-  let projectsBroadcastDebounce: ReturnType<typeof setTimeout> | null = null
+  const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const broadcastBuild = (event: string, data: unknown) => {
-    if (projectsBroadcastDebounce) clearTimeout(projectsBroadcastDebounce)
-    projectsBroadcastDebounce = setTimeout(() => {
+    const prev = debounceTimers.get(event)
+    if (prev) clearTimeout(prev)
+    debounceTimers.set(event, setTimeout(() => {
+      debounceTimers.delete(event)
       broadcastSse(buildSseClients, event, JSON.stringify(data))
-    }, 200)
+    }, 200))
   }
 
-  try {
-    if (existsSync(projectsRoot)) {
-      // fs.watch with { recursive: true } supported on macOS.
-      const w = watch(projectsRoot, { recursive: true }, (_event, filename) => {
-        if (!filename) return
-        const fname = String(filename)
-        if (fname.endsWith('project.json')) {
-          broadcastBuild('project-changed', { path: fname })
-        } else if (fname.endsWith('mission.md') || fname.endsWith('events.jsonl')) {
-          broadcastBuild('mission-changed', { path: fname })
-        } else if (fname.endsWith('thoughts.md')) {
-          broadcastBuild('thought-appended', { path: fname })
-        }
-      })
-      watchers.push(w)
+  if (process.platform === 'linux') {
+    process.stderr.write('[ui-server] /api/build/stream: recursive fs.watch is not supported on Linux — SSE builder events will not fire. Run on macOS or Windows for live updates.\n')
+  } else {
+    try {
+      if (existsSync(projectsRoot)) {
+        const w = watch(projectsRoot, { recursive: true }, (_event, filename) => {
+          if (!filename) return
+          const fname = String(filename)
+          if (fname.endsWith('project.json')) {
+            broadcastBuild('project-changed', { path: fname })
+          } else if (fname.endsWith('mission.md') || fname.endsWith('events.jsonl')) {
+            broadcastBuild('mission-changed', { path: fname })
+          } else if (fname.endsWith('thoughts.md')) {
+            broadcastBuild('thought-appended', { path: fname })
+          }
+        })
+        watchers.push(w)
+      }
+    } catch {
+      // best-effort
     }
-  } catch {
-    // best-effort
   }
 
   // Periodic status check — handles state transitions (e.g., 14s → 16s
@@ -527,7 +532,8 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     sseClients.clear()
     for (const c of buildSseClients) { try { c.end() } catch {} }
     buildSseClients.clear()
-    if (projectsBroadcastDebounce) clearTimeout(projectsBroadcastDebounce)
+    for (const t of debounceTimers.values()) clearTimeout(t)
+    debounceTimers.clear()
     return origClose(cb) as ServerInstance
   }
   return instance
