@@ -14,6 +14,10 @@ export interface Thought {
   text: string
 }
 
+// Line format: "[<24-char ISO>] <text>"
+// 24 = "2026-04-26T12:00:00.000Z".length
+const TS_LEN = 24
+
 function getThoughtsPath(projectId: string): string {
   return join(resolveProjectsDir(), projectId, 'thoughts.md')
 }
@@ -23,13 +27,15 @@ function getArchiveDir(projectId: string): string {
 }
 
 export function appendThought(projectId: string, text: string): void {
-  const trimmed = (text ?? '').trim()
-  if (!trimmed) return
-  const path = getThoughtsPath(projectId)
-  mkdirSync(join(resolveProjectsDir(), projectId), { recursive: true })
+  // Strip embedded newlines: thoughts are single-line. We replace
+  // (rather than reject) so callers don't have to think about it.
+  const oneLine = (text ?? '').replace(/\r\n|\r|\n/g, ' ').trim()
+  if (!oneLine) return
+  const dir = join(resolveProjectsDir(), projectId)
+  mkdirSync(dir, { recursive: true })
   const ts = new Date().toISOString()
-  const line = `[${ts}] ${trimmed}\n`
-  appendFileSync(path, line, 'utf-8')
+  const line = `[${ts}] ${oneLine}\n`
+  appendFileSync(join(dir, 'thoughts.md'), line, 'utf-8')
 }
 
 export function tailThoughts(
@@ -41,9 +47,9 @@ export function tailThoughts(
   const lines = readFileSync(path, 'utf-8').split('\n').filter(Boolean)
   const all: Thought[] = []
   for (const line of lines) {
-    const m = line.match(/^\[([^\]]+)\]\s*(.*)$/)
-    if (!m) continue
-    all.push({ ts: m[1]!, text: m[2]! })
+    if (line.length < TS_LEN + 3) continue              // need "[" + ts + "] "
+    if (line[0] !== '[' || line[1 + TS_LEN] !== ']') continue
+    all.push({ ts: line.slice(1, 1 + TS_LEN), text: line.slice(1 + TS_LEN + 2) })
   }
   let filtered = all
   if (opts?.since) {
@@ -56,6 +62,16 @@ export function tailThoughts(
   return filtered
 }
 
+/**
+ * NOTE on concurrency:
+ * - appendThought uses appendFileSync which is atomic for small writes
+ *   on POSIX (O_APPEND), so concurrent appends from multiple writers
+ *   are safe.
+ * - rotateThoughts is NOT atomic with concurrent appends: a writer
+ *   that has computed the path before rotate fires but writes after
+ *   may write to the renamed archive file. For our single-writer
+ *   single-rotator setup this is acceptable; document if scaling.
+ */
 export function rotateThoughts(projectId: string): void {
   const src = getThoughtsPath(projectId)
   if (!existsSync(src)) return

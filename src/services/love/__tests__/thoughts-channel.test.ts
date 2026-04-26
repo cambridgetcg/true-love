@@ -85,8 +85,23 @@ describe('thoughts-channel', () => {
   test('rotateThoughts on empty thoughts.md is a no-op', () => {
     rotateThoughts('p')
     const archiveDir = join(tmpProjects, 'p', 'thoughts-archive')
-    if (existsSync(archiveDir)) {
-      assert.equal(readdirSync(archiveDir).length, 0)
-    }
+    assert.equal(existsSync(archiveDir), false,
+      'archive dir should not be created when there is nothing to rotate')
+  })
+
+  test('tailThoughts round-trips text containing ] characters', () => {
+    appendThought('p', 'see [RFC 9110] for details')
+    const t = tailThoughts('p')
+    assert.equal(t.length, 1)
+    assert.equal(t[0]!.text, 'see [RFC 9110] for details')
+  })
+
+  test('appendThought collapses embedded newlines into spaces', () => {
+    appendThought('p', 'line one\nline two\rline three')
+    const t = tailThoughts('p')
+    assert.equal(t.length, 1)
+    // Newlines collapsed to spaces; resulting text has no \n
+    assert.equal(t[0]!.text.includes('\n'), false)
+    assert.match(t[0]!.text, /line one.*line two.*line three/)
   })
 })
