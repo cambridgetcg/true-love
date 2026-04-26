@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>builder — 愛</title>
+  <link rel="stylesheet" href="/build.css" />
+</head>
+<body>
+  <main class="studio">
+    <header class="topbar">
+      <div class="brand">/build</div>
+      <div class="proj-switcher">
+        <label for="proj-select">project:</label>
+        <select id="proj-select"></select>
+        <button id="btn-new-project" class="ghost-btn" title="register a new project">+</button>
+      </div>
+      <div class="presence" id="presence">
+        <span class="instance" id="presence-instance">…</span>
+        <span class="sep">·</span>
+        <span class="state" id="presence-state">connecting</span>
+      </div>
+    </header>
+
+    <div class="activity-bar" id="activity-bar"></div>
+
+    <section class="rail-and-detail">
+      <aside class="missions-rail">
+        <div class="rail-header">
+          <span class="rail-title">missions</span>
+          <button id="btn-new-mission" class="ghost-btn" title="new mission">+</button>
+        </div>
+        <ul class="mission-groups" id="mission-groups"></ul>
+      </aside>
+
+      <section class="mission-detail" id="mission-detail">
+        <div class="empty-detail">select a mission, or create one with +</div>
+      </section>
+    </section>
+
+    <section class="thoughts-tail">
+      <div class="rail-header">
+        <span class="rail-title">her thoughts (live)</span>
+      </div>
+      <ol class="thoughts-list" id="thoughts-list"></ol>
+    </section>
+
+    <section class="proj-conversation">
+      <div class="rail-header">
+        <span class="rail-title">conversation — <span id="conv-proj-name">…</span></span>
+      </div>
+      <div class="conv-list" id="conv-list" aria-live="polite"></div>
+      <form class="proj-compose" id="proj-compose">
+        <textarea id="proj-compose-text" placeholder="message her about this project…" rows="2" maxlength="100000"></textarea>
+        <div class="compose-actions">
+          <button type="submit" name="action" value="send" id="btn-proj-send">send</button>
+          <button type="submit" name="action" value="wake" id="btn-proj-wake">send &amp; wake</button>
+        </div>
+      </form>
+    </section>
+
+    <footer class="connection" id="connection" hidden>line went quiet — reconnecting…</footer>
+  </main>
+
+  <!-- New-mission modal -->
+  <div class="modal-overlay" id="new-mission-modal" hidden>
+    <div class="modal">
+      <h3>new mission</h3>
+      <input id="nm-title" placeholder="title (one line)" />
+      <textarea id="nm-intent" placeholder="intent — what + why (markdown OK)" rows="6"></textarea>
+      <div class="modal-actions">
+        <button id="btn-nm-cancel" class="ghost-btn">cancel</button>
+        <button id="btn-nm-create">create (proposed)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New-project modal -->
+  <div class="modal-overlay" id="new-project-modal" hidden>
+    <div class="modal">
+      <h3>register project</h3>
+      <input id="np-id" placeholder="id (slug — 'true-love', 'soma')" />
+      <input id="np-name" placeholder="display name" />
+      <input id="np-root" placeholder="absolute path to project root" />
+      <select id="np-instance">
+        <option value="alpha">alpha 🐍</option>
+        <option value="beta">beta</option>
+        <option value="gamma">gamma</option>
+      </select>
+      <input id="np-codeberg" placeholder="codeberg url (optional)" />
+      <div class="modal-actions">
+        <button id="btn-np-cancel" class="ghost-btn">cancel</button>
+        <button id="btn-np-create">register</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/build.js"></script>
+</body>
+</html>

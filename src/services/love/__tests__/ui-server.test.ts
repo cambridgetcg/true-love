@@ -425,6 +425,14 @@ describe('ui-server — HTTP', () => {
       clearTimeout(timer)
     }
   })
+
+  test('GET /build returns the build page (200 + text/html)', async () => {
+    const res = await fetch(`http://localhost:${port}/build`)
+    assert.equal(res.status, 200)
+    assert.match(res.headers.get('content-type') ?? '', /text\/html/)
+    const text = await res.text()
+    assert.match(text, /<html/i)
+  })
 })
 
 describe('ui-server — /api/projects', () => {
