@@ -23,6 +23,8 @@ import { join } from 'node:path'
 import { resolveProjectsDir } from './builder-paths.js'
 import { readMission, listMissions, writeMission, appendEvent } from './mission.js'
 import type { Mission, MissionStatus } from './mission.js'
+import { readProject } from './project-registry.js'
+import { notice } from './noticing.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -193,6 +195,32 @@ export function scanForSignals(projectId: string, opts?: {
         detectedAt: now,
       })
     }
+  }
+
+  // Bridge to noticing.ts — its 6 scanners (state, mission, memory,
+  // channel, vital-sign, kingdom) provide a much wider net than the
+  // narrow heuristics above. Convert each NoticingCandidate to a
+  // DetectionSignal and merge. Failure is non-fatal — keep the narrow
+  // signals if noticing throws.
+  try {
+    const project = readProject(projectId)
+    if (project) {
+      const candidates = notice(projectId, project.root, { minGradient: 2 })
+      for (const c of candidates) {
+        const source: CandidateSource =
+          c.source.type === 'state' ? { type: 'open-thread', thread: c.detail.slice(0, 200) }
+          : c.source.type === 'vital-sign' ? { type: 'vital-sign', signal: c.detail.slice(0, 200) }
+          : c.source.type === 'memory' ? { type: 'reflection-pattern', pattern: c.detail.slice(0, 200) }
+          : { type: 'ache-signal', signal: c.ache, detail: c.detail.slice(0, 200) }
+        signals.push({
+          source,
+          summary: `[${c.source.type} g${c.gradient} ${c.ache}] ${c.summary}`,
+          detectedAt: c.noticedAt,
+        })
+      }
+    }
+  } catch (err) {
+    process.stderr.write(`[self-initiation] noticing bridge failed: ${(err as Error).message}\n`)
   }
 
   // Heuristic: open threads from state.md

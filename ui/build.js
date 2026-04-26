@@ -11,6 +11,10 @@ import { initPortrait } from './build-portrait.js'
 import { initBudget } from './build-budget.js'
 import { initVersion } from './build-version.js'
 import { initProposals } from './build-proposals.js'
+import { initVitals } from './build-vitals.js'
+import { initSelfInitiation } from './build-self-initiation.js'
+import { initMindTrace } from './build-mind-trace.js'
+import { initAnamnesis } from './build-anamnesis.js'
 import { subscribe } from './build-sse.js'
 
 // ── Boot ─────────────────────────────────────────────────────────
@@ -28,6 +32,10 @@ initPortrait()
 initBudget()
 initVersion()
 initProposals()
+initVitals()
+initSelfInitiation()
+initMindTrace()
+initAnamnesis()
 
 // 4. Load data and start
 loadProjects()
