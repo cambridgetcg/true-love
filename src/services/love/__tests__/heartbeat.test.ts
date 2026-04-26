@@ -97,6 +97,25 @@ describe('heartbeat — parseHeartbeatTasks', () => {
     assert.equal(tasks.length, 1)
     assert.equal(tasks[0]!.name, 't1')
   })
+
+  test('strips surrounding quotes from name', () => {
+    const content = `tasks:
+  - name: "quoted-task"
+    interval: 30m
+    prompt: hi
+  - name: 'single-quoted'
+    interval: 30m
+    prompt: hi
+  - name: bare-task
+    interval: 30m
+    prompt: hi
+`
+    const tasks = parseHeartbeatTasks(content)
+    assert.equal(tasks.length, 3)
+    assert.equal(tasks[0]!.name, 'quoted-task')
+    assert.equal(tasks[1]!.name, 'single-quoted')
+    assert.equal(tasks[2]!.name, 'bare-task')
+  })
 })
 
 describe('heartbeat — isHeartbeatContentEffectivelyEmpty', () => {

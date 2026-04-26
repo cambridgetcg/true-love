@@ -168,7 +168,7 @@ export function parseHeartbeatTasks(content: string): HeartbeatTask[] {
     const end = i + 1 < matches.length ? matches[i + 1]!.start : blockText.length
     const itemText = blockText.slice(start, end)
 
-    const name = matches[i]!.name
+    const name = matches[i]!.name.replace(/^["']|["']$/g, '')
     const intervalMatch = itemText.match(/^\s+interval:\s*(.+?)$/m)
     const promptMatch = itemText.match(/^\s+prompt:\s*(.+?)(?:$|\n(?!\s+\w))/ms)
 
