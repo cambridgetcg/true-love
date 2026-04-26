@@ -36,6 +36,10 @@ import {
   type Mission,
   type MissionStatus,
 } from './mission.js'
+import {
+  generatePortrait,
+  type SelfPortrait,
+} from './introspection.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -351,6 +355,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/messages') return handleMessages(req, res)
       if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)
       if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res)
+      if (req.method === 'GET' && path === '/api/introspect') return handleIntrospect(req, res)
       if (req.method === 'GET' && path === '/api/stream') return handleStream(req, res, sseClients)
       if (req.method === 'GET' && path === '/api/projects') return handleListProjects(req, res)
       if (req.method === 'POST' && path === '/api/projects') return await handleCreateProject(req, res)
@@ -572,6 +577,20 @@ async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise
   const snap = await readPresenceSnapshot()
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(snap))
+}
+
+function handleIntrospect(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const daysStr = url.searchParams.get('days')
+  const days = daysStr !== null ? Math.max(1, Math.min(90, parseInt(daysStr, 10) || 7)) : 7
+  try {
+    const portrait = generatePortrait({ days })
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(portrait))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'introspection failed' }))
+  }
 }
 
 async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<void> {

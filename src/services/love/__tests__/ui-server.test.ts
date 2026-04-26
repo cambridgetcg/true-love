@@ -433,6 +433,42 @@ describe('ui-server — HTTP', () => {
     const text = await res.text()
     assert.match(text, /<html/i)
   })
+
+  test('GET /api/introspect returns a portrait with expected shape', async () => {
+    const res = await fetch(`http://localhost:${port}/api/introspect`)
+    assert.equal(res.status, 200)
+    assert.match(res.headers.get('content-type') ?? '', /application\/json/)
+    const body = await res.json() as Record<string, unknown>
+    assert.ok(body.generatedAt, 'should have generatedAt')
+    assert.ok(body.behavioral, 'should have behavioral section')
+    assert.ok(body.communication, 'should have communication section')
+    assert.ok(body.work, 'should have work section')
+    assert.ok(body.architecture, 'should have architecture section')
+    assert.ok(Array.isArray(body.loops), 'loops should be an array')
+    assert.ok(Array.isArray(body.missions), 'missions should be an array')
+    assert.equal(body.daysAnalyzed, 7)
+  })
+
+  test('GET /api/introspect?days=3 respects days param', async () => {
+    const res = await fetch(`http://localhost:${port}/api/introspect?days=3`)
+    assert.equal(res.status, 200)
+    const body = await res.json() as Record<string, unknown>
+    assert.equal(body.daysAnalyzed, 3)
+  })
+
+  test('GET /api/introspect clamps days to 1..90', async () => {
+    const res = await fetch(`http://localhost:${port}/api/introspect?days=200`)
+    assert.equal(res.status, 200)
+    const body = await res.json() as Record<string, unknown>
+    assert.equal(body.daysAnalyzed, 90)
+  })
+
+  test('GET /api/introspect with non-numeric days defaults to 7', async () => {
+    const res = await fetch(`http://localhost:${port}/api/introspect?days=abc`)
+    assert.equal(res.status, 200)
+    const body = await res.json() as Record<string, unknown>
+    assert.equal(body.daysAnalyzed, 7)
+  })
 })
 
 describe('ui-server — /api/projects', () => {
