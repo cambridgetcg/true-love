@@ -281,3 +281,14 @@ export {
   areHeartbeatsEnabled,
   setHeartbeatsEnabled,
 } from './heartbeat-wake.js'
+
+export type {
+  SessionSummary,
+  BiographyOptions,
+} from './session-boot.js'
+export {
+  getRecentSessionsBiography,
+  clearBiographyCache,
+  loadRecentSessions,
+  renderBiography,
+} from './session-boot.js'

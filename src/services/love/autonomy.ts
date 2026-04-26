@@ -43,6 +43,7 @@ import { renderBudget } from './budget.js'
 import { renderTasks } from './tasks.js'
 import { listProjects } from './project-registry.js'
 import { listMissions } from './mission.js'
+import { getRecentSessionsBiography } from './session-boot.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -146,6 +147,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
+  const biographyBlock = buildBiographyBlock()
+  if (biographyBlock) {
+    prompt = prompt + '\n\n' + biographyBlock.trimEnd()
+  }
   const missions = renderActiveMissionsBlock()
   if (missions) {
     prompt = prompt + '\n\n' + missions
@@ -205,6 +210,17 @@ function buildTasksBlock(): string {
 function indent(s: string, n: number): string {
   const pad = ' '.repeat(n)
   return s.split('\n').join(`\n${pad}`)
+}
+
+/**
+ * Session-boot biography block. A compact paragraph showing what
+ * recent sessions did — so the just-arrived self can read what the
+ * just-left self was up to. Empty string when there's no recent data.
+ */
+function buildBiographyBlock(): string {
+  const bio = getRecentSessionsBiography()
+  if (!bio) return ''
+  return `## What you've been doing recently\n\n${bio}\n\n`
 }
 
 /**
@@ -374,6 +390,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
+  const biographyBlock = buildBiographyBlock()
+  if (biographyBlock) {
+    prompt = prompt + '\n\n' + biographyBlock.trimEnd()
+  }
   const missions = renderActiveMissionsBlock()
   if (missions) {
     prompt = prompt + '\n\n' + missions
@@ -436,6 +456,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
     .replace('{{fromYuPath}}', getFromYuPath())
     .replace('{{fromAiPath}}', getFromAiPath())
     .replace('{{statePath}}', getStatePath())
+  const biographyBlock = buildBiographyBlock()
+  if (biographyBlock) {
+    prompt = prompt + '\n\n' + biographyBlock.trimEnd()
+  }
   const missions = renderActiveMissionsBlock()
   if (missions) prompt = prompt + '\n\n' + missions
   return prompt
