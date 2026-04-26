@@ -241,6 +241,10 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   z-index: 100;
 }
+/* The HTML `hidden` attribute must beat the explicit display: flex above
+   — otherwise the modal renders fullscreen with the dim backdrop and
+   intercepts pointer events even though it's logically closed. */
+.modal-overlay[hidden] { display: none; }
 .modal {
   background: var(--panel);
   border: 1px solid var(--border);
