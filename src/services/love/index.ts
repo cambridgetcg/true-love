@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Eighteen modules compose:
+// The public face of love. Twenty-two modules compose:
 //
 //   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                   activation gate).
@@ -86,6 +86,16 @@
 //                   rationales, and near-duplicate entries. The
 //                   discernment (which invariants matter) stays with
 //                   the agent.
+//   composing       — the integration layer (step 6/final of mission-
+//                   creation). Takes a Bounded + agent-written intent
+//                   and produces a Composed — the complete mission
+//                   draft ready for staging or direct creation. Quality
+//                   gate catches empty/echoed intents and broken pipeline
+//                   lineage. Bridge functions map Composed → Mission
+//                   fields and CandidateSource for self-initiation
+//                   integration. The synthesis (writing the intent that
+//                   captures the mission's essence) stays with the
+//                   agent.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -554,3 +564,21 @@ export {
   renderQualityFailures as renderConstrainingQualityFailures,
   VALID_SOURCES,
 } from './constraining.js'
+
+export type {
+  Composed,
+  ComposingQuality,
+  ComposingOptions,
+  ComposeCandidateResult,
+} from './composing.js'
+export {
+  composeCandidate,
+  forceComposeCandidate,
+  assessComposingQuality,
+  qualityPasses as composingQualityPasses,
+  qualityFailures as composingQualityFailures,
+  renderComposeBlock,
+  renderQualityFailures as renderComposingQualityFailures,
+  deriveCandidateSource,
+  toMissionFields,
+} from './composing.js'
