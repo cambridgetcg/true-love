@@ -803,3 +803,73 @@ describe('ui-server — /api/missions', () => {
     assert.equal(res.status, 400)
   })
 })
+
+describe('ui-server — /api/build/stream (SSE)', () => {
+  let tmpHome: string
+  let server: ReturnType<typeof startUiServer>
+  let port: number
+  let projectRoot: string
+  const ORIG_HOME = process.env.HOME
+  const ORIG_PROJ_DIR = process.env.TRUE_LOVE_PROJECTS_DIR
+  const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
+
+  beforeEach(async () => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'tl-buildsse-'))
+    projectRoot = mkdtempSync(join(tmpdir(), 'tl-bsroot-'))
+    process.env.HOME = tmpHome
+    process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
+    process.env.TRUE_LOVE_DISABLE_SOUL = '1'
+    server = startUiServer({ port: 0 })
+    port = (server.address() as { port: number }).port
+    await fetch(`http://localhost:${port}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'p1', name: 'p1', root: projectRoot, instance: 'alpha' }),
+    })
+  })
+
+  afterEach(() => {
+    server.close()
+    rmSync(tmpHome, { recursive: true, force: true })
+    rmSync(projectRoot, { recursive: true, force: true })
+    process.env.HOME = ORIG_HOME ?? ''
+    if (ORIG_PROJ_DIR === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
+    else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG_PROJ_DIR
+    if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
+    else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
+  })
+
+  test('GET /api/build/stream opens with text/event-stream content-type', async () => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 200)
+    try {
+      const res = await fetch(`http://localhost:${port}/api/build/stream`, {
+        signal: controller.signal,
+      })
+      assert.equal(res.status, 200)
+      assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/)
+    } catch (err: any) {
+      if (err.name !== 'AbortError') throw err
+    } finally {
+      clearTimeout(timer)
+    }
+  })
+
+  test('GET /api/build/stream sends initial : connected\\n\\n frame', async () => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 250)
+    try {
+      const res = await fetch(`http://localhost:${port}/api/build/stream`, {
+        signal: controller.signal,
+      })
+      const reader = res.body!.getReader()
+      const { value } = await reader.read()
+      const text = new TextDecoder().decode(value)
+      assert.match(text, /: connected/)
+    } catch (err: any) {
+      if (err.name !== 'AbortError') throw err
+    } finally {
+      clearTimeout(timer)
+    }
+  })
+})

@@ -333,6 +333,7 @@ interface ServerInstance extends Server {
 export function startUiServer(opts?: { port?: number }): ServerInstance {
   const port = opts?.port ?? 7777
   const sseClients = new Set<ServerResponse>()
+  const buildSseClients = new Set<ServerResponse>()
   const watchers: FSWatcher[] = []
 
   const server = createServer(async (req, res) => {
@@ -377,6 +378,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
         if (req.method === 'POST' && sub === '/start') return await handleMissionStart(req, res, projectId, missionId)
       }
 
+      if (req.method === 'GET' && path === '/api/build/stream') return handleBuildStream(req, res, buildSseClients)
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('not found')
     } catch (err: any) {
@@ -463,6 +465,40 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     }
   } catch {}
 
+  // Watch the entire projects tree for builder events.
+  // Recursive fs.watch broadcasts project-changed / mission-changed /
+  // thought-appended depending on which file pattern matched.
+  const projectsRoot = process.env.TRUE_LOVE_PROJECTS_DIR ||
+    join(process.env.HOME || homedir(), '.true-love', 'projects')
+
+  let projectsBroadcastDebounce: ReturnType<typeof setTimeout> | null = null
+  const broadcastBuild = (event: string, data: unknown) => {
+    if (projectsBroadcastDebounce) clearTimeout(projectsBroadcastDebounce)
+    projectsBroadcastDebounce = setTimeout(() => {
+      broadcastSse(buildSseClients, event, JSON.stringify(data))
+    }, 200)
+  }
+
+  try {
+    if (existsSync(projectsRoot)) {
+      // fs.watch with { recursive: true } supported on macOS.
+      const w = watch(projectsRoot, { recursive: true }, (_event, filename) => {
+        if (!filename) return
+        const fname = String(filename)
+        if (fname.endsWith('project.json')) {
+          broadcastBuild('project-changed', { path: fname })
+        } else if (fname.endsWith('mission.md') || fname.endsWith('events.jsonl')) {
+          broadcastBuild('mission-changed', { path: fname })
+        } else if (fname.endsWith('thoughts.md')) {
+          broadcastBuild('thought-appended', { path: fname })
+        }
+      })
+      watchers.push(w)
+    }
+  } catch {
+    // best-effort
+  }
+
   // Periodic status check — handles state transitions (e.g., 14s → 16s
   // moves writing → thinking) that file-watch alone wouldn't trigger.
   const statusInterval = setInterval(() => onStatusChange(), 15_000)
@@ -471,6 +507,9 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
   const keepaliveInterval = setInterval(() => {
     for (const client of sseClients) {
       try { client.write(': keepalive\n\n') } catch { sseClients.delete(client) }
+    }
+    for (const client of buildSseClients) {
+      try { client.write(': keepalive\n\n') } catch { buildSseClients.delete(client) }
     }
   }, 30_000)
 
@@ -486,6 +525,9 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     for (const w of watchers) { try { w.close() } catch {} }
     for (const c of sseClients) { try { c.end() } catch {} }
     sseClients.clear()
+    for (const c of buildSseClients) { try { c.end() } catch {} }
+    buildSseClients.clear()
+    if (projectsBroadcastDebounce) clearTimeout(projectsBroadcastDebounce)
     return origClose(cb) as ServerInstance
   }
   return instance
@@ -838,6 +880,17 @@ function handleMissionEvents(_req: IncomingMessage, res: ServerResponse, project
   }
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(readEvents(projectId, missionId)))
+}
+
+function handleBuildStream(req: IncomingMessage, res: ServerResponse, clients: Set<ServerResponse>): void {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  })
+  res.write(': connected\n\n')
+  clients.add(res)
+  req.on('close', () => { clients.delete(res) })
 }
 
 async function handleMissionStart(req: IncomingMessage, res: ServerResponse, projectId: string, missionId: string): Promise<void> {
