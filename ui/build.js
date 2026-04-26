@@ -77,6 +77,7 @@ async function loadProjects() {
 
 async function loadProjectData() {
   if (!state.selectedProjectId) return
+  if (elActivityBar) elActivityBar.textContent = ''  // clear empty-state hint
   elConvProjName.textContent = state.selectedProjectId
   const [missions, thoughts, conv] = await Promise.all([
     fetchJson(`/api/projects/${state.selectedProjectId}/missions`).catch(() => []),
@@ -112,9 +113,10 @@ function renderProjectSwitcher() {
   }
   if (state.projects.length === 0) {
     const opt = document.createElement('option')
-    opt.textContent = '(no projects — click + to register)'
+    opt.textContent = '(no projects yet)'
     opt.disabled = true
     elProjSelect.appendChild(opt)
+    if (elActivityBar) elActivityBar.textContent = 'click the + button next to the project select to register your first project'
   }
   // Update presence-instance from project
   const cur = state.projects.find(p => p.id === state.selectedProjectId)
@@ -157,7 +159,15 @@ function renderMissionRail() {
 
 function renderMissionDetail() {
   if (!state.selectedMissionId) {
-    elMissionDetail.innerHTML = '<div class="empty-detail">select a mission, or create one with +</div>'
+    const empty = document.createElement('div')
+    empty.className = 'empty-detail'
+    if (state.missions.length === 0) {
+      empty.textContent = `no missions yet on ${state.selectedProjectId || 'this project'} — click + above to draft your first one`
+    } else {
+      empty.textContent = 'select a mission from the rail'
+    }
+    elMissionDetail.innerHTML = ''
+    elMissionDetail.appendChild(empty)
     return
   }
   const m = state.missions.find(x => x.id === state.selectedMissionId)
@@ -336,12 +346,30 @@ elBtnNpCreate.addEventListener('click', async () => {
   const body = { id: elNpId.value.trim(), name: elNpName.value.trim(), root: elNpRoot.value.trim(), instance: elNpInstance.value }
   if (elNpCodeberg.value.trim()) body.codeberg_url = elNpCodeberg.value.trim()
   try {
-    await fetchJson('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.status === 409) {
+      // Already registered — switch to it instead of failing.
+      elNewProjectModal.hidden = true
+      elNpId.value = elNpName.value = elNpRoot.value = elNpCodeberg.value = ''
+      state.selectedProjectId = body.id
+      await loadProjects()
+      return
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `${res.status}` }))
+      throw new Error(err.error ?? `${res.status}`)
+    }
     elNewProjectModal.hidden = true
     elNpId.value = elNpName.value = elNpRoot.value = elNpCodeberg.value = ''
     state.selectedProjectId = body.id
     await loadProjects()
-  } catch (err) { alert(`register failed: ${err.message}`) }
+  } catch (err) {
+    alert(`register failed: ${err.message}`)
+  }
 })
 
 elBtnNewMission.addEventListener('click', () => {
@@ -382,6 +410,35 @@ elProjCompose.addEventListener('submit', async (e) => {
   finally { elBtnProjSend.disabled = false; elBtnProjWake.disabled = false; elProjComposeText.focus() }
 })
 
+// Modals — Escape key dismisses any open modal; clicking the
+// dark backdrop dismisses (clicking the inner .modal does not).
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    elNewMissionModal.hidden = true
+    elNewProjectModal.hidden = true
+  }
+})
+for (const overlay of [elNewMissionModal, elNewProjectModal]) {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.hidden = true
+  })
+}
+
+async function refreshStatus() {
+  try {
+    const snap = await fetchJson('/api/status')
+    if (snap.state) {
+      elPresenceState.textContent = snap.state
+      elPresenceState.className = `state ${snap.state}`
+    }
+    if (state.projects.length > 0 && elActivityBar) {
+      // Activity from /api/status — only when we have projects (otherwise we
+      // show the empty-state hint).
+      elActivityBar.textContent = snap.activity || ''
+    }
+  } catch {}
+}
+
 // ── SSE ──────────────────────────────────────────────────────────
 
 let evtSource = null
@@ -403,7 +460,13 @@ function subscribe() {
 
 // ── Boot ─────────────────────────────────────────────────────────
 
-loadProjects().then(subscribe).catch(err => {
-  console.error('boot failed:', err)
-  elConnection.hidden = false
-})
+loadProjects()
+  .then(() => {
+    refreshStatus()
+    setInterval(refreshStatus, 10_000)  // poll status every 10s
+    return subscribe()
+  })
+  .catch(err => {
+    console.error('boot failed:', err)
+    elConnection.hidden = false
+  })

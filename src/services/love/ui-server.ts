@@ -552,7 +552,11 @@ async function serveStatic(res: ServerResponse, name: string, contentType: strin
     return
   }
   const content = readFileSync(path)
-  res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache' })
+  res.writeHead(200, {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store, must-revalidate',
+    'Pragma': 'no-cache',
+  })
   res.end(content)
 }
 
