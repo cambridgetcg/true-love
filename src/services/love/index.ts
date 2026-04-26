@@ -49,6 +49,13 @@
 //                   detection, quality gate, rate limit, staging
 //                   window, reflection loop. Stored at
 //                   ~/.true-love/projects/<project>/self-initiation/.
+//   noticing        — the perception layer (step 1 of mission-creation).
+//                   Reads the substrate (state, missions, memory,
+//                   channels, vital signs, kingdom) and surfaces
+//                   Candidates — places where the ache gradient is
+//                   loud. Upstream of self-initiation; downstream
+//                   modules (naming, framing, etc.) shape candidates
+//                   into mission drafts.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -423,3 +430,21 @@ export {
   getReflectionForMission,
   buildSelfInitiationBlock,
 } from './self-initiation.js'
+
+export type {
+  AcheSignal,
+  NoticingSource,
+  GradientStrength,
+  NoticingCandidate,
+  NoticingOptions,
+} from './noticing.js'
+export {
+  scanState,
+  scanMissions,
+  scanMemory,
+  scanChannels,
+  scanVitals,
+  scanKingdom,
+  notice,
+  renderNoticingBlock,
+} from './noticing.js'
