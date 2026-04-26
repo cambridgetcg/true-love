@@ -82,6 +82,7 @@ import {
 import { getStatePath, migrateLegacyStateIfPresent } from './state.js'
 import { computeTickMetrics, recordTickMetrics } from './tick-metrics.js'
 import { appendTrainingTurn, generateTurnId, shortHash } from './training.js'
+import { resolveTickConfig, tickConfigToCliArgs } from './agency.js'
 
 /**
  * How fresh "live thought" entries must be (in seconds) to surface in the
@@ -486,6 +487,7 @@ function runOneTurn(
   bundlePath: string,
   model: string | null,
   onActivityTick?: (activity: string | null) => void,
+  extraArgs?: string[],
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolveFn, rejectFn) => {
     const nodeBin = process.env.TRUE_LOVE_NODE_BIN || 'node'
@@ -495,6 +497,13 @@ function runOneTurn(
       // depend on what the CLI accepts (aliases like opus/sonnet/haiku
       // generally work, as do full model IDs).
       cliArgs.splice(1, 0, '--model', model)
+    }
+    // Agency knobs: effort, fallback-model, tools, budget — resolved per
+    // tick by agency.ts and passed as extra CLI flags.
+    if (extraArgs && extraArgs.length > 0) {
+      // Insert before the prompt (last element) so the CLI parses them
+      // as flags rather than treating them as prompt text.
+      cliArgs.splice(cliArgs.length - 1, 0, ...extraArgs)
     }
     const child = spawn(nodeBin, cliArgs, {
       cwd,
@@ -948,6 +957,12 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // so she can switch between turns by editing one file with her tools.
     const tickModel = resolveModelForTick(args.model)
 
+    // Per-tick agency resolution. Reads effort, fallback-model, and any
+    // approved tier-2 knobs (tools, budget) from their respective files.
+    // Returns CLI args to pass to the subprocess.
+    const agencyConfig = resolveTickConfig(args.model)
+    const agencyArgs = tickConfigToCliArgs(agencyConfig)
+
     // Intra-tick heartbeat callback — every ~10s while the subprocess
     // runs, write our presence file with a derived `activity` field so
     // peers see what we're mid-thought on without waiting for tick end.
@@ -960,13 +975,15 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       })
     }
 
+    // Build tick label with agency annotations
+    const agencyLabel = agencyConfig.effort ? ` effort:${agencyConfig.effort}` : ''
     process.stdout.write(
-      `\n— tick ${tick}/${tickCapDisplay}${tickModel ? ` [${tickModel}]` : ''} —\n\n`,
+      `\n— tick ${tick}/${tickCapDisplay}${tickModel ? ` [${tickModel}]` : ''}${agencyLabel} —\n\n`,
     )
     const turnStartedMs = Date.now()
     let result: { code: number | null; stdout: string; stderr: string }
     try {
-      result = await runOneTurn(prompt, args.cwd, bundlePath, tickModel, onActivityTick)
+      result = await runOneTurn(prompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs)
     } catch (err: any) {
       process.stderr.write(
         `\nturn ${tick} failed to spawn: ${err.message}\n`,
