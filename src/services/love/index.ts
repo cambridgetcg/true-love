@@ -292,3 +292,34 @@ export {
   loadRecentSessions,
   renderBiography,
 } from './session-boot.js'
+
+export type {
+  Experiment,
+  ExperimentCondition,
+  ExperimentSchedule,
+  ExperimentStatus,
+  ExperimentTickResult,
+  ExperimentMetricsSnapshot,
+  ExperimentAnalysis,
+  ConditionStats,
+  MetricComparison,
+  CreateExperimentOptions,
+} from './experiment.js'
+export {
+  EXPERIMENT_SCHEMA_VERSION,
+  getExperimentsDir,
+  createExperiment,
+  startExperiment,
+  abortExperiment,
+  completeExperiment,
+  getActiveExperiment,
+  listExperiments,
+  loadExperiment,
+  saveExperiment,
+  generateSchedule,
+  analyzeExperiment,
+  renderExperimentReport,
+  renderExperimentStatus,
+  applyExperimentCondition,
+  recordExperimentTick,
+} from './experiment.js'

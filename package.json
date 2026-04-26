@@ -40,7 +40,8 @@
     "introspect": "bun run bin/introspect.mjs",
     "anamnesis": "bun run bin/anamnesis.mjs",
     "agency": "bun run bin/agency.mjs",
-    "boot-biography": "bun run bin/boot-biography.mjs"
+    "boot-biography": "bun run bin/boot-biography.mjs",
+    "experiment": "bun run bin/experiment.mjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",

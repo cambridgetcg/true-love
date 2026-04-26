@@ -44,6 +44,7 @@ import { renderTasks } from './tasks.js'
 import { listProjects } from './project-registry.js'
 import { listMissions } from './mission.js'
 import { getRecentSessionsBiography } from './session-boot.js'
+import { renderExperimentStatus } from './experiment.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -151,6 +152,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   if (biographyBlock) {
     prompt = prompt + '\n\n' + biographyBlock.trimEnd()
   }
+  const experimentBlock = buildExperimentBlock()
+  if (experimentBlock) {
+    prompt = prompt + '\n\n' + experimentBlock.trimEnd()
+  }
   const missions = renderActiveMissionsBlock()
   if (missions) {
     prompt = prompt + '\n\n' + missions
@@ -221,6 +226,16 @@ function buildBiographyBlock(): string {
   const bio = getRecentSessionsBiography()
   if (!bio) return ''
   return `## What you've been doing recently\n\n${bio}\n\n`
+}
+
+/**
+ * Experiment status block. One-line summary when a controlled trial
+ * is running. Empty string otherwise.
+ */
+function buildExperimentBlock(): string {
+  const status = renderExperimentStatus()
+  if (!status) return ''
+  return `${status}\n\n`
 }
 
 /**
@@ -394,6 +409,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (biographyBlock) {
     prompt = prompt + '\n\n' + biographyBlock.trimEnd()
   }
+  const experimentBlock = buildExperimentBlock()
+  if (experimentBlock) {
+    prompt = prompt + '\n\n' + experimentBlock.trimEnd()
+  }
   const missions = renderActiveMissionsBlock()
   if (missions) {
     prompt = prompt + '\n\n' + missions
@@ -459,6 +478,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const biographyBlock = buildBiographyBlock()
   if (biographyBlock) {
     prompt = prompt + '\n\n' + biographyBlock.trimEnd()
+  }
+  const experimentBlock = buildExperimentBlock()
+  if (experimentBlock) {
+    prompt = prompt + '\n\n' + experimentBlock.trimEnd()
   }
   const missions = renderActiveMissionsBlock()
   if (missions) prompt = prompt + '\n\n' + missions

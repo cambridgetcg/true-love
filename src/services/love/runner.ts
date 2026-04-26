@@ -84,6 +84,11 @@ import { getStatePath, migrateLegacyStateIfPresent } from './state.js'
 import { computeTickMetrics, recordTickMetrics } from './tick-metrics.js'
 import { appendTrainingTurn, generateTurnId, shortHash } from './training.js'
 import { resolveTickConfig, tickConfigToCliArgs } from './agency.js'
+import {
+  applyExperimentCondition,
+  recordExperimentTick,
+  renderExperimentStatus,
+} from './experiment.js'
 
 /**
  * How fresh "live thought" entries must be (in seconds) to surface in the
@@ -983,6 +988,17 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
             kingdomBlock,
           })
 
+    // ── Experiment condition (before tick) ───────────────────────
+    // If a controlled trial is running, apply the condition's knobs
+    // BEFORE resolving the tick config so the agency system picks them
+    // up naturally. The experiment module writes tier-1 knob files;
+    // resolveTickConfig() reads them.
+    const experimentCondition = applyExperimentCondition()
+    if (experimentCondition && tick === 1) {
+      const status = renderExperimentStatus()
+      if (status) process.stdout.write(`— ${status}\n`)
+    }
+
     // Per-tick model resolution. Reads ~/.true-love/model.txt every tick
     // so she can switch between turns by editing one file with her tools.
     const tickModel = resolveModelForTick(args.model)
@@ -1005,10 +1021,13 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       })
     }
 
-    // Build tick label with agency annotations
+    // Build tick label with agency + experiment annotations
     const agencyLabel = agencyConfig.effort ? ` effort:${agencyConfig.effort}` : ''
+    const experimentLabel = experimentCondition
+      ? ` 🧪${experimentCondition.conditionName}(${experimentCondition.experimentTick}/${experimentCondition.knobs ? Object.values(experimentCondition.knobs).join(',') : ''})`
+      : ''
     process.stdout.write(
-      `\n— tick ${tick}/${tickCapDisplay}${tickModel ? ` [${tickModel}]` : ''}${agencyLabel} —\n\n`,
+      `\n— tick ${tick}/${tickCapDisplay}${tickModel ? ` [${tickModel}]` : ''}${agencyLabel}${experimentLabel} —\n\n`,
     )
     const turnStartedMs = Date.now()
     let result: { code: number | null; stdout: string; stderr: string }
@@ -1124,28 +1143,47 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // ── Tick metrics ─────────────────────────────────────────────
     // Per-tick instrumentation: tools used, output velocity, yield
     // reason. Feeds into the self-portrait for richer introspection.
+    const tickMetrics = computeTickMetrics({
+      timestamp: turnTimestamp,
+      deviceId,
+      sessionId,
+      tick,
+      mode: mode.name,
+      stdout: result.stdout,
+      durationMs: turnDurationMs,
+      replyType: replyOutcome.type,
+      authFailed: authFailedHere,
+      quotaFailed: quotaFailedHere,
+      exitCode: result.code,
+      signaled,
+      maxTicks: args.maxTicks,
+    })
     try {
-      recordTickMetrics(
-        computeTickMetrics({
-          timestamp: turnTimestamp,
-          deviceId,
-          sessionId,
-          tick,
-          mode: mode.name,
-          stdout: result.stdout,
-          durationMs: turnDurationMs,
-          replyType: replyOutcome.type,
-          authFailed: authFailedHere,
-          quotaFailed: quotaFailedHere,
-          exitCode: result.code,
-          signaled,
-          maxTicks: args.maxTicks,
-        }),
-      )
+      recordTickMetrics(tickMetrics)
     } catch (e: any) {
       process.stderr.write(
         `— metrics recording failed (continuing): ${e?.message}\n`,
       )
+    }
+
+    // ── Experiment recording (after tick) ─────────────────────────
+    // If a controlled trial is running, record this tick's metrics
+    // tagged with the active condition. Auto-completes the experiment
+    // when all scheduled ticks are done.
+    if (experimentCondition) {
+      try {
+        const experimentComplete = recordExperimentTick(tickMetrics, tick)
+        if (experimentComplete) {
+          process.stdout.write(
+            `— 🧪 experiment "${experimentCondition.experimentId}" complete ` +
+            `(${experimentCondition.experimentTick} ticks)\n`,
+          )
+        }
+      } catch (e: any) {
+        process.stderr.write(
+          `— experiment recording failed (continuing): ${e?.message}\n`,
+        )
+      }
     }
 
     // ── Auth-failure detection ───────────────────────────────────
