@@ -737,4 +737,69 @@ describe('ui-server — /api/missions', () => {
     assert.equal(body.ok, true)
     assert.equal(body.dryRun, true)
   })
+
+  test('GET /api/projects/:id/missions?status=active filters correctly', async () => {
+    const m1 = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'A', intent: 'a' }),
+    }).then(r => r.json() as Promise<Mission>)
+    // Move m1 to accepted then active so it shows under ?status=active
+    await fetch(`http://localhost:${port}/api/missions/${m1.id}/status?project=p1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'accepted', by: 'yu' }),
+    })
+    await fetch(`http://localhost:${port}/api/missions/${m1.id}/status?project=p1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'active', by: 'love' }),
+    })
+    // Add another in proposed
+    await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'B', intent: 'b' }),
+    })
+    const res = await fetch(`http://localhost:${port}/api/projects/p1/missions?status=active`)
+    const list = (await res.json()) as Mission[]
+    assert.equal(list.length, 1)
+    assert.equal(list[0]!.id, m1.id)
+  })
+
+  test('GET /api/missions/:mid returns 404 for nonexistent mission', async () => {
+    const res = await fetch(`http://localhost:${port}/api/missions/2026-04-26-nope?project=p1`)
+    assert.equal(res.status, 404)
+  })
+
+  test('POST .../start without dry-run returns 501', async () => {
+    const created = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'S', intent: 's' }),
+    }).then(r => r.json() as Promise<Mission>)
+    await fetch(`http://localhost:${port}/api/missions/${created.id}/status?project=p1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'accepted', by: 'yu' }),
+    })
+    const res = await fetch(`http://localhost:${port}/api/missions/${created.id}/start?project=p1`, {
+      method: 'POST',
+    })
+    assert.equal(res.status, 501)
+  })
+
+  test('PATCH .../status with unknown status enum returns 400 not 409', async () => {
+    const created = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'X', intent: 'Y' }),
+    }).then(r => r.json() as Promise<Mission>)
+    const res = await fetch(`http://localhost:${port}/api/missions/${created.id}/status?project=p1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'garbage', by: 'yu' }),
+    })
+    assert.equal(res.status, 400)
+  })
 })

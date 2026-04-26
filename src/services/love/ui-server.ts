@@ -290,6 +290,31 @@ function resolveTrueLoveRoot(): string {
 /** Max chars allowed in a Yu compose POST. */
 const MAX_COMPOSE_CHARS = 100_000
 
+/**
+ * Read and accumulate a request body, with a hard size limit. On
+ * overflow, drains remaining bytes (req.resume()), writes a 400 with
+ * the given error JSON, and returns null. Caller must early-exit on
+ * null. On success, returns the accumulated string.
+ */
+async function readJsonBody(
+  req: IncomingMessage,
+  res: ServerResponse,
+  limit: number,
+  errorMessage: string = 'request body too large',
+): Promise<string | null> {
+  let body = ''
+  for await (const chunk of req) {
+    body += chunk
+    if (body.length > limit) {
+      req.resume()
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: errorMessage }))
+      return null
+    }
+  }
+  return body
+}
+
 /** Static asset directory: <repo>/ui/ */
 function resolveUiAssetDir(): string {
   return join(resolveTrueLoveRoot(), 'ui')
@@ -340,8 +365,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (missionMatch) {
         const missionId = missionMatch[1]!
         const sub = missionMatch[2] ?? ''
-        const mUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
-        const projectId = mUrl.searchParams.get('project') ?? ''
+        const projectId = url.searchParams.get('project') ?? ''
         if (!projectId) {
           res.writeHead(400, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'missing project query param' }))
@@ -495,16 +519,8 @@ async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise
 
 async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const BODY_LIMIT = MAX_COMPOSE_CHARS + 1024
-  let body = ''
-  for await (const chunk of req) {
-    body += chunk
-    if (body.length > BODY_LIMIT) {
-      req.resume() // drain remaining bytes so socket closes cleanly
-      res.writeHead(400, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: false, error: 'message too large' }))
-      return
-    }
-  }
+  const body = await readJsonBody(req, res, BODY_LIMIT, 'message too large')
+  if (body === null) return
   let parsed: { text?: string; wake?: boolean }
   try {
     parsed = JSON.parse(body)
@@ -575,16 +591,8 @@ function handleListProjects(_req: IncomingMessage, res: ServerResponse): void {
 }
 
 async function handleCreateProject(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  let body = ''
-  for await (const chunk of req) {
-    body += chunk
-    if (body.length > 8192) {
-      req.resume()
-      res.writeHead(400, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'request body too large' }))
-      return
-    }
-  }
+  const body = await readJsonBody(req, res, 8192, 'request body too large')
+  if (body === null) return
   let parsed: { id?: string; name?: string; root?: string; instance?: string; codeberg_url?: string }
   try { parsed = JSON.parse(body) } catch {
     res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -643,17 +651,9 @@ async function handleProjectSay(req: IncomingMessage, res: ServerResponse, proje
     res.end(JSON.stringify({ error: 'project not found' }))
     return
   }
-  let body = ''
   const BODY_LIMIT = MAX_COMPOSE_CHARS + 1024
-  for await (const chunk of req) {
-    body += chunk
-    if (body.length > BODY_LIMIT) {
-      req.resume()
-      res.writeHead(400, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: false, error: 'message too large' }))
-      return
-    }
-  }
+  const body = await readJsonBody(req, res, BODY_LIMIT, 'message too large')
+  if (body === null) return
   let parsed: { text?: string; wake?: boolean }
   try { parsed = JSON.parse(body) } catch {
     res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -736,16 +736,8 @@ async function handleCreateMission(req: IncomingMessage, res: ServerResponse, pr
     res.end(JSON.stringify({ error: 'project not found' }))
     return
   }
-  let body = ''
-  for await (const chunk of req) {
-    body += chunk
-    if (body.length > 200_000) {
-      req.resume()
-      res.writeHead(400, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'request body too large' }))
-      return
-    }
-  }
+  const body = await readJsonBody(req, res, 200_000, 'request body too large')
+  if (body === null) return
   let parsed: { title?: string; intent?: string; rationale?: string; origin?: 'yu' | 'love' }
   try { parsed = JSON.parse(body) } catch {
     res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -792,16 +784,8 @@ async function handleMissionStatus(req: IncomingMessage, res: ServerResponse, pr
     res.end(JSON.stringify({ error: 'mission not found' }))
     return
   }
-  let body = ''
-  for await (const chunk of req) {
-    body += chunk
-    if (body.length > 4096) {
-      req.resume()
-      res.writeHead(400, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'request body too large' }))
-      return
-    }
-  }
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
   let parsed: { status?: MissionStatus; by?: 'yu' | 'love'; note?: string }
   try { parsed = JSON.parse(body) } catch {
     res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -811,6 +795,12 @@ async function handleMissionStatus(req: IncomingMessage, res: ServerResponse, pr
   if (!parsed.status) {
     res.writeHead(400, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: 'status required' }))
+    return
+  }
+  const VALID_STATUSES: readonly MissionStatus[] = ['proposed','accepted','active','blocked','review','done','cancelled']
+  if (!VALID_STATUSES.includes(parsed.status)) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: `unknown status "${String(parsed.status)}"` }))
     return
   }
   const by = parsed.by === 'love' ? 'love' : 'yu'
