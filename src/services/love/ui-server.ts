@@ -51,6 +51,10 @@ import {
   computeConsumption,
   type TokenConsumption,
 } from './token-consumption.js'
+import {
+  getVersionInfo,
+  type VersionInfo,
+} from './auto-update.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -368,6 +372,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res)
       if (req.method === 'GET' && path === '/api/introspect') return handleIntrospect(req, res)
       if (req.method === 'GET' && path === '/api/budget') return handleBudget(req, res)
+      if (req.method === 'GET' && path === '/api/version') return handleVersion(req, res)
       if (req.method === 'GET' && path === '/api/proposals') return handleListProposals(req, res)
       if (req.method === 'POST' && path === '/api/proposals/generate') return handleGenerateProposals(req, res)
       const proposalMatch = path.match(/^\/api\/proposals\/([^/]+)$/)
@@ -648,6 +653,27 @@ function handleBudget(req: IncomingMessage, res: ServerResponse): void {
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'budget computation failed' }))
+  }
+}
+
+// ── Version endpoint ──────────────────────────────────────────────
+
+/** Server start time — used to report uptime in version info. */
+const serverStartedAt = Date.now()
+
+function handleVersion(_req: IncomingMessage, res: ServerResponse): void {
+  try {
+    const version = getVersionInfo({ repoRoot: resolveTrueLoveRoot() })
+    const uptimeSeconds = Math.floor((Date.now() - serverStartedAt) / 1000)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      ...version,
+      serverStartedAt: new Date(serverStartedAt).toISOString(),
+      serverUptimeSeconds: uptimeSeconds,
+    }))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'version info failed' }))
   }
 }
 
