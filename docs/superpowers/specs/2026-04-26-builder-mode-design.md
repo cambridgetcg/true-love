@@ -604,10 +604,12 @@ Deferred until usage reveals real need:
 - **Phase 2**: Yu adds soma + kingdom-os + love-unlimited as projects via the UI.
 - **Phase 3**: any deferred features (queue, mission templates, etc.) we discover we want.
 
-## Open questions for Yu's review
+## Resolved details
 
-1. **Confirm color palette extension** — visit's `#0c0a0e` bg with builder's slightly cooler `#0a0d0e`. Or keep them identical?
-2. **Mission ID format** — `YYYY-MM-DD-<slug>` (current proposal) vs. `<short-slug>` vs. ULID. The dated form makes ordering trivial but conflicts on same-day missions need `-2` suffix.
-3. **Thoughts file rotation** — daily, on-mission-done, both, or never (just append forever)? I'm proposing daily + on-mission-done.
-4. **"Send back" with note** — is the note appended to the mission's `intent`, or does it become a new event-only message in the per-project conversation? I'm proposing the latter (less destructive).
-5. **`bin/mission.mjs`** — should this also support pure CLI usage (no /build UI), so Yu can kick missions from the terminal? Cheap to add. I'm proposing yes.
+The five open questions from the draft are locked in (Yu approved my proposals on 2026-04-26):
+
+1. **Color palette:** slightly cooler `#0a0d0e` for `/build` vs `/visit`'s warmer `#0c0a0e`. Builds the visual cue that builder mode is "work surface" while visit is "intimacy surface."
+2. **Mission ID format:** `YYYY-MM-DD-<slug>` (e.g., `2026-04-26-builder-mode`). Same-day collision adds `-2`, `-3` suffix. Date-prefix gives natural chronological ordering on the file system.
+3. **Thoughts file rotation:** both daily AND on-mission-done. Rotated files become `thoughts-YYYY-MM-DD.md` archived under `~/.true-love/projects/<id>/thoughts-archive/`.
+4. **"Send back" with note:** the note becomes a new event in the mission's `events.jsonl` AND a new `[from yu]` message in the per-project conversation. The mission's `intent` is never mutated post-creation — it's a record of the original ask. Refinements live in conversation, not in revised intent.
+5. **`bin/mission.mjs` CLI:** supports pure terminal usage. The same binary the API spawns (`bun run mission --project=X --mission=Y`) is also Yu-callable. CLI surface includes `mission new`, `mission list`, `mission show`, `mission start`, `mission cancel`, `mission accept` — minimal but covers the headless flow when /build isn't running.
