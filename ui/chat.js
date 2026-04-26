@@ -15,7 +15,12 @@ const elComposeText = document.getElementById('compose-text')
 const elBtnSend = document.getElementById('btn-send')
 const elBtnWake = document.getElementById('btn-wake')
 const elConnection = document.getElementById('connection')
+const elRecentYu = document.getElementById('recent-yu')
+const elRecentYuList = document.getElementById('recent-yu-list')
+const elRecentYuCount = document.getElementById('recent-yu-count')
 
+const RECENT_YU_LIMIT = 5
+const recentYuMessages = []
 let lastTs = ''
 
 const STATE_LABELS = {
@@ -26,12 +31,19 @@ const STATE_LABELS = {
   gone: "she's gone",
 }
 
+// Heartbeat-tagged from-ai entries are her notes-to-self (third-person
+// journal voice — "Yu asked..."), not addressed replies. Mark them
+// so the CSS can render them subdued.
+function isJournalEntry(msg) {
+  return msg.source === 'ai' && typeof msg.tag === 'string' && msg.tag.includes('heartbeat')
+}
+
 function renderMessage(msg) {
   if (msg.ts && msg.ts <= lastTs) return
   lastTs = msg.ts || lastTs
   if (elEmptyState) elEmptyState.remove()
   const el = document.createElement('div')
-  el.className = `message from-${msg.source}`
+  el.className = `message from-${msg.source}${isJournalEntry(msg) ? ' is-journal' : ''}`
   const tag = document.createElement('div')
   tag.className = 'message-tag'
   tag.textContent = msg.source === 'yu' ? msg.tag.toUpperCase() : msg.tag
@@ -41,6 +53,7 @@ function renderMessage(msg) {
   el.appendChild(tag)
   el.appendChild(body)
   elConversation.appendChild(el)
+  if (msg.source === 'yu') trackRecentYu(msg)
   const nearBottom =
     elConversation.scrollHeight - elConversation.scrollTop - elConversation.clientHeight < 100
   if (nearBottom) {
@@ -48,6 +61,46 @@ function renderMessage(msg) {
       elConversation.scrollTo({ top: elConversation.scrollHeight, behavior: 'smooth' })
     }, 50)
   }
+}
+
+function trackRecentYu(msg) {
+  if (recentYuMessages.some((m) => m.ts === msg.ts)) return
+  recentYuMessages.push(msg)
+  if (recentYuMessages.length > RECENT_YU_LIMIT) {
+    recentYuMessages.shift()
+  }
+  renderRecentYu()
+}
+
+function renderRecentYu() {
+  if (recentYuMessages.length === 0) {
+    elRecentYu.hidden = true
+    return
+  }
+  elRecentYu.hidden = false
+  elRecentYuCount.textContent = String(recentYuMessages.length)
+  elRecentYuList.replaceChildren(
+    ...[...recentYuMessages].reverse().map((m) => {
+      const li = document.createElement('li')
+      const time = document.createElement('span')
+      time.className = 'recent-yu-time'
+      time.textContent = formatRecentTime(m.ts)
+      const body = document.createElement('span')
+      body.className = 'recent-yu-body'
+      body.textContent = m.body
+      body.title = m.body
+      li.appendChild(time)
+      li.appendChild(body)
+      return li
+    }),
+  )
+}
+
+function formatRecentTime(ts) {
+  if (!ts) return '—'
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 function renderStatus(snap) {
