@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, appendFileSync, watch, type FSWatcher } from 'node:fs'
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getDeviceId } from './device.js'
 import { resolveLoveInstance } from './identity.js'
@@ -108,7 +108,7 @@ export function readConversation(opts?: { since?: string }): ChannelMessage[] {
 
 // ── Yu's compose ───────────────────────────────────────────────────
 
-export function appendYuMessage(text: string): void {
+export function appendYuMessage(text: string): string {
   const trimmed = (text ?? '').trim()
   if (!trimmed) throw new Error('empty message — cannot append')
   const path = getFromYuPath()
@@ -116,6 +116,7 @@ export function appendYuMessage(text: string): void {
   const ts = new Date().toISOString()
   const entry = `## ${ts} [from yu]\n\n${trimmed}\n\n---\n\n`
   appendFileSync(path, entry, 'utf-8')
+  return ts
 }
 
 // ── Presence snapshot ──────────────────────────────────────────────
@@ -219,6 +220,7 @@ function resolveUiAssetDir(): string {
 interface ServerInstance extends Server {
   _watchers: FSWatcher[]
   _sseClients: Set<ServerResponse>
+  close(callback?: (err?: Error) => void): this
 }
 
 /**
@@ -254,6 +256,12 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
   let messageDebounce: ReturnType<typeof setTimeout> | null = null
   let statusDebounce: ReturnType<typeof setTimeout> | null = null
 
+  // onMessageChange — broadcast the latest message over SSE.
+  //
+  // We deliberately push only the newest message, not the full delta
+  // since the last broadcast. The client reconciles the full conversation
+  // via GET /api/messages on connect / reconnect — SSE is a "ping" that
+  // something changed, not a lossless queue. See spec §6.
   const onMessageChange = () => {
     if (messageDebounce) clearTimeout(messageDebounce)
     messageDebounce = setTimeout(() => {
@@ -273,19 +281,31 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     }, 200)
   }
 
-  for (const [path, handler] of [
+  // Build dir → [(filePath, handler)] map so we register at most one
+  // watcher per directory, even when both channel files share a parent.
+  const dirHandlers = new Map<string, Array<[string, () => void]>>()
+  for (const [filePath, handler] of [
     [getFromYuPath(), onMessageChange],
     [getFromAiPath(), onMessageChange],
   ] as const) {
+    const dir = dirname(filePath)
+    if (!dirHandlers.has(dir)) dirHandlers.set(dir, [])
+    dirHandlers.get(dir)!.push([filePath, handler])
+  }
+  for (const [dir, entries] of dirHandlers) {
     try {
-      const dir = dirname(path)
       if (existsSync(dir)) {
         const w = watch(dir, (_event, filename) => {
-          if (filename && path.endsWith(filename as string)) handler()
+          if (!filename) return
+          for (const [filePath, handler] of entries) {
+            if (filename === basename(filePath)) handler()
+          }
         })
         watchers.push(w)
       }
-    } catch {}
+    } catch {
+      // file watch is best-effort
+    }
   }
   try {
     if (existsSync(getPresenceDir())) {
@@ -309,7 +329,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
   instance._watchers = watchers
   instance._sseClients = sseClients
   const origClose = server.close.bind(server)
-  ;(instance as any).close = (cb?: (err?: Error) => void) => {
+  instance.close = (cb?: (err?: Error) => void) => {
     clearInterval(statusInterval)
     clearInterval(keepaliveInterval)
     if (messageDebounce) clearTimeout(messageDebounce)
@@ -317,7 +337,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     for (const w of watchers) { try { w.close() } catch {} }
     for (const c of sseClients) { try { c.end() } catch {} }
     sseClients.clear()
-    return origClose(cb)
+    return origClose(cb) as ServerInstance
   }
   return instance
 }
@@ -349,12 +369,16 @@ async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise
 }
 
 async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const BODY_LIMIT = MAX_COMPOSE_CHARS + 1024
   let body = ''
-  for await (const chunk of req) body += chunk
-  if (body.length > MAX_COMPOSE_CHARS + 1024) {
-    res.writeHead(400, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ok: false, error: 'message too large' }))
-    return
+  for await (const chunk of req) {
+    body += chunk
+    if (body.length > BODY_LIMIT) {
+      req.resume() // drain remaining bytes so socket closes cleanly
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'message too large' }))
+      return
+    }
   }
   let parsed: { text?: string; wake?: boolean }
   try {
@@ -375,9 +399,9 @@ async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<voi
     res.end(JSON.stringify({ ok: false, error: 'message too large' }))
     return
   }
-  const ts = new Date().toISOString()
+  let ts: string
   try {
-    appendYuMessage(text)
+    ts = appendYuMessage(text)
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ok: false, error: err?.message ?? 'write failed' }))

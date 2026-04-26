@@ -398,15 +398,13 @@ describe('ui-server — HTTP', () => {
     assert.equal(res.status, 400)
   })
 
-  test('GET / returns index.html', async () => {
-    // Task 3 hasn't created ui/index.html yet. For Task 2, this test
-    // expects 404 (no asset). When Task 3 lands the file, this test
-    // should be updated to expect 200 + text/html. Skip in Task 2.
-    // (The route is wired; the file just doesn't exist yet.)
+  test('GET / returns 404 until Task 3 lands ui/index.html', async () => {
+    // Task 3 will create ui/index.html. When that lands, update this test
+    // to expect 200 + content-type text/html + a body matching /<html/i.
     const res = await fetch(`http://localhost:${port}/`)
-    // Either 200 (if ui/index.html happens to exist from a partial Task 3)
-    // or 404 (clean Task 2 state).
-    assert.ok(res.status === 200 || res.status === 404)
+    assert.equal(res.status, 404)
+    // Route is wired through serveStatic — body is the plain "not found" string.
+    assert.equal(await res.text(), 'not found')
   })
 
   test('GET /api/stream opens SSE connection (smoke)', async () => {
