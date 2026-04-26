@@ -151,6 +151,10 @@ function parseFrontmatter(content: string): ParsedFrontmatter {
   return { fields, body }
 }
 
+// parseInlineList — split a `[a, b, c]` inline list on commas. No
+// quoting / escaping: items containing commas will round-trip
+// incorrectly. The system uses this for git SHAs (no commas) and
+// file paths (commas legal but uncommon); accept the limitation.
 function parseInlineList(s: string): string[] {
   if (!s || s === '[]') return []
   if (s.startsWith('[') && s.endsWith(']')) {
@@ -187,6 +191,16 @@ function serializeMissionFrontmatter(m: Mission): string {
 
 // ── Mission file CRUD ──────────────────────────────────────────────
 
+/**
+ * Parse a mission.md file into a Mission object.
+ *
+ * Constraint: section bodies (Intent, Rationale, Decomposition) cannot
+ * contain top-level `#` headings. The body is split on lines starting
+ * with `# `, so any embedded H1 inside a section body acts as a section
+ * terminator. The serializer never emits H1 inside bodies, but a
+ * hand-edited mission.md could trigger silent truncation. Use H2+ (`## `)
+ * for sub-headings inside sections.
+ */
 export function parseMissionFile(content: string): Mission {
   const { fields, body } = parseFrontmatter(content)
 
@@ -208,7 +222,17 @@ export function parseMissionFile(content: string): Mission {
   const rationale = extractSection(body, 'Rationale')
   const decomposition = extractSection(body, 'Decomposition')
 
-  const artifacts = (fields.artifacts as MissionArtifacts) ?? { commits: [], files: [], test_runs: [] }
+  const rawArtifacts = fields.artifacts
+  if (rawArtifacts !== undefined &&
+      (rawArtifacts === null ||
+       typeof rawArtifacts !== 'object' ||
+       Array.isArray(rawArtifacts) ||
+       !Array.isArray((rawArtifacts as MissionArtifacts).commits) ||
+       !Array.isArray((rawArtifacts as MissionArtifacts).files) ||
+       !Array.isArray((rawArtifacts as MissionArtifacts).test_runs))) {
+    throw new Error('mission: malformed artifacts (expected object with commits/files/test_runs arrays)')
+  }
+  const artifacts: MissionArtifacts = (rawArtifacts as MissionArtifacts | undefined) ?? { commits: [], files: [], test_runs: [] }
 
   const m: Mission = {
     id: String(fields.id),
@@ -226,6 +250,15 @@ export function parseMissionFile(content: string): Mission {
   return m
 }
 
+/**
+ * Extract a named markdown section from a mission body.
+ *
+ * Constraint: section bodies cannot contain top-level `#` headings.
+ * The body is split on lines starting with `# `, so any embedded H1
+ * inside a section body acts as a section terminator. The serializer
+ * never emits H1 inside bodies, but a hand-edited mission.md could
+ * trigger silent truncation. Use H2+ (`## `) for sub-headings.
+ */
 function extractSection(body: string, header: string): string | undefined {
   // Split body into section chunks at each "# Heading" boundary.
   // Using split+lookahead avoids multiline-$ pitfalls where $ matches
@@ -255,7 +288,8 @@ export function readMission(projectId: string, missionId: string): Mission | nul
   if (!existsSync(path)) return null
   try {
     return parseMissionFile(readFileSync(path, 'utf-8'))
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[mission] failed to read ${projectId}/${missionId}: ${(err as Error).message}\n`)
     return null
   }
 }

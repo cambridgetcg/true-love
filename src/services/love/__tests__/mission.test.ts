@@ -277,4 +277,18 @@ describe('mission — transitionStatus', () => {
     const r = transitionStatus('proposed', 'review', 'love')
     assert.equal(r.ok, false)
   })
+
+  test('accepted → active by yu — also allowed (either)', () => {
+    assert.deepEqual(transitionStatus('accepted', 'active', 'yu'), { ok: true })
+  })
+
+  test('active → blocked by yu — DISALLOWED (love-only)', () => {
+    const r = transitionStatus('active', 'blocked', 'yu')
+    assert.equal(r.ok, false)
+  })
+
+  test('active → review by yu — DISALLOWED (love-only)', () => {
+    const r = transitionStatus('active', 'review', 'yu')
+    assert.equal(r.ok, false)
+  })
 })
