@@ -433,6 +433,7 @@ describe('ui-server — /api/projects', () => {
   let projectRoot: string
   const ORIG_HOME = process.env.HOME
   const ORIG_PROJ_DIR = process.env.TRUE_LOVE_PROJECTS_DIR
+  const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
   beforeEach(() => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-projapi-'))
@@ -451,7 +452,8 @@ describe('ui-server — /api/projects', () => {
     process.env.HOME = ORIG_HOME ?? ''
     if (ORIG_PROJ_DIR === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
     else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG_PROJ_DIR
-    delete process.env.TRUE_LOVE_DISABLE_SOUL
+    if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
+    else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
   })
 
   test('GET /api/projects returns [] when none registered', async () => {
@@ -515,6 +517,7 @@ describe('ui-server — per-project channels', () => {
   let projectRoot: string
   const ORIG_HOME = process.env.HOME
   const ORIG_PROJ_DIR = process.env.TRUE_LOVE_PROJECTS_DIR
+  const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
   beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-pchan-'))
@@ -538,7 +541,8 @@ describe('ui-server — per-project channels', () => {
     process.env.HOME = ORIG_HOME ?? ''
     if (ORIG_PROJ_DIR === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
     else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG_PROJ_DIR
-    delete process.env.TRUE_LOVE_DISABLE_SOUL
+    if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
+    else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
   })
 
   test('POST /api/projects/:id/say appends to per-project from-yu.md', async () => {

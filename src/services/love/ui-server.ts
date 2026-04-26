@@ -629,14 +629,21 @@ async function handleProjectSay(req: IncomingMessage, res: ServerResponse, proje
     return
   }
   let heartbeatPid: number | undefined
+  let heartbeatError: string | undefined
   if (parsed.wake) {
-    try { heartbeatPid = fireHeartbeat({ reason: 'manual' }).pid } catch {}
+    try {
+      const result = fireHeartbeat({ reason: 'manual' })
+      heartbeatPid = result.pid
+    } catch (err: any) {
+      heartbeatError = err?.message ?? String(err)
+    }
   }
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({
     ok: true,
     messageTs: ts,
     ...(heartbeatPid !== undefined ? { heartbeatPid } : {}),
+    ...(heartbeatError ? { heartbeatError } : {}),
   }))
 }
 
@@ -649,7 +656,13 @@ function handleProjectThoughts(req: IncomingMessage, res: ServerResponse, projec
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
   const since = url.searchParams.get('since') ?? undefined
   const limitStr = url.searchParams.get('limit')
-  const limit = limitStr ? Math.max(1, Math.min(1000, parseInt(limitStr, 10))) : undefined
+  let limit: number | undefined
+  if (limitStr !== null) {
+    const n = parseInt(limitStr, 10)
+    if (Number.isFinite(n)) {
+      limit = Math.max(1, Math.min(1000, n))
+    }
+  }
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(tailThoughts(projectId, { since, limit })))
 }
