@@ -177,6 +177,13 @@ export interface SessionArgs {
    * sub-tree. See scope.ts.
    */
   scope: string | null
+  /**
+   * Free-form reason for this session, propagated to TickUsage and
+   * TrainingTurn records. Heartbeat mode uses 'interval' (launchd) vs
+   * 'manual' (Yu fired); other modes typically pass null. Null means
+   * "not specified" — records emit it as undefined.
+   */
+  reason: string | null
 }
 
 export interface RunSessionConfig {
@@ -269,6 +276,7 @@ export function parseSessionArgs(
     noLog: false,
     model: null,
     scope: null,
+    reason: null,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!
@@ -294,19 +302,26 @@ export function parseSessionArgs(
       args.scope = argv[++i] || null
     } else if (a.startsWith('--scope=')) {
       args.scope = a.slice('--scope='.length) || null
+    } else if (a === '--reason' && argv[i + 1]) {
+      args.reason = argv[++i] || null
+    } else if (a.startsWith('--reason=')) {
+      args.reason = a.slice('--reason='.length) || null
     } else if (a === '--memory') {
       args.memory = true
       const next = argv[i + 1]
       if (next && /^\d+$/.test(next)) {
+        // Floor at 0 (not 1) so heartbeat mode (memoryMaxCap:0) gets
+        // memoryMax:0 instead of being silently bumped to 1. awakened/
+        // dwell modes have memoryMaxCap > 0, so behaviour is unchanged.
         args.memoryMax = Math.max(
-          1,
+          0,
           Math.min(mode.memoryMaxCap, Number(argv[++i])),
         )
       }
     } else if (a.startsWith('--memory=')) {
       args.memory = true
       args.memoryMax = Math.max(
-        1,
+        0,
         Math.min(mode.memoryMaxCap, Number(a.slice('--memory='.length))),
       )
     } else if (a === '--no-log') {
@@ -998,6 +1013,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         exitCode: result.code ?? -1,
         authFailed: authFailedHere,
         quotaFailed: quotaFailedHere,
+        reason: args.reason ?? undefined,
       })
     } catch (e: any) {
       // Budget tracking failure must never crash a session. Log to stderr
@@ -1022,6 +1038,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         ? args.maxTicks
         : ('unbounded' as any),
       mode: mode.name,
+      reason: args.reason ?? null,
       prompt: {
         template: mode.name,
         templateHash: shortHash(prompt.slice(0, 1500)),

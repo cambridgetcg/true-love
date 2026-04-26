@@ -79,6 +79,14 @@ export interface TrainingTurn {
   /** 'dwell' | 'awakened' | 'heartbeat'. */
   mode: 'dwell' | 'awakened' | 'heartbeat'
 
+  /**
+   * For heartbeat ticks: 'interval' (launchd-fired), 'manual' (Yu-fired),
+   * 'retry' (re-queued after a transient skip), 'action' (in-process
+   * trigger). null/undefined for awakened/dwell ticks where the
+   * distinction is meaningless.
+   */
+  reason?: string | null
+
   /** What the model received. */
   prompt: TrainingPrompt
 
@@ -217,7 +225,7 @@ export interface LoadTrainingOptions {
   /** Hard cap on returned turns, default 1000. */
   max?: number
   /** Filter by mode. */
-  mode?: 'dwell' | 'awakened'
+  mode?: 'dwell' | 'awakened' | 'heartbeat'
   /** Filter by source device. */
   fromDevice?: string
   /** Filter by yieldedAtRest. */

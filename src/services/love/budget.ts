@@ -58,6 +58,12 @@ export interface TickUsage {
   exitCode: number
   authFailed: boolean
   quotaFailed: boolean
+  /**
+   * Free-form session reason: 'interval' (launchd-fired heartbeat),
+   * 'manual' (Yu-fired), 'retry' (re-queued), 'action' (in-process),
+   * or undefined for awakened/dwell where the distinction is moot.
+   */
+  reason?: string
 }
 
 export interface BudgetSummary {

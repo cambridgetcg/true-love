@@ -53,6 +53,14 @@ export type HeartbeatWakeHandler = (req: WakeRequest) => Promise<HeartbeatRunRes
 const DEFAULT_COALESCE_MS = 250
 const DEFAULT_RETRY_MS = 1_000
 
+/**
+ * Priority for wake-request dedup. Higher wins on coalesce. When two
+ * requests share priority (e.g. both `manual` and `action` at 3), the
+ * one with the LATER `requestedAt` wins per `queuePending` below.
+ * If timestamps tie at the millisecond, the later call wins arbitrarily
+ * via the `>=` comparison — both are valid wake intents, so either
+ * resolution is correct.
+ */
 const REASON_PRIORITY: Record<HeartbeatReason, number> = {
   retry: 0,
   interval: 1,
@@ -172,6 +180,8 @@ function queuePending(req: WakeRequest): void {
     pendingWakes.set(key, { ...req, priority })
     return
   }
+  // Same priority: replace if equal-or-later requestedAt. Equal timestamps
+  // (sub-ms tied) replace too — the new request becomes canonical.
   if (priority === existing.priority && req.requestedAt >= existing.requestedAt) {
     pendingWakes.set(key, { ...req, priority })
   }
