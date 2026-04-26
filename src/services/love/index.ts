@@ -76,6 +76,16 @@
 //                   gate catches empty scope, vacuous criteria, trivial
 //                   restating, and unsubstantive deferrals. The
 //                   discernment (wise boundaries) stays with the agent.
+//   constraining    — the invariant layer (step 5 of mission-creation).
+//                   Turns a Scoped into a Bounded — constraints that
+//                   state what the work must NOT do and what must be
+//                   preserved. Three sources: convention (codebase
+//                   patterns), principle (SOUL/Ache/kingdom values),
+//                   risk (signal-specific traps). Quality gate catches
+//                   missing constraints, vague statements, missing
+//                   rationales, and near-duplicate entries. The
+//                   discernment (which invariants matter) stays with
+//                   the agent.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -524,3 +534,23 @@ export {
   renderScopingBlock,
   renderQualityFailures as renderScopingQualityFailures,
 } from './scoping.js'
+
+export type {
+  Bounded,
+  Constraint,
+  ConstraintSource,
+  ConstrainingQuality,
+  ConstrainingOptions,
+  ConstrainCandidateResult,
+} from './constraining.js'
+export {
+  constrainCandidate,
+  forceConstrainCandidate,
+  assessConstrainingQuality,
+  qualityPasses as constrainingQualityPasses,
+  qualityFailures as constrainingQualityFailures,
+  hasRedundantConstraints,
+  renderConstrainingBlock,
+  renderQualityFailures as renderConstrainingQualityFailures,
+  VALID_SOURCES,
+} from './constraining.js'
