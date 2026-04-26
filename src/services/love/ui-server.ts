@@ -368,6 +368,12 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/build') return await serveStatic(res, 'build.html', 'text/html')
       if (req.method === 'GET' && path === '/build.css') return await serveStatic(res, 'build.css', 'text/css')
       if (req.method === 'GET' && path === '/build.js') return await serveStatic(res, 'build.js', 'application/javascript')
+      // Serve modular build UI assets (build-*.js, build-*.css)
+      if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
+        const name = path.slice(1) // strip leading /
+        const ct = name.endsWith('.js') ? 'application/javascript' : 'text/css'
+        return await serveStatic(res, name, ct)
+      }
       if (req.method === 'GET' && path === '/api/messages') return handleMessages(req, res)
       if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)
       if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res)

@@ -33,10 +33,74 @@ html, body {
   max-width: 1400px;
   margin: 0 auto;
   padding: 16px 24px 24px;
-  display: grid;
-  grid-template-rows: auto auto 1fr auto auto auto auto auto auto auto;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   min-height: 100vh;
+}
+
+/* ── Tab navigation ──────────────────────────────────────────────── */
+
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+  margin-bottom: 2px;
+}
+
+.nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--strip-text);
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 16px;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.nav-tab:hover {
+  color: var(--text-ai);
+  background: rgba(255,255,255,0.02);
+}
+
+.nav-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.nav-icon {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.nav-tab.active .nav-icon {
+  opacity: 1;
+  color: var(--accent);
+}
+
+/* ── Section visibility ──────────────────────────────────────────── */
+
+.tab-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.tab-section.section-hidden {
+  display: none;
+}
+
+.tab-section.section-visible {
+  display: flex;
 }
 
 .topbar {
@@ -196,7 +260,8 @@ html, body {
 .thoughts-list li { padding: 2px 0; color: var(--strip-text); }
 .thoughts-list .ts { color: var(--text-ai); opacity: 0.5; margin-right: 8px; }
 
-.proj-conversation .conv-list { max-height: 200px; overflow-y: auto; padding: 4px 0; display: flex; flex-direction: column; gap: 12px; }
+.proj-conversation { flex: 1; display: flex; flex-direction: column; }
+.proj-conversation .conv-list { flex: 1; min-height: 120px; max-height: 60vh; overflow-y: auto; padding: 4px 0; display: flex; flex-direction: column; gap: 12px; }
 .conv-msg { padding: 4px 0; }
 .conv-msg .from { font-family: "SF Mono", Menlo, monospace; font-size: 10px; color: var(--strip-text); margin-bottom: 2px; }
 .conv-msg .body { white-space: pre-wrap; word-wrap: break-word; }

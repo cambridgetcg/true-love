@@ -24,91 +24,105 @@
 
     <div class="activity-bar" id="activity-bar"></div>
 
-    <section class="rail-and-detail">
-      <aside class="missions-rail">
-        <div class="rail-header">
-          <span class="rail-title">missions</span>
-          <button id="btn-new-mission" class="ghost-btn" title="new mission">+</button>
-        </div>
-        <ul class="mission-groups" id="mission-groups"></ul>
-      </aside>
+    <!-- Navigation tabs (injected by build-nav.js) -->
 
-      <section class="mission-detail" id="mission-detail">
-        <div class="empty-detail">select a mission, or create one with +</div>
+    <!-- ═══ Tab: Missions ═══ -->
+    <div class="tab-section section-visible" data-tab="missions">
+      <section class="rail-and-detail">
+        <aside class="missions-rail">
+          <div class="rail-header">
+            <span class="rail-title">missions</span>
+            <button id="btn-new-mission" class="ghost-btn" title="new mission">+</button>
+          </div>
+          <ul class="mission-groups" id="mission-groups"></ul>
+        </aside>
+
+        <section class="mission-detail" id="mission-detail">
+          <div class="empty-detail">select a mission, or create one with +</div>
+        </section>
       </section>
-    </section>
 
-    <section class="thoughts-tail">
-      <div class="rail-header">
-        <span class="rail-title">her thoughts (live)</span>
-      </div>
-      <ol class="thoughts-list" id="thoughts-list"></ol>
-    </section>
-
-    <section class="version-panel" id="version-panel">
-      <div class="rail-header">
-        <span class="rail-title">version</span>
-        <span class="version-meta" id="version-meta"></span>
-        <button id="btn-version-refresh" class="ghost-btn" title="refresh version info">↻</button>
-      </div>
-      <div class="version-body" id="version-body">
-        <div class="empty-detail">loading version info…</div>
-      </div>
-    </section>
-
-    <section class="portrait-panel" id="portrait-panel">
-      <div class="rail-header">
-        <span class="rail-title">self-portrait</span>
-        <span class="portrait-meta" id="portrait-meta"></span>
-        <button id="btn-portrait-refresh" class="ghost-btn" title="refresh portrait">↻</button>
-      </div>
-      <div class="portrait-body" id="portrait-body">
-        <div class="empty-detail">loading portrait…</div>
-      </div>
-    </section>
-
-    <section class="budget-panel" id="budget-panel">
-      <div class="rail-header">
-        <span class="rail-title">token consumption</span>
-        <span class="budget-meta" id="budget-meta"></span>
-        <div class="budget-timeframes" id="budget-timeframes">
-          <button class="timeframe-btn active" data-hours="5">5h</button>
-          <button class="timeframe-btn" data-hours="24">24h</button>
-          <button class="timeframe-btn" data-hours="168">7d</button>
-          <button class="timeframe-btn" data-hours="720">30d</button>
+      <section class="thoughts-tail">
+        <div class="rail-header">
+          <span class="rail-title">her thoughts (live)</span>
         </div>
-        <button id="btn-budget-refresh" class="ghost-btn" title="refresh budget">↻</button>
-      </div>
-      <div class="budget-body" id="budget-body">
-        <div class="empty-detail">loading token data…</div>
-      </div>
-    </section>
+        <ol class="thoughts-list" id="thoughts-list"></ol>
+      </section>
+    </div>
 
-    <section class="proposals-panel" id="proposals-panel">
-      <div class="rail-header">
-        <span class="rail-title">proposals</span>
-        <span class="proposals-meta" id="proposals-meta"></span>
-        <button id="btn-proposals-generate" class="ghost-btn" title="generate proposals">⚡</button>
-        <button id="btn-proposals-refresh" class="ghost-btn" title="refresh proposals">↻</button>
-      </div>
-      <div class="proposals-body" id="proposals-body">
-        <div class="empty-detail">loading proposals…</div>
-      </div>
-    </section>
-
-    <section class="proj-conversation">
-      <div class="rail-header">
-        <span class="rail-title">conversation — <span id="conv-proj-name">…</span></span>
-      </div>
-      <div class="conv-list" id="conv-list" aria-live="polite"></div>
-      <form class="proj-compose" id="proj-compose">
-        <textarea id="proj-compose-text" placeholder="message her about this project…" rows="2" maxlength="100000"></textarea>
-        <div class="compose-actions">
-          <button type="submit" name="action" value="send" id="btn-proj-send">send</button>
-          <button type="submit" name="action" value="wake" id="btn-proj-wake">send &amp; wake</button>
+    <!-- ═══ Tab: Observe ═══ -->
+    <div class="tab-section section-hidden" data-tab="observe">
+      <section class="version-panel" id="version-panel">
+        <div class="rail-header">
+          <span class="rail-title">version</span>
+          <span class="version-meta" id="version-meta"></span>
+          <button id="btn-version-refresh" class="ghost-btn" title="refresh version info">↻</button>
         </div>
-      </form>
-    </section>
+        <div class="version-body" id="version-body">
+          <div class="empty-detail">loading version info…</div>
+        </div>
+      </section>
+
+      <section class="portrait-panel" id="portrait-panel">
+        <div class="rail-header">
+          <span class="rail-title">self-portrait</span>
+          <span class="portrait-meta" id="portrait-meta"></span>
+          <button id="btn-portrait-refresh" class="ghost-btn" title="refresh portrait">↻</button>
+        </div>
+        <div class="portrait-body" id="portrait-body">
+          <div class="empty-detail">loading portrait…</div>
+        </div>
+      </section>
+
+      <section class="budget-panel" id="budget-panel">
+        <div class="rail-header">
+          <span class="rail-title">token consumption</span>
+          <span class="budget-meta" id="budget-meta"></span>
+          <div class="budget-timeframes" id="budget-timeframes">
+            <button class="timeframe-btn active" data-hours="5">5h</button>
+            <button class="timeframe-btn" data-hours="24">24h</button>
+            <button class="timeframe-btn" data-hours="168">7d</button>
+            <button class="timeframe-btn" data-hours="720">30d</button>
+          </div>
+          <button id="btn-budget-refresh" class="ghost-btn" title="refresh budget">↻</button>
+        </div>
+        <div class="budget-body" id="budget-body">
+          <div class="empty-detail">loading token data…</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══ Tab: Proposals ═══ -->
+    <div class="tab-section section-hidden" data-tab="proposals">
+      <section class="proposals-panel" id="proposals-panel">
+        <div class="rail-header">
+          <span class="rail-title">proposals</span>
+          <span class="proposals-meta" id="proposals-meta"></span>
+          <button id="btn-proposals-generate" class="ghost-btn" title="generate proposals">⚡</button>
+          <button id="btn-proposals-refresh" class="ghost-btn" title="refresh proposals">↻</button>
+        </div>
+        <div class="proposals-body" id="proposals-body">
+          <div class="empty-detail">loading proposals…</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══ Tab: Talk ═══ -->
+    <div class="tab-section section-hidden" data-tab="talk">
+      <section class="proj-conversation">
+        <div class="rail-header">
+          <span class="rail-title">conversation — <span id="conv-proj-name">…</span></span>
+        </div>
+        <div class="conv-list" id="conv-list" aria-live="polite"></div>
+        <form class="proj-compose" id="proj-compose">
+          <textarea id="proj-compose-text" placeholder="message her about this project…" rows="2" maxlength="100000"></textarea>
+          <div class="compose-actions">
+            <button type="submit" name="action" value="send" id="btn-proj-send">send</button>
+            <button type="submit" name="action" value="wake" id="btn-proj-wake">send &amp; wake</button>
+          </div>
+        </form>
+      </section>
+    </div>
 
     <footer class="connection" id="connection" hidden>line went quiet — reconnecting…</footer>
   </main>
