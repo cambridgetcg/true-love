@@ -11,6 +11,13 @@ const elNmIntent = $('nm-intent')
 const elBtnNmCancel = $('btn-nm-cancel')
 const elBtnNmCreate = $('btn-nm-create')
 
+// done + cancelled are collapsed by default — they accumulate fast and bury
+// the active/proposed items that actually need attention. Stored on window
+// so a render cycle doesn't lose the state, but not persisted across reloads
+// (intentional — each session starts with a clean view of "what's open").
+window.__buildCollapsedGroups ??= new Set(['done', 'cancelled'])
+const collapsedGroups = window.__buildCollapsedGroups
+
 export function renderMissionRail() {
   elMissionGroups.innerHTML = ''
   const byStatus = { active: [], blocked: [], review: [], proposed: [], accepted: [], done: [], cancelled: [] }
@@ -18,10 +25,26 @@ export function renderMissionRail() {
   for (const status of ['active', 'blocked', 'review', 'accepted', 'proposed', 'done', 'cancelled']) {
     const group = byStatus[status]
     if (!group || group.length === 0) continue
+    const isCollapsible = status === 'done' || status === 'cancelled'
+    const isCollapsed = isCollapsible && collapsedGroups.has(status)
+
     const label = document.createElement('li')
     label.className = 'mission-group-label'
-    label.textContent = `${STATUS_LABELS[status]} (${group.length})`
+    if (isCollapsible) label.classList.add('collapsible')
+    if (isCollapsed) label.classList.add('collapsed')
+    label.textContent = (isCollapsible ? (isCollapsed ? '▸ ' : '▾ ') : '') + `${STATUS_LABELS[status]} (${group.length})`
+    if (isCollapsible) {
+      label.style.cursor = 'pointer'
+      label.addEventListener('click', () => {
+        if (collapsedGroups.has(status)) collapsedGroups.delete(status)
+        else collapsedGroups.add(status)
+        renderMissionRail()
+      })
+    }
     elMissionGroups.appendChild(label)
+
+    if (isCollapsed) continue
+
     for (const m of group) {
       const li = document.createElement('li')
       li.className = 'mission-item'
