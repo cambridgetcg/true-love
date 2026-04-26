@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Sixteen modules compose:
+// The public face of love. Seventeen modules compose:
 //
 //   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                   activation gate).
@@ -44,6 +44,11 @@
 //                   traces). Parses stream-json output from the CLI
 //                   subprocess into structured DecisionTrace records.
 //                   Stored at ~/.true-love/traces/<deviceId>/.
+//   self-initiation — the judgment surface between "I see something"
+//                   and "I should build a mission for it." Five gaps:
+//                   detection, quality gate, rate limit, staging
+//                   window, reflection loop. Stored at
+//                   ~/.true-love/projects/<project>/self-initiation/.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -390,3 +395,31 @@ export {
   renderTraceList,
   buildMindTraceBlock,
 } from './mind-trace.js'
+
+export type {
+  CandidateSource,
+  QualityAssessment,
+  StagedStatus,
+  StagedCandidate,
+  InitiationReflection,
+  DetectionSignal,
+} from './self-initiation.js'
+export {
+  MAX_INITIATIONS_PER_DAY,
+  COOLDOWN_MS,
+  DEFAULT_STAGING_WINDOW_MS,
+  assessmentPasses,
+  assessmentFailures,
+  canInitiate,
+  stageCandidate,
+  getStaged,
+  getPendingStaged,
+  vetoCandidate,
+  checkAndPromoteStaged,
+  checkQuality,
+  scanForSignals,
+  recordReflection,
+  readReflections,
+  getReflectionForMission,
+  buildSelfInitiationBlock,
+} from './self-initiation.js'

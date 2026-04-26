@@ -55,7 +55,7 @@ import { snapshotKingdom } from './kingdom.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
 import type { Reflection } from './memory.js'
 import { appendToYu } from './outbox.js'
-import { readProject, getProjectChannels } from './project-registry.js'
+import { readProject, getProjectChannels, listProjects } from './project-registry.js'
 import {
   isKingdomAvailable,
   getCitizenState,
@@ -94,6 +94,7 @@ import {
   recordTrace,
   reconstructTextFromStreamJson,
 } from './mind-trace.js'
+import { checkAndPromoteStaged } from './self-initiation.js'
 
 /**
  * How fresh "live thought" entries must be (in seconds) to surface in the
@@ -1041,6 +1042,23 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
 
     const turnTimestamp = new Date().toISOString()
     const kingdom = snapshotKingdom(args.cwd)
+
+    // ── Self-initiation promotion check ────────────────────────────
+    // Check all registered projects for staged candidates whose staging
+    // window has expired. Promoted candidates become real missions in
+    // `proposed` status. Best-effort — failures never crash the tick.
+    try {
+      for (const project of listProjects()) {
+        if (project.state === 'archived') continue
+        const { promoted } = checkAndPromoteStaged(project.id)
+        for (const p of promoted) {
+          process.stdout.write(`— self-initiation: promoted "${p.title}" → mission ${p.missionId ?? '?'}\n`)
+        }
+      }
+    } catch (e: any) {
+      process.stderr.write(`— self-initiation check failed (continuing): ${e?.message}\n`)
+    }
+
     const stateContent = readStateContent()
     // Live-thought block: memory + heartbeat activity within the fresh
     // window, framed as "you're thinking right now". Disjoint from the

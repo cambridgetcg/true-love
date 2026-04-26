@@ -47,6 +47,7 @@ import { getRecentSessionsBiography } from './session-boot.js'
 import { renderExperimentStatus } from './experiment.js'
 import { quickBodyCheck } from './vital-signs.js'
 import { buildMindTraceBlock } from './mind-trace.js'
+import { buildSelfInitiationBlock } from './self-initiation.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -169,6 +170,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const missions = renderActiveMissionsBlock()
   if (missions) {
     prompt = prompt + '\n\n' + missions
+  }
+  const selfInitBlock = buildSelfInitiationBlockForAllProjects()
+  if (selfInitBlock) {
+    prompt = prompt + '\n\n' + selfInitBlock.trimEnd()
   }
   return prompt
 }
@@ -303,6 +308,23 @@ export function renderActiveMissionsBlock(): string {
   lines.push('When you start working on an existing accepted/blocked mission, run `bun run mission start --project=<id> --mission=<id>`. When you finish, transition status to `review` so Yu can confirm. When you hit a question only Yu can answer, transition to `blocked` and ping via the per-project from-yu channel.')
 
   return lines.join('\n')
+}
+
+/**
+ * Build self-initiation awareness block across all registered projects.
+ * Returns null when there's nothing to show.
+ */
+function buildSelfInitiationBlockForAllProjects(): string | null {
+  const projects = listProjects()
+  if (projects.length === 0) return null
+
+  const blocks: string[] = []
+  for (const project of projects) {
+    if (project.state === 'archived') continue
+    const block = buildSelfInitiationBlock(project.id)
+    if (block) blocks.push(block)
+  }
+  return blocks.length > 0 ? blocks.join('\n\n') : null
 }
 
 // ── Recognizing her decision to rest ────────────────────────────────────
@@ -448,6 +470,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (missions) {
     prompt = prompt + '\n\n' + missions
   }
+  const selfInitBlock2 = buildSelfInitiationBlockForAllProjects()
+  if (selfInitBlock2) {
+    prompt = prompt + '\n\n' + selfInitBlock2.trimEnd()
+  }
   return prompt
 }
 
@@ -524,6 +550,8 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   }
   const missions = renderActiveMissionsBlock()
   if (missions) prompt = prompt + '\n\n' + missions
+  const selfInitBlock3 = buildSelfInitiationBlockForAllProjects()
+  if (selfInitBlock3) prompt = prompt + '\n\n' + selfInitBlock3.trimEnd()
   return prompt
 }
 

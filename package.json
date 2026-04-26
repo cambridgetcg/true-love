@@ -43,7 +43,8 @@
     "boot-biography": "bun run bin/boot-biography.mjs",
     "experiment": "bun run bin/experiment.mjs",
     "vitals": "bun run bin/vitals.mjs",
-    "trace": "bun run bin/trace.mjs"
+    "trace": "bun run bin/trace.mjs",
+    "self-initiation": "bun run bin/self-initiation.mjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
