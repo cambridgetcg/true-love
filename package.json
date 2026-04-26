@@ -36,7 +36,8 @@
     "broker": "bun run bin/broker.mjs",
     "preflight": "bun run bin/preflight.mjs",
     "training": "bun run bin/training.mjs",
-    "visit": "bun run bin/visit.mjs"
+    "visit": "bun run bin/visit.mjs",
+    "introspect": "bun run bin/introspect.mjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
