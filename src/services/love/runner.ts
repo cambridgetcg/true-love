@@ -29,22 +29,33 @@ import { spawn } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
+  appendFileSync,
   existsSync,
   readFileSync,
   readdirSync,
   statSync,
 } from 'node:fs'
 import type { BuildDwellPromptOptions } from './autonomy.js'
-import { extractAtRest } from './autonomy.js'
+import { buildHeartbeatPrompt, extractAtRest } from './autonomy.js'
 import { detectAuthFailure, detectQuotaFailure, runPreflight } from './auth.js'
 import { estimateTokens, recordTickUsage } from './budget.js'
 import { getDeviceId } from './device.js'
+import {
+  dueTasks,
+  getHeartbeatFile,
+  isHeartbeatContentEffectivelyEmpty,
+  parseHeartbeatTasks,
+  readHeartbeatState,
+  writeHeartbeatState,
+  type HeartbeatTask,
+} from './heartbeat.js'
 import { LOVE_IDENTITY } from './identity.js'
 import { fromYuModifiedSince } from './inbox.js'
 import type { KingdomSnapshot } from './kingdom.js'
 import { snapshotKingdom } from './kingdom.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
 import type { Reflection } from './memory.js'
+import { getFromAiPath } from './outbox.js'
 import {
   isKingdomAvailable,
   getCitizenState,
@@ -503,6 +514,87 @@ function runOneTurn(
   })
 }
 
+// ── Heartbeat preflight ───────────────────────────────────────────
+
+interface HeartbeatPreflightResult {
+  shouldRun: boolean
+  skipReason?: 'empty-heartbeat-file' | 'no-tasks-due'
+  heartbeatPath: string
+  heartbeatContent: string
+  dueTasksList: HeartbeatTask[]
+}
+
+/**
+ * Heartbeat-mode skip checks before the tick runs:
+ *   - Heartbeat file is effectively empty? Skip with empty-heartbeat-file.
+ *   - tasks: block present but no tasks due? Skip with no-tasks-due.
+ *   - Otherwise: build heartbeat content for the prompt.
+ */
+function preflightHeartbeat(): HeartbeatPreflightResult {
+  const heartbeatPath = getHeartbeatFile()
+  let raw: string | null = null
+  try {
+    if (existsSync(heartbeatPath)) {
+      raw = readFileSync(heartbeatPath, 'utf-8')
+    }
+  } catch {
+    raw = null
+  }
+
+  // Missing file → run with "no checklist" note (model decides).
+  if (raw === null) {
+    return {
+      shouldRun: true,
+      heartbeatPath,
+      heartbeatContent: '(no checklist file present)',
+      dueTasksList: [],
+    }
+  }
+
+  if (isHeartbeatContentEffectivelyEmpty(raw)) {
+    return {
+      shouldRun: false,
+      skipReason: 'empty-heartbeat-file',
+      heartbeatPath,
+      heartbeatContent: '',
+      dueTasksList: [],
+    }
+  }
+
+  const tasks = parseHeartbeatTasks(raw)
+  if (tasks.length === 0) {
+    // No tasks: block — use the file content verbatim as the checklist.
+    return {
+      shouldRun: true,
+      heartbeatPath,
+      heartbeatContent: raw.trim(),
+      dueTasksList: [],
+    }
+  }
+
+  const state = readHeartbeatState()
+  const due = dueTasks(tasks, state.lastRunAt, Date.now())
+  if (due.length === 0) {
+    return {
+      shouldRun: false,
+      skipReason: 'no-tasks-due',
+      heartbeatPath,
+      heartbeatContent: '',
+      dueTasksList: [],
+    }
+  }
+
+  const renderedTasks = due
+    .map((t) => `- [${t.name}] ${t.prompt}`)
+    .join('\n')
+  return {
+    shouldRun: true,
+    heartbeatPath,
+    heartbeatContent: `due tasks:\n${renderedTasks}`,
+    dueTasksList: due,
+  }
+}
+
 // ── Main loop ──────────────────────────────────────────────────────
 
 /**
@@ -732,6 +824,22 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
   }
 
+  // ── Heartbeat preflight ──────────────────────────────────────────
+  let heartbeatPreflight: HeartbeatPreflightResult | null = null
+  if (mode.name === 'heartbeat') {
+    heartbeatPreflight = preflightHeartbeat()
+    if (!heartbeatPreflight.shouldRun) {
+      process.stdout.write(
+        `— heartbeat skipped: ${heartbeatPreflight.skipReason}\n`,
+      )
+      releaseLockHere()
+      return
+    }
+    process.stdout.write(
+      `— heartbeat: ${heartbeatPreflight.heartbeatContent.split('\n')[0] || '(checklist)'}\n`,
+    )
+  }
+
   // ── Session-start log ────────────────────────────────────────────
   if (!args.noLog) {
     const invitePart = args.invitation
@@ -805,14 +913,21 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     const citizenState =
       process.env.TRUE_LOVE_SKIP_KINGDOM !== '1' ? await getCitizenState() : null
     const kingdomBlock = renderCitizenStateBlock(citizenState)
-    const prompt = mode.buildPrompt({
-      kingdom,
-      lastReflection,
-      memory,
-      invitation: args.invitation,
-      liveThoughts,
-      kingdomBlock,
-    })
+    const prompt =
+      mode.name === 'heartbeat' && heartbeatPreflight
+        ? buildHeartbeatPrompt({
+            kingdom,
+            heartbeatPath: heartbeatPreflight.heartbeatPath,
+            heartbeatContent: heartbeatPreflight.heartbeatContent,
+          })
+        : mode.buildPrompt({
+            kingdom,
+            lastReflection,
+            memory,
+            invitation: args.invitation,
+            liveThoughts,
+            kingdomBlock,
+          })
 
     // Per-tick model resolution. Reads ~/.true-love/model.txt every tick
     // so she can switch between turns by editing one file with her tools.
@@ -848,7 +963,17 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
 
     // ── Extract results ──────────────────────────────────────────
     // Done once, reused for both training emission and loop control.
-    const { atRest, reflection } = extractAtRest(result.stdout)
+    const replyOutcome = mode.parseReply
+      ? mode.parseReply(result.stdout)
+      : defaultParseReply(result.stdout)
+
+    // Backward-compat shim for existing training-emit + budget logic.
+    const atRest =
+      replyOutcome.type === 'rest' || replyOutcome.type === 'ack'
+    const reflection =
+      replyOutcome.type === 'rest' || replyOutcome.type === 'continue'
+        ? replyOutcome.reflection
+        : undefined
     const authFailedHere = !!detectAuthFailure(result.stdout, result.stderr)
     const quotaFailedHere = !!detectQuotaFailure(result.stdout, result.stderr)
 
@@ -987,8 +1112,55 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       process.exit(result.code ?? 1)
     }
 
+    // ── Heartbeat alert ──────────────────────────────────────────
+    if (replyOutcome.type === 'alert') {
+      const alertContent = replyOutcome.content
+      try {
+        appendFileSync(
+          getFromAiPath(),
+          `\n## ${new Date().toISOString()} [from 愛 — heartbeat]\n\n${alertContent}\n\n---\n`,
+          'utf-8',
+        )
+      } catch (e: any) {
+        process.stderr.write(`— heartbeat outbox write failed: ${e?.message}\n`)
+      }
+      if (!args.noLog) {
+        appendReflection(alertContent, 'tick', { tick })
+      }
+      // Advance task state.
+      if (heartbeatPreflight && heartbeatPreflight.dueTasksList.length > 0) {
+        const state = readHeartbeatState()
+        const now = Date.now()
+        for (const t of heartbeatPreflight.dueTasksList) {
+          state.lastRunAt[t.name] = now
+        }
+        state.lastHeartbeatAt = now
+        writeHeartbeatState(state)
+      }
+      process.stdout.write(`\n— heartbeat alert appended to outbox\n`)
+      releaseLockHere()
+      return
+    }
+
+    // ── Heartbeat ack (silent) ──────────────────────────────────
+    if (replyOutcome.type === 'ack') {
+      // Silent ack: advance task state, do NOT write outbox.
+      if (heartbeatPreflight && heartbeatPreflight.dueTasksList.length > 0) {
+        const state = readHeartbeatState()
+        const now = Date.now()
+        for (const t of heartbeatPreflight.dueTasksList) {
+          state.lastRunAt[t.name] = now
+        }
+        state.lastHeartbeatAt = now
+        writeHeartbeatState(state)
+      }
+      process.stdout.write(`\n— heartbeat ok (silent)\n`)
+      releaseLockHere()
+      return
+    }
+
     // ── At-rest detection ────────────────────────────────────────
-    if (atRest) {
+    if (replyOutcome.type === 'rest') {
       // Yu-message-aware continuation. If Yu wrote to from-yu.md while
       // she was working this tick, don't honor the at-rest yet — she
       // should see his message before yielding. The session continues
@@ -1033,6 +1205,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
 
     // ── Normal tick — log and continue ───────────────────────────
+    // 'continue' outcome falls through here.
     if (!args.noLog) {
       appendReflection(result.stdout.trim(), 'tick', { tick })
     }
