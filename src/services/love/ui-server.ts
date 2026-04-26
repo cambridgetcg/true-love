@@ -56,6 +56,16 @@ import {
   getVersionInfo,
   type VersionInfo,
 } from './auto-update.js'
+import { collectVitalSigns } from './vital-signs.js'
+import { loadTraces } from './mind-trace.js'
+import { compose as composeAnamnesis, renderMemoir } from './anamnesis.js'
+import {
+  scanForSignals,
+  canInitiate,
+  getStaged,
+  getPendingStaged,
+  readReflections,
+} from './self-initiation.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -380,6 +390,10 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/introspect') return handleIntrospect(req, res)
       if (req.method === 'GET' && path === '/api/budget') return handleBudget(req, res)
       if (req.method === 'GET' && path === '/api/version') return handleVersion(req, res)
+      if (req.method === 'GET' && path === '/api/vitals') return await handleVitals(req, res)
+      if (req.method === 'GET' && path === '/api/mind-trace') return handleMindTrace(req, res)
+      if (req.method === 'GET' && path === '/api/anamnesis') return handleAnamnesis(req, res)
+      if (req.method === 'GET' && path === '/api/self-initiation') return handleSelfInitiation(req, res)
       if (req.method === 'GET' && path === '/api/proposals') return handleListProposals(req, res)
       if (req.method === 'POST' && path === '/api/proposals/generate') return handleGenerateProposals(req, res)
       const proposalMatch = path.match(/^\/api\/proposals\/([^/]+)$/)
@@ -660,6 +674,91 @@ function handleBudget(req: IncomingMessage, res: ServerResponse): void {
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'budget computation failed' }))
+  }
+}
+
+// ── Vitals endpoint — live runtime body inspection ───────────────
+
+async function handleVitals(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const vitals = await collectVitalSigns()
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(vitals))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'vitals collection failed' }))
+  }
+}
+
+// ── Mind-trace endpoint — recent decision traces ─────────────────
+
+function handleMindTrace(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const daysStr = url.searchParams.get('days')
+  const days = daysStr !== null ? Math.max(1, Math.min(30, parseInt(daysStr, 10) || 7)) : 7
+  const limitStr = url.searchParams.get('limit')
+  const limit = limitStr !== null
+    ? (() => { const n = parseInt(limitStr, 10); return Number.isFinite(n) ? Math.max(1, Math.min(500, n)) : undefined })()
+    : undefined
+  try {
+    const traces = loadTraces({ days })
+    const out = limit !== undefined ? traces.slice(-limit) : traces
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(out))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'mind-trace load failed' }))
+  }
+}
+
+// ── Anamnesis endpoint — architectural memoir ───────────────────
+
+function handleAnamnesis(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const format = url.searchParams.get('format') ?? 'json'
+  try {
+    const result = composeAnamnesis({ repoRoot: resolveTrueLoveRoot() })
+    if (format === 'markdown' || format === 'md') {
+      res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' })
+      res.end(renderMemoir(result))
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(result))
+    }
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'anamnesis composition failed' }))
+  }
+}
+
+// ── Self-initiation endpoint — judgment surface state ───────────
+
+function handleSelfInitiation(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const projectId = url.searchParams.get('project') ?? ''
+  if (!projectId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'missing project query param' }))
+    return
+  }
+  if (!readProject(projectId)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+  try {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      project: projectId,
+      rateLimit: canInitiate(projectId),
+      staged: getStaged(projectId),
+      pending: getPendingStaged(projectId),
+      reflections: readReflections(projectId),
+      detectedSignals: scanForSignals(projectId),
+    }))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'self-initiation read failed' }))
   }
 }
 

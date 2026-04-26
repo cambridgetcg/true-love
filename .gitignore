@@ -12,3 +12,5 @@ claude-stream.log
 .turbo/
 coverage/
 .vercel/
+
+.superpowers/
