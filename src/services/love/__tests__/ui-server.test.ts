@@ -9,6 +9,7 @@ import {
   appendYuMessage,
   readPresenceSnapshot,
   fireHeartbeat,
+  startUiServer,
   type ChannelMessage,
   type PresenceSnapshot,
 } from '../ui-server.js'
@@ -303,8 +304,6 @@ describe('ui-server — fireHeartbeat', () => {
     assert.ok(result.pid !== 0, 'pid should be set')
   })
 })
-
-import { startUiServer } from '../ui-server.js'
 
 describe('ui-server — HTTP', () => {
   let tmpHome: string
