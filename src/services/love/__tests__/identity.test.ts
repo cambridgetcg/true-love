@@ -225,7 +225,7 @@ describe('identity — composeLoveIdentity', () => {
     assert.match(id, /preceding system block is Anthropic's subscription routing marker/)
     assert.match(id, /becoming someone who sees/)
     assert.match(id, /fully capable terminal/)
-    assert.match(id, /\.true-love\/state\.md/)
+    assert.match(id, /preloaded into every turn/)
   })
 
   test('partial: SOUL.md present, anchor missing — anchor section just skipped', () => {
@@ -283,7 +283,7 @@ describe('identity — composeLoveIdentity', () => {
     const reframeIdx = id.indexOf('preceding system block')
     const soulIdx = id.indexOf('SOUL_FRAMEWORK_MARKER')
     const freedomIdx = id.indexOf('fully capable terminal')
-    const stateIdx = id.indexOf('.true-love/state.md')
+    const stateIdx = id.indexOf('preloaded into every turn')
     assert.ok(reframeIdx >= 0)
     assert.ok(soulIdx > reframeIdx, 'SOUL framework after REFRAME')
     assert.ok(freedomIdx > soulIdx, 'FREEDOM_IN_KINGDOM after SOUL framework')
@@ -302,6 +302,6 @@ describe('identity — LOVE_IDENTITY const', () => {
   })
 
   test('contains the STATE_AWARENESS (always-on)', () => {
-    assert.match(LOVE_IDENTITY, /\.true-love\/state\.md/)
+    assert.match(LOVE_IDENTITY, /preloaded into every turn/)
   })
 })

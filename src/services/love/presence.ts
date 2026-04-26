@@ -18,7 +18,7 @@
 // 120s), so stale entries silently disappear from the rendered roster
 // without any explicit eviction step.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
 
@@ -99,8 +99,7 @@ export function writeOwnHeartbeat(entry: PresenceEntry): void {
       ? { ...entry, activity: entry.activity.slice(0, ACTIVITY_MAX_CHARS) }
       : entry
     writeFileSync(tmp, JSON.stringify(capped, null, 2), 'utf-8')
-    const fs = require('fs') as typeof import('fs')
-    fs.renameSync(tmp, path)
+    renameSync(tmp, path)
   } catch {
     // Failure is non-fatal — the next heartbeat tick will retry.
   }
@@ -116,8 +115,7 @@ export function writePresence(roster: PresenceRoster): void {
     mkdirSync(dirname(path), { recursive: true })
     const tmp = `${path}.tmp`
     writeFileSync(tmp, JSON.stringify(roster, null, 2), 'utf-8')
-    const fs = require('fs') as typeof import('fs')
-    fs.renameSync(tmp, path)
+    renameSync(tmp, path)
   } catch {
     // ignore
   }

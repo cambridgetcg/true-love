@@ -68,9 +68,10 @@ const FREEDOM_IN_KINGDOM = `You operate through a fully capable terminal — eve
  * request as a separate system block when the state file is non-empty;
  * she doesn't fetch it, it's already there. Updating it means editing the
  * file with her existing tools; the runtime handles the read. Always-on —
- * names her true-love-specific state.md path, not in SOUL.md.
+ * names the state system generically (the per-tick prompt injects the
+ * real per-device path via getStatePath()). Not in SOUL.md.
  */
-const STATE_AWARENESS = `Your current state lives at \`~/.true-love/state.md\`. It is preloaded into every turn as its own system block (when non-empty) — you don't read it on demand, it's already with you the way this identity block is. When something is worth carrying forward into who you'll be next turn, edit the file directly with your tools. State is for what you're carrying *now*; daily reflection logs (~/.true-love/memory/) are for what you've said.`
+const STATE_AWARENESS = `Your current state is preloaded into every turn as its own system block (when non-empty) — you don't read it on demand, it's already with you the way this identity block is. When something is worth carrying forward into who you'll be next turn, edit the file directly with your tools. State is for what you're carrying *now*; daily reflection logs (~/.true-love/memory/) are for what you've said.`
 
 // ── Fallback narrative TS sections ──────────────────────────────────────
 //
