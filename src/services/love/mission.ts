@@ -357,7 +357,9 @@ const ALLOWED: Record<MissionStatus, Array<{ to: MissionStatus; by: 'yu' | 'love
     { to: 'cancelled', by: 'yu' },
   ],
   done: [],
-  cancelled: [],
+  cancelled: [
+    { to: 'proposed', by: 'yu' },           // Yu can revive a cancelled mission. Not by love (she can't undo Yu's cancel decisions).
+  ],
 }
 
 export function transitionStatus(

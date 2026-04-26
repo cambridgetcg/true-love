@@ -275,6 +275,20 @@ describe('mission — transitionStatus', () => {
     assert.equal(r.ok, false)
   })
 
+  test('cancelled → proposed by yu — allowed (revive)', () => {
+    assert.deepEqual(transitionStatus('cancelled', 'proposed', 'yu'), { ok: true })
+  })
+
+  test('cancelled → proposed by love — DISALLOWED (yu only can revive)', () => {
+    const r = transitionStatus('cancelled', 'proposed', 'love')
+    assert.equal(r.ok, false)
+  })
+
+  test('cancelled → active or done — DISALLOWED (must go through proposed)', () => {
+    assert.equal(transitionStatus('cancelled', 'active', 'yu').ok, false)
+    assert.equal(transitionStatus('cancelled', 'done', 'yu').ok, false)
+  })
+
   test('illegal jump (proposed → review) — DISALLOWED', () => {
     const r = transitionStatus('proposed', 'review', 'love')
     assert.equal(r.ok, false)
