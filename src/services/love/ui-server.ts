@@ -13,6 +13,17 @@ import { fileURLToPath } from 'node:url'
 import { getDeviceId } from './device.js'
 import { resolveLoveInstance } from './identity.js'
 import { getCitizenState } from './kingdom-citizen.js'
+import {
+  listProjects,
+  readProject,
+  registerProject,
+  getProjectChannels,
+  type Project,
+} from './project-registry.js'
+import {
+  tailThoughts,
+  type Thought,
+} from './thoughts-channel.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -117,6 +128,44 @@ export function appendYuMessage(text: string): string {
   const entry = `## ${ts} [from yu]\n\n${trimmed}\n\n---\n\n`
   appendFileSync(path, entry, 'utf-8')
   return ts
+}
+
+/**
+ * Per-project equivalent of appendYuMessage. Appends to the project's
+ * from-yu.md channel rather than the global one. Same canonical format.
+ */
+export function appendYuMessageToProject(projectId: string, text: string): string {
+  const trimmed = (text ?? '').trim()
+  if (!trimmed) throw new Error('empty message — cannot append')
+  const channels = getProjectChannels(projectId)
+  mkdirSync(dirname(channels.fromYu), { recursive: true })
+  const ts = new Date().toISOString()
+  const entry = `## ${ts} [from yu]\n\n${trimmed}\n\n---\n\n`
+  appendFileSync(channels.fromYu, entry, 'utf-8')
+  return ts
+}
+
+/**
+ * Per-project equivalent of readConversation.
+ */
+export function readProjectConversation(
+  projectId: string,
+  opts?: { since?: string },
+): ChannelMessage[] {
+  const channels = getProjectChannels(projectId)
+  const all: ChannelMessage[] = []
+  if (existsSync(channels.fromYu)) {
+    try { all.push(...parseChannelFile(readFileSync(channels.fromYu, 'utf-8'), 'yu')) } catch {}
+  }
+  if (existsSync(channels.fromAi)) {
+    try { all.push(...parseChannelFile(readFileSync(channels.fromAi, 'utf-8'), 'ai')) } catch {}
+  }
+  all.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+  if (opts?.since) {
+    const since = opts.since
+    return all.filter((m) => m.ts > since)
+  }
+  return all
 }
 
 // ── Presence snapshot ──────────────────────────────────────────────
@@ -243,6 +292,17 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)
       if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res)
       if (req.method === 'GET' && path === '/api/stream') return handleStream(req, res, sseClients)
+      if (req.method === 'GET' && path === '/api/projects') return handleListProjects(req, res)
+      if (req.method === 'POST' && path === '/api/projects') return await handleCreateProject(req, res)
+      const projMatch = path.match(/^\/api\/projects\/([^/]+)(\/.*)?$/)
+      if (projMatch) {
+        const projectId = projMatch[1]!
+        const sub = projMatch[2] ?? ''
+        if (req.method === 'GET' && sub === '') return handleGetProject(req, res, projectId)
+        if (req.method === 'GET' && sub === '/messages') return handleProjectMessages(req, res, projectId)
+        if (req.method === 'POST' && sub === '/say') return await handleProjectSay(req, res, projectId)
+        if (req.method === 'GET' && sub === '/thoughts') return handleProjectThoughts(req, res, projectId)
+      }
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('not found')
     } catch (err: any) {
@@ -457,4 +517,139 @@ function broadcastSse(clients: Set<ServerResponse>, event: string, data: string)
   for (const client of clients) {
     try { client.write(payload) } catch { clients.delete(client) }
   }
+}
+
+function handleListProjects(_req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(listProjects()))
+}
+
+async function handleCreateProject(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  let body = ''
+  for await (const chunk of req) {
+    body += chunk
+    if (body.length > 8192) {
+      req.resume()
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'request body too large' }))
+      return
+    }
+  }
+  let parsed: { id?: string; name?: string; root?: string; instance?: string; codeberg_url?: string }
+  try { parsed = JSON.parse(body) } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'invalid JSON' }))
+    return
+  }
+  const validInstances = ['alpha', 'beta', 'gamma'] as const
+  if (!parsed.id || !parsed.name || !parsed.root ||
+      !parsed.instance || !validInstances.includes(parsed.instance as typeof validInstances[number])) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'missing required field (id, name, root, instance)' }))
+    return
+  }
+  try {
+    const p = registerProject({
+      id: parsed.id,
+      name: parsed.name,
+      root: parsed.root,
+      instance: parsed.instance as 'alpha' | 'beta' | 'gamma',
+      ...(parsed.codeberg_url ? { codeberg_url: parsed.codeberg_url } : {}),
+    })
+    res.writeHead(201, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(p))
+  } catch (err: any) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'register failed' }))
+  }
+}
+
+function handleGetProject(_req: IncomingMessage, res: ServerResponse, projectId: string): void {
+  const p = readProject(projectId)
+  if (!p) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(p))
+}
+
+function handleProjectMessages(req: IncomingMessage, res: ServerResponse, projectId: string): void {
+  if (!readProject(projectId)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const since = url.searchParams.get('since') ?? undefined
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(readProjectConversation(projectId, { since })))
+}
+
+async function handleProjectSay(req: IncomingMessage, res: ServerResponse, projectId: string): Promise<void> {
+  if (!readProject(projectId)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+  let body = ''
+  const BODY_LIMIT = MAX_COMPOSE_CHARS + 1024
+  for await (const chunk of req) {
+    body += chunk
+    if (body.length > BODY_LIMIT) {
+      req.resume()
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'message too large' }))
+      return
+    }
+  }
+  let parsed: { text?: string; wake?: boolean }
+  try { parsed = JSON.parse(body) } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'invalid JSON' }))
+    return
+  }
+  const text = (parsed.text ?? '').trim()
+  if (!text) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'empty message' }))
+    return
+  }
+  if (text.length > MAX_COMPOSE_CHARS) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'message too large' }))
+    return
+  }
+  let ts: string
+  try { ts = appendYuMessageToProject(projectId, text) }
+  catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: err?.message ?? 'write failed' }))
+    return
+  }
+  let heartbeatPid: number | undefined
+  if (parsed.wake) {
+    try { heartbeatPid = fireHeartbeat({ reason: 'manual' }).pid } catch {}
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    ok: true,
+    messageTs: ts,
+    ...(heartbeatPid !== undefined ? { heartbeatPid } : {}),
+  }))
+}
+
+function handleProjectThoughts(req: IncomingMessage, res: ServerResponse, projectId: string): void {
+  if (!readProject(projectId)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const since = url.searchParams.get('since') ?? undefined
+  const limitStr = url.searchParams.get('limit')
+  const limit = limitStr ? Math.max(1, Math.min(1000, parseInt(limitStr, 10))) : undefined
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(tailThoughts(projectId, { since, limit })))
 }

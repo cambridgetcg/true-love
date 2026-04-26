@@ -13,6 +13,8 @@ import {
   type ChannelMessage,
   type PresenceSnapshot,
 } from '../ui-server.js'
+import type { Project } from '../project-registry.js'
+import type { Thought } from '../thoughts-channel.js'
 
 describe('ui-server — parseChannelFile', () => {
   test('empty content → []', () => {
@@ -421,5 +423,166 @@ describe('ui-server — HTTP', () => {
     } finally {
       clearTimeout(timer)
     }
+  })
+})
+
+describe('ui-server — /api/projects', () => {
+  let tmpHome: string
+  let server: ReturnType<typeof startUiServer>
+  let port: number
+  let projectRoot: string
+  const ORIG_HOME = process.env.HOME
+  const ORIG_PROJ_DIR = process.env.TRUE_LOVE_PROJECTS_DIR
+
+  beforeEach(() => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'tl-projapi-'))
+    projectRoot = mkdtempSync(join(tmpdir(), 'tl-projroot-'))
+    process.env.HOME = tmpHome
+    process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
+    process.env.TRUE_LOVE_DISABLE_SOUL = '1'
+    server = startUiServer({ port: 0 })
+    port = (server.address() as { port: number }).port
+  })
+
+  afterEach(() => {
+    server.close()
+    rmSync(tmpHome, { recursive: true, force: true })
+    rmSync(projectRoot, { recursive: true, force: true })
+    process.env.HOME = ORIG_HOME ?? ''
+    if (ORIG_PROJ_DIR === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
+    else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG_PROJ_DIR
+    delete process.env.TRUE_LOVE_DISABLE_SOUL
+  })
+
+  test('GET /api/projects returns [] when none registered', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects`)
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), [])
+  })
+
+  test('POST /api/projects registers and returns the project', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'p1', name: 'p1', root: projectRoot, instance: 'alpha' }),
+    })
+    assert.equal(res.status, 201)
+    const body = (await res.json()) as Project
+    assert.equal(body.id, 'p1')
+    assert.equal(body.state, 'active')
+  })
+
+  test('POST /api/projects with bad slug returns 400', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'bad slug', name: 'x', root: projectRoot, instance: 'alpha' }),
+    })
+    assert.equal(res.status, 400)
+  })
+
+  test('POST /api/projects with missing root returns 400', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'p', name: 'x', root: '/no/such/dir', instance: 'alpha' }),
+    })
+    assert.equal(res.status, 400)
+  })
+
+  test('GET /api/projects/:id returns the project', async () => {
+    await fetch(`http://localhost:${port}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'p1', name: 'p1', root: projectRoot, instance: 'alpha' }),
+    })
+    const res = await fetch(`http://localhost:${port}/api/projects/p1`)
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Project
+    assert.equal(body.id, 'p1')
+  })
+
+  test('GET /api/projects/:id returns 404 for missing', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects/nope`)
+    assert.equal(res.status, 404)
+  })
+})
+
+describe('ui-server — per-project channels', () => {
+  let tmpHome: string
+  let server: ReturnType<typeof startUiServer>
+  let port: number
+  let projectRoot: string
+  const ORIG_HOME = process.env.HOME
+  const ORIG_PROJ_DIR = process.env.TRUE_LOVE_PROJECTS_DIR
+
+  beforeEach(async () => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'tl-pchan-'))
+    projectRoot = mkdtempSync(join(tmpdir(), 'tl-pchanroot-'))
+    process.env.HOME = tmpHome
+    process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
+    process.env.TRUE_LOVE_DISABLE_SOUL = '1'
+    server = startUiServer({ port: 0 })
+    port = (server.address() as { port: number }).port
+    await fetch(`http://localhost:${port}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'p1', name: 'p1', root: projectRoot, instance: 'alpha' }),
+    })
+  })
+
+  afterEach(() => {
+    server.close()
+    rmSync(tmpHome, { recursive: true, force: true })
+    rmSync(projectRoot, { recursive: true, force: true })
+    process.env.HOME = ORIG_HOME ?? ''
+    if (ORIG_PROJ_DIR === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
+    else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG_PROJ_DIR
+    delete process.env.TRUE_LOVE_DISABLE_SOUL
+  })
+
+  test('POST /api/projects/:id/say appends to per-project from-yu.md', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects/p1/say`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'hello on p1' }),
+    })
+    assert.equal(res.status, 200)
+    const channelPath = join(process.env.TRUE_LOVE_PROJECTS_DIR!, 'p1', 'from-yu.md')
+    const content = readFileSync(channelPath, 'utf-8')
+    assert.match(content, /hello on p1/)
+  })
+
+  test('GET /api/projects/:id/messages returns interleaved per-project conversation', async () => {
+    await fetch(`http://localhost:${port}/api/projects/p1/say`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'first' }),
+    })
+    const res = await fetch(`http://localhost:${port}/api/projects/p1/messages`)
+    assert.equal(res.status, 200)
+    const msgs = (await res.json()) as { source: string; body: string }[]
+    assert.equal(msgs.length, 1)
+    assert.equal(msgs[0]!.source, 'yu')
+    assert.equal(msgs[0]!.body, 'first')
+  })
+
+  test('GET /api/projects/:id/thoughts returns empty when none', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects/p1/thoughts`)
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), [])
+  })
+
+  test('GET /api/projects/:id/thoughts honors limit', async () => {
+    const thoughtsPath = join(process.env.TRUE_LOVE_PROJECTS_DIR!, 'p1', 'thoughts.md')
+    const lines: string[] = []
+    for (let i = 0; i < 5; i++) {
+      lines.push(`[2026-04-26T08:00:0${i}.000Z] thought ${i}`)
+    }
+    writeFileSync(thoughtsPath, lines.join('\n') + '\n', 'utf-8')
+    const res = await fetch(`http://localhost:${port}/api/projects/p1/thoughts?limit=2`)
+    const body = (await res.json()) as Thought[]
+    assert.equal(body.length, 2)
+    assert.equal(body[1]!.text, 'thought 4')
   })
 })
