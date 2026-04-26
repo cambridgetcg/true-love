@@ -12,6 +12,8 @@ import {
   appendEvent,
   readEvents,
   transitionStatus,
+  statusToEventType,
+  writeMissionWithEvents,
   type Mission,
   type MissionStatus,
   type MissionEvent,
@@ -290,5 +292,174 @@ describe('mission — transitionStatus', () => {
   test('active → review by yu — DISALLOWED (love-only)', () => {
     const r = transitionStatus('active', 'review', 'yu')
     assert.equal(r.ok, false)
+  })
+})
+
+describe('mission — statusToEventType', () => {
+  test('active → review → marked-review', () => {
+    assert.equal(statusToEventType('active', 'review'), 'marked-review')
+  })
+
+  test('review → done → accepted-done', () => {
+    assert.equal(statusToEventType('review', 'done'), 'accepted-done')
+  })
+
+  test('any → cancelled → cancelled', () => {
+    assert.equal(statusToEventType('active', 'cancelled'), 'cancelled')
+    assert.equal(statusToEventType('proposed', 'cancelled'), 'cancelled')
+  })
+
+  test('active → blocked �� blocked', () => {
+    assert.equal(statusToEventType('active', 'blocked'), 'blocked')
+  })
+
+  test('review → active → sent-back', () => {
+    assert.equal(statusToEventType('review', 'active'), 'sent-back')
+  })
+
+  test('blocked → active → resumed', () => {
+    assert.equal(statusToEventType('blocked', 'active'), 'resumed')
+  })
+
+  test('accepted → active → started', () => {
+    assert.equal(statusToEventType('accepted', 'active'), 'started')
+  })
+
+  test('proposed → accepted → accepted', () => {
+    assert.equal(statusToEventType('proposed', 'accepted'), 'accepted')
+  })
+})
+
+describe('mission — writeMissionWithEvents', () => {
+  let tmpProjects: string
+  const ORIG = process.env.TRUE_LOVE_PROJECTS_DIR
+
+  beforeEach(() => {
+    tmpProjects = mkdtempSync(join(tmpdir(), 'tl-mwe-'))
+    process.env.TRUE_LOVE_PROJECTS_DIR = tmpProjects
+    mkdirSync(join(tmpProjects, 'p1', 'missions'), { recursive: true })
+  })
+
+  afterEach(() => {
+    rmSync(tmpProjects, { recursive: true, force: true })
+    if (ORIG === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
+    else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG
+  })
+
+  function makeMission(overrides?: Partial<Mission>): Mission {
+    return {
+      id: '2026-04-26-test',
+      project_id: 'p1',
+      origin: 'yu',
+      title: 'Test',
+      intent: 'Test intent',
+      status: 'proposed',
+      created_at: '2026-04-26T08:00:00.000Z',
+      updated_at: '2026-04-26T08:00:00.000Z',
+      artifacts: { commits: [], files: [], test_runs: [] },
+      ...overrides,
+    }
+  }
+
+  test('status change appends event', () => {
+    // Write initial mission at proposed
+    const m = makeMission({ status: 'proposed' })
+    writeMission(m)
+
+    // Transition to accepted
+    const updated = { ...m, status: 'accepted' as MissionStatus, updated_at: '2026-04-26T09:00:00.000Z' }
+    const result = writeMissionWithEvents(updated, 'yu')
+
+    assert.equal(result.eventAppended, true)
+    assert.equal(result.eventType, 'accepted')
+
+    // Verify event was written
+    const events = readEvents('p1', m.id)
+    assert.equal(events.length, 1)
+    assert.equal(events[0]!.type, 'accepted')
+    assert.equal(events[0]!.by, 'yu')
+  })
+
+  test('no status change does not append event', () => {
+    const m = makeMission({ status: 'active' })
+    writeMission(m)
+
+    // Write again with same status (different title)
+    const updated = { ...m, title: 'Updated title' }
+    const result = writeMissionWithEvents(updated, 'love')
+
+    assert.equal(result.eventAppended, false)
+    assert.equal(result.eventType, undefined)
+
+    // No events
+    const events = readEvents('p1', m.id)
+    assert.equal(events.length, 0)
+  })
+
+  test('illegal transition throws', () => {
+    const m = makeMission({ status: 'proposed' })
+    writeMission(m)
+
+    // Try proposed → review (illegal)
+    const updated = { ...m, status: 'review' as MissionStatus, updated_at: '2026-04-26T09:00:00.000Z' }
+    assert.throws(() => writeMissionWithEvents(updated, 'love'), /disallowed/)
+  })
+
+  test('new mission (no previous on disk) — no event, just writes', () => {
+    const m = makeMission({ status: 'proposed' })
+    const result = writeMissionWithEvents(m, 'yu')
+
+    assert.equal(result.eventAppended, false)
+    assert.ok(readMission('p1', m.id))
+  })
+
+  test('active → review by love — appends marked-review event', () => {
+    const m = makeMission({ status: 'active' })
+    writeMission(m)
+
+    const updated = { ...m, status: 'review' as MissionStatus, updated_at: '2026-04-26T10:00:00.000Z' }
+    const result = writeMissionWithEvents(updated, 'love')
+
+    assert.equal(result.eventAppended, true)
+    assert.equal(result.eventType, 'marked-review')
+
+    const events = readEvents('p1', m.id)
+    assert.equal(events.length, 1)
+    assert.equal(events[0]!.type, 'marked-review')
+    assert.equal(events[0]!.by, 'love')
+  })
+
+  test('note is included in event when provided', () => {
+    const m = makeMission({ status: 'active' })
+    writeMission(m)
+
+    const updated = { ...m, status: 'review' as MissionStatus, updated_at: '2026-04-26T10:00:00.000Z' }
+    writeMissionWithEvents(updated, 'love', { note: 'All tests green' })
+
+    const events = readEvents('p1', m.id)
+    assert.equal(events[0]!.note, 'All tests green')
+  })
+
+  test('sequential transitions produce correct event chain', () => {
+    const m = makeMission({ status: 'proposed' })
+    writeMission(m)
+
+    // proposed → accepted
+    const a = { ...m, status: 'accepted' as MissionStatus, updated_at: '2026-04-26T09:00:00.000Z' }
+    writeMissionWithEvents(a, 'yu')
+
+    // accepted → active
+    const b = { ...a, status: 'active' as MissionStatus, updated_at: '2026-04-26T09:01:00.000Z' }
+    writeMissionWithEvents(b, 'love')
+
+    // active → review
+    const c = { ...b, status: 'review' as MissionStatus, updated_at: '2026-04-26T09:02:00.000Z' }
+    writeMissionWithEvents(c, 'love')
+
+    const events = readEvents('p1', m.id)
+    assert.equal(events.length, 3)
+    assert.equal(events[0]!.type, 'accepted')
+    assert.equal(events[1]!.type, 'started')
+    assert.equal(events[2]!.type, 'marked-review')
   })
 })

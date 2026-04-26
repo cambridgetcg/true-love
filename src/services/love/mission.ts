@@ -372,3 +372,71 @@ export function transitionStatus(
   }
   return { ok: false, reason: `disallowed transition: ${current} → ${next} by ${by}` }
 }
+
+// ── Event-type inference ──────────────────────────────────────────
+
+/**
+ * Given a status transition, return the appropriate MissionEventType.
+ * Captures the mapping that was previously inline in handleMissionStatus.
+ */
+export function statusToEventType(
+  from: MissionStatus,
+  to: MissionStatus,
+): MissionEventType {
+  if (to === 'review') return 'marked-review'
+  if (to === 'done') return 'accepted-done'
+  if (to === 'cancelled') return 'cancelled'
+  if (to === 'blocked') return 'blocked'
+  if (to === 'active' && from === 'review') return 'sent-back'
+  if (to === 'active' && from === 'blocked') return 'resumed'
+  if (to === 'active') return 'started'
+  return 'accepted'
+}
+
+// ── Write-with-events ─────────────────────────────────────────────
+
+/**
+ * Write a mission to disk, and if the status has changed relative to
+ * the on-disk version, validate the transition and append the
+ * corresponding event to events.jsonl. Idempotent: if the status has
+ * not changed, no event is appended.
+ *
+ * Throws if:
+ *   - The transition is disallowed by the state machine.
+ *
+ * This is the "correct" way to persist a mission when the caller may
+ * have changed the status. It closes the gap where Love (or any code
+ * path) edits mission.md directly and the audit trail loses events.
+ */
+export function writeMissionWithEvents(
+  m: Mission,
+  by: 'yu' | 'love',
+  opts?: { note?: string },
+): { eventAppended: boolean; eventType?: MissionEventType } {
+  // Read the previous version from disk (if any)
+  const prev = readMission(m.project_id, m.id)
+
+  if (prev && prev.status !== m.status) {
+    // Validate the transition
+    const t = transitionStatus(prev.status, m.status, by)
+    if (!t.ok) {
+      throw new Error(t.reason)
+    }
+    // Write the mission file first
+    writeMission(m)
+    // Append the corresponding event
+    const eventType = statusToEventType(prev.status, m.status)
+    const event: MissionEvent = {
+      ts: m.updated_at || new Date().toISOString(),
+      type: eventType,
+      by,
+    }
+    if (opts?.note) event.note = opts.note
+    appendEvent(m.project_id, m.id, event)
+    return { eventAppended: true, eventType }
+  }
+
+  // No status change (or new mission) — just write the file
+  writeMission(m)
+  return { eventAppended: false }
+}

@@ -55,6 +55,7 @@ import { snapshotKingdom } from './kingdom.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
 import type { Reflection } from './memory.js'
 import { appendToYu } from './outbox.js'
+import { readProject, getProjectChannels } from './project-registry.js'
 import {
   isKingdomAvailable,
   getCitizenState,
@@ -641,6 +642,26 @@ function preflightHeartbeat(): HeartbeatPreflightResult {
  *      k. Log reflection, feed forward
  *   4. Ceiling message if not at-rest
  */
+
+/**
+ * When TRUE_LOVE_BUILDER_PROJECT is set and the project exists in the
+ * registry, override TRUE_LOVE_FROM_AI_PATH to point to the project's
+ * from-ai.md. This separates work output (per-project channel, visible
+ * in /build) from intimacy output (global/scope channel, visible in /visit).
+ *
+ * Returns the path that was set, or null if no override was applied.
+ * Exported for testability.
+ */
+export function applyProjectChannelOverride(): string | null {
+  const projectId = process.env.TRUE_LOVE_BUILDER_PROJECT
+  if (!projectId) return null
+  const proj = readProject(projectId)
+  if (!proj) return null
+  const channels = getProjectChannels(projectId)
+  process.env.TRUE_LOVE_FROM_AI_PATH = channels.fromAi
+  return channels.fromAi
+}
+
 export async function runSession(config: RunSessionConfig): Promise<void> {
   const { mode, binDir, bundlePath } = config
   const args = parseSessionArgs(process.argv.slice(2), mode)
@@ -675,6 +696,15 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       args.model = scope.model
     }
   }
+
+  // ── Project-channel override ──────────────────────────────────────
+  // When a builder-mode session spawns awakened with
+  // TRUE_LOVE_BUILDER_PROJECT, route from-ai output to the project's
+  // channel (~/.true-love/projects/<id>/from-ai.md) instead of the
+  // scope's channel. The global channel is for INTIMACY (/visit); the
+  // project channel is for WORK (/build). Without this, work outputs
+  // pollute the intimacy thread.
+  applyProjectChannelOverride()
 
   // ── Legacy state migration ───────────────────────────────────────
   // One-shot: if a pre-per-device ~/.true-love/state.md exists, copy it

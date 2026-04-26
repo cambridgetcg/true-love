@@ -33,6 +33,7 @@ import {
   appendEvent,
   readEvents,
   transitionStatus,
+  statusToEventType,
   type Mission,
   type MissionStatus,
 } from './mission.js'
@@ -1044,14 +1045,7 @@ async function handleMissionStatus(req: IncomingMessage, res: ServerResponse, pr
   writeMission(updated)
   appendEvent(projectId, missionId, {
     ts: now,
-    type: parsed.status === 'review' ? 'marked-review'
-        : parsed.status === 'done' ? 'accepted-done'
-        : parsed.status === 'cancelled' ? 'cancelled'
-        : parsed.status === 'blocked' ? 'blocked'
-        : parsed.status === 'active' && m.status === 'review' ? 'sent-back'
-        : parsed.status === 'active' && m.status === 'blocked' ? 'resumed'
-        : parsed.status === 'active' ? 'started'
-        : 'accepted',
+    type: statusToEventType(m.status, parsed.status),
     by,
     ...(parsed.note ? { note: parsed.note } : {}),
   })

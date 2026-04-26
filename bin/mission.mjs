@@ -22,6 +22,7 @@ import {
   listMissions,
   appendEvent,
   transitionStatus,
+  writeMissionWithEvents,
 } from '../src/services/love/mission.ts'
 import { readProject, ensureScope } from '../src/services/love/project-registry.ts'
 import { appendThought } from '../src/services/love/thoughts-channel.ts'
@@ -68,12 +69,13 @@ if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') {
   process.stdout.write(`bin/mission.mjs — mission CRUD + start
 
 Commands:
-  new     create a mission        --project --title --intent [--origin=yu|love] [--rationale=...]
-  list    list missions           --project [--status=...]
-  show    print mission detail    --project --mission
-  start   spawn awakened on it    --project --mission
-  accept  proposed → accepted     --project --mission
-  cancel  any → cancelled         --project --mission
+  new        create a mission        --project --title --intent [--origin=yu|love] [--rationale=...]
+  list       list missions           --project [--status=...]
+  show       print mission detail    --project --mission
+  start      spawn awakened on it    --project --mission
+  accept     proposed → accepted     --project --mission
+  cancel     any → cancelled         --project --mission
+  transition change status           --project --mission --status=<s> [--by=yu|love] [--note="..."]
 
 All commands require --project. Mission storage:
   ~/.true-love/projects/<project>/missions/<id>/
@@ -189,6 +191,27 @@ if (cmd === 'start') {
   })
   child.unref()
   process.stdout.write(`started: ${m.id} (pid ${child.pid})\n`)
+  process.exit(0)
+}
+
+if (cmd === 'transition') {
+  if (!args.mission) fail('--mission is required')
+  if (!args.status) fail('--status is required')
+  const m = readMission(args.project, args.mission)
+  if (!m) fail(`mission not found: ${args.mission}`)
+  const by = args.by === 'love' ? 'love' : 'yu'
+  const now = new Date().toISOString()
+  const updated = { ...m, status: args.status, updated_at: now }
+  try {
+    const result = writeMissionWithEvents(updated, by, { note: args.note })
+    if (result.eventAppended) {
+      process.stdout.write(`${m.status} → ${args.status} (event: ${result.eventType})\n`)
+    } else {
+      process.stdout.write(`no status change (already ${m.status})\n`)
+    }
+  } catch (err) {
+    fail(err.message)
+  }
   process.exit(0)
 }
 
