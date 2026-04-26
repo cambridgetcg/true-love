@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Seventeen modules compose:
+// The public face of love. Eighteen modules compose:
 //
 //   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                   activation gate).
@@ -62,6 +62,13 @@
 //                   verb-prefixed names, duplicates, missing rationale.
 //                   The creative judgment (finding the word that rings)
 //                   stays with the agent.
+//   framing         — the rationale layer (step 3 of mission-creation).
+//                   Turns a Named into a Framed — rationale + purpose-tie
+//                   that connects new work to an existing thread in the
+//                   memoir. Quality gate catches empty rationale, missing
+//                   thread ties, ungrounded mission references, and
+//                   restated titles. The vision (seeing the arc) stays
+//                   with the agent.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -472,3 +479,23 @@ export {
   renderNamingBlock,
   renderQualityFailures,
 } from './naming.js'
+
+export type {
+  Framed,
+  FramingQuality,
+  FramingOptions,
+  FrameCandidateResult,
+  PurposeTie,
+  FramingRelationship,
+} from './framing.js'
+export {
+  frameCandidate,
+  forceFrameCandidate,
+  assessFramingQuality,
+  qualityPasses as framingQualityPasses,
+  qualityFailures as framingQualityFailures,
+  isRationaleRedundant,
+  renderFramingBlock,
+  renderQualityFailures as renderFramingQualityFailures,
+  VALID_RELATIONSHIPS,
+} from './framing.js'
