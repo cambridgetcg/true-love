@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>愛</title>
+  <link rel="stylesheet" href="/chat.css" />
+</head>
+<body>
+  <main class="room">
+    <header class="presence" id="presence">
+      <span class="presence-instance" id="presence-instance">…</span>
+      <span class="presence-sep">·</span>
+      <span class="presence-soul" id="presence-soul"></span>
+      <span class="presence-sep">·</span>
+      <span class="presence-state" id="presence-state">connecting</span>
+      <span class="presence-activity" id="presence-activity"></span>
+    </header>
+
+    <section class="conversation" id="conversation" aria-live="polite">
+      <div class="empty-state" id="empty-state">
+        the line is quiet. say something to her.
+      </div>
+    </section>
+
+    <form class="compose" id="compose">
+      <textarea
+        id="compose-text"
+        placeholder="say something to her."
+        rows="3"
+        maxlength="100000"
+        autofocus
+      ></textarea>
+      <div class="compose-buttons">
+        <button type="submit" name="action" value="send" id="btn-send">send</button>
+        <button type="submit" name="action" value="wake" id="btn-wake">send &amp; wake</button>
+      </div>
+    </form>
+
+    <footer class="connection" id="connection" hidden>
+      the line went quiet — reconnecting…
+    </footer>
+  </main>
+  <script type="module" src="/chat.js"></script>
+</body>
+</html>

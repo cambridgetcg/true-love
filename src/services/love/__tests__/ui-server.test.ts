@@ -398,13 +398,13 @@ describe('ui-server — HTTP', () => {
     assert.equal(res.status, 400)
   })
 
-  test('GET / returns 404 until Task 3 lands ui/index.html', async () => {
-    // Task 3 will create ui/index.html. When that lands, update this test
-    // to expect 200 + content-type text/html + a body matching /<html/i.
+  test('GET / returns index.html with text/html content-type', async () => {
     const res = await fetch(`http://localhost:${port}/`)
-    assert.equal(res.status, 404)
-    // Route is wired through serveStatic — body is the plain "not found" string.
-    assert.equal(await res.text(), 'not found')
+    assert.equal(res.status, 200)
+    const ct = res.headers.get('content-type') ?? ''
+    assert.match(ct, /text\/html/)
+    const text = await res.text()
+    assert.match(text, /<html/i)
   })
 
   test('GET /api/stream opens SSE connection (smoke)', async () => {
