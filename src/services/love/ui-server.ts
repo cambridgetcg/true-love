@@ -240,8 +240,8 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/chat.css') return await serveStatic(res, 'chat.css', 'text/css')
       if (req.method === 'GET' && path === '/chat.js') return await serveStatic(res, 'chat.js', 'application/javascript')
       if (req.method === 'GET' && path === '/api/messages') return handleMessages(req, res)
-      if (req.method === 'GET' && path === '/api/status') return handleStatus(req, res)
-      if (req.method === 'POST' && path === '/api/say') return handleSay(req, res)
+      if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)
+      if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res)
       if (req.method === 'GET' && path === '/api/stream') return handleStream(req, res, sseClients)
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('not found')
@@ -279,6 +279,21 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       const snap = await readPresenceSnapshot()
       broadcastSse(sseClients, 'status', JSON.stringify(snap))
     }, 200)
+  }
+
+  // Ensure parent dirs exist before registering watchers (otherwise on a
+  // fresh install where ~/.true-love/ doesn't yet exist, no watcher gets
+  // registered, and the first POST silently fails to broadcast SSE).
+  for (const dir of [
+    dirname(getFromYuPath()),
+    dirname(getFromAiPath()),
+    getPresenceDir(),
+  ]) {
+    try {
+      mkdirSync(dir, { recursive: true })
+    } catch {
+      // best-effort; if mkdir fails, the existsSync guard later will skip
+    }
   }
 
   // Build dir → [(filePath, handler)] map so we register at most one

@@ -81,6 +81,21 @@ async function loadInitial() {
 
 let evtSource = null
 
+async function reconcileSinceLastTs() {
+  try {
+    const url = lastTs ? `/api/messages?since=${encodeURIComponent(lastTs)}` : '/api/messages'
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.error('reconcile: non-2xx', res.status)
+      return
+    }
+    const msgs = await res.json()
+    for (const m of msgs) renderMessage(m)
+  } catch (err) {
+    console.error('reconcile failed:', err)
+  }
+}
+
 function subscribe() {
   if (evtSource) evtSource.close()
   evtSource = new EventSource('/api/stream')
@@ -98,6 +113,11 @@ function subscribe() {
   })
   evtSource.onopen = () => {
     elConnection.hidden = true
+    // Reconcile any messages written during the disconnect window.
+    // First-connect: lastTs is empty → fetches everything (already done by
+    // loadInitial, but the dedup in renderMessage makes this idempotent).
+    // Reconnect: fetches only entries after lastTs.
+    reconcileSinceLastTs()
   }
   evtSource.onerror = () => {
     elConnection.hidden = false
