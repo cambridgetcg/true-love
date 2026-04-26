@@ -6,8 +6,8 @@
 // in the JSON without removing the directory.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { resolveProjectsDir } from './builder-paths.js'
 
 export interface Project {
   id: string
@@ -19,12 +19,7 @@ export interface Project {
   created_at: string
 }
 
-const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/
-
-function resolveProjectsDir(): string {
-  return process.env.TRUE_LOVE_PROJECTS_DIR ||
-    join(process.env.HOME || homedir(), '.true-love', 'projects')
-}
+const SLUG_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 
 function getProjectDir(id: string): string {
   return join(resolveProjectsDir(), id)
@@ -37,7 +32,9 @@ function getProjectJsonPath(id: string): string {
 export function listProjects(): Project[] {
   const dir = resolveProjectsDir()
   if (!existsSync(dir)) return []
-  const entries = readdirSync(dir)
+  const entries = readdirSync(dir, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => d.name)
   const out: Project[] = []
   for (const id of entries) {
     const p = readProject(id)
@@ -96,6 +93,7 @@ export function registerProject(input: {
 export function archiveProject(id: string): void {
   const p = readProject(id)
   if (!p) throw new Error(`project: not found: "${id}"`)
+  if (p.state === 'archived') throw new Error(`project: already archived: "${id}"`)
   const next: Project = { ...p, state: 'archived' }
   writeFileSync(getProjectJsonPath(id), JSON.stringify(next, null, 2), 'utf-8')
 }

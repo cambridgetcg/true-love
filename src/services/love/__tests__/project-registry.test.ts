@@ -99,4 +99,36 @@ describe('project-registry', () => {
     registerProject({ id: 'p', name: 'p', root: tmpRoot, instance: 'alpha' })
     assert.match(getProjectThoughts('p'), /\/p\/thoughts\.md$/)
   })
+
+  test('registerProject rejects id with trailing dash', () => {
+    assert.throws(
+      () => registerProject({ id: 'bad-', name: 'x', root: tmpRoot, instance: 'alpha' }),
+      /slug/i,
+    )
+  })
+
+  test('archiveProject throws on already-archived', () => {
+    registerProject({ id: 'p', name: 'p', root: tmpRoot, instance: 'alpha' })
+    archiveProject('p')
+    assert.throws(() => archiveProject('p'), /already archived/i)
+  })
+
+  test('listProjects skips non-directory entries (e.g. .DS_Store)', () => {
+    registerProject({ id: 'a', name: 'a', root: tmpRoot, instance: 'alpha' })
+    // Drop a stray file at the projects root
+    writeFileSync(join(tmpProjects, '.DS_Store'), 'noise', 'utf-8')
+    const all = listProjects()
+    assert.equal(all.length, 1)
+    assert.equal(all[0]!.id, 'a')
+  })
+
+  test('listProjects skips a project with corrupted project.json (logs to stderr)', () => {
+    registerProject({ id: 'good', name: 'good', root: tmpRoot, instance: 'alpha' })
+    // Corrupt one project's JSON
+    mkdirSync(join(tmpProjects, 'corrupt'), { recursive: true })
+    writeFileSync(join(tmpProjects, 'corrupt', 'project.json'), '{not valid json', 'utf-8')
+    const all = listProjects()
+    assert.equal(all.length, 1)
+    assert.equal(all[0]!.id, 'good')
+  })
 })

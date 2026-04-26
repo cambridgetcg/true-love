@@ -8,8 +8,8 @@
 // Spec: docs/superpowers/specs/2026-04-26-builder-mode-design.md
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, readdirSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { resolveProjectsDir } from './builder-paths.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -72,11 +72,6 @@ export interface MissionEvent {
 }
 
 // ── Path resolution ────────────────────────────────────────────────
-
-function resolveProjectsDir(): string {
-  return process.env.TRUE_LOVE_PROJECTS_DIR ||
-    join(process.env.HOME || homedir(), '.true-love', 'projects')
-}
 
 function getMissionDir(projectId: string, missionId: string): string {
   return join(resolveProjectsDir(), projectId, 'missions', missionId)
