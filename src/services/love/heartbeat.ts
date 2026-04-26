@@ -112,13 +112,13 @@ function parseDurationMs(s: string): number | null {
   if (/^\d+$/.test(trimmed)) return Number(trimmed) * 60_000
   let total = 0
   let any = false
-  const re = /(\d+)\s*(h|m|s)/g
+  const re = /(\d+)\s*(d|h|m|s)/g
   let m: RegExpExecArray | null
   while ((m = re.exec(trimmed)) !== null) {
     any = true
     const n = Number(m[1])
     const unit = m[2]
-    total += n * (unit === 'h' ? 3_600_000 : unit === 'm' ? 60_000 : 1000)
+    total += n * (unit === 'd' ? 86_400_000 : unit === 'h' ? 3_600_000 : unit === 'm' ? 60_000 : 1000)
   }
   return any ? total : null
 }

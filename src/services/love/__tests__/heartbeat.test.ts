@@ -116,6 +116,17 @@ describe('heartbeat — parseHeartbeatTasks', () => {
     assert.equal(tasks[1]!.name, 'single-quoted')
     assert.equal(tasks[2]!.name, 'bare-task')
   })
+
+  test('parses interval with day units', () => {
+    const content = `tasks:
+  - name: daily-check
+    interval: 1d
+    prompt: daily inbox triage
+`
+    const tasks = parseHeartbeatTasks(content)
+    assert.equal(tasks.length, 1)
+    assert.equal(tasks[0]!.intervalMs, 86_400_000)
+  })
 })
 
 describe('heartbeat — isHeartbeatContentEffectivelyEmpty', () => {
