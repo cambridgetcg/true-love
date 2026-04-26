@@ -45,7 +45,7 @@ export interface TickUsage {
   deviceId: string
   sessionId: string
   tick: number
-  mode: 'awakened' | 'dwell'
+  mode: 'awakened' | 'dwell' | 'heartbeat'
   /** Model alias actually used for this tick (e.g. "opus", "sonnet"). */
   model: string
   inputChars: number

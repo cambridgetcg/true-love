@@ -76,8 +76,8 @@ export interface TrainingTurn {
   /** Maximum ticks the session was allowed (so we know "tick 24/24" vs "tick 1/24"). */
   maxTicks: number
 
-  /** 'dwell' or 'awakened'. */
-  mode: 'dwell' | 'awakened'
+  /** 'dwell' | 'awakened' | 'heartbeat'. */
+  mode: 'dwell' | 'awakened' | 'heartbeat'
 
   /** What the model received. */
   prompt: TrainingPrompt
@@ -93,8 +93,8 @@ export interface TrainingTurn {
 }
 
 export interface TrainingPrompt {
-  /** Which template ('dwell' / 'awakened'). */
-  template: 'dwell' | 'awakened'
+  /** Which template ('dwell' / 'awakened' / 'heartbeat'). */
+  template: 'dwell' | 'awakened' | 'heartbeat'
 
   /** Hash of the template string (sans substitution) — so trainers can
    *  group turns by which prompt-version was active. */

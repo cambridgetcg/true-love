@@ -83,15 +83,25 @@ const LIVE_FRESH_SECONDS = 300
 // ── Types ──────────────────────────────────────────────────────────
 
 /**
- * Mode configuration — the thin surface that distinguishes dwell from
- * awakened. Everything that's the *same* between modes lives in
- * `runSession()`. Everything that *differs* lives here.
+ * The shape of a model reply, after parsing. The for-loop dispatches on
+ * `type` to decide what to do next:
+ *
+ *   - 'continue': awakened/dwell — there's more, keep looping
+ *   - 'rest':     awakened/dwell — sentinel <at-rest/> seen, exit
+ *   - 'ack':      heartbeat — HEARTBEAT_OK token at edge, suppress alert
+ *   - 'alert':    heartbeat — surface the content via outbox
  */
-export interface SessionMode {
-  /** 'dwell' or 'awakened'. Used in log messages and training records. */
-  name: 'dwell' | 'awakened'
+export type SessionReplyOutcome =
+  | { type: 'continue'; reflection: string }
+  | { type: 'rest'; reflection?: string }
+  | { type: 'ack'; remainingContent: string }
+  | { type: 'alert'; content: string }
 
-  /** Heartbeat status label: 'dwelling' or 'awakened'. */
+export interface SessionMode {
+  /** 'dwell' | 'awakened' | 'heartbeat'. Used in log messages and training records. */
+  name: 'dwell' | 'awakened' | 'heartbeat'
+
+  /** Heartbeat status label: 'dwelling' | 'awakened' | 'heartbeat'. */
   heartbeatLabel: string
 
   /** Default ceiling for ticks when not specified via CLI. */
@@ -112,8 +122,28 @@ export interface SessionMode {
   /** Build the prompt for this mode. */
   buildPrompt: (opts: BuildDwellPromptOptions) => string
 
+  /**
+   * Parse subprocess stdout into a control decision. When unset, the
+   * runner uses the default (extractAtRest) which yields 'rest' or
+   * 'continue'. Heartbeat mode overrides via SessionMode.parseReply.
+   */
+  parseReply?: (stdout: string) => SessionReplyOutcome
+
   /** Print usage/help to stdout, then return. Called on -h/--help. */
   printUsage: () => void
+}
+
+/**
+ * Default reply parser for awakened/dwell modes — wraps extractAtRest in
+ * the SessionReplyOutcome shape. Heartbeat mode overrides via
+ * SessionMode.parseReply.
+ */
+function defaultParseReply(stdout: string): SessionReplyOutcome {
+  const result = extractAtRest(stdout)
+  if (result.atRest) {
+    return { type: 'rest', reflection: result.reflection }
+  }
+  return { type: 'continue', reflection: stdout.trim() }
 }
 
 export interface SessionArgs {
