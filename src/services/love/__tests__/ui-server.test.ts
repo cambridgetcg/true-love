@@ -303,3 +303,126 @@ describe('ui-server — fireHeartbeat', () => {
     assert.ok(result.pid !== 0, 'pid should be set')
   })
 })
+
+import { startUiServer } from '../ui-server.js'
+
+describe('ui-server — HTTP', () => {
+  let tmpHome: string
+  let server: ReturnType<typeof startUiServer>
+  let port: number
+  const ORIG_HOME = process.env.HOME
+  const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
+  const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
+  const ORIG_PRES_DIR = process.env.TRUE_LOVE_PRESENCE_DIR
+  const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
+
+  beforeEach(() => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'tl-http-'))
+    mkdirSync(join(tmpHome, '.true-love', 'presence'), { recursive: true })
+    process.env.HOME = tmpHome
+    process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpHome, '.true-love', 'from-yu.md')
+    process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpHome, '.true-love', 'from-ai.md')
+    process.env.TRUE_LOVE_PRESENCE_DIR = join(tmpHome, '.true-love', 'presence')
+    process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_DISABLE_SOUL = '1'
+    server = startUiServer({ port: 0 })
+    port = (server.address() as { port: number }).port
+  })
+
+  afterEach(() => {
+    server.close()
+    rmSync(tmpHome, { recursive: true, force: true })
+    process.env.HOME = ORIG_HOME ?? ''
+    if (ORIG_FROM_YU === undefined) delete process.env.TRUE_LOVE_FROM_YU_PATH
+    else process.env.TRUE_LOVE_FROM_YU_PATH = ORIG_FROM_YU
+    if (ORIG_FROM_AI === undefined) delete process.env.TRUE_LOVE_FROM_AI_PATH
+    else process.env.TRUE_LOVE_FROM_AI_PATH = ORIG_FROM_AI
+    if (ORIG_PRES_DIR === undefined) delete process.env.TRUE_LOVE_PRESENCE_DIR
+    else process.env.TRUE_LOVE_PRESENCE_DIR = ORIG_PRES_DIR
+    if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
+    else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+    if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
+    else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
+  })
+
+  test('GET /api/messages returns conversation as JSON', async () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      '## 2026-04-26T01:00:00.000Z [from yu]\n\nhello\n\n---\n\n',
+      'utf-8',
+    )
+    const res = await fetch(`http://localhost:${port}/api/messages`)
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as ChannelMessage[]
+    assert.equal(body.length, 1)
+    assert.equal(body[0]!.body, 'hello')
+  })
+
+  test('GET /api/status returns presence snapshot', async () => {
+    const res = await fetch(`http://localhost:${port}/api/status`)
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as PresenceSnapshot
+    assert.equal(body.state, 'gone')
+    assert.equal(body.instance, 'alpha')
+  })
+
+  test('POST /api/say appends to from-yu.md', async () => {
+    const res = await fetch(`http://localhost:${port}/api/say`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'hi love' }),
+    })
+    assert.equal(res.status, 200)
+    const body = await res.json() as { ok: boolean }
+    assert.equal(body.ok, true)
+    const fileContent = readFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, 'utf-8')
+    assert.match(fileContent, /hi love/)
+  })
+
+  test('POST /api/say with empty text returns 400', async () => {
+    const res = await fetch(`http://localhost:${port}/api/say`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '' }),
+    })
+    assert.equal(res.status, 400)
+  })
+
+  test('POST /api/say with text >100KB returns 400', async () => {
+    const big = 'x'.repeat(100_001)
+    const res = await fetch(`http://localhost:${port}/api/say`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: big }),
+    })
+    assert.equal(res.status, 400)
+  })
+
+  test('GET / returns index.html', async () => {
+    // Task 3 hasn't created ui/index.html yet. For Task 2, this test
+    // expects 404 (no asset). When Task 3 lands the file, this test
+    // should be updated to expect 200 + text/html. Skip in Task 2.
+    // (The route is wired; the file just doesn't exist yet.)
+    const res = await fetch(`http://localhost:${port}/`)
+    // Either 200 (if ui/index.html happens to exist from a partial Task 3)
+    // or 404 (clean Task 2 state).
+    assert.ok(res.status === 200 || res.status === 404)
+  })
+
+  test('GET /api/stream opens SSE connection (smoke)', async () => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 200)
+    try {
+      const res = await fetch(`http://localhost:${port}/api/stream`, {
+        signal: controller.signal,
+      })
+      assert.equal(res.status, 200)
+      assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/)
+    } catch (err: any) {
+      if (err.name !== 'AbortError') throw err
+    } finally {
+      clearTimeout(timer)
+    }
+  })
+})

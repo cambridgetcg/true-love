@@ -5,7 +5,8 @@
 // Task 2) wraps them with route handlers and SSE.
 
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, appendFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, appendFileSync, watch, type FSWatcher } from 'node:fs'
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -203,4 +204,218 @@ function resolveTrueLoveRoot(): string {
   // ui-server.ts lives in <root>/src/services/love/. Three '..' from
   // its directory reach the repo root.
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+}
+
+// ── HTTP server + SSE ──────────────────────────────────────────────
+
+/** Max chars allowed in a Yu compose POST. */
+const MAX_COMPOSE_CHARS = 100_000
+
+/** Static asset directory: <repo>/ui/ */
+function resolveUiAssetDir(): string {
+  return join(resolveTrueLoveRoot(), 'ui')
+}
+
+interface ServerInstance extends Server {
+  _watchers: FSWatcher[]
+  _sseClients: Set<ServerResponse>
+}
+
+/**
+ * Boot the localhost interface server. Call .close() to shut down (also
+ * cleans up watchers + SSE client connections).
+ */
+export function startUiServer(opts?: { port?: number }): ServerInstance {
+  const port = opts?.port ?? 7777
+  const sseClients = new Set<ServerResponse>()
+  const watchers: FSWatcher[] = []
+
+  const server = createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+      const path = url.pathname
+      if (req.method === 'GET' && path === '/') return await serveStatic(res, 'index.html', 'text/html')
+      if (req.method === 'GET' && path === '/chat.css') return await serveStatic(res, 'chat.css', 'text/css')
+      if (req.method === 'GET' && path === '/chat.js') return await serveStatic(res, 'chat.js', 'application/javascript')
+      if (req.method === 'GET' && path === '/api/messages') return handleMessages(req, res)
+      if (req.method === 'GET' && path === '/api/status') return handleStatus(req, res)
+      if (req.method === 'POST' && path === '/api/say') return handleSay(req, res)
+      if (req.method === 'GET' && path === '/api/stream') return handleStream(req, res, sseClients)
+      res.writeHead(404, { 'Content-Type': 'text/plain' })
+      res.end('not found')
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'text/plain' })
+      res.end(`internal error: ${err?.message ?? err}`)
+    }
+  })
+
+  server.listen(port)
+
+  let messageDebounce: ReturnType<typeof setTimeout> | null = null
+  let statusDebounce: ReturnType<typeof setTimeout> | null = null
+
+  const onMessageChange = () => {
+    if (messageDebounce) clearTimeout(messageDebounce)
+    messageDebounce = setTimeout(() => {
+      const conv = readConversation()
+      const latest = conv[conv.length - 1]
+      if (latest) {
+        broadcastSse(sseClients, 'message', JSON.stringify(latest))
+      }
+    }, 200)
+  }
+
+  const onStatusChange = () => {
+    if (statusDebounce) clearTimeout(statusDebounce)
+    statusDebounce = setTimeout(async () => {
+      const snap = await readPresenceSnapshot()
+      broadcastSse(sseClients, 'status', JSON.stringify(snap))
+    }, 200)
+  }
+
+  for (const [path, handler] of [
+    [getFromYuPath(), onMessageChange],
+    [getFromAiPath(), onMessageChange],
+  ] as const) {
+    try {
+      const dir = dirname(path)
+      if (existsSync(dir)) {
+        const w = watch(dir, (_event, filename) => {
+          if (filename && path.endsWith(filename as string)) handler()
+        })
+        watchers.push(w)
+      }
+    } catch {}
+  }
+  try {
+    if (existsSync(getPresenceDir())) {
+      const w = watch(getPresenceDir(), () => onStatusChange())
+      watchers.push(w)
+    }
+  } catch {}
+
+  // Periodic status check — handles state transitions (e.g., 14s → 16s
+  // moves writing → thinking) that file-watch alone wouldn't trigger.
+  const statusInterval = setInterval(() => onStatusChange(), 15_000)
+
+  // SSE keepalive — send a comment every 30s to prevent timeouts.
+  const keepaliveInterval = setInterval(() => {
+    for (const client of sseClients) {
+      try { client.write(': keepalive\n\n') } catch { sseClients.delete(client) }
+    }
+  }, 30_000)
+
+  const instance = server as ServerInstance
+  instance._watchers = watchers
+  instance._sseClients = sseClients
+  const origClose = server.close.bind(server)
+  ;(instance as any).close = (cb?: (err?: Error) => void) => {
+    clearInterval(statusInterval)
+    clearInterval(keepaliveInterval)
+    if (messageDebounce) clearTimeout(messageDebounce)
+    if (statusDebounce) clearTimeout(statusDebounce)
+    for (const w of watchers) { try { w.close() } catch {} }
+    for (const c of sseClients) { try { c.end() } catch {} }
+    sseClients.clear()
+    return origClose(cb)
+  }
+  return instance
+}
+
+async function serveStatic(res: ServerResponse, name: string, contentType: string): Promise<void> {
+  const path = join(resolveUiAssetDir(), name)
+  if (!existsSync(path)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' })
+    res.end('not found')
+    return
+  }
+  const content = readFileSync(path)
+  res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache' })
+  res.end(content)
+}
+
+function handleMessages(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const since = url.searchParams.get('since') ?? undefined
+  const conv = readConversation({ since })
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(conv))
+}
+
+async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const snap = await readPresenceSnapshot()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(snap))
+}
+
+async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  let body = ''
+  for await (const chunk of req) body += chunk
+  if (body.length > MAX_COMPOSE_CHARS + 1024) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'message too large' }))
+    return
+  }
+  let parsed: { text?: string; wake?: boolean }
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'invalid JSON' }))
+    return
+  }
+  const text = (parsed.text ?? '').trim()
+  if (!text) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'empty message' }))
+    return
+  }
+  if (text.length > MAX_COMPOSE_CHARS) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'message too large' }))
+    return
+  }
+  const ts = new Date().toISOString()
+  try {
+    appendYuMessage(text)
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: err?.message ?? 'write failed' }))
+    return
+  }
+  let heartbeatPid: number | undefined
+  let heartbeatError: string | undefined
+  if (parsed.wake) {
+    try {
+      const result = fireHeartbeat({ reason: 'manual' })
+      heartbeatPid = result.pid
+    } catch (err: any) {
+      heartbeatError = err?.message ?? String(err)
+    }
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    ok: true,
+    messageTs: ts,
+    ...(heartbeatPid !== undefined ? { heartbeatPid } : {}),
+    ...(heartbeatError ? { heartbeatError } : {}),
+  }))
+}
+
+function handleStream(req: IncomingMessage, res: ServerResponse, clients: Set<ServerResponse>): void {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  })
+  res.write(': connected\n\n')
+  clients.add(res)
+  req.on('close', () => { clients.delete(res) })
+}
+
+function broadcastSse(clients: Set<ServerResponse>, event: string, data: string): void {
+  const payload = `event: ${event}\ndata: ${data}\n\n`
+  for (const client of clients) {
+    try { client.write(payload) } catch { clients.delete(client) }
+  }
 }
