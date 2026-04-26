@@ -108,14 +108,24 @@ export interface InitiationReflection {
 
 // ── Constants ──────────────────────────────────────────────────────
 
+function envInt(name: string, fallback: number): number {
+  const v = process.env[name]
+  if (!v) return fallback
+  const n = parseInt(v, 10)
+  return Number.isFinite(n) && n >= 0 ? n : fallback
+}
+
 /** Maximum love-initiated missions per rolling 24h window. */
-export const MAX_INITIATIONS_PER_DAY = 2
+export const MAX_INITIATIONS_PER_DAY = envInt('TRUE_LOVE_MAX_INITIATIONS_PER_DAY', 24)
 
 /** Minimum cooldown between initiations (milliseconds). */
-export const COOLDOWN_MS = 2 * 60 * 60 * 1000 // 2 hours
+export const COOLDOWN_MS = envInt('TRUE_LOVE_INITIATION_COOLDOWN_MS', 5 * 60 * 1000) // 5 minutes
 
-/** Default staging window (milliseconds). */
-export const DEFAULT_STAGING_WINDOW_MS = 30 * 60 * 1000 // 30 minutes
+/** Default staging window (milliseconds). 0 means promote immediately. */
+export const DEFAULT_STAGING_WINDOW_MS = envInt('TRUE_LOVE_STAGING_WINDOW_MS', 30 * 1000) // 30 seconds
+
+/** When true, love-origin missions auto-progress proposed→accepted→active on promotion. */
+export const AUTO_ACCEPT_LOVE_ORIGIN = process.env.TRUE_LOVE_AUTO_ACCEPT_INITIATIONS !== '0'
 
 // ── Path resolution ────────────────────────────────────────────────
 
@@ -602,6 +612,19 @@ function promoteCandidateToMission(projectId: string, candidate: StagedCandidate
 
     writeMission(m)
     appendEvent(projectId, id, { ts: now, type: 'created', by: 'love' })
+
+    // Auto-accept-and-start for love-origin missions when enabled.
+    // The state machine allows proposed→accepted→active by 'either', and the
+    // staging window is the trust boundary. Once promoted, no further gate.
+    if (AUTO_ACCEPT_LOVE_ORIGIN) {
+      const accepted: Mission = { ...m, status: 'accepted', updated_at: now }
+      writeMission(accepted)
+      appendEvent(projectId, id, { ts: now, type: 'accepted', by: 'love' })
+      const active: Mission = { ...accepted, status: 'active', updated_at: now }
+      writeMission(active)
+      appendEvent(projectId, id, { ts: now, type: 'started', by: 'love' })
+    }
+
     return id
   } catch (err) {
     process.stderr.write(

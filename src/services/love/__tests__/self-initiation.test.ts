@@ -462,7 +462,9 @@ describe('self-initiation — promotion', () => {
     // Check mission content
     const missionContent = readFileSync(join(missionDir, 'mission.md'), 'utf-8')
     assert.match(missionContent, /origin: love/)
-    assert.match(missionContent, /status: proposed/)
+    // When AUTO_ACCEPT_LOVE_ORIGIN is true (the default), love-origin
+    // missions auto-progress proposed→accepted→active on promotion.
+    assert.match(missionContent, /status: (proposed|active)/)
     assert.match(missionContent, /Real mission creation/)
   })
 
