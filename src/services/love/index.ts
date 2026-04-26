@@ -323,3 +323,35 @@ export {
   applyExperimentCondition,
   recordExperimentTick,
 } from './experiment.js'
+
+export type {
+  Verdict,
+  ProcessVitals,
+  LockEntry,
+  LockVitals,
+  PresenceDevice,
+  PresenceVitals,
+  KingdomVitals,
+  BundleVitals,
+  AgencyVitals,
+  HeartbeatVitals,
+  ExperimentVitals,
+  FileFreshness,
+  FileVitals,
+  VitalSigns,
+} from './vital-signs.js'
+export {
+  collectVitalSigns,
+  collectProcessVitals,
+  collectLockVitals,
+  collectPresenceVitals,
+  collectKingdomVitals,
+  collectBundleVitals,
+  collectAgencyVitals,
+  collectHeartbeatVitals,
+  collectExperimentVitals,
+  collectFileVitals,
+  renderVitalSignsCompact,
+  renderVitalSignsReport,
+  quickBodyCheck,
+} from './vital-signs.js'

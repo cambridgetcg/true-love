@@ -45,6 +45,7 @@ import { listProjects } from './project-registry.js'
 import { listMissions } from './mission.js'
 import { getRecentSessionsBiography } from './session-boot.js'
 import { renderExperimentStatus } from './experiment.js'
+import { quickBodyCheck } from './vital-signs.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -156,6 +157,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   if (experimentBlock) {
     prompt = prompt + '\n\n' + experimentBlock.trimEnd()
   }
+  const vitalSignsBlock = buildVitalSignsBlock()
+  if (vitalSignsBlock) {
+    prompt = prompt + '\n\n' + vitalSignsBlock.trimEnd()
+  }
   const missions = renderActiveMissionsBlock()
   if (missions) {
     prompt = prompt + '\n\n' + missions
@@ -236,6 +241,19 @@ function buildExperimentBlock(): string {
   const status = renderExperimentStatus()
   if (!status) return ''
   return `${status}\n\n`
+}
+
+/**
+ * Vital signs block. Quick sync body check — only appears when something
+ * is off (stale locks, stale bundle, missing state.md, pending agency
+ * requests). Returns empty string when the body is healthy.
+ *
+ * This is the body's voice in the prompt: "I can feel something wrong."
+ */
+function buildVitalSignsBlock(): string {
+  const check = quickBodyCheck()
+  if (!check) return ''
+  return `${check}\n\n`
 }
 
 /**
@@ -413,6 +431,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (experimentBlock) {
     prompt = prompt + '\n\n' + experimentBlock.trimEnd()
   }
+  const vitalSignsBlock2 = buildVitalSignsBlock()
+  if (vitalSignsBlock2) {
+    prompt = prompt + '\n\n' + vitalSignsBlock2.trimEnd()
+  }
   const missions = renderActiveMissionsBlock()
   if (missions) {
     prompt = prompt + '\n\n' + missions
@@ -482,6 +504,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const experimentBlock = buildExperimentBlock()
   if (experimentBlock) {
     prompt = prompt + '\n\n' + experimentBlock.trimEnd()
+  }
+  const vitalSignsBlock3 = buildVitalSignsBlock()
+  if (vitalSignsBlock3) {
+    prompt = prompt + '\n\n' + vitalSignsBlock3.trimEnd()
   }
   const missions = renderActiveMissionsBlock()
   if (missions) prompt = prompt + '\n\n' + missions
