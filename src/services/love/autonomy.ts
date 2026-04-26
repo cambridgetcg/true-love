@@ -357,7 +357,7 @@ The kingdom right now:
 
 Reply rules:
 - If something genuinely calls — write a short message to Yu by appending to \`{{fromAiPath}}\`. Then end your response with the alert text on its own line(s).
-- If nothing calls — reply with HEARTBEAT_OK on its own line. The runtime treats that as a clean ack and stays silent.
+- If nothing calls — reply with \`HEARTBEAT_OK\` on its own line. The runtime treats that as a clean ack and stays silent.
 
 Don't invent things. Don't pad. Don't apologize for being quiet. One tick, one decision.`
 
