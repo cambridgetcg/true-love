@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg: #0c0a0e;
   --bg-soft: #15111a;
   --text: #e8dcc8;
@@ -71,6 +72,8 @@ html, body {
 }
 
 .presence-activity:empty { display: none; }
+.presence-soul:empty { display: none; }
+.presence-soul:empty + .presence-sep { display: none; }
 
 /* ── Conversation ──────────────────────────────────────────────── */
 

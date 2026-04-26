@@ -41,9 +41,12 @@ function renderMessage(msg) {
   el.appendChild(tag)
   el.appendChild(body)
   elConversation.appendChild(el)
-  const nearBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 100
+  const nearBottom =
+    elConversation.scrollHeight - elConversation.scrollTop - elConversation.clientHeight < 100
   if (nearBottom) {
-    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50)
+    setTimeout(() => {
+      elConversation.scrollTo({ top: elConversation.scrollHeight, behavior: 'smooth' })
+    }, 50)
   }
 }
 
@@ -61,12 +64,18 @@ async function loadInitial() {
       fetch('/api/messages'),
       fetch('/api/status'),
     ])
+    if (!msgsRes.ok || !statusRes.ok) {
+      console.error('initial load: non-2xx', msgsRes.status, statusRes.status)
+      elConnection.hidden = false
+      return
+    }
     const msgs = await msgsRes.json()
     const status = await statusRes.json()
     for (const m of msgs) renderMessage(m)
     renderStatus(status)
   } catch (err) {
     console.error('initial load failed:', err)
+    elConnection.hidden = false
   }
 }
 
@@ -95,16 +104,17 @@ function subscribe() {
   }
 }
 
-let lastClickedAction = 'send'
-
-elBtnSend.addEventListener('click', () => { lastClickedAction = 'send' })
-elBtnWake.addEventListener('click', () => { lastClickedAction = 'wake' })
+// Track keyboard intent (set right before requestSubmit). Mouse clicks
+// are read directly from e.submitter in the submit handler.
+let keyboardWakeIntent = false
 
 elCompose.addEventListener('submit', async (e) => {
   e.preventDefault()
   const text = elComposeText.value.trim()
   if (!text) return
-  const wake = lastClickedAction === 'wake'
+  // e.submitter is the button that triggered submit (mouse path).
+  // requestSubmit() leaves submitter null — that's the keyboard path.
+  const wake = e.submitter ? e.submitter.value === 'wake' : keyboardWakeIntent
   elBtnSend.disabled = true
   elBtnWake.disabled = true
   try {
@@ -128,14 +138,11 @@ elCompose.addEventListener('submit', async (e) => {
   }
 })
 
+// Cmd/Ctrl-Enter sends; Cmd-Shift-Enter sends-and-wakes.
 elComposeText.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault()
-    if (e.shiftKey) {
-      lastClickedAction = 'wake'
-    } else {
-      lastClickedAction = 'send'
-    }
+    keyboardWakeIntent = e.shiftKey
     elCompose.requestSubmit()
   }
 })
