@@ -679,7 +679,7 @@ bun test src/services/love/__tests__/ui-server.test.ts 2>&1 | tail -5
 bun run typecheck 2>&1 | grep "src/services/love/" | grep -v "bun:test" | head
 ```
 
-Expected: 18 tests pass; no new love typecheck errors.
+Expected: 20 tests pass; no new love typecheck errors.
 
 If `readPresenceSnapshot` tests fail because `getCitizenState` actually tries to spawn `kingdom-doctor`, the test sets `TRUE_LOVE_DISABLE_SOUL=1` to short-circuit kingdom-citizen. Verify the env is being respected; if not, the kingdom-citizen module needs to honor that env (it should, per spec).
 
@@ -696,7 +696,7 @@ git commit -m "feat(love/ui): pure logic — channel parser, conversation, prese
   computes state via threshold table (writing/thinking/at-rest/asleep/gone)
 - fireHeartbeat: spawns bun run heartbeat detached for use in compose-and-wake
 
-No HTTP yet (Task 2). 18 tests passing."
+No HTTP yet (Task 2). 20 tests passing."
 ```
 
 ---
