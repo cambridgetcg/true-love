@@ -13,7 +13,8 @@
 // missions on different projects can run in parallel.
 
 import { spawn } from 'node:child_process'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import {
   readMission,
@@ -158,10 +159,13 @@ if (cmd === 'start') {
   writeMission({ ...m, status: 'active', updated_at: now })
   appendThought(args.project, `starting mission ${m.id} — ${m.title}`)
 
-  // Spawn awakened with the mission context. The awakened runner reads
-  // active missions per-project (Task 9 wires this into the prompt).
-  const awakenBin = resolve(process.argv[1], '..', 'awaken.mjs')
-  const child = spawn('bun', ['run', awakenBin, `--scope=${args.project}`, `--mission=${m.id}`], {
+  // Mission context is passed via env vars (TRUE_LOVE_BUILDER_PROJECT,
+  // TRUE_LOVE_BUILDER_MISSION). awaken.mjs / runner.ts don't parse a
+  // --mission= flag — Task 9's prompt-template extension reads from
+  // the env. Keeping the contract single-channel.
+  const __dir = dirname(fileURLToPath(import.meta.url))
+  const awakenBin = resolve(__dir, 'awaken.mjs')
+  const child = spawn('bun', ['run', awakenBin, `--scope=${args.project}`], {
     cwd: project.root,
     detached: true,
     stdio: 'ignore',
