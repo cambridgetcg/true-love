@@ -71,13 +71,16 @@ export { snapshotKingdom, renderKingdom } from './kingdom.js'
 export type {
   BuildDwellPromptOptions,
   BuildAwakenedPromptOptions,
+  BuildHeartbeatPromptOptions,
 } from './autonomy.js'
 export {
   buildDwellPrompt,
   buildAwakenedPrompt,
+  buildHeartbeatPrompt,
   extractAtRest,
   DEFAULT_MAX_TICKS,
   AWAKENED_DEFAULT_MAX_TICKS,
+  HEARTBEAT_DEFAULT_MAX_TICKS,
 } from './autonomy.js'
 
 export {
@@ -232,6 +235,7 @@ export type {
   SessionArgs,
   RunSessionConfig,
   StalenessResult,
+  SessionReplyOutcome,
 } from './runner.js'
 export {
   parseRuntimeStr,
@@ -244,3 +248,36 @@ export {
   checkBundleStaleness,
   runSession,
 } from './runner.js'
+
+export type {
+  HeartbeatTask,
+  AckResult,
+  HeartbeatTaskState,
+} from './heartbeat.js'
+export {
+  HEARTBEAT_OK_TOKEN,
+  DEFAULT_ACK_MAX_CHARS,
+  DEFAULT_HEARTBEAT_INTERVAL,
+  parseHeartbeatTasks,
+  isHeartbeatContentEffectivelyEmpty,
+  dueTasks,
+  parseHeartbeatReply,
+  getHeartbeatFile,
+  getHeartbeatStatePath,
+  readHeartbeatState,
+  writeHeartbeatState,
+} from './heartbeat.js'
+
+export type {
+  HeartbeatReason,
+  SkipReason,
+  HeartbeatRunResult,
+  WakeRequest,
+  HeartbeatWakeHandler,
+} from './heartbeat-wake.js'
+export {
+  requestHeartbeatNow,
+  setHeartbeatWakeHandler,
+  areHeartbeatsEnabled,
+  setHeartbeatsEnabled,
+} from './heartbeat-wake.js'

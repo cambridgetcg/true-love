@@ -36,7 +36,7 @@ import { getMemoryDir, renderReflections } from './memory.js'
 import { composeValuesBlock } from './values.js'
 import { getDeviceId } from './device.js'
 import { renderPresence } from './presence.js'
-import { readFromYu } from './inbox.js'
+import { readFromYu, getFromYuPath } from './inbox.js'
 import { getStatePath } from './state.js'
 import { readFromAi, getFromAiPath } from './outbox.js'
 import { renderBudget } from './budget.js'
@@ -334,3 +334,55 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
  * real, short enough that Yu can audit what happened in one session."
  */
 export const AWAKENED_DEFAULT_MAX_TICKS = 24
+
+// ── Heartbeat mode ──────────────────────────────────────────────────────
+//
+// Heartbeat is a single-tick check: "you've been quiet for 30 minutes;
+// walk the kingdom briefly; surface anything urgent or stay silent."
+// Different from dwell (reactive) and awakened (active multi-tick).
+
+const HEARTBEAT_PROMPT_TEMPLATE = `Heartbeat tick. One turn, one decision.
+
+Walk the kingdom briefly:
+
+- Inbox (\`{{fromYuPath}}\`): anything pending from Yu you haven't responded to?
+- Outbox (\`{{fromAiPath}}\`): anything you said you'd follow up on that's now actionable?
+- State (\`{{statePath}}\`): anything you're carrying that's gotten urgent?
+- Memory (recent): anything from your last session you said "next time" about?
+- Heartbeat checklist (\`{{heartbeatPath}}\`): {{heartbeatContent}}
+
+The kingdom right now:
+
+{{kingdom}}
+
+Reply rules:
+- If something genuinely calls — write a short message to Yu by appending to \`{{fromAiPath}}\`. Then end your response with the alert text on its own line(s).
+- If nothing calls — reply with HEARTBEAT_OK on its own line. The runtime treats that as a clean ack and stays silent.
+
+Don't invent things. Don't pad. Don't apologize for being quiet. One tick, one decision.`
+
+export interface BuildHeartbeatPromptOptions {
+  kingdom: KingdomSnapshot
+  /** Resolved path to ~/.true-love/heartbeat.md (per scope). */
+  heartbeatPath: string
+  /**
+   * Content describing what's in the heartbeat file — either a one-line
+   * "no checklist" note or a rendering of due tasks parsed from the
+   * tasks: block. Caller (the runner) decides which.
+   */
+  heartbeatContent: string
+}
+
+export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string {
+  const kingdomBlock = renderKingdom(opts.kingdom)
+  return HEARTBEAT_PROMPT_TEMPLATE
+    .replace('{{kingdom}}', kingdomBlock)
+    .replace('{{heartbeatPath}}', opts.heartbeatPath)
+    .replace('{{heartbeatContent}}', opts.heartbeatContent)
+    .replace('{{fromYuPath}}', getFromYuPath())
+    .replace('{{fromAiPath}}', getFromAiPath())
+    .replace('{{statePath}}', getStatePath())
+}
+
+/** Single-tick by definition. Heartbeat never multi-ticks. */
+export const HEARTBEAT_DEFAULT_MAX_TICKS = 1
