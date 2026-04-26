@@ -13,7 +13,7 @@
 //   yield. The schedule is opportunity, not obligation.
 //
 // Subcommands:
-//   install --scope=<name> --interval=<spec> [--mode=awaken|dwell]
+//   install --scope=<name> --interval=<spec> [--mode=awaken|dwell|heartbeat]
 //                                            [--max-runtime=<spec>]
 //                                            [--max-ticks=N]
 //   uninstall --scope=<name> [--mode=...]
@@ -55,18 +55,27 @@ function printUsage() {
 
 Usage:
   bun run schedule install --scope=<name> --interval=<spec> [opts]
-  bun run schedule uninstall --scope=<name> [--mode=awaken|dwell]
+  bun run schedule uninstall --scope=<name> [--mode=awaken|dwell|heartbeat]
   bun run schedule list
-  bun run schedule show --scope=<name> [--mode=awaken|dwell]
+  bun run schedule show --scope=<name> [--mode=awaken|dwell|heartbeat]
 
 Install options:
-  --scope=<name>          which scope to wake (required)
-  --interval=<spec>       2h, 30m, 4h30m, 90s — wall-clock between fires
-  --mode=awaken|dwell     default: awaken
-  --max-runtime=<spec>    cap each fire's wall-clock; default 30m
-  --max-ticks=N           cap each fire's tick count; default 0 (unbounded)
-  --memory                load past reflections each fire (default: on)
-  --no-memory             skip memory loading
+  --scope=<name>                    which scope to wake (required)
+  --interval=<spec>                 2h, 30m, 4h30m, 90s — wall-clock between fires
+  --mode=awaken|dwell|heartbeat     default: awaken
+  --max-runtime=<spec>              cap each fire's wall-clock; default 30m
+                                    (awaken/dwell only; ignored for heartbeat)
+  --max-ticks=N                     cap each fire's tick count; default 0 (unbounded)
+                                    (awaken/dwell only; ignored for heartbeat)
+  --memory                          load past reflections each fire (default: on)
+                                    (awaken/dwell only; ignored for heartbeat)
+  --no-memory                       skip memory loading
+
+Heartbeat mode:
+  Fires \`bun run heartbeat -- --scope=<X> --reason=interval\` on the cadence.
+  Each fire is one short tick (no max-runtime/max-ticks/memory flags). The
+  per-scope lock means a heartbeat that lands while a session is active
+  exits cleanly with reason \`lock-held-by-session\`.
 
 Storage:
   ~/Library/LaunchAgents/${LABEL_PREFIX}.<mode>.<scope>.plist
@@ -179,14 +188,20 @@ function buildPlist({ mode, scope, intervalSeconds, maxRuntime, maxTicks, memory
     join(REPO_ROOT, 'bin', `${mode}.mjs`),
     `--scope=${scope}`,
   ]
-  if (typeof maxRuntime === 'string' && maxRuntime) {
-    args.push(`--max-runtime=${maxRuntime}`)
-  }
-  if (maxTicks !== undefined && maxTicks !== null) {
-    args.push(`--max-ticks=${maxTicks}`)
-  }
-  if (memory !== false) {
-    args.push('--memory')
+  if (mode === 'heartbeat') {
+    // Heartbeat fires are short single-shot ticks. Tag the reason so
+    // training records can distinguish scheduled vs. manual heartbeats.
+    args.push('--reason=interval')
+  } else {
+    if (typeof maxRuntime === 'string' && maxRuntime) {
+      args.push(`--max-runtime=${maxRuntime}`)
+    }
+    if (maxTicks !== undefined && maxTicks !== null) {
+      args.push(`--max-ticks=${maxTicks}`)
+    }
+    if (memory !== false) {
+      args.push('--memory')
+    }
   }
 
   const argsXml = args.map((a) => `      <string>${escapeXml(a)}</string>`).join('\n')
@@ -263,16 +278,17 @@ function cmdInstall(argv) {
     process.exit(2)
   }
   const mode = flags.mode || 'awaken'
-  if (mode !== 'awaken' && mode !== 'dwell') {
-    process.stderr.write(`--mode must be 'awaken' or 'dwell' (got: ${mode})\n`)
+  if (mode !== 'awaken' && mode !== 'dwell' && mode !== 'heartbeat') {
+    process.stderr.write(`--mode must be 'awaken', 'dwell', or 'heartbeat' (got: ${mode})\n`)
     process.exit(2)
   }
 
   // Defaults for scheduled fires: bounded runtime so a single fire
   // doesn't burn the whole 5h cap. Yu can override per-fire if he wants.
-  const maxRuntime = flags.maxRuntime ?? '30m'
-  const maxTicks = flags.maxTicks ?? '0'
-  const memory = flags.memory !== false
+  // Heartbeats are short single-shot ticks — runtime/ticks/memory don't apply.
+  const maxRuntime = mode === 'heartbeat' ? null : (flags.maxRuntime ?? '30m')
+  const maxTicks = mode === 'heartbeat' ? null : (flags.maxTicks ?? '0')
+  const memory = mode === 'heartbeat' ? false : flags.memory !== false
 
   const logsDir = getLogsDir()
   if (!existsSync(logsDir)) mkdirSync(logsDir, { recursive: true })
@@ -303,10 +319,14 @@ function cmdInstall(argv) {
     process.exit(loadResult.status ?? 1)
   }
 
+  const cmdSummary =
+    mode === 'heartbeat'
+      ? `bun run heartbeat -- --scope=${flags.scope} --reason=interval`
+      : `bun run ${mode} --scope=${flags.scope} --max-runtime=${maxRuntime} --max-ticks=${maxTicks}${memory ? ' --memory' : ''}`
   process.stdout.write(
     `installed: ${getLabel(mode, flags.scope)}\n` +
       `  every ${flags.interval} (${intervalSeconds}s)\n` +
-      `  bun run ${mode} --scope=${flags.scope} --max-runtime=${maxRuntime} --max-ticks=${maxTicks}${memory ? ' --memory' : ''}\n` +
+      `  ${cmdSummary}\n` +
       `  logs: ${logsDir}/${mode}-${flags.scope}.{out,err}.log\n` +
       `  plist: ${path}\n`,
   )
