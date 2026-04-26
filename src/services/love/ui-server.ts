@@ -22,6 +22,7 @@ import {
 } from './project-registry.js'
 import {
   tailThoughts,
+  appendThought,
   type Thought,
 } from './thoughts-channel.js'
 import {
@@ -668,8 +669,10 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse): P
     res.writeHead(201, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(p))
   } catch (err: any) {
-    res.writeHead(400, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: err?.message ?? 'register failed' }))
+    const msg = err?.message ?? 'register failed'
+    const status = msg.includes('already exists') ? 409 : 400
+    res.writeHead(status, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: msg }))
   }
 }
 
@@ -914,6 +917,18 @@ async function handleMissionStart(req: IncomingMessage, res: ServerResponse, pro
     res.end(JSON.stringify({ error: `cannot start mission in status "${m.status}"` }))
     return
   }
+  // Check no other mission is already active on this project (per-project
+  // serialization — matches spec § Concurrency)
+  const activeMissions = listMissions(projectId, { status: 'active' })
+  const conflict = activeMissions.find((other) => other.id !== missionId)
+  if (conflict) {
+    res.writeHead(409, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      error: `project busy: another mission is active`,
+      conflictingMissionId: conflict.id,
+    }))
+    return
+  }
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
   const dryRun = url.searchParams.get('dry-run') === '1'
   if (dryRun) {
@@ -921,7 +936,30 @@ async function handleMissionStart(req: IncomingMessage, res: ServerResponse, pro
     res.end(JSON.stringify({ ok: true, dryRun: true }))
     return
   }
-  // Real spawn lands in Task 7. For now, return 501 if not dry-run.
-  res.writeHead(501, { 'Content-Type': 'application/json' })
-  res.end(JSON.stringify({ error: 'mission start spawn not yet wired (use ?dry-run=1 or bin/mission.mjs)' }))
+  // Real spawn: write 'started' event, transition to active, append thought,
+  // spawn awaken with mission context env vars (matching bin/mission.mjs).
+  const project = readProject(projectId)
+  if (!project) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+  const now = new Date().toISOString()
+  appendEvent(projectId, missionId, { ts: now, type: 'started', by: 'love', tick: 'awakened' })
+  writeMission({ ...m, status: 'active', updated_at: now })
+  appendThought(projectId, `starting mission ${m.id} — ${m.title}`)
+  const awakenBin = join(resolveTrueLoveRoot(), 'bin', 'awaken.mjs')
+  const child = spawn('bun', ['run', awakenBin, `--scope=${projectId}`], {
+    cwd: project.root,
+    detached: true,
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      TRUE_LOVE_BUILDER_PROJECT: projectId,
+      TRUE_LOVE_BUILDER_MISSION: missionId,
+    },
+  })
+  child.unref()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, pid: child.pid }))
 }

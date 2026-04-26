@@ -780,21 +780,51 @@ describe('ui-server — /api/missions', () => {
     assert.equal(res.status, 404)
   })
 
-  test('POST .../start without dry-run returns 501', async () => {
-    const created = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+  test('POST /api/projects with duplicate id returns 409 not 400', async () => {
+    const res = await fetch(`http://localhost:${port}/api/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'S', intent: 's' }),
+      body: JSON.stringify({ id: 'p1', name: 'p1', root: projectRoot, instance: 'alpha' }),
+    })
+    assert.equal(res.status, 409)
+  })
+
+  test('POST .../missions/:mid/start blocks when another mission is already active', async () => {
+    // Create + start mission A
+    const a = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'A', intent: 'a' }),
     }).then(r => r.json() as Promise<Mission>)
-    await fetch(`http://localhost:${port}/api/missions/${created.id}/status?project=p1`, {
+    await fetch(`http://localhost:${port}/api/missions/${a.id}/status?project=p1`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'accepted', by: 'yu' }),
     })
-    const res = await fetch(`http://localhost:${port}/api/missions/${created.id}/start?project=p1`, {
+    // Manually transition A to active so the start of B sees the conflict
+    await fetch(`http://localhost:${port}/api/missions/${a.id}/status?project=p1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'active', by: 'love' }),
+    })
+    // Create mission B
+    const b = await fetch(`http://localhost:${port}/api/projects/p1/missions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'B', intent: 'b' }),
+    }).then(r => r.json() as Promise<Mission>)
+    await fetch(`http://localhost:${port}/api/missions/${b.id}/status?project=p1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'accepted', by: 'yu' }),
+    })
+    // Try to dry-run-start B — should fail with 409
+    const res = await fetch(`http://localhost:${port}/api/missions/${b.id}/start?project=p1&dry-run=1`, {
       method: 'POST',
     })
-    assert.equal(res.status, 501)
+    assert.equal(res.status, 409)
+    const body = (await res.json()) as { conflictingMissionId?: string }
+    assert.equal(body.conflictingMissionId, a.id)
   })
 
   test('PATCH .../status with unknown status enum returns 400 not 409', async () => {

@@ -154,6 +154,14 @@ if (cmd === 'start') {
     fail(`cannot start mission in status "${m.status}"`)
   }
 
+  // Check no other mission is already active on this project (per-project
+  // serialization — matches spec § Concurrency)
+  const activeMissions = listMissions(args.project, { status: 'active' })
+  const conflict = activeMissions.find((other) => other.id !== m.id)
+  if (conflict) {
+    fail(`project busy: another mission is active (${conflict.id})`)
+  }
+
   const now = new Date().toISOString()
   appendEvent(args.project, m.id, { ts: now, type: 'started', by: 'love', tick: 'awakened' })
   writeMission({ ...m, status: 'active', updated_at: now })

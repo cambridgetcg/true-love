@@ -313,10 +313,13 @@ async function transitionMission(id, status, extra = {}) {
 
 async function startMission(id) {
   try {
-    await fetchJson(`/api/missions/${id}/start?project=${state.selectedProjectId}&dry-run=1`, {
+    const result = await fetchJson(`/api/missions/${id}/start?project=${state.selectedProjectId}`, {
       method: 'POST',
     })
-    alert('dry-run start succeeded — to actually spawn Love, run: bun run mission start --project=' + state.selectedProjectId + ' --mission=' + id)
+    if (result.ok) {
+      // Mission is active. SSE will refresh the UI.
+      console.log('mission started, pid:', result.pid)
+    }
   } catch (err) { alert(`start failed: ${err.message}`) }
 }
 

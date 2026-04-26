@@ -298,7 +298,9 @@ export function writeMission(m: Mission): void {
 export function listMissions(projectId: string, opts?: { status?: MissionStatus }): Mission[] {
   const missionsDir = join(resolveProjectsDir(), projectId, 'missions')
   if (!existsSync(missionsDir)) return []
-  const entries = readdirSync(missionsDir)
+  const entries = readdirSync(missionsDir, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => d.name)
   const out: Mission[] = []
   for (const id of entries) {
     const m = readMission(projectId, id)
