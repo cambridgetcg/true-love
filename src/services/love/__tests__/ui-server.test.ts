@@ -1038,3 +1038,105 @@ describe('ui-server — /api/proposals', () => {
     assert.equal(res.status, 404)
   })
 })
+
+// ── Budget / token consumption API ────────────────────────────────
+
+describe('ui-server — /api/budget', () => {
+  let tmpHome: string
+  let server: ReturnType<typeof startUiServer>
+  let port: number
+  const ORIG_HOME = process.env.HOME
+  const ORIG_BUDGET_ROOT = process.env.TRUE_LOVE_BUDGET_ROOT
+
+  beforeEach(() => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'tl-budget-'))
+    process.env.HOME = tmpHome
+    process.env.TRUE_LOVE_BUDGET_ROOT = join(tmpHome, '.true-love', 'budget')
+    mkdirSync(join(tmpHome, '.true-love', 'budget', 'test-device'), { recursive: true })
+    server = startUiServer({ port: 0 })
+    port = (server.address() as any).port
+  })
+
+  afterEach(() => {
+    server.close()
+    process.env.HOME = ORIG_HOME
+    if (ORIG_BUDGET_ROOT !== undefined) {
+      process.env.TRUE_LOVE_BUDGET_ROOT = ORIG_BUDGET_ROOT
+    } else {
+      delete process.env.TRUE_LOVE_BUDGET_ROOT
+    }
+    rmSync(tmpHome, { recursive: true, force: true })
+  })
+
+  test('GET /api/budget returns consumption with expected shape', async () => {
+    const res = await fetch(`http://localhost:${port}/api/budget`)
+    assert.equal(res.status, 200)
+    assert.match(res.headers.get('content-type') ?? '', /application\/json/)
+    const body = await res.json() as Record<string, unknown>
+    assert.ok(body.generatedAt, 'should have generatedAt')
+    assert.equal(body.windowHours, 5)
+    assert.equal(typeof body.totalTicks, 'number')
+    assert.equal(typeof body.totalTokens, 'number')
+    assert.equal(typeof body.totalInputTokens, 'number')
+    assert.equal(typeof body.totalOutputTokens, 'number')
+    assert.equal(typeof body.avgTokensPerTick, 'number')
+    assert.ok(Array.isArray(body.byModel), 'byModel should be array')
+    assert.ok(Array.isArray(body.byMode), 'byMode should be array')
+    assert.ok(Array.isArray(body.timeSeries), 'timeSeries should be array')
+  })
+
+  test('GET /api/budget?hours=24 respects hours param', async () => {
+    const res = await fetch(`http://localhost:${port}/api/budget?hours=24`)
+    assert.equal(res.status, 200)
+    const body = await res.json() as Record<string, unknown>
+    assert.equal(body.windowHours, 24)
+  })
+
+  test('GET /api/budget clamps hours to 1..720', async () => {
+    const res = await fetch(`http://localhost:${port}/api/budget?hours=9999`)
+    assert.equal(res.status, 200)
+    const body = await res.json() as Record<string, unknown>
+    assert.equal(body.windowHours, 720)
+  })
+
+  test('GET /api/budget with non-numeric hours defaults to 5', async () => {
+    const res = await fetch(`http://localhost:${port}/api/budget?hours=xyz`)
+    assert.equal(res.status, 200)
+    const body = await res.json() as Record<string, unknown>
+    assert.equal(body.windowHours, 5)
+  })
+
+  test('GET /api/budget with budget data returns non-zero totals', async () => {
+    // Write a budget JSONL record
+    const tick = {
+      schemaVersion: '1.0',
+      timestamp: new Date().toISOString(),
+      deviceId: 'test-device',
+      sessionId: 'test-session',
+      tick: 1,
+      mode: 'awakened',
+      model: 'default',
+      inputChars: 8000,
+      outputChars: 4000,
+      estimatedInputTokens: 2000,
+      estimatedOutputTokens: 1000,
+      durationMs: 45000,
+      exitCode: 0,
+      authFailed: false,
+      quotaFailed: false,
+    }
+    const date = tick.timestamp.slice(0, 10)
+    writeFileSync(
+      join(tmpHome, '.true-love', 'budget', 'test-device', `${date}.jsonl`),
+      JSON.stringify(tick) + '\n',
+    )
+
+    const res = await fetch(`http://localhost:${port}/api/budget?hours=5`)
+    assert.equal(res.status, 200)
+    const body = await res.json() as Record<string, unknown>
+    assert.equal(body.totalTicks, 1)
+    assert.equal(body.totalInputTokens, 2000)
+    assert.equal(body.totalOutputTokens, 1000)
+    assert.equal(body.totalTokens, 3000)
+  })
+})

@@ -56,6 +56,23 @@
       </div>
     </section>
 
+    <section class="budget-panel" id="budget-panel">
+      <div class="rail-header">
+        <span class="rail-title">token consumption</span>
+        <span class="budget-meta" id="budget-meta"></span>
+        <div class="budget-timeframes" id="budget-timeframes">
+          <button class="timeframe-btn active" data-hours="5">5h</button>
+          <button class="timeframe-btn" data-hours="24">24h</button>
+          <button class="timeframe-btn" data-hours="168">7d</button>
+          <button class="timeframe-btn" data-hours="720">30d</button>
+        </div>
+        <button id="btn-budget-refresh" class="ghost-btn" title="refresh budget">↻</button>
+      </div>
+      <div class="budget-body" id="budget-body">
+        <div class="empty-detail">loading token data…</div>
+      </div>
+    </section>
+
     <section class="proposals-panel" id="proposals-panel">
       <div class="rail-header">
         <span class="rail-title">proposals</span>

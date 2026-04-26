@@ -47,6 +47,10 @@ import {
   markApplied,
   type Proposal,
 } from './proposals.js'
+import {
+  computeConsumption,
+  type TokenConsumption,
+} from './token-consumption.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -363,6 +367,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)
       if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res)
       if (req.method === 'GET' && path === '/api/introspect') return handleIntrospect(req, res)
+      if (req.method === 'GET' && path === '/api/budget') return handleBudget(req, res)
       if (req.method === 'GET' && path === '/api/proposals') return handleListProposals(req, res)
       if (req.method === 'POST' && path === '/api/proposals/generate') return handleGenerateProposals(req, res)
       const proposalMatch = path.match(/^\/api\/proposals\/([^/]+)$/)
@@ -525,6 +530,32 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     }
   }
 
+  // Watch the budget directory for token consumption changes.
+  // When a tick completes, runner.ts appends to budget JSONL — this
+  // triggers a 'budget-changed' event so the UI panel updates live.
+  const budgetRoot = process.env.TRUE_LOVE_BUDGET_ROOT ||
+    join(process.env.HOME || homedir(), '.true-love', 'budget')
+  try {
+    if (!existsSync(budgetRoot)) mkdirSync(budgetRoot, { recursive: true })
+  } catch {}
+
+  if (process.platform !== 'linux') {
+    try {
+      if (existsSync(budgetRoot)) {
+        const w = watch(budgetRoot, { recursive: true }, (_event, filename) => {
+          if (!filename) return
+          const fname = String(filename)
+          if (fname.endsWith('.jsonl')) {
+            broadcastBuild('budget-changed', { path: fname })
+          }
+        })
+        watchers.push(w)
+      }
+    } catch {
+      // best-effort — budget watch is not critical
+    }
+  }
+
   // Periodic status check — handles state transitions (e.g., 14s → 16s
   // moves writing → thinking) that file-watch alone wouldn't trigger.
   const statusInterval = setInterval(() => onStatusChange(), 15_000)
@@ -601,6 +632,22 @@ function handleIntrospect(req: IncomingMessage, res: ServerResponse): void {
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'introspection failed' }))
+  }
+}
+
+// ── Budget / token consumption endpoint ──────────────────────────
+
+function handleBudget(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const hoursStr = url.searchParams.get('hours')
+  const hours = hoursStr !== null ? Math.max(1, Math.min(720, parseInt(hoursStr, 10) || 5)) : 5
+  try {
+    const consumption = computeConsumption(hours)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(consumption))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'budget computation failed' }))
   }
 }
 
