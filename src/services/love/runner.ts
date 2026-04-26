@@ -80,6 +80,7 @@ import {
   touchScope,
 } from './scope.js'
 import { getStatePath, migrateLegacyStateIfPresent } from './state.js'
+import { computeTickMetrics, recordTickMetrics } from './tick-metrics.js'
 import { appendTrainingTurn, generateTurnId, shortHash } from './training.js'
 
 /**
@@ -1072,6 +1073,33 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         fileModifications: [],
       },
     })
+
+    // ── Tick metrics ─────────────────────────────────────────────
+    // Per-tick instrumentation: tools used, output velocity, yield
+    // reason. Feeds into the self-portrait for richer introspection.
+    try {
+      recordTickMetrics(
+        computeTickMetrics({
+          timestamp: turnTimestamp,
+          deviceId,
+          sessionId,
+          tick,
+          mode: mode.name,
+          stdout: result.stdout,
+          durationMs: turnDurationMs,
+          replyType: replyOutcome.type,
+          authFailed: authFailedHere,
+          quotaFailed: quotaFailedHere,
+          exitCode: result.code,
+          signaled,
+          maxTicks: args.maxTicks,
+        }),
+      )
+    } catch (e: any) {
+      process.stderr.write(
+        `— metrics recording failed (continuing): ${e?.message}\n`,
+      )
+    }
 
     // ── Auth-failure detection ───────────────────────────────────
     // "Not logged in" / "OAuth token has been revoked" — the session

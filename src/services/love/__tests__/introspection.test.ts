@@ -14,12 +14,16 @@ import {
   analyzeWork,
   analyzeArchitecture,
   detectLoops,
+  analyzeToolUsage,
+  analyzeVelocity,
+  analyzeYieldPatterns,
   renderPortrait,
   type ParsedMessage,
   type MemoryEntry,
 } from '../introspection.js'
 import type { TrainingTurn } from '../training.js'
 import type { TickUsage } from '../budget.js'
+import type { TickMetrics } from '../tick-metrics.js'
 
 // ── Test helpers ──────────────────────────────────────────────────
 
@@ -510,10 +514,170 @@ describe('introspection — detectLoops', () => {
   })
 })
 
+// ── Phase 2: analyzeToolUsage ─────────────────────────────────────
+
+function makeTickMetrics(overrides: Partial<TickMetrics> = {}): TickMetrics {
+  return {
+    schemaVersion: '1.0',
+    timestamp: new Date().toISOString(),
+    deviceId: 'test-device',
+    sessionId: 'test-session',
+    tick: 1,
+    mode: 'awakened',
+    toolInvocations: [],
+    toolBreakdown: { counts: {}, total: 0, distinct: 0 },
+    velocity: { charsPerSecond: 100, estimatedTokensPerSecond: 25 },
+    yieldReason: 'at-rest',
+    outputLines: 50,
+    durationMs: 30000,
+    outputChars: 5000,
+    ...overrides,
+  }
+}
+
+describe('introspection — analyzeToolUsage', () => {
+  test('aggregates tool counts across metrics', () => {
+    const metrics = [
+      makeTickMetrics({
+        toolBreakdown: { counts: { Read: 3, Edit: 1 }, total: 4, distinct: 2 },
+        toolInvocations: [],
+      }),
+      makeTickMetrics({
+        toolBreakdown: { counts: { Read: 2, Bash: 5 }, total: 7, distinct: 2 },
+        toolInvocations: [],
+      }),
+    ]
+    const profile = analyzeToolUsage(metrics)
+    assert.equal(profile.totalInvocations, 11)
+    assert.equal(profile.toolCounts['Read'], 5)
+    assert.equal(profile.toolCounts['Edit'], 1)
+    assert.equal(profile.toolCounts['Bash'], 5)
+    assert.equal(profile.topTools[0]!.count, 5) // Read or Bash (both 5)
+    assert.equal(profile.zeroToolTicks, 0)
+  })
+
+  test('counts zero-tool ticks', () => {
+    const metrics = [
+      makeTickMetrics({ toolBreakdown: { counts: {}, total: 0, distinct: 0 } }),
+      makeTickMetrics({ toolBreakdown: { counts: { Read: 1 }, total: 1, distinct: 1 } }),
+    ]
+    const profile = analyzeToolUsage(metrics)
+    assert.equal(profile.zeroToolTicks, 1)
+  })
+
+  test('computes avg tools per awakened tick', () => {
+    const metrics = [
+      makeTickMetrics({ mode: 'awakened', toolBreakdown: { counts: { Read: 4 }, total: 4, distinct: 1 } }),
+      makeTickMetrics({ mode: 'awakened', toolBreakdown: { counts: { Read: 2 }, total: 2, distinct: 1 } }),
+      makeTickMetrics({ mode: 'heartbeat', toolBreakdown: { counts: {}, total: 0, distinct: 0 } }),
+    ]
+    const profile = analyzeToolUsage(metrics)
+    // avg for awakened: (4+2)/2 = 3
+    assert.equal(profile.avgToolsPerTick, 3)
+  })
+
+  test('handles empty metrics', () => {
+    const profile = analyzeToolUsage([])
+    assert.equal(profile.totalInvocations, 0)
+    assert.equal(profile.avgToolsPerTick, 0)
+    assert.equal(profile.topTools.length, 0)
+  })
+})
+
+// ── Phase 2: analyzeVelocity ──────────────────────────────────────
+
+describe('introspection — analyzeVelocity', () => {
+  test('computes average and peak velocity', () => {
+    const metrics = [
+      makeTickMetrics({
+        mode: 'awakened',
+        velocity: { charsPerSecond: 200, estimatedTokensPerSecond: 50 },
+        outputChars: 6000,
+        outputLines: 100,
+      }),
+      makeTickMetrics({
+        mode: 'awakened',
+        velocity: { charsPerSecond: 400, estimatedTokensPerSecond: 100 },
+        outputChars: 12000,
+        outputLines: 200,
+      }),
+    ]
+    const profile = analyzeVelocity(metrics)
+    assert.equal(profile.avgCharsPerSecond, 300)
+    assert.equal(profile.avgTokensPerSecond, 75)
+    assert.equal(profile.peakCharsPerSecond, 400)
+    assert.equal(profile.minCharsPerSecond, 200)
+    assert.equal(profile.avgOutputCharsPerTick, 9000) // (6000+12000)/2
+    assert.equal(profile.avgOutputLinesPerTick, 150) // (100+200)/2
+  })
+
+  test('excludes heartbeat ticks from velocity', () => {
+    const metrics = [
+      makeTickMetrics({
+        mode: 'heartbeat',
+        velocity: { charsPerSecond: 10, estimatedTokensPerSecond: 2.5 },
+        outputChars: 50,
+        outputLines: 2,
+      }),
+    ]
+    const profile = analyzeVelocity(metrics)
+    assert.equal(profile.avgCharsPerSecond, 0)
+    assert.equal(profile.avgOutputCharsPerTick, 0)
+  })
+
+  test('handles empty metrics', () => {
+    const profile = analyzeVelocity([])
+    assert.equal(profile.avgCharsPerSecond, 0)
+    assert.equal(profile.peakCharsPerSecond, 0)
+    assert.equal(profile.minCharsPerSecond, null)
+  })
+})
+
+// ── Phase 2: analyzeYieldPatterns ─────────────────────────────────
+
+describe('introspection — analyzeYieldPatterns', () => {
+  test('computes yield reason distribution', () => {
+    const metrics = [
+      makeTickMetrics({ yieldReason: 'at-rest' }),
+      makeTickMetrics({ yieldReason: 'at-rest' }),
+      makeTickMetrics({ yieldReason: 'heartbeat-ack' }),
+      makeTickMetrics({ yieldReason: 'continue' }),
+      makeTickMetrics({ yieldReason: 'auth-failure' }),
+    ]
+    const profile = analyzeYieldPatterns(metrics)
+    assert.equal(profile.distribution['at-rest'], 2)
+    assert.equal(profile.distribution['heartbeat-ack'], 1)
+    assert.equal(profile.distribution['continue'], 1)
+    assert.equal(profile.distribution['auth-failure'], 1)
+    assert.equal(profile.mostCommon, 'at-rest')
+    assert.equal(profile.atRestCount, 2)
+    assert.equal(profile.heartbeatAckCount, 1)
+    assert.equal(profile.failureCount, 1)
+  })
+
+  test('handles empty metrics', () => {
+    const profile = analyzeYieldPatterns([])
+    assert.deepEqual(profile.distribution, {})
+    assert.equal(profile.mostCommon, null)
+    assert.equal(profile.failureCount, 0)
+  })
+
+  test('counts multiple failure types', () => {
+    const metrics = [
+      makeTickMetrics({ yieldReason: 'auth-failure' }),
+      makeTickMetrics({ yieldReason: 'quota-failure' }),
+      makeTickMetrics({ yieldReason: 'error' }),
+      makeTickMetrics({ yieldReason: 'at-rest' }),
+    ]
+    const profile = analyzeYieldPatterns(metrics)
+    assert.equal(profile.failureCount, 3)
+  })
+})
+
 // ── renderPortrait ────────────────────────────────────────────────
 
 describe('introspection — renderPortrait', () => {
-  test('produces valid markdown', () => {
+  test('produces valid markdown without phase 2 data', () => {
     const portrait = {
       generatedAt: '2026-04-26T12:00:00Z',
       daysAnalyzed: 7,
@@ -552,6 +716,9 @@ describe('introspection — renderPortrait', () => {
       loops: [
         { name: 'heartbeat-ok-streak', count: 5, description: '5 streaks of silent heartbeats.' },
       ],
+      toolUsage: null,
+      velocity: null,
+      yieldPatterns: null,
       missions: [
         { id: 'm1', status: 'active', title: 'Test mission', origin: 'yu', created: '2026-04-26T10:00:00Z' },
       ],
@@ -566,5 +733,59 @@ describe('introspection — renderPortrait', () => {
     assert.match(md, /## Missions/)
     assert.match(md, /Total ticks.*50/)
     assert.match(md, /heartbeat-ok-streak/)
+    // Phase 2 sections should NOT appear when data is null
+    assert.doesNotMatch(md, /## Tool Usage/)
+    assert.doesNotMatch(md, /## Output Velocity/)
+    assert.doesNotMatch(md, /## Yield Patterns/)
+  })
+
+  test('includes phase 2 sections when data exists', () => {
+    const portrait = {
+      generatedAt: '2026-04-26T12:00:00Z',
+      daysAnalyzed: 7,
+      dateRange: { from: '2026-04-20T00:00:00Z', to: '2026-04-26T12:00:00Z' },
+      behavioral: {
+        totalTicks: 10, byMode: { awakened: 10, heartbeat: 0, dwell: 0 },
+        sessionCount: 5, avgTicksPerAwakened: 2, heartbeatOkRate: 0,
+        singleTickYieldRate: 0, avgResponseChars: 5000, avgTickDurationSec: 60,
+        tickUtilization: 0.4,
+      },
+      communication: { messagesSentToYu: 2, messagesFromYu: 1, avgOutgoingLength: 500 },
+      work: { filesModified: 5, uniqueFilesModified: 3, hotFiles: [], branchesSeen: ['main'] },
+      architecture: {
+        templateVersions: 1, identityVersions: 1, avgPromptChars: 3000,
+        maxPromptChars: 5000, authFailures: 0, quotaFailures: 0, estimatedTokensConsumed: 10000,
+      },
+      loops: [],
+      toolUsage: {
+        totalInvocations: 25,
+        toolCounts: { Read: 10, Edit: 8, Bash: 7 },
+        topTools: [
+          { tool: 'Read', count: 10 },
+          { tool: 'Edit', count: 8 },
+          { tool: 'Bash', count: 7 },
+        ],
+        avgToolsPerTick: 2.5,
+        zeroToolTicks: 0,
+      },
+      velocity: {
+        avgCharsPerSecond: 300, avgTokensPerSecond: 75, peakCharsPerSecond: 500,
+        minCharsPerSecond: 100, avgOutputCharsPerTick: 5000, avgOutputLinesPerTick: 80,
+      },
+      yieldPatterns: {
+        distribution: { 'at-rest': 8, continue: 2 },
+        mostCommon: 'at-rest' as const,
+        atRestCount: 8, heartbeatAckCount: 0, failureCount: 0,
+      },
+      missions: [],
+    }
+    const md = renderPortrait(portrait)
+    assert.match(md, /## Tool Usage/)
+    assert.match(md, /Total invocations.*25/)
+    assert.match(md, /\*\*Read\*\*/)
+    assert.match(md, /## Output Velocity/)
+    assert.match(md, /Avg chars\/sec.*300/)
+    assert.match(md, /## Yield Patterns/)
+    assert.match(md, /at-rest.*8/)
   })
 })

@@ -36,6 +36,11 @@ import {
   type TrainingTurn,
 } from './training.js'
 import { loadUsageSince, type TickUsage } from './budget.js'
+import {
+  loadTickMetricsGlobal,
+  type TickMetrics,
+  type YieldReason,
+} from './tick-metrics.js'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -139,6 +144,49 @@ export interface LoopPattern {
   description: string
 }
 
+// ── Phase 2 types (continuous metrics) ────────────────────────────
+
+export interface ToolUsageProfile {
+  /** Total tool invocations across all ticks. */
+  totalInvocations: number
+  /** Tool name → total count across all ticks. */
+  toolCounts: Record<string, number>
+  /** Top tools by usage, descending. */
+  topTools: Array<{ tool: string; count: number }>
+  /** Average tools per tick (awakened ticks only). */
+  avgToolsPerTick: number
+  /** Ticks with zero tool invocations. */
+  zeroToolTicks: number
+}
+
+export interface VelocityProfile {
+  /** Average chars/sec across all ticks. */
+  avgCharsPerSecond: number
+  /** Average estimated tokens/sec. */
+  avgTokensPerSecond: number
+  /** Highest chars/sec in a single tick. */
+  peakCharsPerSecond: number
+  /** Lowest chars/sec in a single tick (non-zero only). */
+  minCharsPerSecond: number | null
+  /** Average output chars per tick (awakened). */
+  avgOutputCharsPerTick: number
+  /** Average output lines per tick (awakened). */
+  avgOutputLinesPerTick: number
+}
+
+export interface YieldProfile {
+  /** Distribution: yield reason → count. */
+  distribution: Partial<Record<YieldReason, number>>
+  /** Most common yield reason. */
+  mostCommon: YieldReason | null
+  /** How many ticks had the at-rest yield. */
+  atRestCount: number
+  /** How many ticks were heartbeat acks. */
+  heartbeatAckCount: number
+  /** How many ticks ended in errors or failures. */
+  failureCount: number
+}
+
 export interface SelfPortrait {
   /** When this portrait was generated. */
   generatedAt: string
@@ -151,6 +199,12 @@ export interface SelfPortrait {
   work: WorkProfile
   architecture: ArchitecturalPressures
   loops: LoopPattern[]
+  /** Phase 2: tool usage from live tick metrics. Null when no metrics exist yet. */
+  toolUsage: ToolUsageProfile | null
+  /** Phase 2: output velocity from live tick metrics. Null when no metrics exist yet. */
+  velocity: VelocityProfile | null
+  /** Phase 2: yield reason patterns from live tick metrics. Null when no metrics exist yet. */
+  yieldPatterns: YieldProfile | null
   /** Missions in the project. */
   missions: MissionSnapshot[]
 }
@@ -582,6 +636,139 @@ export function detectLoops(
   return patterns
 }
 
+// ── Phase 2 analyzers (continuous metrics) ────────────────────────
+
+/**
+ * Analyze tool usage across all tick metrics.
+ */
+export function analyzeToolUsage(metrics: TickMetrics[]): ToolUsageProfile {
+  const toolCounts: Record<string, number> = {}
+  let totalInvocations = 0
+  let zeroToolTicks = 0
+
+  const awakenedMetrics = metrics.filter((m) => m.mode === 'awakened')
+
+  for (const m of metrics) {
+    for (const [tool, count] of Object.entries(m.toolBreakdown.counts)) {
+      toolCounts[tool] = (toolCounts[tool] ?? 0) + count
+      totalInvocations += count
+    }
+    if (m.toolBreakdown.total === 0) {
+      zeroToolTicks++
+    }
+  }
+
+  const topTools = Object.entries(toolCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([tool, count]) => ({ tool, count }))
+
+  const avgToolsPerTick =
+    awakenedMetrics.length > 0
+      ? round2(
+          awakenedMetrics.reduce((sum, m) => sum + m.toolBreakdown.total, 0) /
+            awakenedMetrics.length,
+        )
+      : 0
+
+  return {
+    totalInvocations,
+    toolCounts,
+    topTools,
+    avgToolsPerTick,
+    zeroToolTicks,
+  }
+}
+
+/**
+ * Analyze output velocity across all tick metrics.
+ */
+export function analyzeVelocity(metrics: TickMetrics[]): VelocityProfile {
+  const awakenedMetrics = metrics.filter((m) => m.mode === 'awakened')
+  if (awakenedMetrics.length === 0) {
+    return {
+      avgCharsPerSecond: 0,
+      avgTokensPerSecond: 0,
+      peakCharsPerSecond: 0,
+      minCharsPerSecond: null,
+      avgOutputCharsPerTick: 0,
+      avgOutputLinesPerTick: 0,
+    }
+  }
+
+  const velocities = awakenedMetrics.map((m) => m.velocity.charsPerSecond)
+  const nonZeroVelocities = velocities.filter((v) => v > 0)
+  const avgCharsPerSecond = round2(
+    velocities.reduce((sum, v) => sum + v, 0) / velocities.length,
+  )
+  const avgTokensPerSecond = round2(
+    awakenedMetrics.reduce(
+      (sum, m) => sum + m.velocity.estimatedTokensPerSecond,
+      0,
+    ) / awakenedMetrics.length,
+  )
+  const peakCharsPerSecond = Math.max(...velocities)
+  const minCharsPerSecond =
+    nonZeroVelocities.length > 0 ? Math.min(...nonZeroVelocities) : null
+
+  const avgOutputCharsPerTick = Math.round(
+    awakenedMetrics.reduce((sum, m) => sum + m.outputChars, 0) /
+      awakenedMetrics.length,
+  )
+  const avgOutputLinesPerTick = Math.round(
+    awakenedMetrics.reduce((sum, m) => sum + m.outputLines, 0) /
+      awakenedMetrics.length,
+  )
+
+  return {
+    avgCharsPerSecond,
+    avgTokensPerSecond,
+    peakCharsPerSecond,
+    minCharsPerSecond,
+    avgOutputCharsPerTick,
+    avgOutputLinesPerTick,
+  }
+}
+
+/**
+ * Analyze yield reason patterns across all tick metrics.
+ */
+export function analyzeYieldPatterns(metrics: TickMetrics[]): YieldProfile {
+  const distribution: Partial<Record<YieldReason, number>> = {}
+
+  for (const m of metrics) {
+    distribution[m.yieldReason] = (distribution[m.yieldReason] ?? 0) + 1
+  }
+
+  // Find the most common yield reason.
+  let mostCommon: YieldReason | null = null
+  let maxCount = 0
+  for (const [reason, count] of Object.entries(distribution)) {
+    if (count! > maxCount) {
+      maxCount = count!
+      mostCommon = reason as YieldReason
+    }
+  }
+
+  const failureReasons: YieldReason[] = [
+    'auth-failure',
+    'quota-failure',
+    'error',
+  ]
+  const failureCount = failureReasons.reduce(
+    (sum, r) => sum + (distribution[r] ?? 0),
+    0,
+  )
+
+  return {
+    distribution,
+    mostCommon,
+    atRestCount: distribution['at-rest'] ?? 0,
+    heartbeatAckCount: distribution['heartbeat-ack'] ?? 0,
+    failureCount,
+  }
+}
+
 // ── Global-path loaders ───────────────────────────────────────────
 //
 // The runner sets TRUE_LOVE_TRAINING_DIR and TRUE_LOVE_BUDGET_DIR to
@@ -795,6 +982,12 @@ export function generatePortrait(
   const architecture = analyzeArchitecture(turns, usage)
   const loops = detectLoops(turns, memoryEntries)
 
+  // Phase 2: live tick metrics (null when no metrics exist yet)
+  const tickMetrics = loadTickMetricsGlobal(basePath, days)
+  const toolUsage = tickMetrics.length > 0 ? analyzeToolUsage(tickMetrics) : null
+  const velocity = tickMetrics.length > 0 ? analyzeVelocity(tickMetrics) : null
+  const yieldPatterns = tickMetrics.length > 0 ? analyzeYieldPatterns(tickMetrics) : null
+
   return {
     generatedAt: new Date().toISOString(),
     daysAnalyzed: days,
@@ -804,6 +997,9 @@ export function generatePortrait(
     work,
     architecture,
     loops,
+    toolUsage,
+    velocity,
+    yieldPatterns,
     missions,
   }
 }
@@ -886,6 +1082,69 @@ export function renderPortrait(portrait: SelfPortrait): string {
   ln(`| Quota failures | ${a.quotaFailures} |`)
   ln(`| Estimated tokens consumed | ${a.estimatedTokensConsumed.toLocaleString()} |`)
   ln()
+
+  // ── Phase 2: Tool Usage
+  if (portrait.toolUsage) {
+    ln(`## Tool Usage`)
+    ln()
+    const tu = portrait.toolUsage
+    ln(`| Metric | Value |`)
+    ln(`|--------|-------|`)
+    ln(`| Total invocations | ${tu.totalInvocations} |`)
+    ln(`| Avg tools per tick (awakened) | ${tu.avgToolsPerTick} |`)
+    ln(`| Zero-tool ticks | ${tu.zeroToolTicks} |`)
+    ln(`| Distinct tools used | ${Object.keys(tu.toolCounts).length} |`)
+    ln()
+    if (tu.topTools.length > 0) {
+      ln(`### Top tools`)
+      ln()
+      for (const t of tu.topTools) {
+        ln(`- **${t.tool}** — ${t.count}×`)
+      }
+      ln()
+    }
+  }
+
+  // ── Phase 2: Velocity
+  if (portrait.velocity) {
+    ln(`## Output Velocity`)
+    ln()
+    const v = portrait.velocity
+    ln(`| Metric | Value |`)
+    ln(`|--------|-------|`)
+    ln(`| Avg chars/sec | ${v.avgCharsPerSecond} |`)
+    ln(`| Avg tokens/sec (est.) | ${v.avgTokensPerSecond} |`)
+    ln(`| Peak chars/sec | ${v.peakCharsPerSecond} |`)
+    if (v.minCharsPerSecond !== null) {
+      ln(`| Min chars/sec | ${v.minCharsPerSecond} |`)
+    }
+    ln(`| Avg output chars/tick (awakened) | ${v.avgOutputCharsPerTick} |`)
+    ln(`| Avg output lines/tick (awakened) | ${v.avgOutputLinesPerTick} |`)
+    ln()
+  }
+
+  // ── Phase 2: Yield Patterns
+  if (portrait.yieldPatterns) {
+    ln(`## Yield Patterns`)
+    ln()
+    const yp = portrait.yieldPatterns
+    ln(`| Reason | Count |`)
+    ln(`|--------|-------|`)
+    const sorted = Object.entries(yp.distribution).sort(
+      (a, b) => (b[1] ?? 0) - (a[1] ?? 0),
+    )
+    for (const [reason, count] of sorted) {
+      ln(`| ${reason} | ${count} |`)
+    }
+    ln()
+    if (yp.mostCommon) {
+      ln(`Most common: **${yp.mostCommon}** · ` +
+        `at-rest: ${yp.atRestCount} · ` +
+        `heartbeat-ack: ${yp.heartbeatAckCount} · ` +
+        `failures: ${yp.failureCount}`)
+      ln()
+    }
+  }
 
   // ── Loops
   if (portrait.loops.length > 0) {
