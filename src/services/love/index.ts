@@ -69,6 +69,13 @@
 //                   thread ties, ungrounded mission references, and
 //                   restated titles. The vision (seeing the arc) stays
 //                   with the agent.
+//   scoping         — the scope & done-condition layer (steps 4+6 of
+//                   mission-creation). Turns a Framed into a Scoped —
+//                   phase decomposition (this-mission vs future-missions)
+//                   and a testable Definition of Done contract. Quality
+//                   gate catches empty scope, vacuous criteria, trivial
+//                   restating, and unsubstantive deferrals. The
+//                   discernment (wise boundaries) stays with the agent.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -499,3 +506,21 @@ export {
   renderQualityFailures as renderFramingQualityFailures,
   VALID_RELATIONSHIPS,
 } from './framing.js'
+
+export type {
+  Scoped,
+  ScopingQuality,
+  ScopingOptions,
+  ScopeCandidateResult,
+  DoneCondition,
+} from './scoping.js'
+export {
+  scopeCandidate,
+  forceScopeCandidate,
+  assessScopingQuality,
+  qualityPasses as scopingQualityPasses,
+  qualityFailures as scopingQualityFailures,
+  isScopeRedundant,
+  renderScopingBlock,
+  renderQualityFailures as renderScopingQualityFailures,
+} from './scoping.js'
