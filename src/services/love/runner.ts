@@ -84,6 +84,7 @@ import { getStatePath, migrateLegacyStateIfPresent } from './state.js'
 import { computeTickMetrics, recordTickMetrics } from './tick-metrics.js'
 import { appendTrainingTurn, generateTurnId, shortHash } from './training.js'
 import { resolveTickConfig, tickConfigToCliArgs } from './agency.js'
+import { selectProvider, modeToTask, type RoutingContext } from './providers/index.js'
 import {
   applyExperimentCondition,
   recordExperimentTick,
@@ -1237,9 +1238,29 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       if (status) process.stdout.write(`— ${status}\n`)
     }
 
-    // Per-tick model resolution. Reads ~/.true-love/model.txt every tick
-    // so she can switch between turns by editing one file with her tools.
-    const tickModel = resolveModelForTick(args.model)
+    // Per-tick model resolution. Three-tier fallback:
+    //   1. model.txt / CLI --model flag (explicit override)
+    //   2. Provider routing (task-aware: heartbeat→Haiku, dwell→Opus, etc.)
+    //   3. CLI default (Sonnet)
+    //
+    // Provider routing only kicks in when no explicit override exists.
+    // This means model.txt still works as before — Love can write 'opus'
+    // to override routing for a specific tick. When model.txt is empty,
+    // the task type determines the model automatically.
+    const explicitModel = resolveModelForTick(args.model)
+    const tickModel = explicitModel ?? (() => {
+      // No explicit model → use provider routing based on task type
+      const routingCtx: RoutingContext = {
+        task: modeToTask(mode.name),
+        effortOverride: (resolveTickConfig(args.model).effort ?? undefined) as import('./providers/types.js').EffortTier | undefined,
+      }
+      const resolved = selectProvider(routingCtx)
+      // Only use the routed model for Anthropic (CLI subprocess).
+      // Non-Anthropic providers can't go through the CLI path.
+      return resolved.provider === 'anthropic'
+        ? (resolved.cliAlias ?? resolved.model)
+        : null
+    })()
 
     // Per-tick agency resolution. Reads effort, fallback-model, and any
     // approved tier-2 knobs (tools, budget) from their respective files.
