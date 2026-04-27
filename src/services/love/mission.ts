@@ -56,6 +56,8 @@ export type MissionEventType =
   | 'sent-back'
   | 'accepted-done'
   | 'cancelled'
+  | 'reflection-pending'
+  | 'reflection-recorded'
 
 export interface MissionEvent {
   ts: string

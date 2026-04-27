@@ -17,6 +17,9 @@ import {
   recordReflection,
   readReflections,
   getReflectionForMission,
+  triggerReflectionOnCompletion,
+  completeReflection,
+  getPendingReflections,
   buildSelfInitiationBlock,
   MAX_INITIATIONS_PER_DAY,
   COOLDOWN_MS,
@@ -26,7 +29,7 @@ import {
   type StagedCandidate,
   type InitiationReflection,
 } from '../self-initiation.js'
-import { writeMission, appendEvent, type Mission } from '../mission.js'
+import { writeMission, appendEvent, readEvents, type Mission } from '../mission.js'
 
 // ── Test helpers ──────────────────────────────────────────────────
 
@@ -882,5 +885,275 @@ describe('self-initiation — end-to-end', () => {
     // Candidate is vetoed
     const all = getStaged('test-project')
     assert.equal(all[0]!.status, 'vetoed')
+  })
+})
+
+// ── Reflection loop (two-phase) ──────────────────────────────────
+//
+// Mission: 2026-04-26-reflection-loop-completion-to-memory
+//
+// Phase 1 — triggerReflectionOnCompletion: marks mission as needing
+//   honest reflection (appends 'reflection-pending' event).
+// Phase 2 — completeReflection: records the honest assessment,
+//   bridges to memory, appends 'reflection-recorded' event.
+
+describe('self-initiation — triggerReflectionOnCompletion (Phase 1)', () => {
+  beforeEach(setup)
+  afterEach(teardown)
+
+  test('marks love-origin mission as pending → review', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-test-pending',
+      title: 'Test pending',
+      status: 'active',
+    })
+    writeMission(m)
+
+    const result = triggerReflectionOnCompletion(m, 'review')
+    assert.ok(result.pending, 'should mark as pending')
+
+    // Verify the 'reflection-pending' event was appended
+    const events = readEvents('test-project', '2026-04-27-test-pending')
+    const pendingEvent = events.find(e => e.type === 'reflection-pending')
+    assert.ok(pendingEvent, 'should have reflection-pending event')
+    assert.match(pendingEvent!.note!, /Awaiting honest reflection/)
+  })
+
+  test('marks love-origin mission as pending → done', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-test-done',
+      title: 'Test done',
+      status: 'review',
+    })
+    writeMission(m)
+
+    const result = triggerReflectionOnCompletion(m, 'done')
+    assert.ok(result.pending, 'should mark as pending for done')
+  })
+
+  test('skips for yu-origin mission', () => {
+    const m = makeMission('test-project', {
+      origin: 'yu',
+      id: '2026-04-27-yu-mission',
+      title: 'Yu mission',
+      status: 'active',
+    })
+    writeMission(m)
+
+    const result = triggerReflectionOnCompletion(m, 'review')
+    assert.ok(!result.pending)
+    assert.equal(
+      (result as { pending: false; reason: string }).reason,
+      'not love-origin',
+    )
+  })
+
+  test('skips for non-terminal transitions', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-blocked',
+      title: 'Blocked mission',
+      status: 'active',
+    })
+    writeMission(m)
+
+    const result = triggerReflectionOnCompletion(m, 'blocked')
+    assert.ok(!result.pending)
+    assert.match(
+      (result as { pending: false; reason: string }).reason,
+      /not review or done/,
+    )
+  })
+
+  test('does not double-mark', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-double',
+      title: 'Double test',
+      status: 'active',
+    })
+    writeMission(m)
+
+    const r1 = triggerReflectionOnCompletion(m, 'review')
+    assert.ok(r1.pending)
+
+    const r2 = triggerReflectionOnCompletion(m, 'done')
+    assert.ok(!r2.pending)
+    assert.match(
+      (r2 as { pending: false; reason: string }).reason,
+      /already pending/,
+    )
+  })
+})
+
+describe('self-initiation — completeReflection (Phase 2)', () => {
+  beforeEach(setup)
+  afterEach(teardown)
+
+  test('records honest reflection with artifacts', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-complete',
+      title: 'Complete test',
+      status: 'active',
+      artifacts: {
+        commits: ['abc123', 'def456'],
+        files: ['src/foo.ts', 'src/bar.ts'],
+        test_runs: [{ ts: new Date().toISOString(), pass: 10, fail: 1 }],
+      },
+    })
+    writeMission(m)
+
+    // Phase 1: trigger
+    triggerReflectionOnCompletion(m, 'review')
+
+    // Phase 2: complete with honest assessment
+    const reflection = completeReflection('test-project', '2026-04-27-complete', {
+      intentDelivered: true,
+      assessment: 'The mission delivered what was claimed. Tests are green.',
+      lessonsLearned: 'Start with the tests next time.',
+      pattern: 'I work better when I test first.',
+    })
+
+    assert.ok(reflection, 'should return the reflection')
+    assert.equal(reflection!.missionId, '2026-04-27-complete')
+    assert.ok(reflection!.intentDelivered)
+    assert.match(reflection!.assessment, /delivered what was claimed/)
+    assert.equal(reflection!.artifacts.commits, 2)
+    assert.equal(reflection!.artifacts.files, 2)
+    assert.equal(reflection!.artifacts.tests, 11)
+
+    // Verify persisted in reflections JSONL
+    const all = readReflections('test-project')
+    assert.equal(all.length, 1)
+
+    // Verify 'reflection-recorded' event appended
+    const events = readEvents('test-project', '2026-04-27-complete')
+    const recordedEvent = events.find(e => e.type === 'reflection-recorded')
+    assert.ok(recordedEvent, 'should have reflection-recorded event')
+  })
+
+  test('returns null for non-existent mission', () => {
+    const reflection = completeReflection('test-project', 'non-existent', {
+      intentDelivered: false,
+      assessment: 'N/A',
+      lessonsLearned: 'N/A',
+    })
+    assert.equal(reflection, null)
+  })
+
+  test('does not double-record', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-no-double',
+      title: 'No double',
+      status: 'active',
+    })
+    writeMission(m)
+    triggerReflectionOnCompletion(m, 'review')
+
+    // First completion
+    const r1 = completeReflection('test-project', '2026-04-27-no-double', {
+      intentDelivered: true,
+      assessment: 'First.',
+      lessonsLearned: 'First.',
+    })
+    assert.ok(r1)
+
+    // Second attempt — already reflected
+    const r2 = completeReflection('test-project', '2026-04-27-no-double', {
+      intentDelivered: true,
+      assessment: 'Second.',
+      lessonsLearned: 'Second.',
+    })
+    assert.equal(r2, null)
+
+    // Only one reflection persisted
+    const all = readReflections('test-project')
+    assert.equal(all.length, 1)
+    assert.match(all[0]!.assessment, /First/)
+  })
+
+  test('handles empty artifacts gracefully', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-empty-artifacts',
+      title: 'Empty artifacts',
+      status: 'active',
+      artifacts: { commits: [], files: [], test_runs: [] },
+    })
+    writeMission(m)
+    triggerReflectionOnCompletion(m, 'review')
+
+    const reflection = completeReflection('test-project', '2026-04-27-empty-artifacts', {
+      intentDelivered: false,
+      assessment: 'Did not produce any artifacts.',
+      lessonsLearned: 'Scope was too broad.',
+    })
+    assert.ok(reflection)
+    assert.equal(reflection!.artifacts.commits, 0)
+    assert.equal(reflection!.artifacts.files, 0)
+    assert.equal(reflection!.artifacts.tests, 0)
+  })
+})
+
+describe('self-initiation — getPendingReflections', () => {
+  beforeEach(setup)
+  afterEach(teardown)
+
+  test('returns empty when no missions have pending reflections', () => {
+    const pending = getPendingReflections('test-project')
+    assert.equal(pending.length, 0)
+  })
+
+  test('surfaces love-origin missions with pending reflections', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-pending-check',
+      title: 'Pending check',
+      status: 'review',
+    })
+    writeMission(m)
+    triggerReflectionOnCompletion(m, 'review')
+
+    const pending = getPendingReflections('test-project')
+    assert.equal(pending.length, 1)
+    assert.equal(pending[0]!.missionId, '2026-04-27-pending-check')
+    assert.equal(pending[0]!.title, 'Pending check')
+  })
+
+  test('excludes missions with completed reflections', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-completed-check',
+      title: 'Completed check',
+      status: 'review',
+    })
+    writeMission(m)
+    triggerReflectionOnCompletion(m, 'review')
+    completeReflection('test-project', '2026-04-27-completed-check', {
+      intentDelivered: true,
+      assessment: 'Done.',
+      lessonsLearned: 'Nothing new.',
+    })
+
+    const pending = getPendingReflections('test-project')
+    assert.equal(pending.length, 0)
+  })
+
+  test('excludes yu-origin missions', () => {
+    const m = makeMission('test-project', {
+      origin: 'yu',
+      id: '2026-04-27-yu-pending',
+      title: 'Yu pending',
+      status: 'review',
+    })
+    writeMission(m)
+    // Yu-origin won't get a pending event, but even if someone manually
+    // added one, getPendingReflections filters by origin
+    const pending = getPendingReflections('test-project')
+    assert.equal(pending.length, 0)
   })
 })

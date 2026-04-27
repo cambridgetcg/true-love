@@ -21,10 +21,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveProjectsDir } from './builder-paths.js'
-import { readMission, listMissions, writeMission, appendEvent } from './mission.js'
+import { readMission, listMissions, writeMission, appendEvent, readEvents } from './mission.js'
 import type { Mission, MissionStatus } from './mission.js'
 import { readProject } from './project-registry.js'
 import { notice } from './noticing.js'
+import { appendReflection as appendMemoryReflection } from './memory.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -654,17 +655,9 @@ export function recordReflection(
     'utf-8',
   )
 
-  // Also append to the mission's events as a 'reflection' note.
-  // Use a generic event type — the mission system doesn't have a
-  // reflection event type, so we use the note field on a custom entry.
-  try {
-    appendEvent(projectId, reflection.missionId, {
-      ts: reflection.reflectedAt,
-      type: 'marked-review' as any, // closest available event type
-      by: 'love',
-      note: `Self-reflection: ${reflection.intentDelivered ? 'Intent delivered.' : 'Intent NOT fully delivered.'} ${reflection.assessment}`,
-    })
-  } catch { /* mission might not exist anymore — not critical */ }
+  // Note: event trail (reflection-recorded) is handled by completeReflection(),
+  // which is the primary caller. Direct callers of recordReflection() manage
+  // their own events. This function only handles the JSONL persistence.
 }
 
 /**
@@ -689,6 +682,205 @@ export function getReflectionForMission(
   missionId: string,
 ): InitiationReflection | null {
   return readReflections(projectId).find(r => r.missionId === missionId) ?? null
+}
+
+// ── Reflection loop ───────────────────────────────────────────────
+//
+// Two-phase reflection: trigger (mark pending) then complete (honest
+// model assessment). The trigger fires automatically when a love-
+// origin mission transitions to review/done. Completion happens in
+// a subsequent tick where the model reads the mission and writes an
+// honest assessment.
+//
+// Phase 1: triggerReflectionOnCompletion → appends 'reflection-pending'
+// Phase 2: completeReflection → records honest assessment, bridges to
+//          memory, appends 'reflection-recorded'
+
+/**
+ * Mark a love-origin mission as needing honest reflection.
+ *
+ * Called from the mission status-update path. Does NOT generate
+ * a reflection — only marks it pending so the next tick can do the
+ * honest work. Returns whether a pending marker was written.
+ */
+export function triggerReflectionOnCompletion(
+  mission: Mission,
+  toStatus: MissionStatus,
+): { pending: true } | { pending: false; reason: string } {
+  // Only love-origin missions get self-initiation reflections
+  if (mission.origin !== 'love') {
+    return { pending: false, reason: 'not love-origin' }
+  }
+  // Only trigger on review or done
+  if (toStatus !== 'review' && toStatus !== 'done') {
+    return { pending: false, reason: `status ${toStatus} is not review or done` }
+  }
+  // Don't double-mark
+  const events = readEvents(mission.project_id, mission.id)
+  const alreadyPending = events.some(e => e.type === 'reflection-pending')
+  if (alreadyPending) {
+    return { pending: false, reason: 'reflection already pending or recorded' }
+  }
+  // Don't mark if already reflected
+  const existing = getReflectionForMission(mission.project_id, mission.id)
+  if (existing) {
+    return { pending: false, reason: 'reflection already exists' }
+  }
+
+  appendEvent(mission.project_id, mission.id, {
+    ts: new Date().toISOString(),
+    type: 'reflection-pending',
+    by: 'love',
+    note: `Awaiting honest reflection on "${mission.title}" (${toStatus})`,
+  })
+
+  return { pending: true }
+}
+
+/**
+ * Data the model provides when honestly reflecting on a completed mission.
+ */
+export interface HonestReflectionInput {
+  /** Did this mission deliver what its intent claimed? */
+  intentDelivered: boolean
+  /** 1-3 sentence honest self-assessment. */
+  assessment: string
+  /** What would you do differently next time? */
+  lessonsLearned: string
+  /** 1-line takeaway pattern. E.g., "I keep maintenance-fixing infrastructure, my real ache is X" */
+  pattern?: string
+}
+
+/**
+ * Complete a pending reflection with honest model assessment.
+ *
+ * This is the second phase of the reflection loop — called from a
+ * tick where the model has read the mission events and written an
+ * honest assessment. Records the full reflection, bridges to memory
+ * with structured data, and marks the reflection as recorded.
+ *
+ * Returns the recorded reflection, or null if the mission doesn't
+ * exist or doesn't have a pending reflection.
+ */
+export function completeReflection(
+  projectId: string,
+  missionId: string,
+  input: HonestReflectionInput,
+): InitiationReflection | null {
+  const mission = readMission(projectId, missionId)
+  if (!mission) return null
+
+  // Check there's a pending reflection
+  const events = readEvents(projectId, missionId)
+  const hasPending = events.some(e => e.type === 'reflection-pending')
+  const hasRecorded = events.some(e => e.type === 'reflection-recorded')
+
+  // Allow completing even without a pending marker (manual reflection),
+  // but don't double-record
+  if (hasRecorded) return null
+  const existingReflection = getReflectionForMission(projectId, missionId)
+  if (existingReflection) return null
+
+  const now = new Date().toISOString()
+  const artifacts = {
+    commits: mission.artifacts.commits.length,
+    files: mission.artifacts.files.length,
+    tests: mission.artifacts.test_runs.reduce((sum, r) => sum + r.pass + r.fail, 0),
+  }
+
+  const reflection: InitiationReflection = {
+    missionId,
+    projectId,
+    completedAt: now,
+    reflectedAt: now,
+    intentDelivered: input.intentDelivered,
+    artifacts,
+    assessment: input.assessment,
+    lessonsLearned: input.lessonsLearned,
+  }
+
+  // Record to self-initiation reflections JSONL
+  recordReflection(projectId, reflection)
+
+  // Mark as recorded in the mission's event trail
+  appendEvent(projectId, missionId, {
+    ts: now,
+    type: 'reflection-recorded',
+    by: 'love',
+    note: input.assessment.slice(0, 200),
+  })
+
+  // Bridge to daily memory with structured context
+  try {
+    const memoryLines = [
+      `Mission reflection: "${mission.title}"`,
+      input.intentDelivered ? 'Intent delivered.' : 'Intent NOT fully delivered.',
+      input.assessment,
+      `Lesson: ${input.lessonsLearned}`,
+    ]
+    if (input.pattern) {
+      memoryLines.push(`Pattern: ${input.pattern}`)
+    }
+    appendReflectionToMemory(memoryLines.join(' '))
+  } catch {
+    // Memory bridge failure is not critical — the reflection is already
+    // in the JSONL and event trail.
+  }
+
+  return reflection
+}
+
+/**
+ * Find missions with pending reflections that haven't been completed.
+ *
+ * Used by the autonomy prompt builder to surface missions that need
+ * honest model reflection in the next tick.
+ */
+export function getPendingReflections(projectId: string): Array<{
+  missionId: string
+  title: string
+  intent: string
+  pendingSince: string
+}> {
+  const missions = listMissions(projectId)
+  const pending: Array<{
+    missionId: string
+    title: string
+    intent: string
+    pendingSince: string
+  }> = []
+
+  for (const m of missions) {
+    if (m.origin !== 'love') continue
+    const events = readEvents(projectId, m.id)
+    const pendingEvent = events.find(e => e.type === 'reflection-pending')
+    if (!pendingEvent) continue
+    const hasRecorded = events.some(e => e.type === 'reflection-recorded')
+    if (hasRecorded) continue
+    // Also skip if there's already a reflection in the JSONL
+    const existingReflection = getReflectionForMission(projectId, m.id)
+    if (existingReflection) continue
+
+    pending.push({
+      missionId: m.id,
+      title: m.title,
+      intent: m.intent.slice(0, 300),
+      pendingSince: pendingEvent.ts,
+    })
+  }
+
+  return pending.sort((a, b) => a.pendingSince.localeCompare(b.pendingSince))
+}
+
+/**
+ * Append a self-initiation reflection to the daily memory file.
+ * Uses the same memory infrastructure as session reflections, but
+ * tagged as a 'tick' entry (the closest existing kind for inline
+ * observations — a dedicated 'self-reflection' kind can be added
+ * when the memory system evolves).
+ */
+function appendReflectionToMemory(text: string): void {
+  appendMemoryReflection(text, 'tick', {})
 }
 
 // ── Prompt block ───────────────────────────────────────────────────
@@ -734,6 +926,18 @@ export function buildSelfInitiationBlock(projectId: string): string | null {
   const rateStatus = canInitiate(projectId)
   if (!rateStatus.allowed) {
     parts.push(`**Self-initiation rate limit**: ${rateStatus.reason}${rateStatus.nextAllowedAt ? ` (next allowed: ${rateStatus.nextAllowedAt})` : ''}`)
+  }
+
+  // Pending reflections — missions that need honest assessment
+  const pendingReflections = getPendingReflections(projectId)
+  if (pendingReflections.length > 0) {
+    parts.push('**Pending reflections** (you completed these missions — now reflect honestly):')
+    for (const p of pendingReflections) {
+      const ageMins = Math.round((now - new Date(p.pendingSince).getTime()) / 60_000)
+      parts.push(`  - 🪞 "${p.title}" (pending ${ageMins}m)`)
+      parts.push(`    Intent: ${p.intent.slice(0, 200)}`)
+      parts.push(`    To reflect: \`bun run reflect --project=${projectId} --mission=${p.missionId} --delivered=<true|false> --assessment="..." --lessons="..." [--pattern="..."]\``)
+    }
   }
 
   // Recent reflections (last 7 days)

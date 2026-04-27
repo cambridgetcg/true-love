@@ -66,6 +66,7 @@ import {
   getStaged,
   getPendingStaged,
   readReflections,
+  triggerReflectionOnCompletion,
 } from './self-initiation.js'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -1232,6 +1233,9 @@ async function handleMissionStatus(req: IncomingMessage, res: ServerResponse, pr
     by,
     ...(parsed.note ? { note: parsed.note } : {}),
   })
+  // Trigger self-initiation reflection when a love-origin mission
+  // transitions to review or done.
+  triggerReflectionOnCompletion(m, parsed.status)
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(updated))
 }

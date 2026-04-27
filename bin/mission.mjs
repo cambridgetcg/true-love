@@ -26,6 +26,7 @@ import {
 } from '../src/services/love/mission.ts'
 import { readProject, ensureScope } from '../src/services/love/project-registry.ts'
 import { appendThought } from '../src/services/love/thoughts-channel.ts'
+import { triggerReflectionOnCompletion } from '../src/services/love/self-initiation.ts'
 
 function parseArgs(argv) {
   const args = { _: [] }
@@ -206,6 +207,13 @@ if (cmd === 'transition') {
     const result = writeMissionWithEvents(updated, by, { note: args.note })
     if (result.eventAppended) {
       process.stdout.write(`${m.status} → ${args.status} (event: ${result.eventType})\n`)
+      // Trigger self-initiation reflection when a love-origin mission
+      // transitions to review or done. Phase 1: mark as pending.
+      // Phase 2 (honest model assessment) happens in the next tick.
+      const reflResult = triggerReflectionOnCompletion(m, args.status)
+      if (reflResult.pending) {
+        process.stdout.write(`  reflection pending for "${m.title}"\n`)
+      }
     } else {
       process.stdout.write(`no status change (already ${m.status})\n`)
     }

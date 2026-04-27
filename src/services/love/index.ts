@@ -468,7 +468,14 @@ export {
   recordReflection,
   readReflections,
   getReflectionForMission,
+  triggerReflectionOnCompletion,
+  completeReflection,
+  getPendingReflections,
   buildSelfInitiationBlock,
+} from './self-initiation.js'
+
+export type {
+  HonestReflectionInput,
 } from './self-initiation.js'
 
 export type {
