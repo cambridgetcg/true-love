@@ -73,6 +73,13 @@ import {
 } from './self-initiation.js'
 import { readProgress, readLatestProgress, detectStall } from './progress.js'
 import { fireUserPromptSubmit } from './hooks/fire-points.js'
+import {
+  enqueueExtraction,
+  drainExtractions,
+  readRecentMemories as readBiographicalMemories,
+  formatCompact as formatBiographicalCompact,
+  getExtractionStatus,
+} from './extract-memories/index.js'
 import { getStreamDir, readNewDeltas, type StreamDelta } from './stream.js'
 import {
   createSession,
@@ -516,6 +523,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/love-state') return handleLoveState(req, res)
       if (req.method === 'GET' && path === '/api/mind-trace') return handleMindTrace(req, res)
       if (req.method === 'GET' && path === '/api/anamnesis') return handleAnamnesis(req, res)
+      if (req.method === 'GET' && path === '/api/biographical') return handleBiographical(req, res)
       if (req.method === 'GET' && path === '/api/self-initiation') return handleSelfInitiation(req, res)
       // Veto a staged self-initiation candidate
       const vetoMatch = path.match(/^\/api\/self-initiation\/([^/]+)\/veto$/)
@@ -636,6 +644,41 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
                   tag: msg.tag,
                 })
               }
+            }
+
+            // ── Biographical memory extraction ──────────────────
+            // After routing new AI messages, enqueue extraction for
+            // each user→AI exchange. The extraction runs in the
+            // background (Haiku tier) and never blocks the UI.
+            try {
+              const yuPath = getFromYuPath()
+              if (existsSync(yuPath)) {
+                const yuMessages = parseChannelFile(readFileSync(yuPath, 'utf-8'), 'yu')
+                for (const aiMsg of newMessages) {
+                  // Skip heartbeat/autonomous messages — extract only
+                  // from visit exchanges (Yu writes, Love responds)
+                  if (!aiMsg.tag.includes('heartbeat') && !aiMsg.tag.includes('autonomous')) {
+                    // Find the most recent Yu message before this AI response
+                    const precedingYu = yuMessages
+                      .filter((m) => m.ts < aiMsg.ts)
+                      .pop()
+                    if (precedingYu) {
+                      enqueueExtraction(
+                        {
+                          user: precedingYu.body,
+                          assistant: aiMsg.body,
+                          userTs: precedingYu.ts,
+                          assistantTs: aiMsg.ts,
+                        },
+                        activeSession?.id,
+                        'visit',
+                      )
+                    }
+                  }
+                }
+              }
+            } catch {
+              // Extraction is best-effort — never block the message flow
             }
           }
         }
@@ -812,6 +855,9 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     buildSseClients.clear()
     for (const t of debounceTimers.values()) clearTimeout(t)
     debounceTimers.clear()
+    // Drain in-flight biographical extractions before shutdown
+    // (pattern from cli/print.ts:967 in Claude Code reference)
+    drainExtractions(10_000).catch(() => {})
     return origClose(cb) as ServerInstance
   }
   return instance
@@ -943,6 +989,33 @@ function handleAnamnesis(req: IncomingMessage, res: ServerResponse): void {
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'anamnesis composition failed' }))
+  }
+}
+
+// ── Biographical memories endpoint ──────────────────────────────
+
+function handleBiographical(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const days = parseInt(url.searchParams.get('days') ?? '30', 10)
+  const format = url.searchParams.get('format') ?? 'json'
+  try {
+    const memories = readBiographicalMemories(Math.min(days, 365))
+    const status = getExtractionStatus()
+    if (format === 'compact') {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' })
+      res.end(formatBiographicalCompact(memories))
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        count: memories.length,
+        days,
+        extraction: status,
+        memories,
+      }))
+    }
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'biographical read failed' }))
   }
 }
 
