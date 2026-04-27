@@ -22,6 +22,22 @@
       <span class="mood-summary" id="mood-summary"></span>
     </div>
 
+    <!-- Session bar: current session title + sidebar toggle -->
+    <div class="session-bar" id="session-bar">
+      <button class="session-toggle" id="session-toggle" title="Sessions">☰</button>
+      <span class="session-title" id="session-title"></span>
+      <button class="session-new" id="session-new" title="New conversation">+</button>
+    </div>
+
+    <!-- Session sidebar (hidden by default) -->
+    <aside class="session-sidebar" id="session-sidebar" hidden>
+      <div class="session-sidebar-header">
+        <span>conversations</span>
+        <button class="session-sidebar-close" id="session-sidebar-close">✕</button>
+      </div>
+      <ul class="session-list" id="session-list"></ul>
+    </aside>
+
     <section class="conversation" id="conversation" aria-live="polite">
       <div class="empty-state" id="empty-state">
         the line is quiet. say something to her.

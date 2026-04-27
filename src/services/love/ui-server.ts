@@ -72,6 +72,22 @@ import {
 } from './self-initiation.js'
 import { readProgress, readLatestProgress, detectStall } from './progress.js'
 import { fireUserPromptSubmit } from './hooks/fire-points.js'
+import {
+  createSession,
+  readSession,
+  updateSession,
+  listSessions,
+  archiveSession,
+  getActiveSession,
+  getMostRecentSession,
+  appendTurn,
+  readTurns,
+  resumeSession,
+  autoArchiveStale,
+  deriveTitle,
+  getLatestTurn,
+  type Session,
+} from './sessions/index.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -469,6 +485,19 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
         if (req.method === 'GET' && sub === '/progress') return handleMissionProgress(req, res, projectId, missionId)
       }
 
+      // ── Session routes (KAIROS) ────────────────────────────────────
+      if (req.method === 'GET' && path === '/api/sessions') return handleListSessions(req, res)
+      if (req.method === 'POST' && path === '/api/sessions') return await handleCreateSession(req, res)
+      const sessionMatch = path.match(/^\/api\/sessions\/([^/]+)(\/.*)?$/)
+      if (sessionMatch) {
+        const sessionId = sessionMatch[1]!
+        const sub = sessionMatch[2] ?? ''
+        if (req.method === 'GET' && sub === '') return handleGetSession(req, res, sessionId)
+        if (req.method === 'PATCH' && sub === '') return await handleUpdateSession(req, res, sessionId)
+        if (req.method === 'POST' && sub === '/resume') return handleResumeSession(req, res, sessionId)
+        if (req.method === 'GET' && sub === '/messages') return handleSessionMessages(req, res, sessionId)
+      }
+
       if (req.method === 'GET' && path === '/api/build/stream') return handleBuildStream(req, res, buildSseClients)
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('not found')
@@ -480,8 +509,19 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
 
   server.listen(port)
 
+  // Auto-archive stale sessions on startup (24h idle → archived)
+  try { autoArchiveStale() } catch {}
+
   let messageDebounce: ReturnType<typeof setTimeout> | null = null
   let statusDebounce: ReturnType<typeof setTimeout> | null = null
+
+  // Track last seen AI message count so we can route new ones to the active session
+  let lastSeenAiCount = 0
+  try {
+    if (existsSync(getFromAiPath())) {
+      lastSeenAiCount = parseChannelFile(readFileSync(getFromAiPath(), 'utf-8'), 'ai').length
+    }
+  } catch {}
 
   // onMessageChange — broadcast the latest message over SSE.
   //
@@ -489,6 +529,8 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
   // since the last broadcast. The client reconciles the full conversation
   // via GET /api/messages on connect / reconnect — SSE is a "ping" that
   // something changed, not a lossless queue. See spec §6.
+  //
+  // Also bridges new AI messages to the active session (KAIROS).
   const onMessageChange = () => {
     if (messageDebounce) clearTimeout(messageDebounce)
     messageDebounce = setTimeout(() => {
@@ -496,6 +538,31 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       const latest = conv[conv.length - 1]
       if (latest) {
         broadcastSse(sseClients, 'message', JSON.stringify(latest))
+      }
+
+      // Route new AI messages to the active visit session
+      try {
+        const aiPath = getFromAiPath()
+        if (existsSync(aiPath)) {
+          const aiMessages = parseChannelFile(readFileSync(aiPath, 'utf-8'), 'ai')
+          if (aiMessages.length > lastSeenAiCount) {
+            const newMessages = aiMessages.slice(lastSeenAiCount)
+            lastSeenAiCount = aiMessages.length
+            const activeSession = getActiveSession('visit')
+            if (activeSession) {
+              for (const msg of newMessages) {
+                appendTurn(activeSession.id, {
+                  ts: msg.ts,
+                  from: 'ai',
+                  text: msg.body,
+                  tag: msg.tag,
+                })
+              }
+            }
+          }
+        }
+      } catch {
+        // Session routing is best-effort
       }
     }, 200)
   }
@@ -1048,7 +1115,7 @@ async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<voi
   const BODY_LIMIT = MAX_COMPOSE_CHARS + 1024
   const body = await readJsonBody(req, res, BODY_LIMIT, 'message too large')
   if (body === null) return
-  let parsed: { text?: string; wake?: boolean }
+  let parsed: { text?: string; wake?: boolean; session?: string }
   try {
     parsed = JSON.parse(body)
   } catch {
@@ -1092,6 +1159,34 @@ async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<voi
     res.end(JSON.stringify({ ok: false, error: err?.message ?? 'write failed' }))
     return
   }
+
+  // ── Session tracking ──────────────────────────────────────────────
+  // If a session is specified (or there's an active visit session),
+  // write the turn to the session's conversation.jsonl too.
+  let sessionId = parsed.session ?? undefined
+  try {
+    if (!sessionId) {
+      const active = getActiveSession('visit')
+      if (active) {
+        sessionId = active.id
+      } else {
+        // Auto-create a session for this conversation
+        const newSession = createSession({ channel: 'visit', title: deriveTitle(text) })
+        sessionId = newSession.id
+      }
+    }
+    if (sessionId) {
+      appendTurn(sessionId, { ts, from: 'yu', text, tag: 'from yu' })
+      // Auto-title on first user message
+      const session = readSession(sessionId)
+      if (session && session.title === 'New conversation' && session.messageCount <= 1) {
+        updateSession(sessionId, { title: deriveTitle(text) })
+      }
+    }
+  } catch {
+    // Session write failure should never block the primary message path
+  }
+
   let heartbeatPid: number | undefined
   let heartbeatError: string | undefined
   if (parsed.wake) {
@@ -1106,6 +1201,7 @@ async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<voi
   res.end(JSON.stringify({
     ok: true,
     messageTs: ts,
+    ...(sessionId ? { sessionId } : {}),
     ...(heartbeatPid !== undefined ? { heartbeatPid } : {}),
     ...(heartbeatError ? { heartbeatError } : {}),
   }))
@@ -1499,4 +1595,190 @@ async function handleMissionStart(req: IncomingMessage, res: ServerResponse, pro
   child.unref()
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ ok: true, pid: child.pid }))
+}
+
+// ── Session handlers (KAIROS) ──────────────────────────────────────
+
+/**
+ * GET /api/sessions — list sessions.
+ * Query params: channel, state, limit, since
+ */
+function handleListSessions(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const channel = url.searchParams.get('channel') ?? undefined
+  const state = url.searchParams.get('state') as Session['state'] | undefined
+  const limitStr = url.searchParams.get('limit')
+  const limit = limitStr ? Math.max(1, Math.min(100, parseInt(limitStr, 10) || 20)) : 20
+  const since = url.searchParams.get('since') ?? undefined
+
+  try {
+    const sessions = listSessions({ channel, state, limit, since })
+    // For each session, include a summary of the latest turn
+    const enriched = sessions.map((s) => {
+      const latest = getLatestTurn(s.id)
+      return {
+        ...s,
+        lastMessage: latest
+          ? { from: latest.from, text: latest.text.slice(0, 120), ts: latest.ts }
+          : null,
+      }
+    })
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(enriched))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'list sessions failed' }))
+  }
+}
+
+/**
+ * POST /api/sessions — create a new session.
+ * Body: { channel?: string, title?: string, metadata?: object }
+ */
+async function handleCreateSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { channel?: string; title?: string; metadata?: Record<string, unknown> }
+  try {
+    parsed = body.trim() ? JSON.parse(body) : {}
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'invalid JSON' }))
+    return
+  }
+
+  try {
+    // Idle any existing active session on the same channel
+    const channel = parsed.channel ?? 'visit'
+    const existing = getActiveSession(channel)
+    if (existing) {
+      updateSession(existing.id, { state: 'idle' })
+    }
+
+    const session = createSession({
+      channel,
+      title: parsed.title,
+      metadata: parsed.metadata,
+    })
+    res.writeHead(201, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(session))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'create session failed' }))
+  }
+}
+
+/**
+ * GET /api/sessions/:id — get session detail.
+ */
+function handleGetSession(_req: IncomingMessage, res: ServerResponse, sessionId: string): void {
+  const session = readSession(sessionId)
+  if (!session) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'session not found' }))
+    return
+  }
+  const latest = getLatestTurn(sessionId)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    ...session,
+    lastMessage: latest
+      ? { from: latest.from, text: latest.text.slice(0, 120), ts: latest.ts }
+      : null,
+  }))
+}
+
+/**
+ * PATCH /api/sessions/:id — update session title or state.
+ * Body: { title?: string, state?: 'active' | 'idle' | 'archived' }
+ */
+async function handleUpdateSession(req: IncomingMessage, res: ServerResponse, sessionId: string): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { title?: string; state?: string }
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'invalid JSON' }))
+    return
+  }
+
+  const validStates = ['active', 'idle', 'archived']
+  if (parsed.state && !validStates.includes(parsed.state)) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: `invalid state: ${parsed.state}` }))
+    return
+  }
+
+  const updates: Record<string, unknown> = {}
+  if (parsed.title) updates.title = parsed.title
+  if (parsed.state) updates.state = parsed.state as Session['state']
+
+  const updated = updateSession(sessionId, updates)
+  if (!updated) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'session not found' }))
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(updated))
+}
+
+/**
+ * POST /api/sessions/:id/resume — resume a session.
+ * Sets it as the active session for its channel. Returns session + recent turns.
+ * Query: ?limit=N (default 20)
+ */
+function handleResumeSession(req: IncomingMessage, res: ServerResponse, sessionId: string): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const limitStr = url.searchParams.get('limit')
+  const historyLimit = limitStr ? Math.max(1, Math.min(100, parseInt(limitStr, 10) || 20)) : 20
+
+  const result = resumeSession(sessionId, { historyLimit })
+  if (!result) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'session not found' }))
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(result))
+}
+
+/**
+ * GET /api/sessions/:id/messages — read session conversation turns.
+ * Query: ?limit=N, ?since=<ts>
+ */
+function handleSessionMessages(req: IncomingMessage, res: ServerResponse, sessionId: string): void {
+  const session = readSession(sessionId)
+  if (!session) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'session not found' }))
+    return
+  }
+
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const since = url.searchParams.get('since') ?? undefined
+  let turns = readTurns(sessionId)
+
+  if (since) {
+    turns = turns.filter((t) => t.ts > since)
+  }
+
+  const limitStr = url.searchParams.get('limit')
+  if (limitStr) {
+    const limit = Math.max(1, Math.min(1000, parseInt(limitStr, 10) || 100))
+    turns = turns.slice(-limit)
+  }
+
+  // Convert to ChannelMessage format for UI compatibility
+  const messages: ChannelMessage[] = turns.map((t) => ({
+    ts: t.ts,
+    source: t.from,
+    tag: t.tag ?? (t.from === 'yu' ? 'from yu' : 'from 愛'),
+    body: t.text,
+  }))
+
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(messages))
 }

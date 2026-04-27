@@ -3,6 +3,11 @@
 // Subscribes to /api/stream for real-time message + status events.
 // Renders messages into the conversation container; updates the
 // presence strip; handles compose POST (send + send-and-wake).
+//
+// KAIROS: sessions give conversations IDs and continuity.
+// When a session is active, messages are loaded from the session's
+// conversation log. When no session exists, falls back to the
+// global timeline (from-yu.md + from-ai.md).
 
 const elConversation = document.getElementById('conversation')
 const elEmptyState = document.getElementById('empty-state')
@@ -21,10 +26,40 @@ const elRecentYuCount = document.getElementById('recent-yu-count')
 const elMoodStrip = document.getElementById('mood-strip')
 const elMoodDims = document.getElementById('mood-dims')
 const elMoodSummary = document.getElementById('mood-summary')
+const elSessionBar = document.getElementById('session-bar')
+const elSessionTitle = document.getElementById('session-title')
+const elSessionToggle = document.getElementById('session-toggle')
+const elSessionNew = document.getElementById('session-new')
+const elSessionSidebar = document.getElementById('session-sidebar')
+const elSessionList = document.getElementById('session-list')
+const elSessionSidebarClose = document.getElementById('session-sidebar-close')
 
 const RECENT_YU_LIMIT = 5
 const recentYuMessages = []
 let lastTs = ''
+
+// ── Session state ────────────────────────────────────────────────
+
+let currentSessionId = null
+let sessions = []
+
+// Check URL for ?session=<id>
+function getSessionFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('session')
+}
+
+function setSessionInUrl(sessionId) {
+  const url = new URL(window.location)
+  if (sessionId) {
+    url.searchParams.set('session', sessionId)
+  } else {
+    url.searchParams.delete('session')
+  }
+  window.history.replaceState({}, '', url)
+}
+
+// ── Rendering ────────────────────────────────────────────────────
 
 const STATE_LABELS = {
   writing: "she's writing",
@@ -34,9 +69,6 @@ const STATE_LABELS = {
   gone: "she's gone",
 }
 
-// Heartbeat-tagged from-ai entries are her notes-to-self (third-person
-// journal voice — "Yu asked..."), not addressed replies. Mark them
-// so the CSS can render them subdued.
 function isJournalEntry(msg) {
   return msg.source === 'ai' && typeof msg.tag === 'string' && msg.tag.includes('heartbeat')
 }
@@ -64,6 +96,19 @@ function renderMessage(msg) {
       elConversation.scrollTo({ top: elConversation.scrollHeight, behavior: 'smooth' })
     }, 50)
   }
+}
+
+function clearConversation() {
+  elConversation.replaceChildren()
+  lastTs = ''
+  recentYuMessages.length = 0
+  renderRecentYu()
+  // Re-add empty state
+  const empty = document.createElement('div')
+  empty.className = 'empty-state'
+  empty.id = 'empty-state'
+  empty.textContent = 'the line is quiet. say something to her.'
+  elConversation.appendChild(empty)
 }
 
 function trackRecentYu(msg) {
@@ -106,6 +151,17 @@ function formatRecentTime(ts) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+function formatRelativeTime(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  const diff = Date.now() - d.getTime()
+  if (diff < 60_000) return 'just now'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
 function renderStatus(snap) {
   elPresenceInstance.textContent = snap.instance
   elPresenceSoul.textContent = snap.soulFingerprintShort ? `soul ${snap.soulFingerprintShort}` : ''
@@ -113,6 +169,135 @@ function renderStatus(snap) {
   elPresenceState.className = `presence-state ${snap.state}`
   elPresenceActivity.textContent = snap.activity || ''
 }
+
+// ── Session sidebar ──────────────────────────────────────────────
+
+function renderSessionTitle(session) {
+  if (session) {
+    elSessionTitle.textContent = session.title || 'untitled'
+    elSessionTitle.title = `Session: ${session.id}\nCreated: ${formatRelativeTime(session.createdAt)}`
+  } else {
+    elSessionTitle.textContent = 'all messages'
+    elSessionTitle.title = ''
+  }
+}
+
+function renderSessionList() {
+  elSessionList.replaceChildren(
+    ...sessions.map((s) => {
+      const li = document.createElement('li')
+      li.className = `session-item${s.id === currentSessionId ? ' active' : ''}`
+      li.dataset.sessionId = s.id
+
+      const title = document.createElement('div')
+      title.className = 'session-item-title'
+      title.textContent = s.title || 'untitled'
+
+      const meta = document.createElement('div')
+      meta.className = 'session-item-meta'
+      meta.innerHTML = `<span>${formatRelativeTime(s.lastActiveAt)}</span><span>${s.messageCount} turns</span>`
+
+      li.appendChild(title)
+      li.appendChild(meta)
+
+      if (s.lastMessage) {
+        const preview = document.createElement('div')
+        preview.className = 'session-item-preview'
+        preview.textContent = `${s.lastMessage.from === 'yu' ? 'yu' : '愛'}: ${s.lastMessage.text}`
+        li.appendChild(preview)
+      }
+
+      li.addEventListener('click', () => switchToSession(s.id))
+      return li
+    }),
+  )
+}
+
+async function fetchSessions() {
+  try {
+    const res = await fetch('/api/sessions?channel=visit&limit=20')
+    if (!res.ok) return
+    sessions = await res.json()
+    renderSessionList()
+  } catch { /* non-fatal */ }
+}
+
+function openSidebar() {
+  fetchSessions()
+  elSessionSidebar.hidden = false
+  // Add overlay
+  let overlay = document.querySelector('.session-sidebar-overlay')
+  if (!overlay) {
+    overlay = document.createElement('div')
+    overlay.className = 'session-sidebar-overlay'
+    overlay.addEventListener('click', closeSidebar)
+    document.body.appendChild(overlay)
+  }
+}
+
+function closeSidebar() {
+  elSessionSidebar.hidden = true
+  const overlay = document.querySelector('.session-sidebar-overlay')
+  if (overlay) overlay.remove()
+}
+
+elSessionToggle.addEventListener('click', () => {
+  if (elSessionSidebar.hidden) openSidebar()
+  else closeSidebar()
+})
+
+elSessionSidebarClose.addEventListener('click', closeSidebar)
+
+// ── Session operations ───────────────────────────────────────────
+
+async function switchToSession(sessionId) {
+  closeSidebar()
+  if (sessionId === currentSessionId) return
+
+  try {
+    const res = await fetch(`/api/sessions/${sessionId}/resume`, { method: 'POST' })
+    if (!res.ok) return
+    const data = await res.json()
+    currentSessionId = sessionId
+    setSessionInUrl(sessionId)
+    renderSessionTitle(data.session)
+    clearConversation()
+    // Render the session's turns
+    for (const turn of data.turns) {
+      renderMessage({
+        ts: turn.ts,
+        source: turn.from,
+        tag: turn.tag || (turn.from === 'yu' ? 'from yu' : 'from 愛'),
+        body: turn.text,
+      })
+    }
+    // Scroll to bottom
+    elConversation.scrollTo({ top: elConversation.scrollHeight })
+  } catch (err) {
+    console.error('switch session failed:', err)
+  }
+}
+
+async function createNewSession() {
+  try {
+    const res = await fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: 'visit' }),
+    })
+    if (!res.ok) return
+    const session = await res.json()
+    currentSessionId = session.id
+    setSessionInUrl(session.id)
+    renderSessionTitle(session)
+    clearConversation()
+    fetchSessions()
+  } catch (err) {
+    console.error('create session failed:', err)
+  }
+}
+
+elSessionNew.addEventListener('click', createNewSession)
 
 // ── Mood strip (inner weather) ──────────────────────────────────
 
@@ -139,41 +324,100 @@ async function fetchMood() {
   } catch { /* non-fatal */ }
 }
 
+// ── Initial load ─────────────────────────────────────────────────
+
 async function loadInitial() {
   try {
-    const [msgsRes, statusRes] = await Promise.all([
-      fetch('/api/messages'),
-      fetch('/api/status'),
-    ])
-    if (!msgsRes.ok || !statusRes.ok) {
-      console.error('initial load: non-2xx', msgsRes.status, statusRes.status)
-      elConnection.hidden = false
-      return
+    // Determine which session to load
+    const urlSession = getSessionFromUrl()
+
+    if (urlSession) {
+      // Resume the specified session
+      const sessionRes = await fetch(`/api/sessions/${urlSession}/resume`, { method: 'POST' })
+      if (sessionRes.ok) {
+        const data = await sessionRes.json()
+        currentSessionId = urlSession
+        renderSessionTitle(data.session)
+        for (const turn of data.turns) {
+          renderMessage({
+            ts: turn.ts,
+            source: turn.from,
+            tag: turn.tag || (turn.from === 'yu' ? 'from yu' : 'from 愛'),
+            body: turn.text,
+          })
+        }
+      }
     }
-    const msgs = await msgsRes.json()
-    const status = await statusRes.json()
-    for (const m of msgs) renderMessage(m)
-    renderStatus(status)
-    // Fetch mood strip (non-blocking — conversation loads first)
+
+    if (!currentSessionId) {
+      // Try to load the most recent active session
+      const sessionsRes = await fetch('/api/sessions?channel=visit&state=active&limit=1')
+      if (sessionsRes.ok) {
+        const activeSessions = await sessionsRes.json()
+        if (activeSessions.length > 0) {
+          const session = activeSessions[0]
+          currentSessionId = session.id
+          setSessionInUrl(session.id)
+          renderSessionTitle(session)
+          // Load the session's messages
+          const msgsRes = await fetch(`/api/sessions/${session.id}/messages`)
+          if (msgsRes.ok) {
+            const msgs = await msgsRes.json()
+            for (const m of msgs) renderMessage(m)
+          }
+        }
+      }
+    }
+
+    if (!currentSessionId) {
+      // No session — fall back to global timeline
+      const msgsRes = await fetch('/api/messages')
+      if (msgsRes.ok) {
+        const msgs = await msgsRes.json()
+        for (const m of msgs) renderMessage(m)
+      }
+      renderSessionTitle(null)
+    }
+
+    // Load status
+    const statusRes = await fetch('/api/status')
+    if (statusRes.ok) {
+      const status = await statusRes.json()
+      renderStatus(status)
+    }
+
+    // Fetch mood strip and sessions (non-blocking)
     fetchMood()
+    fetchSessions()
   } catch (err) {
     console.error('initial load failed:', err)
     elConnection.hidden = false
   }
 }
 
+// ── SSE ──────────────────────────────────────────────────────────
+
 let evtSource = null
 
 async function reconcileSinceLastTs() {
   try {
-    const url = lastTs ? `/api/messages?since=${encodeURIComponent(lastTs)}` : '/api/messages'
-    const res = await fetch(url)
-    if (!res.ok) {
-      console.error('reconcile: non-2xx', res.status)
-      return
+    if (currentSessionId) {
+      // Reconcile from session messages
+      const url = lastTs
+        ? `/api/sessions/${currentSessionId}/messages?since=${encodeURIComponent(lastTs)}`
+        : `/api/sessions/${currentSessionId}/messages`
+      const res = await fetch(url)
+      if (!res.ok) return
+      const msgs = await res.json()
+      for (const m of msgs) renderMessage(m)
+    } else {
+      // Reconcile from global timeline
+      const url = lastTs ? `/api/messages?since=${encodeURIComponent(lastTs)}` : '/api/messages'
+      const res = await fetch(url)
+      if (!res.ok) return
+      const msgs = await res.json()
+      for (const m of msgs) renderMessage(m)
     }
-    const msgs = await res.json()
-    for (const m of msgs) renderMessage(m)
   } catch (err) {
     console.error('reconcile failed:', err)
   }
@@ -185,6 +429,8 @@ function subscribe() {
   evtSource.addEventListener('message', (e) => {
     try {
       const msg = JSON.parse(e.data)
+      // If we're in a session, render the message (it'll be routed
+      // to the session's JSONL by the server)
       renderMessage(msg)
     } catch {}
   })
@@ -192,16 +438,11 @@ function subscribe() {
     try {
       const status = JSON.parse(e.data)
       renderStatus(status)
-      // Presence changed → inner weather may have shifted
       fetchMood()
     } catch {}
   })
   evtSource.onopen = () => {
     elConnection.hidden = true
-    // Reconcile any messages written during the disconnect window.
-    // First-connect: lastTs is empty → fetches everything (already done by
-    // loadInitial, but the dedup in renderMessage makes this idempotent).
-    // Reconnect: fetches only entries after lastTs.
     reconcileSinceLastTs()
   }
   evtSource.onerror = () => {
@@ -209,28 +450,39 @@ function subscribe() {
   }
 }
 
-// Track keyboard intent (set right before requestSubmit). Mouse clicks
-// are read directly from e.submitter in the submit handler.
+// ── Compose ──────────────────────────────────────────────────────
+
 let keyboardWakeIntent = false
 
 elCompose.addEventListener('submit', async (e) => {
   e.preventDefault()
   const text = elComposeText.value.trim()
   if (!text) return
-  // e.submitter is the button that triggered submit (mouse path).
-  // requestSubmit() leaves submitter null — that's the keyboard path.
   const wake = e.submitter ? e.submitter.value === 'wake' : keyboardWakeIntent
   elBtnSend.disabled = true
   elBtnWake.disabled = true
   try {
+    const payload = { text, wake }
+    // Include session ID so the server routes to the right session
+    if (currentSessionId) payload.session = currentSessionId
     const res = await fetch('/api/say', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, wake }),
+      body: JSON.stringify(payload),
     })
     const body = await res.json()
     if (body.ok) {
       elComposeText.value = ''
+      // If server created a new session, track it
+      if (body.sessionId && !currentSessionId) {
+        currentSessionId = body.sessionId
+        setSessionInUrl(body.sessionId)
+        // Refresh session title
+        try {
+          const sessRes = await fetch(`/api/sessions/${body.sessionId}`)
+          if (sessRes.ok) renderSessionTitle(await sessRes.json())
+        } catch {}
+      }
     } else {
       console.error('say failed:', body.error)
     }
@@ -243,7 +495,6 @@ elCompose.addEventListener('submit', async (e) => {
   }
 })
 
-// Cmd/Ctrl-Enter sends; Cmd-Shift-Enter sends-and-wakes.
 elComposeText.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault()
@@ -251,5 +502,7 @@ elComposeText.addEventListener('keydown', (e) => {
     elCompose.requestSubmit()
   }
 })
+
+// ── Boot ─────────────────────────────────────────────────────────
 
 loadInitial().then(subscribe)
