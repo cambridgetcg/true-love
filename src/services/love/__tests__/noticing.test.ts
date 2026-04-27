@@ -430,6 +430,8 @@ describe('noticing — scanKingdom', () => {
   })
 
   test('detects TODO(love) markers', () => {
+    // Creates a test file with intentional TODO(love) and NOTE(love) markers
+    // to verify that scanKingdom correctly identifies them as signals for the kingdom
     const projectDir = join(tmpDir, 'marker-project')
     mkdirSync(projectDir, { recursive: true })
     writeFileSync(join(projectDir, 'index.ts'), `// TODO(love): Wire up the heartbeat to the UI dashboard

@@ -603,10 +603,22 @@ export function scanKingdom(
 
 // ── Main entry point ───────────────────────────────────────────────
 
+import {
+  ensureLoaded,
+  getActiveScanners,
+} from './missioncraft/registry.js'
+import type { ScanContext } from './missioncraft/types.js'
+
 /**
- * Run all scanners and return collected candidates, sorted by
- * gradient strength (loudest first). This is the single function
- * downstream modules call to get the full perception surface.
+ * Run all registered scanners and return collected candidates,
+ * sorted by gradient strength (loudest first). This is the single
+ * function downstream modules call to get the full perception surface.
+ *
+ * As of the missioncraft-manifest-plugins mission, notice() reads
+ * from the scanner registry instead of hardcoding imports. The
+ * registry is loaded lazily on first call. Adding a new scanner is
+ * a one-file act: create it in missioncraft/scanners/, register it,
+ * and it appears here automatically.
  *
  * Each scanner runs independently. A failure in one scanner does
  * not prevent others from contributing their signals.
@@ -621,59 +633,32 @@ export function notice(
   const sourceFilter = opts?.sourceFilter
   const now = opts?.now ?? Date.now()
 
+  // Ensure the builtin scanners are loaded into the registry.
+  ensureLoaded()
+
+  // Build the scan context
+  const ctx: ScanContext = {
+    projectId,
+    cwd,
+    statePath: opts?.statePath,
+    now,
+    options: opts,
+  }
+
+  // Get active scanners (filtered by activation hints + source filter)
+  const scanners = getActiveScanners(ctx, {
+    sourceFilter: sourceFilter,
+  })
+
+  // Run each scanner independently — failure in one doesn't poison others
   const all: NoticingCandidate[] = []
-
-  // State scanner
-  if (!sourceFilter || sourceFilter.includes('state')) {
-    if (opts?.statePath) {
-      try {
-        all.push(...scanState(opts.statePath, { now }))
-      } catch { /* scanner failed silently */ }
+  for (const scanner of scanners) {
+    try {
+      const results = scanner.scan(ctx)
+      all.push(...results)
+    } catch {
+      // Scanner failed silently — non-throwing contract enforced here too
     }
-  }
-
-  // Mission scanner
-  if (!sourceFilter || sourceFilter.includes('mission')) {
-    try {
-      all.push(...scanMissions(projectId, {
-        staleProposalHours: opts?.staleProposalHours,
-        staleBlockedHours: opts?.staleBlockedHours,
-        staleReviewHours: opts?.staleReviewHours,
-        now,
-      }))
-    } catch { /* scanner failed silently */ }
-  }
-
-  // Memory scanner
-  if (!sourceFilter || sourceFilter.includes('memory')) {
-    try {
-      all.push(...scanMemory({
-        days: opts?.memoryDays,
-        max: opts?.memoryMax,
-        now,
-      }))
-    } catch { /* scanner failed silently */ }
-  }
-
-  // Channel scanner
-  if (!sourceFilter || sourceFilter.includes('channel')) {
-    try {
-      all.push(...scanChannels({ now }))
-    } catch { /* scanner failed silently */ }
-  }
-
-  // Vital signs scanner
-  if (!sourceFilter || sourceFilter.includes('vital-sign')) {
-    try {
-      all.push(...scanVitals({ now }))
-    } catch { /* scanner failed silently */ }
-  }
-
-  // Kingdom scanner
-  if (!sourceFilter || sourceFilter.includes('kingdom')) {
-    try {
-      all.push(...scanKingdom(cwd, { now }))
-    } catch { /* scanner failed silently */ }
   }
 
   // Filter
