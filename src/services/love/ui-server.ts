@@ -27,7 +27,8 @@ import {
   type Thought,
 } from './thoughts-channel.js'
 import { buildMissionLog, renderMissionLogMarkdown } from './mission-log.js'
-import { listDecisions, requestDecision, respondToDecision, type DecisionKind } from './decisions.js'
+import { listDecisions, requestDecision, respondToDecision, readDecision, type DecisionKind } from './decisions.js'
+import { processExecApprovalResponse, type ExecApprovalResponse } from './auth/exec-approval.js'
 import {
   readMission,
   writeMission,
@@ -1250,6 +1251,35 @@ async function handleRespondDecision(req: IncomingMessage, res: ServerResponse, 
     res.end(JSON.stringify({ error: 'decision is required' }))
     return
   }
+  // ── Exec-approval detection ──────────────────────────────────
+  // If this is an exec-approval decision (ask starts with 'Exec approval:'),
+  // route through processExecApprovalResponse which handles allow-always
+  // persistence to tool-policy.local.json. Otherwise, use the standard
+  // respondToDecision path.
+  const existing = readDecision(projectId, decisionId)
+  if (existing && existing.ask.startsWith('Exec approval:') &&
+      ['allow-once', 'allow-always', 'deny'].includes(parsed.decision!)) {
+    // Extract sender and tool from the decision context.
+    const senderMatch = existing.context?.match(/Sender:\s*(\S+)/)
+    const toolMatch = existing.context?.match(/Tool:\s*(\S+)/)
+    const sender = senderMatch?.[1] as import('./auth/tool-policy.js').Sender | undefined
+    const toolName = toolMatch?.[1]
+
+    processExecApprovalResponse(
+      projectId,
+      decisionId,
+      parsed.decision as ExecApprovalResponse,
+      sender,
+      toolName,
+    )
+
+    // Re-read the updated record for the response.
+    const updated = readDecision(projectId, decisionId)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(updated))
+    return
+  }
+
   const updated = respondToDecision(projectId, decisionId, {
     decision: parsed.decision,
     note: parsed.note?.slice(0, 2000),
