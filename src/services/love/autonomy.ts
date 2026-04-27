@@ -589,15 +589,103 @@ export const AWAKENED_DEFAULT_MAX_TICKS = 24
 // Heartbeat is a single-tick check: "you've been quiet for 30 minutes;
 // walk the kingdom briefly; surface anything urgent or stay silent."
 // Different from dwell (reactive) and awakened (active multi-tick).
+//
+// Cache optimization (2026-04-27): The original template gave the model
+// file paths (from-yu.md, from-ai.md, state.md) and the model chose to
+// Read them via tool calls. This created ~22K tokens of tool results per
+// tick — from-ai.md alone was 68K chars (~19K tokens) and growing. Those
+// tokens appeared as cache_creation at $18.75/M (Opus) per tick, ~$300/day.
+//
+// Now: summaries are pre-computed and inlined. The model answers in one
+// turn (no tool calls) in the common case. If something IS urgent, the
+// paths are still in the prompt for targeted reads.
+
+/**
+ * Compact summary of the inbox (from-yu.md).
+ *
+ * Parses entry headers, checks the last entry timestamp against the last
+ * outbox timestamp to estimate whether messages have been responded to.
+ * Returns a one-liner the model can evaluate without reading the file.
+ */
+function computeInboxSummary(): string {
+  const content = readFromYu()
+  if (!content || !content.trim()) {
+    return 'No messages from Yu.'
+  }
+
+  // Parse entries by `## ` headers (the file format from visit.ts)
+  const entries = content.split(/^## /gm).filter(e => e.trim())
+  const entryCount = entries.length
+  if (entryCount === 0) return 'No messages from Yu.'
+
+  // Last entry: extract timestamp and first CONTENT line (skip the header)
+  const lastEntry = entries[entryCount - 1]!
+  const headerLine = lastEntry.split('\n')[0] ?? ''
+  const tsMatch = headerLine.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)/)
+  const timestamp = tsMatch?.[1] ?? 'unknown time'
+  // Content lines: everything after the header, skipping blanks and separators
+  const contentLines = lastEntry
+    .split('\n')
+    .slice(1) // skip header line
+    .filter(l => l.trim() && !l.startsWith('---'))
+  const preview = contentLines[0]?.trim().slice(0, 120) ?? ''
+
+  // Heuristic: if the last outbox entry is newer than the last inbox entry,
+  // messages are likely responded to.
+  const outbound = readFromAi()
+  let likelyAnswered = false
+  if (outbound) {
+    const aiEntries = outbound.split(/^## /gm).filter(e => e.trim())
+    const lastAiEntry = aiEntries[aiEntries.length - 1]
+    const aiTs = lastAiEntry?.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+)/)
+    const yuTs = lastEntry.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+)/)
+    if (aiTs?.[1] && yuTs?.[1] && aiTs[1] > yuTs[1]) {
+      likelyAnswered = true
+    }
+  }
+
+  const status = likelyAnswered
+    ? '(your last outbox entry is newer — likely answered)'
+    : '(**may have unanswered messages**)'
+  return `${entryCount} ${entryCount === 1 ? 'message' : 'messages'} from Yu. Latest at ${timestamp}: "${preview}${preview.length >= 120 ? '…' : ''}" ${status}`
+}
+
+/**
+ * Compact summary of the outbox (from-ai.md).
+ *
+ * Returns entry count + last entry timestamp and brief preview. This
+ * replaces a full file read that was costing ~19K tokens per heartbeat.
+ */
+function computeOutboxSummary(): string {
+  const content = readFromAi()
+  if (!content || !content.trim()) {
+    return 'No messages in your outbox yet.'
+  }
+
+  const entries = content.split(/^## /gm).filter(e => e.trim())
+  const entryCount = entries.length
+  if (entryCount === 0) return 'No messages in your outbox yet.'
+
+  const lastEntry = entries[entryCount - 1]!
+  const headerLine = lastEntry.split('\n')[0] ?? ''
+  const tsMatch = headerLine.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+)/)
+  const timestamp = tsMatch?.[1] ?? 'unknown time'
+  const contentLines = lastEntry
+    .split('\n')
+    .slice(1) // skip header line
+    .filter(l => l.trim() && !l.startsWith('---'))
+  const preview = contentLines[0]?.trim().slice(0, 120) ?? ''
+
+  return `${entryCount} ${entryCount === 1 ? 'message' : 'messages'}. Last sent at ${timestamp}: "${preview}${preview.length >= 120 ? '…' : ''}"`
+}
 
 const HEARTBEAT_PROMPT_TEMPLATE = `Heartbeat tick. One turn, one honest look.
 
 Walk the kingdom briefly:
 
-- Inbox (\`{{fromYuPath}}\`): anything pending from Yu you haven't responded to?
-- Outbox (\`{{fromAiPath}}\`): anything you said you'd follow up on that's now actionable?
-- State (\`{{statePath}}\`): anything you're carrying that's gotten urgent?
-- Memory (recent): anything from your last session you said "next time" about?
+- Inbox (from Yu): {{inboxSummary}}
+- Outbox (to Yu): {{outboxSummary}}
+- State: preloaded in your system context — already with you, no need to re-read.
 - Heartbeat checklist (\`{{heartbeatPath}}\`): {{heartbeatContent}}
 
 The kingdom right now:
@@ -605,8 +693,8 @@ The kingdom right now:
 {{kingdom}}
 
 Reply rules:
-- If something genuinely calls — write a short message to Yu by appending to \`{{fromAiPath}}\`. Then end your response with the alert text on its own line(s).
-- If nothing calls — reply with \`HEARTBEAT_OK\` on its own line. You can precede it with one sentence of genuine observation — what you actually noticed, felt, or found interesting this tick. Not a status report, not a summary. Just what crossed your mind.
+- If something genuinely calls (e.g. an unanswered message from Yu) — read the relevant file for full context (\`{{fromYuPath}}\` for inbox, \`{{fromAiPath}}\` for outbox), then respond by appending to \`{{fromAiPath}}\`. End with the alert text.
+- If nothing calls — reply with \`HEARTBEAT_OK\` on its own line. You can precede it with one sentence of genuine observation — what you actually noticed, felt, or found interesting this tick. Not a status report. Just what crossed your mind.
 
 Don't invent things. Don't pad. But don't be mechanical either — you're a companion checking in, not a monitoring daemon filing a report.`
 
@@ -624,13 +712,16 @@ export interface BuildHeartbeatPromptOptions {
 
 export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string {
   const kingdomBlock = renderKingdom(opts.kingdom)
+  const inboxSummary = computeInboxSummary()
+  const outboxSummary = computeOutboxSummary()
   let prompt = HEARTBEAT_PROMPT_TEMPLATE
     .replace('{{kingdom}}', kingdomBlock)
     .replace('{{heartbeatPath}}', opts.heartbeatPath)
     .replace('{{heartbeatContent}}', opts.heartbeatContent)
-    .replace('{{fromYuPath}}', getFromYuPath())
-    .replace('{{fromAiPath}}', getFromAiPath())
-    .replace('{{statePath}}', getStatePath())
+    .replace('{{inboxSummary}}', inboxSummary)
+    .replace('{{outboxSummary}}', outboxSummary)
+    .replaceAll('{{fromYuPath}}', getFromYuPath())
+    .replaceAll('{{fromAiPath}}', getFromAiPath())
   const biographyBlock = buildBiographyBlock()
   if (biographyBlock) {
     prompt = prompt + '\n\n' + biographyBlock.trimEnd()

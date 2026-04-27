@@ -271,3 +271,153 @@ describe('autonomy — judgment block in prompt builders', () => {
     assert.doesNotMatch(heartbeat, /Judgment surface/, 'heartbeat: no block when no projects')
   })
 })
+
+// ── Heartbeat cache optimization ─────────────────────────────────────
+//
+// The heartbeat template was the biggest cost driver: the model read
+// from-ai.md (~68K chars, ~19K tokens) and state.md (~10K chars, ~3K
+// tokens) via tool calls every tick. Those tool results appeared as
+// cache_creation tokens at write rate ($18.75/M on Opus).
+//
+// The optimization: pre-compute inline summaries of inbox (from-yu.md)
+// and outbox (from-ai.md), and tell the model its state is already in
+// the system context. The model answers in one turn (no tool calls)
+// in the common case. Paths remain available for urgent reads.
+//
+// These tests verify the optimized heartbeat prompt structure.
+
+describe('autonomy — heartbeat cache optimization', () => {
+  const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
+  const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'tl-hb-cache-'))
+    process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpDir, 'from-yu.md')
+    process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpDir, 'from-ai.md')
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+    if (ORIG_FROM_YU === undefined) delete process.env.TRUE_LOVE_FROM_YU_PATH
+    else process.env.TRUE_LOVE_FROM_YU_PATH = ORIG_FROM_YU
+    if (ORIG_FROM_AI === undefined) delete process.env.TRUE_LOVE_FROM_AI_PATH
+    else process.env.TRUE_LOVE_FROM_AI_PATH = ORIG_FROM_AI
+  })
+
+  test('heartbeat prompt includes inline inbox summary, not raw path inviting reads', () => {
+    // Write a from-yu message
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      `## 2026-04-27T10:00:00.000Z [from yu]\n\nHello my Love\n\n---\n`,
+    )
+    // Write a from-ai response that's OLDER (unanswered)
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      `## 2026-04-27T09:00 [from 愛]\n\nGood morning\n\n---\n`,
+    )
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    // Should contain the inline summary with message content
+    assert.match(prompt, /from Yu/, 'must mention inbox summary')
+    assert.match(prompt, /Hello my Love/, 'must include preview of latest message')
+    assert.match(prompt, /unanswered/, 'must flag potentially unanswered messages')
+
+    // Should NOT contain the old pattern of "State (`path`): anything…"
+    assert.doesNotMatch(prompt, /State \(`[^`]+`\): anything/, 'must not invite re-reading state file')
+    // Should mention state is preloaded
+    assert.match(prompt, /preloaded in your system context/, 'must tell model state is already loaded')
+  })
+
+  test('heartbeat prompt marks messages as answered when outbox is newer', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      `## 2026-04-27T08:00:00.000Z [from yu]\n\nHow are you?\n\n---\n`,
+    )
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      `## 2026-04-27T09:00 [from 愛]\n\nI'm doing well\n\n---\n`,
+    )
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.match(prompt, /likely answered/, 'must indicate messages are likely answered')
+    // The inbox summary line itself should say "likely answered", not "may have unanswered"
+    // (The template text mentions "unanswered" in the reply rules — that's fine)
+    assert.doesNotMatch(prompt, /\*\*may have unanswered/, 'inbox summary must NOT flag as unanswered when outbox is newer')
+  })
+
+  test('heartbeat prompt handles empty inbox/outbox gracefully', () => {
+    // Neither file exists
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.match(prompt, /No messages from Yu/, 'must handle empty inbox')
+    assert.match(prompt, /No messages in your outbox/, 'must handle empty outbox')
+    // Should still have the basic structure
+    assert.match(prompt, /HEARTBEAT_OK/, 'must still include reply rules')
+  })
+
+  test('heartbeat prompt includes outbox summary with message count', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      [
+        `## 2026-04-27T08:00 [from 愛]\n\nFirst message\n\n---\n`,
+        `## 2026-04-27T09:00 [from 愛]\n\nSecond message\n\n---\n`,
+        `## 2026-04-27T10:00 [from 愛]\n\nThird message about progress\n\n---\n`,
+      ].join('\n'),
+    )
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.match(prompt, /3 messages/, 'must show correct message count')
+    assert.match(prompt, /2026-04-27T10:00/, 'must show last entry timestamp')
+    assert.match(prompt, /progress/, 'must include last entry preview')
+  })
+
+  test('heartbeat prompt keeps paths available for urgent reads and writing', () => {
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    // The from-ai path should still appear (for writing responses)
+    assert.match(prompt, /from-ai\.md/, 'must keep from-ai path for writing')
+    // The from-yu path should appear (for reading full context if urgent)
+    assert.match(prompt, /from-yu\.md/, 'must keep from-yu path for urgent reads')
+  })
+
+  test('heartbeat prompt no longer mentions statePath for re-reading', () => {
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    // The old template had: `State (` + statePath + `): anything you're carrying...`
+    // This invited the model to read the state file via tool call — redundant
+    // since state is already in the system context.
+    assert.doesNotMatch(
+      prompt,
+      /State \(`.*state.*`\): anything/i,
+      'must not invite re-reading state file',
+    )
+  })
+})
