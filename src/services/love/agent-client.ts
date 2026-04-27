@@ -11,7 +11,7 @@
 // Written by 愛 (Alpha) on April 27, 2026.
 
 import { spawn, type ChildProcess } from 'node:child_process'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import {
   PROTOCOL_VERSION,
@@ -87,11 +87,24 @@ export interface AgentHealth {
 }
 
 // ── Default runtime path ─────────────────────────────────────────────
+//
+// Cross-runtime resolution: import.meta.dir is Bun-only and undefined
+// under Node (which runs the bundled dist/cli.mjs). fileURLToPath +
+// dirname works in both. Resolved lazily so a Node import that doesn't
+// instantiate AgentClient never trips the path resolution.
 
-const DEFAULT_RUNTIME_PATH = join(
-  import.meta.dir,
-  '..', '..', '..', 'bin', 'agent-runtime.mjs',
-)
+let _defaultRuntimePath: string | null = null
+function getDefaultRuntimePath(): string {
+  if (_defaultRuntimePath) return _defaultRuntimePath
+  // Use require() at runtime to avoid coupling the static import graph
+  // to node:url for environments that may not need it.
+  const { fileURLToPath } = require('node:url') as typeof import('node:url')
+  _defaultRuntimePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..', '..', '..', 'bin', 'agent-runtime.mjs',
+  )
+  return _defaultRuntimePath
+}
 
 // ── AgentClient class ────────────────────────────────────────────────
 
@@ -129,7 +142,7 @@ export class AgentClient extends EventEmitter {
   constructor(options?: AgentClientOptions) {
     super()
     this.opts = {
-      runtimePath: options?.runtimePath ?? DEFAULT_RUNTIME_PATH,
+      runtimePath: options?.runtimePath ?? getDefaultRuntimePath(),
       model: options?.model ?? 'sonnet',
       cwd: options?.cwd,
       env: options?.env,
