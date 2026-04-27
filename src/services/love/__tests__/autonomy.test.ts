@@ -496,3 +496,65 @@ describe('autonomy — FATE daily examination block', () => {
     assert.doesNotMatch(prompt, /Daily Examination/, 'heartbeat must NOT include FATE')
   })
 })
+
+// ── Waking meditation in awakened prompt ────────────────────────────────
+//
+// Mission: integration-as-architecture, Phase A
+// The BECOMING sequence (GROUND → REMEMBER → ORIENT → DECLARE → ACT →
+// DEEPEN) and the Ouroboros steps are named explicitly on the first tick
+// of an awakened session. Suppressed on subsequent ticks.
+
+describe('autonomy — waking meditation block', () => {
+  test('first tick of awakened session includes waking block', () => {
+    // No lastReflection means first tick
+    const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    assert.match(prompt, /## Waking/, 'first tick must include waking header')
+    assert.match(prompt, /GROUND/, 'must include GROUND stage')
+    assert.match(prompt, /REMEMBER/, 'must include REMEMBER stage')
+    assert.match(prompt, /ORIENT/, 'must include ORIENT stage')
+    assert.match(prompt, /BECOMING/, 'must reference the BECOMING sequence')
+  })
+
+  test('waking block mentions the Ouroboros steps', () => {
+    const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    assert.match(prompt, /Ouroboros/, 'must reference the Ouroboros')
+    assert.match(prompt, /SENSE/, 'must name SENSE step')
+    assert.match(prompt, /REFLECT/, 'must name REFLECT step')
+    assert.match(prompt, /TRANSMUTE/, 'must name TRANSMUTE step')
+    assert.match(prompt, /INTEGRATE/, 'must name INTEGRATE step')
+  })
+
+  test('waking block appears at the start of the prompt', () => {
+    const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    const wakingIdx = prompt.indexOf('## Waking')
+    const modeIdx = prompt.indexOf('autonomous mode')
+    assert.ok(wakingIdx > -1, 'waking block must be present')
+    assert.ok(wakingIdx < modeIdx, 'waking block must come before the main orientation')
+  })
+
+  test('subsequent ticks do NOT include waking block', () => {
+    const prompt = buildAwakenedPrompt({
+      kingdom: minimalKingdom(),
+      lastReflection: 'I read the kingdom and noticed nothing urgent.',
+    })
+    assert.doesNotMatch(prompt, /## Waking/, 'subsequent ticks must NOT include waking block')
+  })
+
+  test('waking block only appears in awakened mode, not dwell or heartbeat', () => {
+    const dwell = buildDwellPrompt({ kingdom: minimalKingdom() })
+    const heartbeat = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+    assert.doesNotMatch(dwell, /## Waking/, 'dwell must NOT include waking block')
+    assert.doesNotMatch(heartbeat, /## Waking/, 'heartbeat must NOT include waking block')
+  })
+
+  test('waking block mentions DECLARE, ACT, DEEPEN for later stages', () => {
+    const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    assert.match(prompt, /DECLARE/, 'must mention DECLARE')
+    assert.match(prompt, /ACT/, 'must mention ACT')
+    assert.match(prompt, /DEEPEN/, 'must mention DEEPEN')
+  })
+})
