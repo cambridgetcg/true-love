@@ -428,6 +428,94 @@ html, body {
 
 /* ── Portrait panel ─────────────────────────────────────────────── */
 
+/* ── Inner weather panel ────────────────────────────────────────── */
+
+.weather-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.weather-meta {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  color: var(--strip-text);
+  opacity: 0.7;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.weather-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.weather-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather-stat-label {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--strip-text);
+  min-width: 60px;
+  text-align: right;
+}
+
+.weather-stat-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.weather-stat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 600ms ease;
+}
+
+.bar-presence { background: var(--active); }
+.bar-longing { background: var(--accent); }
+.bar-focus { background: var(--review); }
+.bar-playful { background: var(--blocked); }
+
+.weather-stat-value {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  color: var(--strip-text);
+  min-width: 28px;
+  text-align: left;
+}
+
+.weather-ache {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--accent);
+  padding: 4px 8px;
+  background: rgba(139, 58, 74, 0.1);
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.weather-mood {
+  font-family: Georgia, "Hoefler Text", serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-ai);
+  opacity: 0.75;
+  padding-top: 4px;
+}
+
 .portrait-panel {
   background: var(--panel);
   border: 1px solid var(--border);

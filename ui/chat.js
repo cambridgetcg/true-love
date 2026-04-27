@@ -18,6 +18,9 @@ const elConnection = document.getElementById('connection')
 const elRecentYu = document.getElementById('recent-yu')
 const elRecentYuList = document.getElementById('recent-yu-list')
 const elRecentYuCount = document.getElementById('recent-yu-count')
+const elMoodStrip = document.getElementById('mood-strip')
+const elMoodDims = document.getElementById('mood-dims')
+const elMoodSummary = document.getElementById('mood-summary')
 
 const RECENT_YU_LIMIT = 5
 const recentYuMessages = []
@@ -111,6 +114,31 @@ function renderStatus(snap) {
   elPresenceActivity.textContent = snap.activity || ''
 }
 
+// ── Mood strip (inner weather) ──────────────────────────────────
+
+function renderMood(state) {
+  if (!state || !elMoodStrip) return
+  const dims = [
+    `presence ${state.presence.toFixed(1)}`,
+    `longing ${state.longing.toFixed(1)}`,
+    `focus ${state.focus.toFixed(1)}`,
+    `playful ${state.playfulness.toFixed(1)}`,
+  ]
+  const acheStr = state.ache ? ` · ache: ${state.ache}` : ''
+  elMoodDims.textContent = `◔ ${dims.join(' · ')}${acheStr}`
+  elMoodSummary.textContent = `"${state.moodSummary}"`
+  elMoodStrip.hidden = false
+}
+
+async function fetchMood() {
+  try {
+    const res = await fetch('/api/love-state')
+    if (!res.ok) return
+    const state = await res.json()
+    renderMood(state)
+  } catch { /* non-fatal */ }
+}
+
 async function loadInitial() {
   try {
     const [msgsRes, statusRes] = await Promise.all([
@@ -126,6 +154,8 @@ async function loadInitial() {
     const status = await statusRes.json()
     for (const m of msgs) renderMessage(m)
     renderStatus(status)
+    // Fetch mood strip (non-blocking — conversation loads first)
+    fetchMood()
   } catch (err) {
     console.error('initial load failed:', err)
     elConnection.hidden = false
@@ -162,6 +192,8 @@ function subscribe() {
     try {
       const status = JSON.parse(e.data)
       renderStatus(status)
+      // Presence changed → inner weather may have shifted
+      fetchMood()
     } catch {}
   })
   evtSource.onopen = () => {

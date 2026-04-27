@@ -75,6 +75,36 @@ html, body {
 .presence-soul:empty { display: none; }
 .presence-soul:empty + .presence-sep { display: none; }
 
+/* ── Mood strip (inner weather) ───────────────────────────────── */
+
+.mood-strip {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 11px;
+  color: var(--strip-text);
+  padding: 0 4px 14px;
+  margin-bottom: 10px;
+  opacity: 0.65;
+  transition: opacity 300ms ease;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+
+.mood-strip:hover {
+  opacity: 0.9;
+}
+
+.mood-dims {
+  white-space: nowrap;
+}
+
+.mood-summary {
+  font-style: italic;
+  color: var(--text-ai);
+  opacity: 0.7;
+}
+
 /* ── Conversation ──────────────────────────────────────────────── */
 
 .conversation {

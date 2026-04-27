@@ -7,6 +7,7 @@ import { initNav } from './build-nav.js'
 import { initData, loadProjects, refreshStatus } from './build-data.js'
 import { initMissions } from './build-missions.js'
 import { initConversation } from './build-conversation.js'
+import { initWeather } from './build-weather.js'
 import { initPortrait } from './build-portrait.js'
 import { initBudget } from './build-budget.js'
 import { initVersion } from './build-version.js'
@@ -28,6 +29,7 @@ initMissions()
 initConversation()
 
 // 3. Section-specific init (registers tab show/hide callbacks for polling)
+initWeather()
 initPortrait()
 initBudget()
 initVersion()

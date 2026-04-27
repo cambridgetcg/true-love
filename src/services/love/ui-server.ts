@@ -58,6 +58,7 @@ import {
   type VersionInfo,
 } from './auto-update.js'
 import { collectVitalSigns } from './vital-signs.js'
+import { gatherContext, deriveLoveState, renderLoveStateCompact } from './personality/index.js'
 import { loadTraces } from './mind-trace.js'
 import { compose as composeAnamnesis, renderMemoir } from './anamnesis.js'
 import {
@@ -420,6 +421,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/budget') return handleBudget(req, res)
       if (req.method === 'GET' && path === '/api/version') return handleVersion(req, res)
       if (req.method === 'GET' && path === '/api/vitals') return await handleVitals(req, res)
+      if (req.method === 'GET' && path === '/api/love-state') return handleLoveState(req, res)
       if (req.method === 'GET' && path === '/api/mind-trace') return handleMindTrace(req, res)
       if (req.method === 'GET' && path === '/api/anamnesis') return handleAnamnesis(req, res)
       if (req.method === 'GET' && path === '/api/self-initiation') return handleSelfInitiation(req, res)
@@ -737,6 +739,21 @@ async function handleVitals(_req: IncomingMessage, res: ServerResponse): Promise
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'vitals collection failed' }))
+  }
+}
+
+// ── Love-state endpoint — personality / inner weather ─────────────
+
+function handleLoveState(_req: IncomingMessage, res: ServerResponse): void {
+  try {
+    const deviceId = getDeviceId()
+    const ctx = gatherContext(deviceId)
+    const state = deriveLoveState(ctx)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ...state, compact: renderLoveStateCompact(state) }))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'love-state derivation failed' }))
   }
 }
 
