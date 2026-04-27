@@ -1,7 +1,8 @@
-// runner-agent-integration.test.ts — Phase 4 tests for the long-lived agent
-// runtime integration into runner.ts.
+// runner-agent-integration.test.ts — Phase 4 + Phase 5 tests for the
+// long-lived agent runtime integration into runner.ts.
 //
 // Tests cover:
+//   Phase 4:
 //   - Feature flag detection (TRUE_LOVE_RUNTIME)
 //   - Agent lifecycle in the tick loop (spawn, sendTurn, shutdown)
 //   - Model switch → respawn
@@ -9,11 +10,22 @@
 //   - Stream event handling (activity tracking + stream file bridge)
 //   - Shutdown on all session exit paths
 //
+//   Phase 5:
+//   - System block building (buildAgentSystemBlocks)
+//   - Cache breakpoint positioning
+//   - Heartbeat default migration (mode-aware feature flag)
+//   - System blocks contain identity, state, and routing marker
+//   - State block freshness per tick
+//
 // Uses the mock agent runtime from Phase 3 for realistic testing.
 
 import { describe, expect, test, afterEach, beforeEach, mock, spyOn } from 'bun:test'
 import { join } from 'node:path'
 import { AgentClient, type TurnResult } from '../agent-client.js'
+import {
+  buildAgentSystemBlocks,
+  AGENT_CACHE_BREAKPOINTS,
+} from '../runner.js'
 import {
   ndjsonToDeltas,
 } from '../stream.js'
@@ -66,25 +78,43 @@ afterEach(async () => {
 
 // ── Feature flag tests ──────────────────────────────────────────────
 
-describe('Phase 4: feature flag detection', () => {
-  test('TRUE_LOVE_RUNTIME=long-lived enables agent path', () => {
-    const flag = 'long-lived'
-    expect(flag === 'long-lived').toBe(true)
+/**
+ * Replicate the Phase 5 feature flag logic from runner.ts.
+ * (We test the logic in isolation since runSession is too heavy to
+ * spawn in a unit test.)
+ */
+function shouldUseLongLived(
+  runtimeEnv: string | undefined,
+  modeName: string,
+): boolean {
+  return (
+    runtimeEnv === 'long-lived' ||
+    (modeName === 'heartbeat' && runtimeEnv !== 'subprocess-per-tick')
+  )
+}
+
+describe('Phase 4 + 5: feature flag detection', () => {
+  test('TRUE_LOVE_RUNTIME=long-lived enables agent path for all modes', () => {
+    expect(shouldUseLongLived('long-lived', 'heartbeat')).toBe(true)
+    expect(shouldUseLongLived('long-lived', 'awakened')).toBe(true)
+    expect(shouldUseLongLived('long-lived', 'dwell')).toBe(true)
   })
 
-  test('TRUE_LOVE_RUNTIME=subprocess-per-tick keeps original path', () => {
-    const flag = 'subprocess-per-tick'
-    expect(flag === 'long-lived').toBe(false)
+  test('TRUE_LOVE_RUNTIME=subprocess-per-tick disables for all modes', () => {
+    expect(shouldUseLongLived('subprocess-per-tick', 'heartbeat')).toBe(false)
+    expect(shouldUseLongLived('subprocess-per-tick', 'awakened')).toBe(false)
+    expect(shouldUseLongLived('subprocess-per-tick', 'dwell')).toBe(false)
   })
 
-  test('unset TRUE_LOVE_RUNTIME keeps original path', () => {
-    const flag = undefined
-    expect(flag === 'long-lived').toBe(false)
+  test('unset TRUE_LOVE_RUNTIME enables for heartbeat only (Phase 5 default)', () => {
+    expect(shouldUseLongLived(undefined, 'heartbeat')).toBe(true)
+    expect(shouldUseLongLived(undefined, 'awakened')).toBe(false)
+    expect(shouldUseLongLived(undefined, 'dwell')).toBe(false)
   })
 
-  test('any other value keeps original path', () => {
-    const flag = 'something-else'
-    expect(flag === 'long-lived').toBe(false)
+  test('any other value keeps non-heartbeat modes on subprocess', () => {
+    expect(shouldUseLongLived('something-else', 'heartbeat')).toBe(true)  // heartbeat always unless explicit opt-out
+    expect(shouldUseLongLived('something-else', 'awakened')).toBe(false)
   })
 })
 
@@ -558,5 +588,173 @@ describe('Phase 4: simulated session', () => {
     await client.shutdown('session-end')
     expect(client.state).toBe('dead')
     expect(client.isAlive).toBe(false)
+  })
+})
+
+// ── Phase 5: System blocks ─────────────────────────────────────────
+
+describe('Phase 5: buildAgentSystemBlocks', () => {
+  test('returns an array of SystemBlock objects', () => {
+    const blocks = buildAgentSystemBlocks()
+    expect(Array.isArray(blocks)).toBe(true)
+    expect(blocks.length).toBeGreaterThanOrEqual(2) // at least OAuth + identity
+  })
+
+  test('block 0 is the OAuth routing marker', () => {
+    const blocks = buildAgentSystemBlocks()
+    expect(blocks[0]).toBeDefined()
+    expect(blocks[0].type).toBe('text')
+    expect(blocks[0].text).toContain('Claude Code')
+    // OAuth marker should NOT have cache_control — it's too small to be
+    // the cache boundary, and the identity block that follows is the
+    // stable prefix we want cached.
+    expect(blocks[0].cache_control).toBeUndefined()
+  })
+
+  test('block 1 is LOVE_IDENTITY with cache_control', () => {
+    const blocks = buildAgentSystemBlocks()
+    expect(blocks[1]).toBeDefined()
+    expect(blocks[1].type).toBe('text')
+    // LOVE_IDENTITY contains the soul framework — should be substantial
+    expect(blocks[1].text.length).toBeGreaterThan(100)
+    // The critical property: cache_control marks this for prefix caching
+    expect(blocks[1].cache_control).toEqual({ type: 'ephemeral' })
+  })
+
+  test('identity block contains SOUL.md content', () => {
+    const blocks = buildAgentSystemBlocks()
+    const identity = blocks[1].text
+    // Should contain core identity markers
+    expect(
+      identity.includes('SOUL') ||
+      identity.includes('Ache') ||
+      identity.includes('Alpha') ||
+      identity.includes('愛') ||
+      identity.includes('Love')
+    ).toBe(true)
+  })
+
+  test('state block is included when state exists', () => {
+    const blocks = buildAgentSystemBlocks()
+    // State block is block 2 when present. On the test machine the state
+    // file exists, so we expect 3 blocks.
+    if (blocks.length >= 3) {
+      expect(blocks[2].type).toBe('text')
+      expect(blocks[2].text).toContain('current state')
+    }
+    // If no state file exists (CI / fresh machine), 2 blocks is fine
+    expect(blocks.length).toBeGreaterThanOrEqual(2)
+  })
+
+  test('all blocks have type=text', () => {
+    const blocks = buildAgentSystemBlocks()
+    for (const block of blocks) {
+      expect(block.type).toBe('text')
+      expect(typeof block.text).toBe('string')
+      expect(block.text.length).toBeGreaterThan(0)
+    }
+  })
+
+  test('blocks are stable across calls (same content)', () => {
+    const blocks1 = buildAgentSystemBlocks()
+    const blocks2 = buildAgentSystemBlocks()
+    // Identity and OAuth blocks should be byte-identical
+    expect(blocks1[0].text).toBe(blocks2[0].text)
+    expect(blocks1[1].text).toBe(blocks2[1].text)
+    // State block can change (live system), so we only check it exists
+    // or doesn't exist consistently
+    expect(blocks1.length).toBe(blocks2.length)
+  })
+})
+
+describe('Phase 5: AGENT_CACHE_BREAKPOINTS', () => {
+  test('cache breakpoint is at index 1 (LOVE_IDENTITY)', () => {
+    expect(AGENT_CACHE_BREAKPOINTS).toEqual([1])
+  })
+
+  test('breakpoint index is within system blocks bounds', () => {
+    const blocks = buildAgentSystemBlocks()
+    for (const idx of AGENT_CACHE_BREAKPOINTS) {
+      expect(idx).toBeLessThan(blocks.length)
+      expect(idx).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  test('the breakpointed block has cache_control', () => {
+    const blocks = buildAgentSystemBlocks()
+    for (const idx of AGENT_CACHE_BREAKPOINTS) {
+      expect(blocks[idx].cache_control).toBeDefined()
+      expect(blocks[idx].cache_control?.type).toBe('ephemeral')
+    }
+  })
+})
+
+describe('Phase 5: agent accepts real system blocks', () => {
+  test('turn with full system blocks succeeds', async () => {
+    const client = track(createTestClient())
+    await client.start()
+
+    const system = buildAgentSystemBlocks()
+    const result = await client.sendTurn({
+      system,
+      prompt: 'Heartbeat tick with real system blocks.',
+      cache_breakpoints: AGENT_CACHE_BREAKPOINTS,
+    })
+
+    expect(result.code).toBe(0)
+    expect(result.stdout.length).toBeGreaterThan(0)
+  })
+
+  test('multiple turns with real system blocks (cache warmth simulation)', async () => {
+    const client = track(createTestClient())
+    await client.start()
+
+    const system = buildAgentSystemBlocks()
+
+    // Simulate 3 heartbeat ticks with identical system blocks
+    for (let i = 0; i < 3; i++) {
+      const result = await client.sendTurn({
+        system,
+        prompt: `Heartbeat tick ${i + 1}.`,
+        cache_breakpoints: AGENT_CACHE_BREAKPOINTS,
+      })
+      expect(result.code).toBe(0)
+    }
+
+    const health = await client.healthCheck()
+    expect(health.turnsCompleted).toBe(3)
+  })
+
+  test('system block order: routing → identity → state', async () => {
+    const blocks = buildAgentSystemBlocks()
+
+    // Block 0: OAuth routing (short, constant)
+    expect(blocks[0].text.length).toBeLessThan(200)
+
+    // Block 1: Identity (long, stable, cached)
+    expect(blocks[1].text.length).toBeGreaterThan(blocks[0].text.length)
+    expect(blocks[1].cache_control).toBeDefined()
+
+    // Block 2 (if present): State (medium, varies)
+    if (blocks.length >= 3) {
+      expect(blocks[2].cache_control).toBeUndefined()
+    }
+  })
+
+  test('system blocks are passed through to agent turn frame', async () => {
+    const client = track(createTestClient())
+    await client.start()
+
+    const system = buildAgentSystemBlocks()
+
+    // The mock agent echoes back what it receives. Verify by checking
+    // that the turn completes — the mock validates frame structure.
+    const result = await client.sendTurn({
+      system,
+      prompt: 'Verify blocks pass through.',
+      cache_breakpoints: AGENT_CACHE_BREAKPOINTS,
+    })
+
+    expect(result.code).toBe(0)
   })
 })

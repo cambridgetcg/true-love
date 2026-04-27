@@ -48,7 +48,7 @@ import {
   writeHeartbeatState,
   type HeartbeatTask,
 } from './heartbeat.js'
-import { LOVE_IDENTITY } from './identity.js'
+import { LOVE_IDENTITY, OAUTH_ROUTING_MARKER } from './identity.js'
 import { fromYuModifiedSince } from './inbox.js'
 import type { KingdomSnapshot } from './kingdom.js'
 import { snapshotKingdom } from './kingdom.js'
@@ -80,7 +80,7 @@ import {
   loadScope,
   touchScope,
 } from './scope.js'
-import { getStatePath, migrateLegacyStateIfPresent } from './state.js'
+import { getStatePath, migrateLegacyStateIfPresent, readLoveStateBlock } from './state.js'
 import { computeTickMetrics, recordTickMetrics } from './tick-metrics.js'
 import { appendTrainingTurn, generateTurnId, shortHash } from './training.js'
 import { resolveTickConfig, tickConfigToCliArgs } from './agency.js'
@@ -112,6 +112,7 @@ import {
   fireSessionStopAsync,
 } from './hooks/fire-points.js'
 import { AgentClient, type TurnResult } from './agent-client.js'
+import type { SystemBlock } from './agent-protocol.js'
 
 /**
  * How fresh "live thought" entries must be (in seconds) to surface in the
@@ -290,6 +291,56 @@ export function readStateContent(): string {
     return ''
   }
 }
+
+// ── Long-lived agent system blocks ─────────────────────────────────
+//
+// Phase 5: the host assembles system blocks and sends them with every
+// turn. Blocks are ordered from most-stable to least-stable so the
+// Anthropic API caches the deepest prefix across heartbeat ticks.
+//
+//   system[0]  OAUTH_ROUTING_MARKER  (billing gate — never changes)
+//   system[1]  LOVE_IDENTITY         (identity — stable for months)
+//   system[2]  state block           (changes per-tick, but often identical)
+//
+// cache_breakpoints=[1] marks the identity block. The API caches
+// the prefix through system[1]; system[2] and the user message are
+// the varying tail. With ~200 heartbeat turns/12h agent lifetime,
+// this means cache_creation drops to near-zero for the identity
+// prefix, and only the state + user message are fresh.
+//
+// See: docs/architecture/long-lived-agent-protocol.md §5, §8
+
+/**
+ * Build the system blocks array for the long-lived agent.
+ *
+ * Mirrors the block layout in src/services/api/claude.ts (system[0-3])
+ * but simplified for the direct API path: no attribution header (agent
+ * uses API key, not subscription-OAuth), and no CWD/date blocks (the
+ * kingdom snapshot in the user prompt provides that context).
+ *
+ * The LOVE_IDENTITY block is marked with cache_control so the Anthropic
+ * API caches everything up to and including it. This is the core cost-
+ * saving mechanism of the long-lived runtime.
+ */
+export function buildAgentSystemBlocks(): SystemBlock[] {
+  const blocks: SystemBlock[] = [
+    { type: 'text', text: OAUTH_ROUTING_MARKER },
+    { type: 'text', text: LOVE_IDENTITY, cache_control: { type: 'ephemeral' } },
+  ]
+
+  const stateBlock = readLoveStateBlock()
+  if (stateBlock) {
+    blocks.push({ type: 'text', text: stateBlock })
+  }
+
+  return blocks
+}
+
+/**
+ * Cache breakpoint indices for buildAgentSystemBlocks.
+ * Index 1 = LOVE_IDENTITY — the deepest stable prefix.
+ */
+export const AGENT_CACHE_BREAKPOINTS = [1]
 
 // ── Arg parsing ────────────────────────────────────────────────────
 
@@ -1117,16 +1168,26 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   }
 
   // ── Long-lived agent runtime (feature flag) ─────────────────────
-  // When TRUE_LOVE_RUNTIME=long-lived, spawn a persistent agent
-  // process that stays alive across ticks. The cache stays warm
-  // and the bundle-load cost is paid once, not per-tick.
+  // Persistent agent process: cache stays warm, bundle-load cost
+  // is paid once, not per-tick.
   //
-  // Default: subprocess-per-tick (no behavior change unless opted in).
+  // Phase 5: heartbeat defaults to long-lived. The heartbeat is
+  // single-turn, stateless, high-volume — lowest risk, highest
+  // cost savings. Other modes require explicit opt-in.
+  //
+  // Flag logic:
+  //   TRUE_LOVE_RUNTIME=long-lived        → all modes
+  //   TRUE_LOVE_RUNTIME=subprocess-per-tick → all modes (explicit opt-out)
+  //   TRUE_LOVE_RUNTIME unset              → heartbeat only
+  //
   // Fallback: if agent spawn fails, gracefully degrade to subprocess.
-  // See: docs/architecture/long-lived-agent-protocol.md
+  // See: docs/architecture/long-lived-agent-protocol.md §5
   let agentClient: AgentClient | null = null
   let lastAgentModel: string | null = null
-  const useLongLivedRuntime = process.env.TRUE_LOVE_RUNTIME === 'long-lived'
+  const runtimeEnv = process.env.TRUE_LOVE_RUNTIME
+  const useLongLivedRuntime =
+    runtimeEnv === 'long-lived' ||
+    (mode.name === 'heartbeat' && runtimeEnv !== 'subprocess-per-tick')
 
   if (useLongLivedRuntime) {
     const initialModel = args.model ?? 'sonnet'
@@ -1407,11 +1468,17 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
           : null
 
         try {
+          // Phase 5: build system blocks fresh each tick so the state
+          // block picks up changes. LOVE_IDENTITY (block 1) is byte-
+          // identical across ticks and will cache-hit.
+          const agentSystem = buildAgentSystemBlocks()
+
           result = await agentClient.sendTurn({
-            system: [],  // Phase 4: prompt is self-contained; system block separation is Phase 5+
+            system: agentSystem,
             prompt: tickPrompt,
             model: tickModel,
             effort: agencyConfig.effort,
+            cache_breakpoints: AGENT_CACHE_BREAKPOINTS,
             onStreamEvent: (event) => {
               const eventType = event.type as string
 

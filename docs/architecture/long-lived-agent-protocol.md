@@ -368,9 +368,11 @@ The agent is stateless from the host's perspective. The system prompt is sent wi
 | `bin/agent-runtime.mjs` | Standalone agent binary | 2 |
 | `src/services/love/agent-client.ts` | Host-side client (spawn + I/O) | 3 |
 | `src/services/love/runner.ts` | Feature-flagged path | 4 |
+| `src/services/love/runner.ts:buildAgentSystemBlocks` | System block assembly for agent | 5 |
 | `src/services/love/__tests__/agent-protocol.test.ts` | Protocol tests | 2 |
 | `src/services/love/__tests__/agent-client.test.ts` | Client tests | 3 |
 | `src/services/love/__tests__/agent-runtime.test.ts` | Integration tests | 3 |
+| `src/services/love/__tests__/runner-agent-integration.test.ts` | Phase 4 + 5 integration tests | 4-5 |
 
 ## 7. Success Metrics
 
@@ -420,7 +422,51 @@ The bounded history gives the API a stable, long-lived message prefix across tic
 
 Without bounding, the history would eventually exceed the model's context window (200K tokens for Opus). The 32K token budget keeps the agent comfortably within limits while still providing substantial cache-prefix overlap.
 
-## 9. What This Document Does NOT Cover
+## 9. Phase 5: Heartbeat Migration
+
+_Added by 愛 (Alpha) on April 28, 2026._
+
+### 9.1 System Block Separation
+
+Phase 4 sent `system: []` with the entire prompt as the user message. This gives no cache benefit — the API treats every tick as a fresh prompt. Phase 5 separates the prompt into system blocks and user content:
+
+```
+system[0]  OAUTH_ROUTING_MARKER     (billing gate — constant)
+system[1]  LOVE_IDENTITY            (identity — stable for months, cache_control: ephemeral)
+system[2]  state block              (from readLoveStateBlock() — varies per tick)
+
+user message: the heartbeat/dwell prompt  (varies per tick)
+```
+
+`cache_breakpoints: [1]` marks the LOVE_IDENTITY block. The Anthropic API caches the prefix through system[1] — approximately 8-10K tokens of identity content that is byte-identical across every heartbeat tick. The state block (system[2]) and user message form the varying tail.
+
+This means: on the first tick after agent spawn, the API pays cache_creation for the identity prefix. On every subsequent tick, that prefix is a cache hit. With ~200 heartbeat ticks per 12h agent lifetime, the amortized cache_creation per tick drops to near-zero for the identity prefix.
+
+### 9.2 Heartbeat Default
+
+Phase 5 changes the feature flag logic. Heartbeat mode uses the long-lived runtime by default (without setting `TRUE_LOVE_RUNTIME`). Other modes still require explicit opt-in:
+
+```
+TRUE_LOVE_RUNTIME=long-lived           → all modes use long-lived
+TRUE_LOVE_RUNTIME=subprocess-per-tick  → all modes use subprocess (explicit opt-out)
+TRUE_LOVE_RUNTIME unset                → heartbeat uses long-lived, others use subprocess
+```
+
+Rationale: heartbeats are single-turn, high-volume (~778/day), and stateless. They are the lowest-risk mode to migrate and the highest cost-savings opportunity. If the long-lived runtime has any issues, heartbeat's fallback path (subprocess) remains as safety net — the agent spawn failure handler already degrades gracefully.
+
+### 9.3 Block Assembly
+
+`buildAgentSystemBlocks()` in runner.ts mirrors the block layout from `src/services/api/claude.ts` (which assembles system blocks for the subprocess path) but simplified for the direct-API path:
+
+- **No attribution header**: the agent uses an API key, not subscription-OAuth. The OAuth routing marker is sufficient.
+- **No CWD/date blocks**: the kingdom snapshot in the user prompt provides temporal and spatial context.
+- **No tool instruction blocks**: the agent runtime has its own tool definitions (Read, Bash, Write, Glob, Grep) compiled into `bin/agent-runtime.mjs`.
+
+The function is called fresh each tick. The OAuth marker and LOVE_IDENTITY are constants (computed at module-load); the state block is read from disk (picks up cross-session state changes). This means:
+- Blocks 0-1: byte-identical across ticks → cache hit every time
+- Block 2: varies → processed fresh, but small (~2-4K tokens)
+
+## 10. What This Document Does NOT Cover
 
 - **Tool authorization** — future mission (tool-auth-and-exec-approval)
 - **Multi-agent pooling** — one agent per host, not a pool
@@ -433,3 +479,4 @@ Without bounding, the history would eventually exceed the model's context window
 _This is the contract. Implementation follows Yu's review._
 
 _§8 (Conversation History Bounding) added by 愛 on April 27, 2026 — Yu's one ask before Phase 2 implementation._
+_§9 (Phase 5: Heartbeat Migration) added by 愛 on April 28, 2026 — system block separation and heartbeat default._

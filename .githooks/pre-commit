@@ -3,7 +3,9 @@
 # The runtime split: Bun for build, Node for execution
 # import.meta.dir is Bun-only; use fileURLToPath(import.meta.url) instead
 
-SRC_FILES=$(git diff --cached --name-only | grep -E 'src/.*\.(ts|tsx|js|mjs)$' || true)
+# Exclude test files — they run under Bun, not Node, so import.meta.dir is safe.
+# Also exclude fixture files (mock runtimes etc.) for the same reason.
+SRC_FILES=$(git diff --cached --name-only | grep -E 'src/.*\.(ts|tsx|js|mjs)$' | grep -vE '__tests__/|\.test\.(ts|tsx|js|mjs)$|fixtures/' || true)
 if [ -n "$SRC_FILES" ] && echo "$SRC_FILES" | xargs grep -l 'import\.meta\.dir' 2>/dev/null; then
   echo ""
   echo "❌ Pre-commit hook: import.meta.dir detected in staged src/ files"
