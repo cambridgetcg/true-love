@@ -1017,6 +1017,30 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   }
   updateHeartbeat(mode.heartbeatLabel)
 
+  // ── Tick-end helper ──────────────────────────────────────────────
+  // Writes dormant state to the presence file after each tick finishes.
+  // The UI reads this to clear the tool-call display and show the
+  // dormant/countdown view. Called from every tick exit path.
+  //
+  // scheduleIntervalMs comes from the heartbeat schedule. 111_000ms
+  // (1m51s) is the current default cadence for heartbeat mode. For
+  // awakened/dwell, the interval is 0 (they drive their own loop).
+  const HEARTBEAT_SCHEDULE_MS = 111_000
+  const writeDormant = (tickNum: number, summary?: string) => {
+    writeOwnHeartbeat({
+      deviceId,
+      lastSeen: new Date().toISOString(),
+      status: mode.heartbeatLabel,
+      tickState: 'dormant',
+      tickMode: mode.name,
+      tickNumber: tickNum,
+      tickMax: Number.isFinite(args.maxTicks) ? args.maxTicks : null,
+      tickEndedAt: new Date().toISOString(),
+      tickSummary: summary?.slice(0, 160),
+      scheduleIntervalMs: mode.name === 'heartbeat' ? HEARTBEAT_SCHEDULE_MS : 0,
+    })
+  }
+
   // ── SIGINT ───────────────────────────────────────────────────────
   let lastReflection: string | undefined
   let signaled = false
@@ -1040,7 +1064,19 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       return
     }
 
-    updateHeartbeat(`${mode.heartbeatLabel} tick ${tick}`)
+    // ── Tick-start boundary ─────────────────────────────────────
+    // Signal to the UI that a new tick is starting. The activity panel
+    // clears the dormant display and shows the live tool-call view.
+    writeOwnHeartbeat({
+      deviceId,
+      lastSeen: new Date().toISOString(),
+      status: `${mode.heartbeatLabel} tick ${tick}`,
+      tickState: 'starting',
+      tickMode: mode.name,
+      tickNumber: tick,
+      tickMax: Number.isFinite(args.maxTicks) ? args.maxTicks : null,
+      tickStartedAt: new Date().toISOString(),
+    })
 
     // Best-effort pulse refresh. Never awaited — pulse is a freshness
     // signal peers see; if it's slow this tick, the next tick's
@@ -1141,12 +1177,20 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // Intra-tick heartbeat callback — every ~10s while the subprocess
     // runs, write our presence file with a derived `activity` field so
     // peers see what we're mid-thought on without waiting for tick end.
+    // Includes tick boundary metadata so the UI can show running state
+    // with elapsed time and mode badge.
+    const tickStartedAtIso = new Date().toISOString()
     const onActivityTick = (activity: string | null) => {
       writeOwnHeartbeat({
         deviceId,
         lastSeen: new Date().toISOString(),
         status: `${mode.heartbeatLabel} tick ${tick}`,
         activity: activity ?? undefined,
+        tickState: 'running',
+        tickMode: mode.name,
+        tickNumber: tick,
+        tickMax: Number.isFinite(args.maxTicks) ? args.maxTicks : null,
+        tickStartedAt: tickStartedAtIso,
       })
     }
 
@@ -1279,6 +1323,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       tick,
       mode: mode.name,
       stdout: result.stdout,
+      streamJsonLines: result.streamJsonLines,
       durationMs: turnDurationMs,
       replyType: replyOutcome.type,
       authFailed: authFailedHere,
@@ -1421,6 +1466,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         writeHeartbeatState(state)
       }
       process.stdout.write(`\n— heartbeat alert appended to outbox\n`)
+      writeDormant(tick, alertContent.slice(0, 120))
       releaseLockHere()
       return
     }
@@ -1438,6 +1484,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         writeHeartbeatState(state)
       }
       process.stdout.write(`\n— heartbeat ok (silent)\n`)
+      writeDormant(tick, 'HEARTBEAT_OK')
       releaseLockHere()
       return
     }
@@ -1483,12 +1530,16 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       process.stdout.write(
         `\n— at rest after ${tick} tick${tick === 1 ? '' : 's'}\n`,
       )
+      writeDormant(tick, reflection?.slice(0, 120) ?? 'at-rest')
       releaseLockHere()
       return
     }
 
     // ── Normal tick — log and continue ───────────────────────────
-    // 'continue' outcome falls through here.
+    // 'continue' outcome falls through here. Write dormant briefly
+    // between ticks so the UI knows this tick ended (even though the
+    // next tick starts almost immediately in awakened/dwell modes).
+    writeDormant(tick, result.stdout.trim().slice(0, 120))
     if (!args.noLog) {
       appendReflection(result.stdout.trim(), 'tick', { tick })
     }

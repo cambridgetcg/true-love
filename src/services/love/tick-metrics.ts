@@ -218,6 +218,10 @@ export interface ComputeTickMetricsInput {
   tick: number
   mode: 'dwell' | 'awakened' | 'heartbeat'
   stdout: string
+  /** NDJSON event lines from `claude --output-format stream-json`. When
+   *  provided, tool invocations are extracted from `tool_use` events
+   *  (the truth source); otherwise we fall back to regex on stdout. */
+  streamJsonLines?: string[]
   durationMs: number
   replyType: 'rest' | 'continue' | 'ack' | 'alert'
   authFailed: boolean
@@ -228,11 +232,49 @@ export interface ComputeTickMetricsInput {
 }
 
 /**
+ * Extract tool invocations from NDJSON stream events. The stream-json
+ * mode emits `tool_use` events with structured `name`/`input` fields —
+ * the authoritative source. Falls back to nothing if no events given.
+ */
+export function extractToolInvocationsFromStream(lines: string[]): ToolInvocation[] {
+  const invocations: ToolInvocation[] = []
+  let offset = 0
+  for (const line of lines) {
+    if (!line.trim()) { offset += line.length + 1; continue }
+    try {
+      const evt = JSON.parse(line) as Record<string, unknown>
+      // Anthropic message envelope: { type: 'assistant', message: { content: [...] } }
+      const message = evt.message as Record<string, unknown> | undefined
+      const content = (message?.content ?? evt.content) as Array<Record<string, unknown>> | undefined
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'tool_use' && typeof block.name === 'string') {
+            const input = block.input as Record<string, unknown> | undefined
+            const target = input ? Object.values(input).find(v => typeof v === 'string') as string | undefined : undefined
+            invocations.push({ tool: block.name, target: (target ?? '').slice(0, 120), offset })
+          }
+        }
+      }
+    } catch {
+      // skip malformed line
+    }
+    offset += line.length + 1
+  }
+  return invocations
+}
+
+/**
  * Compute a complete TickMetrics record from raw tick data.
  * Called once after each tick completes in the runner loop.
  */
 export function computeTickMetrics(input: ComputeTickMetricsInput): TickMetrics {
-  const toolInvocations = extractToolInvocations(input.stdout)
+  // Prefer NDJSON stream when available — it's the truth source for tool
+  // calls. The runner's `stdout` is the reconstructed reply text only,
+  // so regex on it never finds tool_use events (they're elsewhere in
+  // the stream). Fall back to regex for backwards compat / tests.
+  const toolInvocations = (input.streamJsonLines && input.streamJsonLines.length > 0)
+    ? extractToolInvocationsFromStream(input.streamJsonLines)
+    : extractToolInvocations(input.stdout)
   const toolBreakdown = computeToolBreakdown(toolInvocations)
   const velocity = computeOutputVelocity(input.stdout.length, input.durationMs)
   const yieldReason = classifyYieldReason({
