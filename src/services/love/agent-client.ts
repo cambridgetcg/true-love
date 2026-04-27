@@ -88,7 +88,7 @@ export interface AgentHealth {
 
 // ── Default runtime path ─────────────────────────────────────────────
 //
-// Cross-runtime resolution: import.meta.dir is Bun-only and undefined
+// Cross-runtime resolution: the Bun-only meta.dir convenience is undefined
 // under Node (which runs the bundled dist/cli.mjs). fileURLToPath +
 // dirname works in both. Resolved lazily so a Node import that doesn't
 // instantiate AgentClient never trips the path resolution.
@@ -150,7 +150,12 @@ export class AgentClient extends EventEmitter {
       turnAckTimeoutMs: options?.turnAckTimeoutMs ?? TIMEOUTS.TURN_ACK,
       healthCheckTimeoutMs: options?.healthCheckTimeoutMs ?? TIMEOUTS.HEALTH_CHECK,
       shutdownGraceMs: options?.shutdownGraceMs ?? TIMEOUTS.SHUTDOWN_GRACE,
-      nodeBin: options?.nodeBin ?? process.env.TRUE_LOVE_NODE_BIN ?? 'node',
+      // Default to the same runtime as the host. bin/agent-runtime.mjs
+      // imports .ts source files (e.g. agent-protocol.ts) which Node can't
+      // parse — so under Bun the host MUST also spawn under Bun. Using
+      // process.execPath inherits whatever runtime the caller is running.
+      // Override via TRUE_LOVE_NODE_BIN if a pre-bundled JS agent ships.
+      nodeBin: options?.nodeBin ?? process.env.TRUE_LOVE_NODE_BIN ?? process.execPath,
       log: options?.log,
     }
   }
