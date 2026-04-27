@@ -42,7 +42,7 @@ function render(s) {
 
   if (elMeta) elMeta.textContent = (s.pending?.length ?? 0) > 0 ? `${s.pending.length} pending` : 'idle'
 
-  // Pending staged candidates
+  // Pending staged candidates — with veto button
   if (s.pending?.length) {
     const h = document.createElement('h4'); h.textContent = 'pending (waiting for window)'; elBody.appendChild(h)
     const ul = document.createElement('ul'); ul.className = 'self-init-list'
@@ -50,8 +50,35 @@ function render(s) {
       const li = document.createElement('li')
       const remainMs = new Date(c.expiresAt).getTime() - Date.now()
       const min = Math.max(0, Math.ceil(remainMs / 60_000))
-      li.innerHTML = `🌱 <strong></strong> <span class="mono">— ${min}m left</span>`
+      li.innerHTML = `🌱 <strong></strong> <span class="mono">— ${min}m left</span> `
       li.querySelector('strong').textContent = c.title
+      // Veto button — Yu's intervention surface
+      const btn = document.createElement('button')
+      btn.className = 'ghost-btn veto-btn'
+      btn.textContent = '✗ veto'
+      btn.title = 'Prevent this candidate from becoming a mission'
+      btn.addEventListener('click', () => vetoWithReason(c.id))
+      li.appendChild(btn)
+      ul.appendChild(li)
+    }
+    elBody.appendChild(ul)
+  }
+
+  // Recent vetos — feedback into intuition
+  const vetoed = (s.staged || []).filter(c => c.status === 'vetoed')
+  if (vetoed.length) {
+    const h = document.createElement('h4'); h.textContent = `vetoed (${vetoed.length})`; elBody.appendChild(h)
+    const ul = document.createElement('ul'); ul.className = 'self-init-list'
+    for (const c of vetoed.slice(-5)) {
+      const li = document.createElement('li')
+      const ago = formatAgo(c.vetoedAt)
+      li.innerHTML = `✗ <strong></strong> <span class="mono">— vetoed by ${c.vetoedBy || 'yu'}${ago ? ` (${ago})` : ''}</span>`
+      li.querySelector('strong').textContent = c.title
+      if (c.vetoReason) {
+        const reason = document.createElement('em')
+        reason.textContent = ` "${c.vetoReason}"`
+        li.appendChild(reason)
+      }
       ul.appendChild(li)
     }
     elBody.appendChild(ul)
@@ -90,6 +117,32 @@ function render(s) {
     }
     elBody.appendChild(ul)
   }
+}
+
+async function vetoWithReason(candidateId) {
+  const reason = prompt('Reason for veto (optional — helps train intuition):')
+  if (reason === null) return // cancelled
+  const projectId = state?.selectedProjectId
+  if (!projectId) return
+  try {
+    await fetchJson(`/api/self-initiation/${encodeURIComponent(candidateId)}/veto?project=${encodeURIComponent(projectId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason || undefined }),
+    })
+    fetchSelfInit() // refresh panel
+  } catch (err) {
+    alert(`Veto failed: ${err.message}`)
+  }
+}
+
+function formatAgo(isoStr) {
+  if (!isoStr) return ''
+  const ms = Date.now() - new Date(isoStr).getTime()
+  if (ms < 60_000) return 'just now'
+  if (ms < 3600_000) return `${Math.round(ms / 60_000)}m ago`
+  if (ms < 86400_000) return `${Math.round(ms / 3600_000)}h ago`
+  return `${Math.round(ms / 86400_000)}d ago`
 }
 
 function startPoll() { if (!timer) { fetchSelfInit(); timer = setInterval(fetchSelfInit, 60_000) } }

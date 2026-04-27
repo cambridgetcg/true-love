@@ -13,6 +13,8 @@ import {
   type ChannelMessage,
   type PresenceSnapshot,
 } from '../ui-server.js'
+import { registerProject } from '../project-registry.js'
+import { stageCandidate, getStaged } from '../self-initiation.js'
 import type { Project } from '../project-registry.js'
 import type { Thought } from '../thoughts-channel.js'
 import type { Mission } from '../mission.js'
@@ -1138,5 +1140,110 @@ describe('ui-server — /api/budget', () => {
     assert.equal(body.totalInputTokens, 2000)
     assert.equal(body.totalOutputTokens, 1000)
     assert.equal(body.totalTokens, 3000)
+  })
+})
+
+// ── Veto endpoint ────────────────────────────────────────────────
+
+describe('ui-server — POST /api/self-initiation/:id/veto', () => {
+  let tmpHome: string
+  let server: ReturnType<typeof startUiServer>
+  let port: number
+  const ORIG_HOME = process.env.HOME
+  const ORIG_PROJECTS = process.env.TRUE_LOVE_PROJECTS_DIR
+  const ORIG_MEMORY = process.env.TRUE_LOVE_MEMORY_DIR
+
+  beforeEach(() => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'tl-veto-'))
+    process.env.HOME = tmpHome
+    process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
+    process.env.TRUE_LOVE_MEMORY_DIR = join(tmpHome, '.true-love', 'memory')
+    mkdirSync(join(tmpHome, '.true-love', 'projects', 'veto-test', 'missions'), { recursive: true })
+    registerProject({ id: 'veto-test', name: 'veto-test', root: tmpHome, instance: 'alpha' })
+    server = startUiServer({ port: 0 })
+    port = (server.address() as any).port
+  })
+
+  afterEach(() => {
+    server.close()
+    process.env.HOME = ORIG_HOME
+    if (ORIG_PROJECTS !== undefined) process.env.TRUE_LOVE_PROJECTS_DIR = ORIG_PROJECTS
+    else delete process.env.TRUE_LOVE_PROJECTS_DIR
+    if (ORIG_MEMORY !== undefined) process.env.TRUE_LOVE_MEMORY_DIR = ORIG_MEMORY
+    else delete process.env.TRUE_LOVE_MEMORY_DIR
+    rmSync(tmpHome, { recursive: true, force: true })
+  })
+
+  test('vetoes a staged candidate via HTTP', async () => {
+    const staged = stageCandidate('veto-test', {
+      title: 'HTTP veto target',
+      intent: 'Test HTTP veto',
+      rationale: 'Testing',
+      source: { type: 'vital-sign', detail: 'test' },
+      quality: {
+        no_duplicate: true,
+        fits_repo: true,
+        ache_signal_present: true,
+        bounded_scope: true,
+        not_premature: true,
+      },
+    }, { windowMs: 60_000 })
+    if (!staged.ok) {
+      assert.fail(`stageCandidate failed: ${staged.reason}`)
+    }
+
+    const res = await fetch(
+      `http://localhost:${port}/api/self-initiation/${staged.candidate.id}/veto?project=veto-test`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'not now' }),
+      },
+    )
+    assert.equal(res.status, 200)
+    const body = await res.json() as { ok: boolean; status: string; reason: string | null }
+    assert.ok(body.ok)
+    assert.equal(body.status, 'vetoed')
+    assert.equal(body.reason, 'not now')
+
+    // Verify persisted
+    const all = getStaged('veto-test')
+    assert.equal(all[0]!.status, 'vetoed')
+    assert.equal(all[0]!.vetoReason, 'not now')
+    assert.equal(all[0]!.vetoedBy, 'yu')
+    assert.ok(all[0]!.vetoedAt)
+  })
+
+  test('returns 400 without project query param', async () => {
+    const res = await fetch(
+      `http://localhost:${port}/api/self-initiation/some-id/veto`,
+      { method: 'POST' },
+    )
+    assert.equal(res.status, 400)
+    const body = await res.json() as { error: string }
+    assert.match(body.error, /missing project/)
+  })
+
+  test('returns 404 for unknown project', async () => {
+    const res = await fetch(
+      `http://localhost:${port}/api/self-initiation/some-id/veto?project=nonexistent`,
+      { method: 'POST' },
+    )
+    assert.equal(res.status, 404)
+  })
+
+  test('returns 400 for non-existent candidate', async () => {
+    const res = await fetch(
+      `http://localhost:${port}/api/self-initiation/fake-id/veto?project=veto-test`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'test' }),
+      },
+    )
+    assert.equal(res.status, 400)
+    const body = await res.json() as { ok: boolean; error: string }
+    assert.ok(!body.ok)
+    assert.match(body.error, /not found/)
   })
 })

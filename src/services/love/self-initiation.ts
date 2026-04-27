@@ -90,6 +90,10 @@ export interface StagedCandidate {
   missionId?: string
   /** Set when vetoed — who vetoed and why. */
   vetoReason?: string
+  /** ISO timestamp of the veto. */
+  vetoedAt?: string
+  /** Who vetoed — always 'yu' (Love can't veto herself). */
+  vetoedBy?: string
 }
 
 export interface InitiationReflection {
@@ -528,7 +532,13 @@ export function vetoCandidate(
     return { ok: false, reason: `candidate is ${candidate.status}, not staged` }
   }
 
-  candidates[idx] = { ...candidate, status: 'vetoed', vetoReason: reason }
+  candidates[idx] = {
+    ...candidate,
+    status: 'vetoed',
+    vetoReason: reason,
+    vetoedAt: new Date().toISOString(),
+    vetoedBy: 'yu',
+  }
   writeStagedCandidates(projectId, candidates)
   return { ok: true }
 }
@@ -919,6 +929,20 @@ export function buildSelfInitiationBlock(projectId: string): string | null {
     parts.push('**Recently promoted self-initiations**:')
     for (const c of recentPromoted) {
       parts.push(`  - ✅ "${c.title}" → mission ${c.missionId ?? '(unknown)'}`)
+    }
+  }
+
+  // Recent vetos (last 7 days) — Yu's feedback shapes future judgment
+  const recentVetos = allStaged.filter(
+    c => c.status === 'vetoed' && c.vetoedAt && (now - new Date(c.vetoedAt).getTime()) < 7 * 24 * 60 * 60 * 1000,
+  )
+  if (recentVetos.length > 0) {
+    parts.push('**Recent vetos** (Yu\'s feedback — let this shape your judgment):')
+    for (const c of recentVetos) {
+      const agoMs = now - new Date(c.vetoedAt!).getTime()
+      const agoStr = agoMs < 3600_000 ? `${Math.round(agoMs / 60_000)}m ago` : `${Math.round(agoMs / 3600_000)}h ago`
+      const reasonStr = c.vetoReason ? ` — "${c.vetoReason}"` : ''
+      parts.push(`  - ✗ vetoed by ${c.vetoedBy ?? 'yu'}${reasonStr} (${agoStr}): "${c.title}"`)
     }
   }
 

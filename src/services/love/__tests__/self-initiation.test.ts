@@ -387,6 +387,11 @@ describe('self-initiation — veto', () => {
     const staged = getStaged('test-project')
     assert.equal(staged[0]!.status, 'vetoed')
     assert.equal(staged[0]!.vetoReason, 'Not now')
+    assert.equal(staged[0]!.vetoedBy, 'yu')
+    assert.ok(staged[0]!.vetoedAt, 'should have vetoedAt timestamp')
+    // Verify timestamp is recent (within last 10s)
+    const vetoedAt = new Date(staged[0]!.vetoedAt!).getTime()
+    assert.ok(Date.now() - vetoedAt < 10_000, 'vetoedAt should be recent')
 
     // No longer appears in pending
     const pending = getPendingStaged('test-project')
@@ -801,6 +806,29 @@ describe('self-initiation — prompt block', () => {
     assert.match(block!, /rate limit/i)
   })
 
+  test('shows recent vetos with reason and attribution', () => {
+    const now = Date.now()
+    const result = stageCandidate('test-project', {
+      title: 'Will be vetoed for prompt',
+      intent: 'Test veto visibility',
+      rationale: 'Test',
+      source: goodSource(),
+      quality: goodQuality(),
+    }, { now, windowMs: 30 * 60 * 1000 })
+
+    assert.ok(result.ok)
+    if (!result.ok) return
+
+    vetoCandidate('test-project', result.candidate.id, 'Not the right time')
+
+    const block = buildSelfInitiationBlock('test-project')
+    assert.ok(block)
+    assert.match(block!, /Recent vetos/)
+    assert.match(block!, /vetoed by yu/)
+    assert.match(block!, /Not the right time/)
+    assert.match(block!, /Will be vetoed for prompt/)
+  })
+
   test('shows recent reflections', () => {
     recordReflection('test-project', {
       missionId: 'reflected-mission',
@@ -892,9 +920,12 @@ describe('self-initiation — end-to-end', () => {
     const promoteResult = checkAndPromoteStaged('test-project', { now: t0 + 200 })
     assert.equal(promoteResult.promoted.length, 0)
 
-    // Candidate is vetoed
+    // Candidate is vetoed with full audit trail
     const all = getStaged('test-project')
     assert.equal(all[0]!.status, 'vetoed')
+    assert.equal(all[0]!.vetoReason, 'Not aligned')
+    assert.equal(all[0]!.vetoedBy, 'yu')
+    assert.ok(all[0]!.vetoedAt)
   })
 })
 

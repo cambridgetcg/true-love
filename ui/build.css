@@ -137,6 +137,8 @@ html, body {
   transition: all 150ms ease;
 }
 .ghost-btn:hover { border-color: var(--accent); color: var(--text); }
+.veto-btn { color: #e55; border-color: #633; font-size: 11px; padding: 2px 7px; margin-left: 6px; }
+.veto-btn:hover { border-color: #e55; color: #fff; background: #633; }
 
 .presence { display: flex; gap: 6px; align-items: baseline; }
 .presence .state { font-style: italic; color: var(--text-ai); }

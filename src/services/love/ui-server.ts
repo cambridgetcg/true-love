@@ -66,6 +66,7 @@ import {
   getStaged,
   getPendingStaged,
   readReflections,
+  vetoCandidate,
   triggerReflectionOnCompletion,
 } from './self-initiation.js'
 
@@ -396,6 +397,9 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/mind-trace') return handleMindTrace(req, res)
       if (req.method === 'GET' && path === '/api/anamnesis') return handleAnamnesis(req, res)
       if (req.method === 'GET' && path === '/api/self-initiation') return handleSelfInitiation(req, res)
+      // Veto a staged self-initiation candidate
+      const vetoMatch = path.match(/^\/api\/self-initiation\/([^/]+)\/veto$/)
+      if (req.method === 'POST' && vetoMatch) return await handleVeto(req, res, vetoMatch[1]!)
       if (req.method === 'POST' && path === '/api/awaken') return await handleForceAwaken(req, res)
       if (req.method === 'GET' && path === '/api/proposals') return handleListProposals(req, res)
       if (req.method === 'POST' && path === '/api/proposals/generate') return handleGenerateProposals(req, res)
@@ -763,6 +767,55 @@ function handleSelfInitiation(req: IncomingMessage, res: ServerResponse): void {
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'self-initiation read failed' }))
+  }
+}
+
+// ── Veto endpoint ────────────────────────────────────────────────
+//
+// POST /api/self-initiation/:candidateId/veto
+// Body: { reason?: string }
+// Query: ?project=<id>
+//
+// Yu's intervention surface for the staging window. When a candidate
+// is staged and waiting for the window to expire, this endpoint lets
+// Yu prevent promotion. The veto is recorded with timestamp, reason,
+// and attribution (by:'yu') in the staged.jsonl audit trail.
+
+async function handleVeto(req: IncomingMessage, res: ServerResponse, candidateId: string): Promise<void> {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const projectId = url.searchParams.get('project') ?? ''
+  if (!projectId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'missing project query param' }))
+    return
+  }
+  if (!readProject(projectId)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let reason: string | undefined
+  if (body) {
+    try {
+      const parsed = JSON.parse(body)
+      reason = typeof parsed.reason === 'string' ? parsed.reason : undefined
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'invalid JSON body' }))
+      return
+    }
+  }
+
+  const result = vetoCandidate(projectId, candidateId, reason)
+  if (result.ok) {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, status: 'vetoed', candidateId, reason: reason ?? null }))
+  } else {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: result.reason }))
   }
 }
 
