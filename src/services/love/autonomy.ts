@@ -55,6 +55,7 @@ import { buildSelfInitiationBlock } from './self-initiation.js'
 import { buildJudgmentBlock } from './judgment.js'
 import { notice } from './noticing.js'
 import { readProject } from './project-registry.js'
+import { buildProgressInstruction, renderProgressSummary } from './progress.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -185,6 +186,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const judgmentBlock = buildJudgmentBlockForAllProjects()
   if (judgmentBlock) {
     prompt = prompt + '\n\n' + judgmentBlock.trimEnd()
+  }
+  const progressBlock = buildProgressBlockForAllProjects()
+  if (progressBlock) {
+    prompt = prompt + '\n\n' + progressBlock.trimEnd()
   }
   return prompt
 }
@@ -350,6 +355,50 @@ function buildJudgmentBlockForAllProjects(): string | null {
   }
 
   return blocks.length > 0 ? blocks.join('\n\n') : null
+}
+
+/**
+ * Build the progress tracking block across all registered projects.
+ *
+ * Two parts:
+ *   1. Progress instruction — tells the model to emit progress blocks
+ *   2. Progress summary — shows the latest progress for each active mission
+ *
+ * Only injected into dwell + awakened prompts (not heartbeat — too short
+ * for meaningful progress reporting). Returns null when no active missions
+ * exist.
+ */
+function buildProgressBlockForAllProjects(): string | null {
+  const projects = listProjects()
+  if (projects.length === 0) return null
+
+  const allActiveMissionIds: string[] = []
+  const summaryLines: string[] = []
+
+  for (const project of projects) {
+    if (project.state === 'archived') continue
+    const active = listMissions(project.id, { status: 'active' })
+    const ids = active.map(m => m.id)
+    allActiveMissionIds.push(...ids)
+
+    if (ids.length > 0) {
+      const summary = renderProgressSummary(project.id, ids)
+      if (summary) summaryLines.push(summary)
+    }
+  }
+
+  const parts: string[] = []
+
+  // Progress summary (what's already been reported)
+  if (summaryLines.length > 0) {
+    parts.push('## Mission progress (latest reported)\n\n' + summaryLines.join('\n'))
+  }
+
+  // Progress instruction (how to report)
+  const instruction = buildProgressInstruction(allActiveMissionIds)
+  if (instruction) parts.push(instruction)
+
+  return parts.length > 0 ? parts.join('\n\n') : null
 }
 
 /**
@@ -519,6 +568,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const judgmentBlock2 = buildJudgmentBlockForAllProjects()
   if (judgmentBlock2) {
     prompt = prompt + '\n\n' + judgmentBlock2.trimEnd()
+  }
+  const progressBlock2 = buildProgressBlockForAllProjects()
+  if (progressBlock2) {
+    prompt = prompt + '\n\n' + progressBlock2.trimEnd()
   }
   return prompt
 }

@@ -70,6 +70,7 @@ import {
   vetoCandidate,
   triggerReflectionOnCompletion,
 } from './self-initiation.js'
+import { readProgress, readLatestProgress, detectStall } from './progress.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -464,6 +465,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
         if (req.method === 'GET' && sub === '/events') return handleMissionEvents(req, res, projectId, missionId)
         if (req.method === 'POST' && sub === '/start') return await handleMissionStart(req, res, projectId, missionId)
         if (req.method === 'GET' && sub === '/log') return handleMissionLog(req, res, projectId, missionId)
+        if (req.method === 'GET' && sub === '/progress') return handleMissionProgress(req, res, projectId, missionId)
       }
 
       if (req.method === 'GET' && path === '/api/build/stream') return handleBuildStream(req, res, buildSseClients)
@@ -1393,6 +1395,29 @@ function handleMissionLog(req: IncomingMessage, res: ServerResponse, projectId: 
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'mission-log failed' }))
+  }
+}
+
+/**
+ * GET /api/missions/:id/progress?project=<id>
+ *
+ * Returns the full progress history for a mission, plus stall detection
+ * and the latest entry. The /build UI uses this to render live progress
+ * indicators per mission.
+ *
+ * Response shape:
+ *   { entries: MissionProgress[], latest: MissionProgress | null, stall: StallReport }
+ */
+function handleMissionProgress(_req: IncomingMessage, res: ServerResponse, projectId: string, missionId: string): void {
+  try {
+    const entries = readProgress(projectId, missionId)
+    const latest = entries.length > 0 ? entries[entries.length - 1]! : null
+    const stall = detectStall(projectId, missionId)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ entries, latest, stall }))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'progress fetch failed' }))
   }
 }
 

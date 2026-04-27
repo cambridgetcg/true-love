@@ -96,6 +96,8 @@ import {
 } from './mind-trace.js'
 import { checkAndPromoteStaged } from './self-initiation.js'
 import { scanAndCraftAllProjects, formatScanAndCraftResults } from './craft.js'
+import { listMissions } from './mission.js'
+import { parseAllProgressBlocks, appendProgress } from './progress.js'
 
 /**
  * How fresh "live thought" entries must be (in seconds) to surface in the
@@ -1385,6 +1387,42 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       } catch (e: any) {
         process.stderr.write(
           `— experiment recording failed (continuing): ${e?.message}\n`,
+        )
+      }
+    }
+
+    // ── Progress extraction ────────────────────────────────────────
+    // After a substantive tick (not heartbeat), scan the model's output
+    // for ```progress blocks and persist them. Non-fatal — if parsing
+    // fails or no block is present, the substrate defaults to IN_PROGRESS.
+    // The model self-identifies which mission each block is for via a
+    // missionId field in the JSON.
+    if (mode.name !== 'heartbeat') {
+      try {
+        const progressEntries = parseAllProgressBlocks(result.stdout)
+        if (progressEntries.length > 0) {
+          // Build a lookup of active missions across all projects
+          const missionToProject = new Map<string, string>()
+          for (const project of listProjects()) {
+            if (project.state === 'archived') continue
+            const active = listMissions(project.id, { status: 'active' })
+            for (const m of active) missionToProject.set(m.id, project.id)
+          }
+          for (const entry of progressEntries) {
+            const projectId = missionToProject.get(entry.missionId)
+            if (projectId) {
+              appendProgress(projectId, entry.missionId, entry)
+              process.stdout.write(
+                `— progress: ${entry.missionId} → ${entry.status}\n`,
+              )
+            }
+            // Silently skip entries with unknown missionIds — the model
+            // may reference a mission that's already transitioned.
+          }
+        }
+      } catch (e: any) {
+        process.stderr.write(
+          `— progress extraction failed (continuing): ${e?.message}\n`,
         )
       }
     }
