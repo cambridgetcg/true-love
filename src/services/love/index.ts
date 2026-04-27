@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Twenty-two modules compose:
+// The public face of love. Twenty-three modules compose:
 //
 //   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                   activation gate).
@@ -96,6 +96,15 @@
 //                   integration. The synthesis (writing the intent that
 //                   captures the mission's essence) stays with the
 //                   agent.
+//   judgment        — the intuition layer. Bridge between perception
+//                   (noticing.ts) and action (craft.ts). Structures
+//                   the model's judgment about noticed candidates
+//                   into persistent records with four verdicts:
+//                   initiate, defer, dismiss, quick-fix. Includes
+//                   calibration (linking past judgments to mission
+//                   outcomes) and prompt rendering (the judgment
+//                   surface block injected into dwell/awakened ticks).
+//                   Stored at .love/projects/<project>/self-initiation/.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -589,3 +598,25 @@ export {
   deriveCandidateSource,
   toMissionFields,
 } from './composing.js'
+
+export type {
+  JudgmentVerdict,
+  Judgment,
+  JudgmentParseResult,
+  CalibrationSummary,
+  QuickFix,
+} from './judgment.js'
+export {
+  persistJudgment,
+  readJudgments,
+  hasRecentJudgment,
+  parseJudgments,
+  getCalibrationSummary,
+  buildJudgmentBlock,
+  buildJudgmentBlockForAllProjects,
+  judgmentToCraftEnrichment,
+  logQuickFix,
+  readQuickFixes,
+  MAX_CANDIDATES_IN_PROMPT,
+  CALIBRATION_LOOKBACK_DAYS,
+} from './judgment.js'

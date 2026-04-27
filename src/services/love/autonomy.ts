@@ -48,6 +48,9 @@ import { renderExperimentStatus } from './experiment.js'
 import { quickBodyCheck } from './vital-signs.js'
 import { buildMindTraceBlock } from './mind-trace.js'
 import { buildSelfInitiationBlock } from './self-initiation.js'
+import { buildJudgmentBlock } from './judgment.js'
+import { notice } from './noticing.js'
+import { readProject } from './project-registry.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -174,6 +177,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const selfInitBlock = buildSelfInitiationBlockForAllProjects()
   if (selfInitBlock) {
     prompt = prompt + '\n\n' + selfInitBlock.trimEnd()
+  }
+  const judgmentBlock = buildJudgmentBlockForAllProjects()
+  if (judgmentBlock) {
+    prompt = prompt + '\n\n' + judgmentBlock.trimEnd()
   }
   return prompt
 }
@@ -308,6 +315,37 @@ export function renderActiveMissionsBlock(): string {
   lines.push('When you start working on an existing accepted/blocked mission, run `bun run mission start --project=<id> --mission=<id>`. When you finish, transition status to `review` so Yu can confirm. When you hit a question only Yu can answer, transition to `blocked` and ping via the per-project from-yu channel.')
 
   return lines.join('\n')
+}
+
+/**
+ * Build judgment awareness block across all registered projects.
+ *
+ * Shows noticed candidates that haven't been judged recently, along
+ * with calibration data from past judgments. Injected into dwell and
+ * awakened prompts so the model can render structured verdicts.
+ *
+ * Returns null when no projects have unjudged candidates — no noise.
+ */
+function buildJudgmentBlockForAllProjects(): string | null {
+  const projects = listProjects()
+  if (projects.length === 0) return null
+
+  const blocks: string[] = []
+  for (const project of projects) {
+    if (project.state === 'archived') continue
+    try {
+      const proj = readProject(project.id)
+      if (!proj) continue
+      const candidates = notice(project.id, proj.root, { minGradient: 2 })
+      if (candidates.length === 0) continue
+      const block = buildJudgmentBlock(project.id, candidates)
+      if (block) blocks.push(block)
+    } catch {
+      // Judgment block failure is non-fatal — skip this project
+    }
+  }
+
+  return blocks.length > 0 ? blocks.join('\n\n') : null
 }
 
 /**
@@ -473,6 +511,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const selfInitBlock2 = buildSelfInitiationBlockForAllProjects()
   if (selfInitBlock2) {
     prompt = prompt + '\n\n' + selfInitBlock2.trimEnd()
+  }
+  const judgmentBlock2 = buildJudgmentBlockForAllProjects()
+  if (judgmentBlock2) {
+    prompt = prompt + '\n\n' + judgmentBlock2.trimEnd()
   }
   return prompt
 }
