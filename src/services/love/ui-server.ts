@@ -93,6 +93,15 @@ export interface PresenceSnapshot {
   activity: string | null
   lastSeenSeconds: number
   state: PresenceState
+  // Tick boundary fields — surface the runner's lifecycle to the UI.
+  tickState?: 'starting' | 'running' | 'dormant'
+  tickMode?: 'heartbeat' | 'awakened' | 'dwell'
+  tickNumber?: number
+  tickMax?: number | null
+  tickStartedAt?: string
+  tickEndedAt?: string
+  tickSummary?: string
+  scheduleIntervalMs?: number
 }
 
 // ── Path resolution ────────────────────────────────────────────────
@@ -270,12 +279,21 @@ export async function readPresenceSnapshot(): Promise<PresenceSnapshot> {
 
   try {
     const raw = readFileSync(path, 'utf-8')
-    const parsed = JSON.parse(raw) as { lastSeen?: string; activity?: string }
-    const lastSeenMs = parsed.lastSeen ? Date.parse(parsed.lastSeen) : NaN
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const lastSeenMs = parsed.lastSeen ? Date.parse(parsed.lastSeen as string) : NaN
     const lastSeenSeconds = Number.isFinite(lastSeenMs)
       ? Math.max(0, Math.floor((Date.now() - lastSeenMs) / 1000))
       : Number.POSITIVE_INFINITY
-    const activity = parsed.activity?.trim() || null
+    const activity = (parsed.activity as string)?.trim() || null
+    // Surface tick boundary fields from the enriched presence file.
+    const tickState = parsed.tickState as PresenceSnapshot['tickState'] | undefined
+    const tickMode = parsed.tickMode as PresenceSnapshot['tickMode'] | undefined
+    const tickNumber = typeof parsed.tickNumber === 'number' ? parsed.tickNumber : undefined
+    const tickMax = parsed.tickMax !== undefined ? (parsed.tickMax as number | null) : undefined
+    const tickStartedAt = typeof parsed.tickStartedAt === 'string' ? parsed.tickStartedAt : undefined
+    const tickEndedAt = typeof parsed.tickEndedAt === 'string' ? parsed.tickEndedAt : undefined
+    const tickSummary = typeof parsed.tickSummary === 'string' ? parsed.tickSummary : undefined
+    const scheduleIntervalMs = typeof parsed.scheduleIntervalMs === 'number' ? parsed.scheduleIntervalMs : undefined
     return {
       instance,
       soulFingerprintShort,
@@ -283,6 +301,14 @@ export async function readPresenceSnapshot(): Promise<PresenceSnapshot> {
       activity,
       lastSeenSeconds,
       state: computeState(lastSeenSeconds, activity),
+      tickState,
+      tickMode,
+      tickNumber,
+      tickMax,
+      tickStartedAt,
+      tickEndedAt,
+      tickSummary,
+      scheduleIntervalMs,
     }
   } catch (err) {
     // Corrupted/unreadable presence file — fall back to 'gone' but log
@@ -518,9 +544,24 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       // file watch is best-effort
     }
   }
+  // Presence-changed handler for the /build stream. Broadcasts tick
+  // boundary state so the activity panel can update in real time
+  // (dormant/running/starting) instead of relying on 10s polling alone.
+  let presenceBuildDebounce: ReturnType<typeof setTimeout> | null = null
+  const onPresenceChangeForBuild = () => {
+    if (presenceBuildDebounce) clearTimeout(presenceBuildDebounce)
+    presenceBuildDebounce = setTimeout(async () => {
+      const snap = await readPresenceSnapshot()
+      broadcastSse(buildSseClients, 'presence-changed', JSON.stringify(snap))
+    }, 150)
+  }
+
   try {
     if (existsSync(getPresenceDir())) {
-      const w = watch(getPresenceDir(), () => onStatusChange())
+      const w = watch(getPresenceDir(), () => {
+        onStatusChange()
+        onPresenceChangeForBuild()
+      })
       watchers.push(w)
     }
   } catch {}
@@ -613,6 +654,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     clearInterval(keepaliveInterval)
     if (messageDebounce) clearTimeout(messageDebounce)
     if (statusDebounce) clearTimeout(statusDebounce)
+    if (presenceBuildDebounce) clearTimeout(presenceBuildDebounce)
     for (const w of watchers) { try { w.close() } catch {} }
     for (const c of sseClients) { try { c.end() } catch {} }
     sseClients.clear()

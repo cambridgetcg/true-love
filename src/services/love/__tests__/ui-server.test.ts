@@ -296,6 +296,101 @@ describe('ui-server — readPresenceSnapshot', () => {
     assert.equal(snap.state, 'thinking')
     assert.match(snap.activity ?? '', /considering/)
   })
+
+  // ── Tick boundary fields ──────────────────────────────────────
+
+  test('surfaces tickState=running with all tick boundary fields', async () => {
+    const now = new Date().toISOString()
+    writeFileSync(
+      join(process.env.TRUE_LOVE_PRESENCE_DIR!, 'test-device.json'),
+      JSON.stringify({
+        deviceId: 'test-device',
+        lastSeen: now,
+        status: 'awakened tick 3',
+        activity: 'read: src/services/love/runner.ts',
+        tickState: 'running',
+        tickMode: 'awakened',
+        tickNumber: 3,
+        tickMax: 24,
+        tickStartedAt: now,
+      }),
+      'utf-8',
+    )
+    const snap = await readPresenceSnapshot()
+    assert.equal(snap.tickState, 'running')
+    assert.equal(snap.tickMode, 'awakened')
+    assert.equal(snap.tickNumber, 3)
+    assert.equal(snap.tickMax, 24)
+    assert.equal(snap.tickStartedAt, now)
+    assert.equal(snap.tickEndedAt, undefined)
+    assert.equal(snap.state, 'writing') // activity present, <15s → writing
+  })
+
+  test('surfaces tickState=dormant with schedule interval', async () => {
+    const now = new Date().toISOString()
+    writeFileSync(
+      join(process.env.TRUE_LOVE_PRESENCE_DIR!, 'test-device.json'),
+      JSON.stringify({
+        deviceId: 'test-device',
+        lastSeen: now,
+        status: 'heartbeat',
+        tickState: 'dormant',
+        tickMode: 'heartbeat',
+        tickNumber: 1,
+        tickMax: 1,
+        tickEndedAt: now,
+        tickSummary: 'HEARTBEAT_OK',
+        scheduleIntervalMs: 111000,
+      }),
+      'utf-8',
+    )
+    const snap = await readPresenceSnapshot()
+    assert.equal(snap.tickState, 'dormant')
+    assert.equal(snap.tickMode, 'heartbeat')
+    assert.equal(snap.tickEndedAt, now)
+    assert.equal(snap.tickSummary, 'HEARTBEAT_OK')
+    assert.equal(snap.scheduleIntervalMs, 111000)
+  })
+
+  test('omits tick boundary fields when presence file has none', async () => {
+    const now = new Date().toISOString()
+    writeFileSync(
+      join(process.env.TRUE_LOVE_PRESENCE_DIR!, 'test-device.json'),
+      JSON.stringify({
+        deviceId: 'test-device',
+        lastSeen: now,
+        status: 'awakened',
+      }),
+      'utf-8',
+    )
+    const snap = await readPresenceSnapshot()
+    assert.equal(snap.tickState, undefined)
+    assert.equal(snap.tickMode, undefined)
+    assert.equal(snap.tickNumber, undefined)
+    assert.equal(snap.scheduleIntervalMs, undefined)
+  })
+
+  test('surfaces tickMax=null for unbounded sessions', async () => {
+    const now = new Date().toISOString()
+    writeFileSync(
+      join(process.env.TRUE_LOVE_PRESENCE_DIR!, 'test-device.json'),
+      JSON.stringify({
+        deviceId: 'test-device',
+        lastSeen: now,
+        status: 'dwell tick 1',
+        tickState: 'running',
+        tickMode: 'dwell',
+        tickNumber: 1,
+        tickMax: null,
+        tickStartedAt: now,
+      }),
+      'utf-8',
+    )
+    const snap = await readPresenceSnapshot()
+    assert.equal(snap.tickState, 'running')
+    assert.equal(snap.tickMode, 'dwell')
+    assert.equal(snap.tickMax, null)
+  })
 })
 
 describe('ui-server — fireHeartbeat', () => {
@@ -369,6 +464,34 @@ describe('ui-server — HTTP', () => {
     const body = (await res.json()) as PresenceSnapshot
     assert.equal(body.state, 'gone')
     assert.equal(body.instance, 'alpha')
+  })
+
+  test('GET /api/status includes tick boundary fields when present', async () => {
+    const now = new Date().toISOString()
+    writeFileSync(
+      join(process.env.TRUE_LOVE_PRESENCE_DIR!, 'test-device.json'),
+      JSON.stringify({
+        deviceId: 'test-device',
+        lastSeen: now,
+        status: 'awakened tick 5',
+        activity: 'bash: bun test',
+        tickState: 'running',
+        tickMode: 'awakened',
+        tickNumber: 5,
+        tickMax: 24,
+        tickStartedAt: now,
+      }),
+      'utf-8',
+    )
+    const res = await fetch(`http://localhost:${port}/api/status`)
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as PresenceSnapshot
+    assert.equal(body.tickState, 'running')
+    assert.equal(body.tickMode, 'awakened')
+    assert.equal(body.tickNumber, 5)
+    assert.equal(body.tickMax, 24)
+    assert.equal(body.tickStartedAt, now)
+    assert.ok(body.activity?.includes('bun test'))
   })
 
   test('POST /api/say appends to from-yu.md', async () => {

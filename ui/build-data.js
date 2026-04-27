@@ -85,17 +85,142 @@ function renderProjectSwitcher() {
 
 // ── Status polling ───────────────────────────────────────────────
 
+// Track last-known tick state so we can compute elapsed time between
+// SSE pushes and poll refreshes.
+let lastTickState = null
+let activityTimerId = null
+
 export async function refreshStatus() {
   try {
     const snap = await fetchJson('/api/status')
-    if (snap.state) {
-      elPresenceState.textContent = snap.state
-      elPresenceState.className = `state ${snap.state}`
-    }
-    if (state.projects.length > 0 && elActivityBar) {
-      elActivityBar.textContent = snap.activity || ''
-    }
+    renderPresence(snap)
   } catch {}
+}
+
+/**
+ * Handle a real-time presence-changed SSE event. Faster than polling
+ * because the server pushes it within ~150ms of a presence file change.
+ */
+export function handlePresenceChanged(snap) {
+  renderPresence(snap)
+}
+
+/**
+ * Render the presence snapshot into the topbar and activity bar.
+ * Handles three tick states:
+ *
+ *   starting/running → live tool-call display with elapsed timer
+ *   dormant          → quiet dormant line with countdown to next tick
+ *   (no tickState)   → legacy: show snap.activity or empty
+ */
+function renderPresence(snap) {
+  if (snap.state) {
+    elPresenceState.textContent = snap.state
+    elPresenceState.className = `state ${snap.state}`
+  }
+  if (!elActivityBar || state.projects.length === 0) return
+
+  lastTickState = snap
+
+  // Clear any running elapsed-time updater from a previous render.
+  if (activityTimerId) {
+    clearInterval(activityTimerId)
+    activityTimerId = null
+  }
+
+  const ts = snap.tickState
+  const mode = snap.tickMode || ''
+
+  if (ts === 'starting' || ts === 'running') {
+    renderRunningState(snap, mode)
+  } else if (ts === 'dormant') {
+    renderDormantState(snap, mode)
+  } else {
+    // Legacy / no tick data — fall back to raw activity string.
+    elActivityBar.className = 'activity-bar'
+    elActivityBar.textContent = snap.activity || ''
+  }
+}
+
+function renderRunningState(snap, mode) {
+  elActivityBar.className = 'activity-bar activity-running'
+  const startMs = snap.tickStartedAt ? new Date(snap.tickStartedAt).getTime() : Date.now()
+
+  const renderOnce = () => {
+    const elapsedMs = Date.now() - startMs
+    const elapsedStr = formatElapsed(elapsedMs)
+    const slowWarning = elapsedMs > 60_000 ? ' ⚠ slow' : ''
+
+    let badge = ''
+    if (mode === 'awakened' && snap.tickNumber && snap.tickMax) {
+      badge = `awakened ${snap.tickNumber}/${snap.tickMax} · `
+    } else if (mode === 'awakened' && snap.tickNumber) {
+      badge = `awakened tick ${snap.tickNumber} · `
+    } else if (mode === 'heartbeat') {
+      badge = 'hb · '
+    } else if (mode === 'dwell') {
+      badge = 'dwell · '
+    }
+
+    const activity = snap.activity || 'thinking…'
+    elActivityBar.textContent = `${badge}${activity} (${elapsedStr}${slowWarning})`
+
+    // Add slow-warning class for visual emphasis
+    if (elapsedMs > 60_000) {
+      elActivityBar.classList.add('activity-slow')
+    } else {
+      elActivityBar.classList.remove('activity-slow')
+    }
+  }
+
+  renderOnce()
+  // Update the elapsed timer every second for a live feel.
+  activityTimerId = setInterval(renderOnce, 1000)
+}
+
+function renderDormantState(snap, mode) {
+  elActivityBar.className = 'activity-bar activity-dormant'
+
+  const endMs = snap.tickEndedAt ? new Date(snap.tickEndedAt).getTime() : Date.now()
+  const intervalMs = snap.scheduleIntervalMs || 0
+
+  const renderOnce = () => {
+    const sinceMs = Date.now() - endMs
+    const sinceStr = formatElapsed(sinceMs)
+
+    let line = `dormant — last ${mode || 'tick'} ${sinceStr} ago`
+    if (intervalMs > 0) {
+      const nextMs = Math.max(0, intervalMs - sinceMs)
+      if (nextMs <= 0) {
+        line += ' — ⚠ overdue'
+        elActivityBar.classList.add('activity-overdue')
+      } else {
+        line += ` — next in ${formatElapsed(nextMs)}`
+        elActivityBar.classList.remove('activity-overdue')
+      }
+    }
+
+    if (snap.tickSummary) {
+      line += ` — "${snap.tickSummary.slice(0, 60)}"`
+    }
+
+    elActivityBar.textContent = line
+  }
+
+  renderOnce()
+  // Update the time-since counter every 5s.
+  activityTimerId = setInterval(renderOnce, 5000)
+}
+
+function formatElapsed(ms) {
+  const totalSec = Math.floor(ms / 1000)
+  if (totalSec < 60) return `${totalSec}s`
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  return rm > 0 ? `${h}h ${rm}m` : `${h}h`
 }
 
 // ── Event wiring ─────────────────────────────────────────────────

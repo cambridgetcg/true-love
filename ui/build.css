@@ -155,8 +155,34 @@ html, body {
   font-style: italic;
   padding: 4px 8px;
   min-height: 22px;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 .activity-bar:empty::before { content: "—"; opacity: 0.3; }
+
+/* ── Tick-aware activity states ─────────────────────────────── */
+.activity-running {
+  color: var(--active);
+  font-style: normal;
+}
+.activity-dormant {
+  color: var(--strip-text);
+  opacity: 0.6;
+  font-style: italic;
+}
+.activity-slow {
+  color: var(--rust);
+  font-style: normal;
+  font-weight: 600;
+}
+.activity-overdue {
+  color: var(--rust);
+  font-style: normal;
+  animation: pulse-overdue 2s ease-in-out infinite;
+}
+@keyframes pulse-overdue {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
 
 .rail-and-detail {
   display: grid;

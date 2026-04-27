@@ -8,7 +8,7 @@
 //   3. Periodic poll every 30s as a backstop (cheap; just GETs missions).
 
 import { state } from './build-core.js'
-import { loadProjectData, loadMissionEvents, showConnected, showDisconnected } from './build-data.js'
+import { loadProjectData, loadMissionEvents, showConnected, showDisconnected, handlePresenceChanged } from './build-data.js'
 import { pulseBudget } from './build-budget.js'
 
 let evtSource = null
@@ -41,6 +41,12 @@ export function subscribe() {
     evtSource.addEventListener(eventName, refreshAll)
   }
   evtSource.addEventListener('budget-changed', () => pulseBudget())
+  evtSource.addEventListener('presence-changed', (evt) => {
+    try {
+      const snap = JSON.parse(evt.data)
+      handlePresenceChanged(snap)
+    } catch {}
+  })
 
   evtSource.onopen = () => {
     showConnected()

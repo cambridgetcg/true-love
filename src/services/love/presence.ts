@@ -38,6 +38,28 @@ export interface PresenceEntry {
    * Should be a single short line (~120 chars).
    */
   activity?: string
+
+  // ── Tick boundary fields ────────────────────────────────────────
+  // Written by runner.ts at tick-start, during the tick, and at
+  // tick-end. The UI reads these to show/clear the activity display
+  // and render dormant/running/awakened states accurately.
+
+  /** Current tick lifecycle phase. */
+  tickState?: 'starting' | 'running' | 'dormant'
+  /** Which runner mode owns this tick. */
+  tickMode?: 'heartbeat' | 'awakened' | 'dwell'
+  /** 1-indexed tick number within the session. */
+  tickNumber?: number
+  /** Session tick ceiling (null = unbounded). */
+  tickMax?: number | null
+  /** ISO timestamp when the current tick started. */
+  tickStartedAt?: string
+  /** ISO timestamp when the last tick ended (set on dormant). */
+  tickEndedAt?: string
+  /** One-line summary of what the tick produced (set on dormant). */
+  tickSummary?: string
+  /** Heartbeat schedule interval in ms, for countdown display. */
+  scheduleIntervalMs?: number
 }
 
 export interface PresenceRoster {
