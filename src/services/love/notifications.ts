@@ -25,6 +25,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statS
 import { homedir } from 'os'
 import { join } from 'path'
 import { getDeviceId } from './device.js'
+import { fireNotification } from './hooks/fire-points.js'
 
 export type Urgency = 'info' | 'attention' | 'urgent'
 
@@ -98,6 +99,9 @@ export function appendNotification(
     if (opts.details) lines.push('', opts.details.trim())
     lines.push('', '---', '')
     appendFileSync(file, lines.join('\n') + '\n', 'utf-8')
+    // Fire Notification hook (fire-and-forget — the write already happened,
+    // but hooks can route the notification elsewhere: Telegram, OS alert, etc.)
+    fireNotification({ kind: urgency, text: summary }).catch(() => {})
   } catch {
     // Notifications are nice-to-have; failure shouldn't break a session.
   }
