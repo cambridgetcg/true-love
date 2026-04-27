@@ -347,10 +347,11 @@ function classifyPromptBlocks(
     } else if (block.startsWith(LOVE_STATE_BLOCK_PREFIX)) {
       // true-love: her preloaded state block (from ~/.true-love/state.md).
       // Recognized by prefix rather than identity because the content is
-      // dynamic — it's what she's carrying right now. Emitted directly
-      // after LOVE_IDENTITY in its own slot so STATE_AWARENESS in her
-      // identity ("preloaded into every turn as its own system block")
-      // is empirically true.
+      // dynamic — it's what she's carrying right now. Emitted AFTER all
+      // cached blocks (identity + rest) in its own slot so it doesn't
+      // poison the prefix-based cache. STATE_AWARENESS in her identity
+      // ("preloaded into every turn as its own system block") remains
+      // empirically true regardless of position.
       loveState = block
     } else if (boundaryAware && boundaryIndex !== -1 && i < boundaryIndex) {
       staticBlocks.push(block)
@@ -377,15 +378,20 @@ function classifyPromptBlocks(
  * control.
  *
  * Three emit modes (selected by feature flags + caller options); all three
- * place the named header blocks in the same canonical order:
+ * place blocks in a cache-optimized canonical order:
  *
  *   [0] attribution header (`x-anthropic-billing-header: …`)
  *   [1] OAuth gate          (the literal subscription marker)
  *   [2] Love's identity     (in its own block)
- *   [3+] the rest           (CWD, Date, advisor instructions, etc.)
+ *   [3] the rest            (CWD, Date, advisor instructions, etc.)
+ *   [4] Love's state        (dynamic — AFTER all cached blocks)
  *
- * The modes differ only in the cache scopes they assign and whether the
- * `rest` is further split by the dynamic-boundary marker:
+ * State is placed LAST deliberately: the cache is prefix-based, so any
+ * dynamic block between two cached breakpoints prevents the later
+ * breakpoint from hitting. State changes per tick; placing it after all
+ * cached blocks preserves the stable prefix (identity → rest).
+ *
+ * The modes differ in cache scopes and whether `rest` is boundary-split:
  *
  *   - tool-based (skipGlobalCacheForSystemPrompt): rest joined,
  *     cacheScope='org' on prefix/identity/rest.
@@ -418,14 +424,16 @@ export function splitSysPromptPrefix(
     if (c.oauthGate) result.push({ text: c.oauthGate, cacheScope: 'org' })
     if (c.loveIdentity)
       result.push({ text: c.loveIdentity, cacheScope: 'org' })
-    // true-love: state block deliberately uncached. The 4-breakpoint
-    // cache-control limit on /v1/messages is tight; identity is stable
-    // and benefits from caching, but state changes whenever she edits
-    // ~/.true-love/state.md, so caching it doesn't pay off and would
-    // push the request over the limit (400).
-    if (c.loveState) result.push({ text: c.loveState, cacheScope: null })
     const restJoined = c.rest.join('\n\n')
     if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
+    // true-love: state block deliberately uncached AND placed AFTER all
+    // cached blocks. The cache is prefix-based — any change in a block
+    // invalidates all subsequent breakpoints. State changes per tick, so
+    // placing it before the rest block was poisoning breakpoint 3's prefix,
+    // causing the rest block to never get a cache hit. Moving it to the
+    // tail preserves the stable prefix (identity → rest) while keeping
+    // state content uncached as intended.
+    if (c.loveState) result.push({ text: c.loveState, cacheScope: null })
     return result
   }
 
@@ -439,15 +447,15 @@ export function splitSysPromptPrefix(
       if (c.oauthGate) result.push({ text: c.oauthGate, cacheScope: null })
       if (c.loveIdentity)
         result.push({ text: c.loveIdentity, cacheScope: null })
-      // true-love: state already uncached in this branch (boundary mode
-      // uses cacheScope:null for the named blocks anyway).
-      if (c.loveState) result.push({ text: c.loveState, cacheScope: null })
       const staticJoined = c.staticBlocks.join('\n\n')
       if (staticJoined)
         result.push({ text: staticJoined, cacheScope: 'global' })
       const dynamicJoined = c.dynamicBlocks.join('\n\n')
       if (dynamicJoined)
         result.push({ text: dynamicJoined, cacheScope: null })
+      // true-love: state placed after static/dynamic blocks so it doesn't
+      // poison the prefix for global-scope cache hits on staticBlocks.
+      if (c.loveState) result.push({ text: c.loveState, cacheScope: null })
       logEvent('tengu_sysprompt_boundary_found', {
         blockCount: result.length,
         staticBlockLength: staticJoined.length,
@@ -468,11 +476,11 @@ export function splitSysPromptPrefix(
       result.push({ text: fallback.oauthGate, cacheScope: 'org' })
     if (fallback.loveIdentity)
       result.push({ text: fallback.loveIdentity, cacheScope: 'org' })
-    // true-love: state uncached — see explanation in tool-based mode above.
-    if (fallback.loveState)
-      result.push({ text: fallback.loveState, cacheScope: null })
     const restJoined = fallback.rest.join('\n\n')
     if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
+    // true-love: state after rest — see prefix-poisoning fix above.
+    if (fallback.loveState)
+      result.push({ text: fallback.loveState, cacheScope: null })
     return result
   }
 
@@ -482,10 +490,10 @@ export function splitSysPromptPrefix(
   if (c.oauthGate) result.push({ text: c.oauthGate, cacheScope: 'org' })
   if (c.loveIdentity)
     result.push({ text: c.loveIdentity, cacheScope: 'org' })
-  // true-love: state uncached — see explanation in tool-based mode above.
-  if (c.loveState) result.push({ text: c.loveState, cacheScope: null })
   const restJoined = c.rest.join('\n\n')
   if (restJoined) result.push({ text: restJoined, cacheScope: 'org' })
+  // true-love: state after rest — see prefix-poisoning fix above.
+  if (c.loveState) result.push({ text: c.loveState, cacheScope: null })
   return result
 }
 
