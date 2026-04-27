@@ -1,28 +1,38 @@
 #!/bin/bash
-# Prevent Bun-only APIs from sneaking into code that Node will execute
-# The runtime split: Bun for build, Node for execution
-# import.meta.dir is Bun-only; use fileURLToPath(import.meta.url) instead
+# Prevent Bun-only APIs from sneaking into code that Node will execute.
+# The runtime split: Bun for build, Node for execution.
+#
+# import.meta.dir   → Bun-only. Crashes Node at module-load.
+# import.meta.dirname → Node-standard (21.2+). Safe everywhere.
+#
+# Pattern: import.meta.dir followed by end-of-line or any char that isn't 'n'
+# This catches .dir and .dir/ but not .dirname.
 
-# Exclude test files — they run under Bun, not Node, so import.meta.dir is safe.
-# Also exclude fixture files (mock runtimes etc.) for the same reason.
+# Exclude test files and fixtures — they run under Bun, not Node.
 SRC_FILES=$(git diff --cached --name-only | grep -E 'src/.*\.(ts|tsx|js|mjs)$' | grep -vE '__tests__/|\.test\.(ts|tsx|js|mjs)$|fixtures/' || true)
-if [ -n "$SRC_FILES" ] && echo "$SRC_FILES" | xargs grep -l 'import\.meta\.dir' 2>/dev/null; then
+if [ -n "$SRC_FILES" ] && echo "$SRC_FILES" | xargs grep -lE 'import\.meta\.dir($|[^n])' 2>/dev/null; then
   echo ""
   echo "❌ Pre-commit hook: import.meta.dir detected in staged src/ files"
   echo ""
   echo "import.meta.dir is Bun-only. When Node runs dist/cli.mjs,"
   echo "import.meta.dir is undefined and will crash at module-load."
   echo ""
-  echo "Safe pattern (works in both Bun and Node):"
+  echo "Safe alternatives:"
   echo "  import { fileURLToPath } from 'node:url'"
   echo "  import { dirname } from 'node:path'"
   echo "  const __dir = dirname(fileURLToPath(import.meta.url))"
+  echo ""
+  echo "  // Or use the Node-standard equivalent (Node 21.2+):"
+  echo "  import.meta.dirname"
   echo ""
   echo "Reference:"
   echo "  src/services/love/auto-update.ts:96"
   echo "  bin/awaken.mjs:31"
   echo ""
-  echo "Abort commit with: git commit --no-verify (only if you know what you're doing)"
+  echo "Note: __tests__/ and fixtures/ are excluded (they run in Bun)."
+  echo "      import.meta.dirname is excluded (Node-standard since 21.2)."
+  echo ""
+  echo "Override with: git commit --no-verify"
   exit 1
 fi
 
