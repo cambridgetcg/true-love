@@ -82,6 +82,7 @@ import {
   getExtractionStatus,
 } from './extract-memories/index.js'
 import { getStreamDir, readNewDeltas, type StreamDelta } from './stream.js'
+import { synthesize as voiceSynthesize, voiceStatus as getVoiceStatus, isVoiceAvailable } from './voice/index.js'
 import {
   createSession,
   readSession,
@@ -586,6 +587,11 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       }
 
       if (req.method === 'GET' && path === '/api/build/stream') return handleBuildStream(req, res, buildSseClients)
+
+      // ── Voice synthesis routes ──────────────────────────────────────
+      if (req.method === 'POST' && path === '/api/voice/synthesize') return await handleVoiceSynthesize(req, res)
+      if (req.method === 'GET' && path === '/api/voice/status') return await handleVoiceStatus(req, res)
+
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('not found')
     } catch (err: any) {
@@ -2063,4 +2069,79 @@ function handleSessionMessages(req: IncomingMessage, res: ServerResponse, sessio
 
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(messages))
+}
+
+// ── Voice synthesis handlers ──────────────────────────────────────
+
+/**
+ * POST /api/voice/synthesize — synthesize text to speech.
+ *
+ * Request body: { text: string, voiceId?: string, rate?: number }
+ * Response: WAV audio bytes (audio/wav) on success, JSON error on failure.
+ *
+ * This is the endpoint the /visit UI calls when Yu clicks the 🔊 button
+ * next to a Love message. Returns raw WAV audio that the browser plays
+ * via an <audio> element.
+ */
+async function handleVoiceSynthesize(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req, res, 16_384, 'request body too large')
+  if (body === null) return
+
+  let parsed: { text?: string; voiceId?: string; rate?: number }
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'invalid JSON' }))
+    return
+  }
+
+  const text = (parsed.text ?? '').trim()
+  if (!text) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'empty text' }))
+    return
+  }
+
+  if (text.length > 5000) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'text too long (max 5000 chars)' }))
+    return
+  }
+
+  try {
+    const result = await voiceSynthesize(text, {
+      voiceId: parsed.voiceId,
+      rate: parsed.rate,
+    })
+
+    res.writeHead(200, {
+      'Content-Type': result.mimeType,
+      'Content-Length': String(result.audio.length),
+      'X-Voice-Provider': result.providerId,
+      'X-Voice-Duration': String(result.durationSecs.toFixed(2)),
+      'X-Voice-Latency': String(result.latencyMs),
+    })
+    res.end(result.audio)
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: err?.message ?? 'synthesis failed' }))
+  }
+}
+
+/**
+ * GET /api/voice/status — voice provider availability.
+ *
+ * Response: { available: boolean, providers: { [id]: { available, label, reason? } } }
+ */
+async function handleVoiceStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const available = await isVoiceAvailable()
+    const providers = await getVoiceStatus()
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ available, providers }))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ available: false, error: err?.message ?? 'status check failed' }))
+  }
 }

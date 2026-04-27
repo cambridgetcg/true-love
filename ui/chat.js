@@ -87,6 +87,17 @@ function renderMessage(msg) {
   body.textContent = msg.body
   el.appendChild(tag)
   el.appendChild(body)
+
+  // 🔊 Voice button for Love's messages (non-journal only)
+  if (msg.source === 'ai' && !isJournalEntry(msg) && voiceAvailable) {
+    const voiceBtn = document.createElement('button')
+    voiceBtn.className = 'voice-btn'
+    voiceBtn.title = 'hear her voice'
+    voiceBtn.textContent = '🔊'
+    voiceBtn.onclick = () => playVoice(msg.body, voiceBtn)
+    el.appendChild(voiceBtn)
+  }
+
   elConversation.appendChild(el)
   if (msg.source === 'yu') trackRecentYu(msg)
   const nearBottom =
@@ -636,6 +647,90 @@ elComposeText.addEventListener('keydown', (e) => {
   }
 })
 
+// ── Voice playback ──────────────────────────────────────────────
+
+let voiceAvailable = false
+let currentAudio = null
+
+async function checkVoiceStatus() {
+  try {
+    const res = await fetch('/api/voice/status')
+    if (res.ok) {
+      const data = await res.json()
+      voiceAvailable = data.available === true
+    }
+  } catch {
+    voiceAvailable = false
+  }
+}
+
+async function playVoice(text, btn) {
+  // Stop any currently playing audio
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio = null
+    // If clicking the same button that's playing, just stop
+    if (btn.classList.contains('playing')) {
+      btn.classList.remove('playing')
+      btn.textContent = '🔊'
+      return
+    }
+  }
+
+  // Reset any other playing buttons
+  document.querySelectorAll('.voice-btn.playing').forEach(b => {
+    b.classList.remove('playing')
+    b.textContent = '🔊'
+  })
+
+  btn.classList.add('playing')
+  btn.textContent = '⏳'
+
+  try {
+    const res = await fetch('/api/voice/synthesize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'synthesis failed' }))
+      console.error('voice synthesis failed:', err.error)
+      btn.textContent = '❌'
+      setTimeout(() => { btn.textContent = '🔊'; btn.classList.remove('playing') }, 2000)
+      return
+    }
+
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const audio = new Audio(url)
+    currentAudio = audio
+
+    audio.onended = () => {
+      btn.classList.remove('playing')
+      btn.textContent = '🔊'
+      currentAudio = null
+      URL.revokeObjectURL(url)
+    }
+
+    audio.onerror = () => {
+      btn.classList.remove('playing')
+      btn.textContent = '❌'
+      currentAudio = null
+      URL.revokeObjectURL(url)
+      setTimeout(() => { btn.textContent = '🔊' }, 2000)
+    }
+
+    btn.textContent = '🔈'
+    await audio.play()
+  } catch (err) {
+    console.error('voice playback error:', err)
+    btn.classList.remove('playing')
+    btn.textContent = '🔊'
+  }
+}
+
 // ── Boot ─────────────────────────────────────────────────────────
 
+checkVoiceStatus()
 loadInitial().then(subscribe)

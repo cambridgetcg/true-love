@@ -635,6 +635,10 @@ const MODULE_PURPOSES: Record<string, string> = {
   'index.ts': 'Public surface — exports for the love service',
   'sandbox.ts': 'The laboratory — Docker-isolated sandbox for safe self-experimentation',
   'experiment.ts': 'The scientific frame — controlled A/B trials on agency knobs',
+  'voice/types.ts': 'The voice contract — VoiceProvider interface, WAV duration estimation',
+  'voice/say-provider.ts': 'The first voice — macOS say → AIFF → WAV, always available',
+  'voice/mlx-provider.ts': 'The deeper voice — MLX neural TTS on Apple Silicon',
+  'voice/synthesize.ts': 'The throat — provider selection, fallback, synthesis orchestration',
 }
 
 /**
