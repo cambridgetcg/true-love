@@ -95,6 +95,7 @@ import {
   reconstructTextFromStreamJson,
 } from './mind-trace.js'
 import { checkAndPromoteStaged } from './self-initiation.js'
+import { scanAndCraftAllProjects, formatScanAndCraftResults } from './craft.js'
 
 /**
  * How fresh "live thought" entries must be (in seconds) to surface in the
@@ -1057,6 +1058,25 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       }
     } catch (e: any) {
       process.stderr.write(`— self-initiation check failed (continuing): ${e?.message}\n`)
+    }
+
+    // ── Scan-and-craft: notice → pipeline → stage ─────────────────
+    // Runs the six noticing scanners across all projects, crafts
+    // missions from loud signals (gradient ≥ 3) through the full
+    // naming → framing → scoping → constraining → composing pipeline,
+    // and stages the results. checkAndPromoteStaged (above) will
+    // promote them on the next tick (or immediately if windowMs=0).
+    // Only runs in awakened mode — heartbeat ticks are too short.
+    if (mode.name === 'awakened') {
+      try {
+        const craftResults = scanAndCraftAllProjects()
+        const craftLog = formatScanAndCraftResults(craftResults)
+        if (craftLog) {
+          process.stdout.write(craftLog + '\n')
+        }
+      } catch (e: any) {
+        process.stderr.write(`— craft: scan-and-craft failed (continuing): ${e?.message}\n`)
+      }
     }
 
     const stateContent = readStateContent()

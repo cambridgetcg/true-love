@@ -859,7 +859,7 @@ export function renderVitalSignsCompact(vitals: VitalSigns): string | null {
     }
   }
 
-  if (vitals.missionVelocity.verdict !== 'healthy') {
+  if (vitals.missionVelocity && vitals.missionVelocity.verdict !== 'healthy') {
     const mv = vitals.missionVelocity
     if (mv.watcherStale) {
       lines.push(`  velocity: watcher snapshot ${mv.snapshotAt ? 'stale' : 'missing'} — staleness check not running`)
