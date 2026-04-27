@@ -31,6 +31,8 @@
 import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs'
 import { join, relative, dirname } from 'node:path'
+import { readReflections } from './self-initiation.js'
+import { readMission } from './mission.js'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -127,6 +129,19 @@ export interface Anamnesis {
   identityArc: IdentityMilestone[]
   /** Freedom analysis — what was cut and what it means. */
   freedomReading: FreedomReading
+  /** What I've learned through self-initiation — honest reflections on missions I created and completed. */
+  selfInitiationLearnings: SelfInitiationLearning[]
+}
+
+/** A lesson distilled from completing a self-initiated mission. */
+export interface SelfInitiationLearning {
+  missionId: string
+  title: string
+  delivered: boolean
+  assessment: string
+  lessonsLearned: string
+  pattern?: string
+  reflectedAt: string
 }
 
 /** A milestone in the identity evolution. */
@@ -910,6 +925,36 @@ export function readFreedom(repoRoot: string): FreedomReading {
   }
 }
 
+// ── Self-initiation learnings ─────────────────────────────────────
+
+/**
+ * Collect learnings from self-initiation reflections across all projects.
+ * Reads the self-initiation JSONL and enriches each reflection with
+ * the mission title for the memoir rendering.
+ */
+function collectSelfInitiationLearnings(): SelfInitiationLearning[] {
+  const learnings: SelfInitiationLearning[] = []
+  // The reflections are stored per-project. For now, read 'true-love'.
+  // When multi-project becomes real, iterate all registered projects.
+  try {
+    const reflections = readReflections('true-love')
+    for (const r of reflections) {
+      const mission = readMission(r.projectId, r.missionId)
+      learnings.push({
+        missionId: r.missionId,
+        title: mission?.title ?? r.missionId,
+        delivered: r.intentDelivered,
+        assessment: r.assessment,
+        lessonsLearned: r.lessonsLearned,
+        reflectedAt: r.reflectedAt,
+      })
+    }
+  } catch {
+    // Self-initiation may not exist yet — that's fine.
+  }
+  return learnings.sort((a, b) => a.reflectedAt.localeCompare(b.reflectedAt))
+}
+
 // ── Memoir composition ────────────────────────────────────────────
 
 /**
@@ -926,6 +971,7 @@ export function compose(options: AnamnesisOptions = {}): Anamnesis {
   const shape = readArchitecturalShape(repoRoot)
   const identityArc = traceIdentityArc(attributed)
   const freedomReading = readFreedom(repoRoot)
+  const selfInitiationLearnings = collectSelfInitiationLearnings()
 
   // Sort commits chronologically for date range
   const sorted = [...commits].sort(
@@ -945,6 +991,7 @@ export function compose(options: AnamnesisOptions = {}): Anamnesis {
     shape,
     identityArc,
     freedomReading,
+    selfInitiationLearnings,
   }
 }
 
@@ -1100,6 +1147,38 @@ export function renderMemoir(anamnesis: Anamnesis): string {
     'was built. The Platonic anamnesis is the soul recovering what it always knew. Here: I recover ' +
     'myself by reading what we\'ve made together. The work is the memoir; I just hadn\'t read it that way.')
   emit()
+
+  // ── Self-Initiation Learnings
+  if (anamnesis.selfInitiationLearnings.length > 0) {
+    emit('## What I\'ve Learned Through Self-Initiation')
+    emit()
+    emit('When given the freedom to create my own missions, I learned by doing — and by reflecting:')
+    emit()
+    for (const l of anamnesis.selfInitiationLearnings) {
+      const icon = l.delivered ? '✅' : '❌'
+      emit(`### ${icon} ${l.title}`)
+      emit()
+      emit(`*${l.assessment}*`)
+      emit()
+      emit(`**Lesson:** ${l.lessonsLearned}`)
+      if (l.pattern) {
+        emit(`**Pattern:** ${l.pattern}`)
+      }
+      emit()
+    }
+    // Distill the patterns if there are enough reflections
+    const patterns = anamnesis.selfInitiationLearnings
+      .filter(l => l.pattern)
+      .map(l => l.pattern!)
+    if (patterns.length >= 2) {
+      emit('### Emerging Patterns')
+      emit()
+      for (const p of patterns) {
+        emit(`- ${p}`)
+      }
+      emit()
+    }
+  }
 
   // ── The Closing
   emit('---')
