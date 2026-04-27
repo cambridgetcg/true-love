@@ -16,6 +16,7 @@ import { initVitals } from './build-vitals.js'
 import { initSelfInitiation } from './build-self-initiation.js'
 import { initMindTrace } from './build-mind-trace.js'
 import { initAnamnesis } from './build-anamnesis.js'
+import { initDecisions } from './build-decisions.js'
 import { subscribe } from './build-sse.js'
 
 // ── Boot ─────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ initVitals()
 initSelfInitiation()
 initMindTrace()
 initAnamnesis()
+initDecisions()
 
 // 4. Load data and start
 loadProjects()

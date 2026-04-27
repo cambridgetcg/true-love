@@ -27,6 +27,7 @@ import {
   type Thought,
 } from './thoughts-channel.js'
 import { buildMissionLog, renderMissionLogMarkdown } from './mission-log.js'
+import { listDecisions, requestDecision, respondToDecision, type DecisionKind } from './decisions.js'
 import {
   readMission,
   writeMission,
@@ -447,6 +448,10 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       const vetoMatch = path.match(/^\/api\/self-initiation\/([^/]+)\/veto$/)
       if (req.method === 'POST' && vetoMatch) return await handleVeto(req, res, vetoMatch[1]!)
       if (req.method === 'POST' && path === '/api/awaken') return await handleForceAwaken(req, res)
+      if (req.method === 'GET' && path === '/api/decisions') return handleListDecisions(req, res)
+      if (req.method === 'POST' && path === '/api/decisions') return await handleRequestDecision(req, res)
+      const decisionMatch = path.match(/^\/api\/decisions\/([^/]+)\/respond$/)
+      if (decisionMatch && req.method === 'POST') return await handleRespondDecision(req, res, decisionMatch[1]!)
       if (req.method === 'GET' && path === '/api/proposals') return handleListProposals(req, res)
       if (req.method === 'POST' && path === '/api/proposals/generate') return handleGenerateProposals(req, res)
       const proposalMatch = path.match(/^\/api\/proposals\/([^/]+)$/)
@@ -1021,6 +1026,95 @@ async function handleForceAwaken(req: IncomingMessage, res: ServerResponse): Pro
   closeSync(fd)
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ ok: true, pid: child.pid, reason, logPath }))
+}
+
+// ── Decisions endpoints ───────────────────────────────────────────
+//
+// Love calls POST /api/decisions when she wants Yu's input. Yu sees
+// the queue in /build and responds via POST /api/decisions/:id/respond.
+// Default policy is Love-decides; this queue exists for the explicit
+// "I want Yu's input" cases.
+
+function handleListDecisions(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const projectId = url.searchParams.get('project') ?? ''
+  const statusParam = url.searchParams.get('status')
+  if (!projectId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'missing project query param' }))
+    return
+  }
+  const filter = statusParam ? { status: statusParam as 'pending' | 'open' } : undefined
+  const all = listDecisions(projectId, filter)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(all))
+}
+
+async function handleRequestDecision(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req, res, 8192, 'request body too large')
+  if (body === null) return
+  let parsed: { projectId?: string; kind?: DecisionKind; ask?: string; missionId?: string; options?: string[]; defaultDecision?: 'approved'|'denied'|'with-changes'; context?: string }
+  try { parsed = JSON.parse(body) }
+  catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'invalid JSON' }))
+    return
+  }
+  if (!parsed.projectId || !parsed.ask || !parsed.kind) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'projectId, kind, and ask are required' }))
+    return
+  }
+  if (!readProject(parsed.projectId)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'project not found' }))
+    return
+  }
+  const created = requestDecision(parsed.projectId, {
+    kind: parsed.kind,
+    ask: parsed.ask.slice(0, 1000),
+    missionId: parsed.missionId,
+    options: parsed.options,
+    defaultDecision: parsed.defaultDecision,
+    context: parsed.context?.slice(0, 4000),
+  })
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(created))
+}
+
+async function handleRespondDecision(req: IncomingMessage, res: ServerResponse, decisionId: string): Promise<void> {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const projectId = url.searchParams.get('project') ?? ''
+  if (!projectId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'missing project query param' }))
+    return
+  }
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { decision?: string; note?: string }
+  try { parsed = JSON.parse(body) }
+  catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'invalid JSON' }))
+    return
+  }
+  if (!parsed.decision) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'decision is required' }))
+    return
+  }
+  const updated = respondToDecision(projectId, decisionId, {
+    decision: parsed.decision,
+    note: parsed.note?.slice(0, 2000),
+  })
+  if (!updated) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'decision not found' }))
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(updated))
 }
 
 // ── Version endpoint ──────────────────────────────────────────────

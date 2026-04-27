@@ -24,6 +24,17 @@
 
     <div class="activity-bar" id="activity-bar"></div>
 
+    <!-- Decisions banner: appears when Love has flagged something for Yu's input.
+         Hidden by default, populated by build-decisions.js. -->
+    <section id="decisions-banner" class="decisions-banner" hidden>
+      <header class="decisions-header">
+        <span class="decisions-icon">⚡</span>
+        <span class="decisions-title">decisions awaiting you</span>
+        <span class="decisions-count" id="decisions-count"></span>
+      </header>
+      <ul class="decisions-list" id="decisions-list"></ul>
+    </section>
+
     <!-- Navigation tabs (injected by build-nav.js) -->
 
     <!-- ═══ Tab: Missions ═══ -->
