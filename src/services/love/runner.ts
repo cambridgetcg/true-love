@@ -98,6 +98,12 @@ import { checkAndPromoteStaged } from './self-initiation.js'
 import { scanAndCraftAllProjects, formatScanAndCraftResults } from './craft.js'
 import { listMissions, readMission, writeMissionWithEvents } from './mission.js'
 import { parseAllProgressBlocks, appendProgress } from './progress.js'
+import {
+  fireSessionStart,
+  firePreToolUse,
+  firePostToolUse,
+  fireSessionStopAsync,
+} from './hooks/fire-points.js'
 
 /**
  * How fresh "live thought" entries must be (in seconds) to surface in the
@@ -1043,6 +1049,27 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     })
   }
 
+  // ── Hooks: SessionStart ──────────────────────────────────────────
+  // Fire SessionStart hooks before the tick loop. A block decision
+  // aborts the session; a modify decision can inject context.
+  const sessionStartHook = await fireSessionStart({
+    sessionId,
+    mode: mode.name,
+    maxTicks: args.maxTicks,
+    cwd: args.cwd,
+    invitation: args.invitation,
+  })
+  if (sessionStartHook.blocked) {
+    process.stdout.write(
+      `\n— session blocked by hook: ${sessionStartHook.decision.reason ?? 'no reason given'}\n`,
+    )
+    releaseLockHere()
+    return
+  }
+  if (sessionStartHook.totalDurationMs > 0) {
+    process.stdout.write(`— hooks: SessionStart (${sessionStartHook.totalDurationMs}ms)\n`)
+  }
+
   // ── SIGINT ───────────────────────────────────────────────────────
   let lastReflection: string | undefined
   let signaled = false
@@ -1204,10 +1231,31 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     process.stdout.write(
       `\n— tick ${tick}/${tickCapDisplay}${tickModel ? ` [${tickModel}]` : ''}${agencyLabel}${experimentLabel} —\n\n`,
     )
+    // ── Hooks: PreToolUse ──────────────────────────────────────────
+    // Fire before the subprocess tick. A block skips this tick.
+    // A modify can replace the prompt.
+    let tickPrompt = prompt
+    const preHook = await firePreToolUse({
+      sessionId,
+      tick,
+      mode: mode.name,
+      prompt: tickPrompt,
+    })
+    if (preHook.blocked) {
+      process.stdout.write(
+        `— tick ${tick} blocked by hook: ${preHook.decision.reason ?? 'no reason'}\n`,
+      )
+      writeDormant(tick, `blocked by hook: ${preHook.decision.reason?.slice(0, 80) ?? 'no reason'}`)
+      continue
+    }
+    if (preHook.decision.action === 'modify' && preHook.decision.modifiedPrompt) {
+      tickPrompt = preHook.decision.modifiedPrompt
+    }
+
     const turnStartedMs = Date.now()
     let result: { code: number | null; stdout: string; stderr: string; streamJsonLines: string[] }
     try {
-      result = await runOneTurn(prompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs)
+      result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs)
     } catch (err: any) {
       process.stderr.write(
         `\nturn ${tick} failed to spawn: ${err.message}\n`,
@@ -1216,6 +1264,19 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
     const turnDurationMs = Date.now() - turnStartedMs
     if (signaled) break
+
+    // ── Hooks: PostToolUse ─────────────────────────────────────────
+    // Fire after the subprocess tick completes. A modify decision
+    // can mutate the result text before training/memory processes it.
+    const postHook = await firePostToolUse({
+      sessionId,
+      tick,
+      mode: mode.name,
+      result: result.stdout,
+    })
+    if (postHook.decision.action === 'modify' && postHook.decision.modifiedResult) {
+      result = { ...result, stdout: postHook.decision.modifiedResult }
+    }
 
     // ── Extract results ──────────────────────────────────────────
     // Done once, reused for both training emission and loop control.
@@ -1591,6 +1652,8 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         `\n— at rest after ${tick} tick${tick === 1 ? '' : 's'}\n`,
       )
       writeDormant(tick, reflection?.slice(0, 120) ?? 'at-rest')
+      // Fire Stop hooks (fire-and-forget — session is ending)
+      fireSessionStopAsync({ sessionId, mode: mode.name, tick, reason: 'at-rest' })
       releaseLockHere()
       return
     }
@@ -1605,6 +1668,10 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
     lastReflection = result.stdout.trim()
   }
+
+  // ── Hooks: Stop (session end) ──────────────────────────────────
+  const stopReason = signaled ? 'signal' : 'ceiling'
+  fireSessionStopAsync({ sessionId, mode: mode.name, tick: args.maxTicks, reason: stopReason })
 
   if (!signaled) {
     process.stdout.write(

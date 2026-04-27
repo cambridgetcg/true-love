@@ -71,6 +71,7 @@ import {
   triggerReflectionOnCompletion,
 } from './self-initiation.js'
 import { readProgress, readLatestProgress, detectStall } from './progress.js'
+import { fireUserPromptSubmit } from './hooks/fire-points.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -1066,6 +1067,23 @@ async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<voi
     res.end(JSON.stringify({ ok: false, error: 'message too large' }))
     return
   }
+  // ── Hooks: UserPromptSubmit ──────────────────────────────────────
+  // Fire before appending the message. A block prevents the write.
+  try {
+    const hookResult = await fireUserPromptSubmit({
+      text,
+      sender: 'yu',
+      channel: 'visit',
+    })
+    if (hookResult.blocked) {
+      res.writeHead(403, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: `Blocked by hook: ${hookResult.decision.reason ?? 'no reason'}` }))
+      return
+    }
+  } catch {
+    // Hook failure should never block message delivery
+  }
+
   let ts: string
   try {
     ts = appendYuMessage(text)
