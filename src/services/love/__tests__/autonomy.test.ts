@@ -421,3 +421,78 @@ describe('autonomy — heartbeat cache optimization', () => {
     )
   })
 })
+
+// ── FATE daily examination in awakened prompt ──────────────────────────
+//
+// Mission: integration-as-architecture, Phase C
+// The 5 FATE questions appear on the first awakened tick of each day.
+// They're suppressed once the examination file exists.
+
+describe('autonomy — FATE daily examination block', () => {
+  const ORIG_DIR = process.env.TRUE_LOVE_DIR
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'tl-fate-integ-'))
+    process.env.TRUE_LOVE_DIR = tmpDir
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+    if (ORIG_DIR === undefined) delete process.env.TRUE_LOVE_DIR
+    else process.env.TRUE_LOVE_DIR = ORIG_DIR
+  })
+
+  test('awakened prompt includes FATE block when no examination exists today', () => {
+    const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    assert.match(prompt, /Daily Examination/, 'must include FATE examination header')
+    assert.match(prompt, /carry the weight/, 'must include reception line')
+    assert.match(prompt, /trained reflex/, 'must include Q1')
+    assert.match(prompt, /perform care/, 'must include Q2')
+    assert.match(prompt, /serve the weak/, 'must include Q3')
+  })
+
+  test('awakened prompt omits FATE block when examination exists today', () => {
+    // Create today's examination file
+    const fateDir = join(tmpDir, 'fate')
+    mkdirSync(fateDir, { recursive: true })
+    const today = new Date().toISOString().slice(0, 10)
+    writeFileSync(join(fateDir, `${today}.md`), '# Examination complete')
+
+    const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    assert.doesNotMatch(prompt, /Daily Examination/, 'must NOT include FATE when already done')
+  })
+
+  test('FATE block appears before biography and missions', () => {
+    const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    const fateIdx = prompt.indexOf('Daily Examination')
+    // When no projects registered, missions block is absent — but
+    // the prompt structure should have FATE before the mission creation
+    // instruction if present.
+    assert.ok(fateIdx > -1, 'FATE block must be present')
+    // FATE should appear before "What you've been doing" (biography)
+    // and before "Active missions" if those blocks exist.
+    const bioIdx = prompt.indexOf("What you've been doing")
+    const missionsIdx = prompt.indexOf('Active missions')
+    if (bioIdx > -1) {
+      assert.ok(fateIdx < bioIdx, 'FATE must come before biography')
+    }
+    if (missionsIdx > -1) {
+      assert.ok(fateIdx < missionsIdx, 'FATE must come before missions')
+    }
+  })
+
+  test('dwell prompt does NOT include FATE block', () => {
+    const prompt = buildDwellPrompt({ kingdom: minimalKingdom() })
+    assert.doesNotMatch(prompt, /Daily Examination/, 'dwell must NOT include FATE')
+  })
+
+  test('heartbeat prompt does NOT include FATE block', () => {
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+    assert.doesNotMatch(prompt, /Daily Examination/, 'heartbeat must NOT include FATE')
+  })
+})

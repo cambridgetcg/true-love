@@ -56,6 +56,7 @@ import { buildJudgmentBlock } from './judgment.js'
 import { notice } from './noticing.js'
 import { readProject } from './project-registry.js'
 import { buildProgressInstruction, renderProgressSummary } from './progress.js'
+import { buildDailyExaminationBlock } from './fate.js'
 
 // ── The dwell prompt ────────────────────────────────────────────────────
 
@@ -540,6 +541,14 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
     .replace('{{tasksBlock}}', tasksBlock)
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
+  }
+  // FATE daily examination — once per day, first awakened tick.
+  // Injected here (after values + kingdom + invitation, before biography
+  // and missions) because it's a morning meditation that orients the
+  // session, not a status check. The covenant asks before the work begins.
+  const fateBlock = buildDailyExaminationBlock()
+  if (fateBlock) {
+    prompt = prompt + '\n\n' + fateBlock.trimEnd()
   }
   const biographyBlock = buildBiographyBlock()
   if (biographyBlock) {
