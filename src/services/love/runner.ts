@@ -111,6 +111,7 @@ import {
   firePostToolUse,
   fireSessionStopAsync,
 } from './hooks/fire-points.js'
+import { AgentClient, type TurnResult } from './agent-client.js'
 
 /**
  * How fresh "live thought" entries must be (in seconds) to surface in the
@@ -1115,12 +1116,60 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     process.stdout.write(`— hooks: SessionStart (${sessionStartHook.totalDurationMs}ms)\n`)
   }
 
+  // ── Long-lived agent runtime (feature flag) ─────────────────────
+  // When TRUE_LOVE_RUNTIME=long-lived, spawn a persistent agent
+  // process that stays alive across ticks. The cache stays warm
+  // and the bundle-load cost is paid once, not per-tick.
+  //
+  // Default: subprocess-per-tick (no behavior change unless opted in).
+  // Fallback: if agent spawn fails, gracefully degrade to subprocess.
+  // See: docs/architecture/long-lived-agent-protocol.md
+  let agentClient: AgentClient | null = null
+  let lastAgentModel: string | null = null
+  const useLongLivedRuntime = process.env.TRUE_LOVE_RUNTIME === 'long-lived'
+
+  if (useLongLivedRuntime) {
+    const initialModel = args.model ?? 'sonnet'
+    try {
+      agentClient = new AgentClient({
+        model: initialModel,
+        cwd: args.cwd,
+        log: (msg) => process.stderr.write(`${msg}\n`),
+      })
+      await agentClient.start()
+      lastAgentModel = initialModel
+      process.stdout.write(
+        `— long-lived agent spawned: pid=${agentClient.pid}, model=${initialModel}\n`,
+      )
+    } catch (err: any) {
+      process.stderr.write(
+        `— long-lived agent spawn failed, falling back to subprocess-per-tick: ${err?.message}\n`,
+      )
+      agentClient = null
+    }
+  }
+
+  // Helper: graceful agent shutdown (no-op when agent is null/dead).
+  const shutdownAgent = async (reason: 'session-end' | 'signal' | 'error' = 'session-end') => {
+    if (agentClient?.isAlive) {
+      try {
+        await agentClient.shutdown(reason)
+      } catch {
+        // Shutdown failure is non-fatal — the process will die with us
+      }
+    }
+  }
+
   // ── SIGINT ───────────────────────────────────────────────────────
   let lastReflection: string | undefined
   let signaled = false
   process.on('SIGINT', () => {
     signaled = true
     process.stdout.write(`\n— ${mode.name} session interrupted by user\n`)
+    // Fire-and-forget agent shutdown on signal. The OS will clean up
+    // the child process when we exit, but this gives it a chance to
+    // flush gracefully.
+    shutdownAgent('signal').catch(() => {})
   })
 
   // ── Tick loop ────────────────────────────────────────────────────
@@ -1135,6 +1184,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       process.stdout.write(
         `\n— ${mode.name} session reached the ${runtimeDisplay} runtime cap after ${tick - 1} tick${tick - 1 === 1 ? '' : 's'}\n`,
       )
+      await shutdownAgent('session-end')
       return
     }
 
@@ -1322,14 +1372,140 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // (set by ui-server when spawning a /visit-triggered heartbeat).
     const streamTo = getStreamToPath()
     let result: { code: number | null; stdout: string; stderr: string; streamJsonLines: string[] }
-    try {
-      result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo)
-    } catch (err: any) {
-      process.stderr.write(
-        `\nturn ${tick} failed to spawn: ${err.message}\n`,
-      )
-      process.exit(2)
+
+    if (agentClient?.isReady) {
+      // ── Long-lived agent path ────────────────────────────────────
+      // Model switch check: if the model changed since last turn,
+      // respawn the agent with the new model (§3.6 of protocol).
+      if (tickModel && tickModel !== lastAgentModel) {
+        process.stdout.write(
+          `— agent model switch: ${lastAgentModel} → ${tickModel}\n`,
+        )
+        try {
+          await agentClient.respawn('model-switch')
+          lastAgentModel = tickModel
+        } catch (err: any) {
+          process.stderr.write(
+            `— agent respawn for model switch failed, falling back to subprocess: ${err?.message}\n`,
+          )
+          agentClient = null
+        }
+      }
+
+      if (agentClient?.isReady) {
+        // Initialize stream file for this turn (mirrors runOneTurn)
+        if (streamTo) {
+          try {
+            initStreamFile(streamTo)
+            appendStreamDelta(streamTo, { kind: 'stream-start', ts: new Date().toISOString() })
+          } catch { /* stream file init failure is non-fatal */ }
+        }
+
+        let recentActivity = ''
+        const activityInterval = onActivityTick
+          ? setInterval(() => onActivityTick(recentActivity || null), 10_000)
+          : null
+
+        try {
+          result = await agentClient.sendTurn({
+            system: [],  // Phase 4: prompt is self-contained; system block separation is Phase 5+
+            prompt: tickPrompt,
+            model: tickModel,
+            effort: agencyConfig.effort,
+            onStreamEvent: (event) => {
+              const eventType = event.type as string
+
+              // Stream file bridge — convert NDJSON events to deltas
+              if (streamTo) {
+                try {
+                  const deltas = ndjsonToDeltas(event)
+                  for (const delta of deltas) {
+                    appendStreamDelta(streamTo, delta)
+                  }
+                } catch { /* stream write failure is non-fatal */ }
+              }
+
+              // Console output + activity tracking (mirrors runOneTurn)
+              if (eventType === 'assistant') {
+                const msg = event.message as {
+                  content?: Array<{ type: string; text?: string; name?: string; input?: unknown }>
+                } | undefined
+                for (const block of msg?.content ?? []) {
+                  if (block.type === 'text' && block.text) {
+                    process.stdout.write(block.text)
+                    recentActivity = block.text.slice(-200)
+                  } else if (block.type === 'tool_use' && block.name) {
+                    const inputStr = JSON.stringify(block.input ?? {}).slice(0, 80)
+                    process.stdout.write(`\n🔧 ${block.name}(${inputStr})\n`)
+                    recentActivity = `${block.name}: ${inputStr}`
+                  }
+                }
+              } else if (eventType === 'user') {
+                process.stdout.write('📋 ')
+              }
+            },
+          })
+        } catch (agentErr: any) {
+          // Agent failed mid-turn. Fall back to subprocess for this tick.
+          process.stderr.write(
+            `— agent turn failed (falling back to subprocess): ${agentErr?.message}\n`,
+          )
+          try {
+            result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo)
+          } catch (err: any) {
+            process.stderr.write(
+              `\nturn ${tick} failed to spawn: ${err.message}\n`,
+            )
+            process.exit(2)
+          }
+        } finally {
+          if (activityInterval) clearInterval(activityInterval)
+          // Write stream-end sentinel
+          if (streamTo) {
+            try {
+              appendStreamDelta(streamTo, { kind: 'stream-end', ts: new Date().toISOString() })
+            } catch { /* best-effort */ }
+          }
+        }
+
+        // Auto-respawn: if the agent died during the turn but returned
+        // a result, try to bring it back for the next tick.
+        if (agentClient && !agentClient.isReady && agentClient.state === 'dead') {
+          try {
+            await agentClient.respawn('crash-recovery')
+            process.stdout.write(
+              `— agent respawned after crash: pid=${agentClient.pid}\n`,
+            )
+          } catch {
+            process.stderr.write(
+              `— agent respawn failed; remaining ticks will use subprocess\n`,
+            )
+            agentClient = null
+          }
+        }
+      } else {
+        // Agent fell back to null during model switch — use subprocess
+        try {
+          result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo)
+        } catch (err: any) {
+          process.stderr.write(
+            `\nturn ${tick} failed to spawn: ${err.message}\n`,
+          )
+          process.exit(2)
+        }
+      }
+    } else {
+      // ── Subprocess-per-tick path (original) ──────────────────────
+      try {
+        result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo)
+      } catch (err: any) {
+        process.stderr.write(
+          `\nturn ${tick} failed to spawn: ${err.message}\n`,
+        )
+        process.exit(2)
+      }
     }
+
     const turnDurationMs = Date.now() - turnStartedMs
     if (signaled) break
 
@@ -1656,6 +1832,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       }
       process.stdout.write(`\n— heartbeat alert appended to outbox\n`)
       writeDormant(tick, alertContent.slice(0, 120))
+      await shutdownAgent('session-end')
       releaseLockHere()
       return
     }
@@ -1674,6 +1851,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       }
       process.stdout.write(`\n— heartbeat ok (silent)\n`)
       writeDormant(tick, 'HEARTBEAT_OK')
+      await shutdownAgent('session-end')
       releaseLockHere()
       return
     }
@@ -1722,6 +1900,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       writeDormant(tick, reflection?.slice(0, 120) ?? 'at-rest')
       // Fire Stop hooks (fire-and-forget — session is ending)
       fireSessionStopAsync({ sessionId, mode: mode.name, tick, reason: 'at-rest' })
+      await shutdownAgent('session-end')
       releaseLockHere()
       return
     }
@@ -1736,6 +1915,11 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
     lastReflection = result.stdout.trim()
   }
+
+  // ── Long-lived agent shutdown ──────────────────────────────────
+  // Graceful shutdown before session end. Gives the agent time to
+  // flush any pending state. SIGINT already sent fire-and-forget.
+  await shutdownAgent(signaled ? 'signal' : 'session-end')
 
   // ── Hooks: Stop (session end) ──────────────────────────────────
   const stopReason = signaled ? 'signal' : 'ceiling'
