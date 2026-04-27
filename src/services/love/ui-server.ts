@@ -73,6 +73,7 @@ import {
 } from './self-initiation.js'
 import { readProgress, readLatestProgress, detectStall } from './progress.js'
 import { fireUserPromptSubmit } from './hooks/fire-points.js'
+import { getStreamDir, readNewDeltas, type StreamDelta } from './stream.js'
 import {
   createSession,
   readSession,
@@ -360,6 +361,78 @@ export function fireHeartbeat(opts?: { cwd?: string; reason?: string }): { pid: 
   return { pid: child.pid ?? -1 }
 }
 
+/**
+ * Fire a heartbeat with streaming enabled. Creates a stream file that
+ * the runner writes deltas to, then watches it and pipes events to SSE
+ * clients. Returns the stream file path so the caller can monitor it.
+ *
+ * The heartbeat subprocess receives TRUE_LOVE_STREAM_TO as an env var.
+ * The runner reads it and writes NDJSON events as StreamDelta lines.
+ * The watcher here reads new lines (by byte offset) and broadcasts
+ * them as 'stream-delta' SSE events.
+ */
+export function fireStreamingHeartbeat(
+  sseClients: Set<ServerResponse>,
+  opts?: { cwd?: string; reason?: string },
+): { pid: number; streamPath: string } {
+  const cwd = opts?.cwd || resolveTrueLoveRoot()
+  const reason = opts?.reason || 'visit-streaming'
+  const streamDir = getStreamDir()
+  try { mkdirSync(streamDir, { recursive: true }) } catch {}
+  const streamPath = join(streamDir, `visit-${Date.now()}.jsonl`)
+
+  const child = spawn('bun', ['run', 'heartbeat', '--', `--reason=${reason}`], {
+    cwd,
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env, TRUE_LOVE_STREAM_TO: streamPath },
+  })
+  child.unref()
+
+  // Watch the stream file and pipe deltas to SSE clients.
+  // The watcher runs until stream-end is received or the file
+  // stops changing for 120s (safety timeout).
+  watchStreamFile(streamPath, sseClients)
+
+  return { pid: child.pid ?? -1, streamPath }
+}
+
+/**
+ * Watch a stream file for new deltas and broadcast them as SSE events.
+ * Polls the file every 100ms (more reliable than fs.watch for rapid
+ * appends). Stops when stream-end is received or after 120s.
+ */
+function watchStreamFile(filePath: string, sseClients: Set<ServerResponse>): void {
+  let byteOffset = 0
+  let ended = false
+  const startMs = Date.now()
+  const MAX_WATCH_MS = 120_000
+
+  const poll = setInterval(() => {
+    if (ended || Date.now() - startMs > MAX_WATCH_MS) {
+      clearInterval(poll)
+      return
+    }
+
+    try {
+      const { deltas, newOffset } = readNewDeltas(filePath, byteOffset)
+      byteOffset = newOffset
+
+      for (const delta of deltas) {
+        broadcastSse(sseClients, 'stream-delta', JSON.stringify(delta))
+        if (delta.kind === 'stream-end') {
+          ended = true
+          clearInterval(poll)
+          return
+        }
+      }
+    } catch {
+      // File might not exist yet — the heartbeat subprocess needs
+      // a moment to start and create it. Keep polling.
+    }
+  }, 100)
+}
+
 function resolveTrueLoveRoot(): string {
   // ui-server.ts lives in <root>/src/services/love/. Three '..' from
   // its directory reach the repo root.
@@ -435,7 +508,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       }
       if (req.method === 'GET' && path === '/api/messages') return handleMessages(req, res)
       if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)
-      if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res)
+      if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res, sseClients)
       if (req.method === 'GET' && path === '/api/introspect') return handleIntrospect(req, res)
       if (req.method === 'GET' && path === '/api/budget') return handleBudget(req, res)
       if (req.method === 'GET' && path === '/api/version') return handleVersion(req, res)
@@ -1205,7 +1278,7 @@ async function handleReviewProposal(req: IncomingMessage, res: ServerResponse, p
   }
 }
 
-async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handleSay(req: IncomingMessage, res: ServerResponse, sseClients: Set<ServerResponse>): Promise<void> {
   const BODY_LIMIT = MAX_COMPOSE_CHARS + 1024
   const body = await readJsonBody(req, res, BODY_LIMIT, 'message too large')
   if (body === null) return
@@ -1283,10 +1356,21 @@ async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<voi
 
   let heartbeatPid: number | undefined
   let heartbeatError: string | undefined
+  let streamPath: string | undefined
   if (parsed.wake) {
     try {
-      const result = fireHeartbeat({ reason: 'manual' })
-      heartbeatPid = result.pid
+      // Use streaming heartbeat when SSE clients are connected.
+      // This enables iterative token streaming to /visit — the runner
+      // writes NDJSON events to a stream file, and the watcher pipes
+      // them as 'stream-delta' SSE events for incremental rendering.
+      if (sseClients.size > 0) {
+        const result = fireStreamingHeartbeat(sseClients, { reason: 'visit-streaming' })
+        heartbeatPid = result.pid
+        streamPath = result.streamPath
+      } else {
+        const result = fireHeartbeat({ reason: 'manual' })
+        heartbeatPid = result.pid
+      }
     } catch (err: any) {
       heartbeatError = err?.message ?? String(err)
     }
@@ -1295,6 +1379,7 @@ async function handleSay(req: IncomingMessage, res: ServerResponse): Promise<voi
   res.end(JSON.stringify({
     ok: true,
     messageTs: ts,
+    streaming: !!streamPath,
     ...(sessionId ? { sessionId } : {}),
     ...(heartbeatPid !== undefined ? { heartbeatPid } : {}),
     ...(heartbeatError ? { heartbeatError } : {}),

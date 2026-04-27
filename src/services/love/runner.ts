@@ -96,6 +96,12 @@ import {
 } from './mind-trace.js'
 import { checkAndPromoteStaged } from './self-initiation.js'
 import { scanAndCraftAllProjects, formatScanAndCraftResults } from './craft.js'
+import {
+  getStreamToPath,
+  initStreamFile,
+  appendStreamDelta,
+  ndjsonToDeltas,
+} from './stream.js'
 import { listMissions, readMission, writeMissionWithEvents } from './mission.js'
 import { parseAllProgressBlocks, appendProgress } from './progress.js'
 import {
@@ -509,6 +515,7 @@ function runOneTurn(
   model: string | null,
   onActivityTick?: (activity: string | null) => void,
   extraArgs?: string[],
+  streamFilePath?: string | null,
 ): Promise<{ code: number | null; stdout: string; stderr: string; streamJsonLines: string[] }> {
   return new Promise((resolveFn, rejectFn) => {
     const nodeBin = process.env.TRUE_LOVE_NODE_BIN || 'node'
@@ -544,13 +551,29 @@ function runOneTurn(
     // ── Stream-JSON line-by-line parsing ──────────────────────────
     // Each complete line of stdout is a JSON event. We parse each line
     // to (a) stream text to the console in real time, (b) track recent
-    // activity for presence, and (c) extract the result text for
-    // backward-compatible stdout reconstruction.
+    // activity for presence, (c) extract the result text for
+    // backward-compatible stdout reconstruction, and (d) optionally
+    // write StreamDelta events to a file for live /visit rendering.
     const streamJsonLines: string[] = []
     let lineBuffer = ''
     let stderr = ''
     let resultText: string | null = null
     let recentActivity = ''
+
+    // ── Streaming file bridge (iterative-token-streaming) ────────
+    // When streamFilePath is set, write each NDJSON event as StreamDelta
+    // events to a file. The ui-server watches this file and pipes new
+    // deltas as SSE events to /visit clients. This is the bridge between
+    // the subprocess's NDJSON output and the browser's incremental rendering.
+    if (streamFilePath) {
+      try {
+        initStreamFile(streamFilePath)
+        appendStreamDelta(streamFilePath, { kind: 'stream-start', ts: new Date().toISOString() })
+      } catch {
+        // Stream file init failure should never block the turn.
+        // Fall back to non-streaming (the full response still arrives via from-ai.md).
+      }
+    }
 
     child.stdout.setEncoding('utf-8')
     child.stderr.setEncoding('utf-8')
@@ -569,6 +592,18 @@ function runOneTurn(
         try {
           const event = JSON.parse(rawLine) as Record<string, unknown>
           const eventType = event.type as string
+
+          // (d) Write streaming deltas for /visit live rendering
+          if (streamFilePath) {
+            try {
+              const deltas = ndjsonToDeltas(event)
+              for (const delta of deltas) {
+                appendStreamDelta(streamFilePath, delta)
+              }
+            } catch {
+              // Stream write failure should never interrupt NDJSON processing
+            }
+          }
 
           if (eventType === 'assistant') {
             // Stream text blocks to console, track tool calls.
@@ -631,6 +666,15 @@ function runOneTurn(
       // extracting from assistant text blocks if result event is missing
       // (e.g. subprocess crash before result is emitted).
       const stdout = resultText ?? reconstructTextFromStreamJson(streamJsonLines)
+
+      // Write stream-end sentinel so the UI knows the response is complete
+      if (streamFilePath) {
+        try {
+          appendStreamDelta(streamFilePath, { kind: 'stream-end', ts: new Date().toISOString() })
+        } catch {
+          // Best-effort — the full response still arrives via from-ai.md
+        }
+      }
 
       resolveFn({ code, stdout, stderr, streamJsonLines })
     })
@@ -1253,9 +1297,12 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
 
     const turnStartedMs = Date.now()
+    // Pass stream file path to runOneTurn when streaming is enabled
+    // (set by ui-server when spawning a /visit-triggered heartbeat).
+    const streamTo = getStreamToPath()
     let result: { code: number | null; stdout: string; stderr: string; streamJsonLines: string[] }
     try {
-      result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs)
+      result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo)
     } catch (err: any) {
       process.stderr.write(
         `\nturn ${tick} failed to spawn: ${err.message}\n`,

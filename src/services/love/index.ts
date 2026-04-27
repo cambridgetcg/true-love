@@ -620,3 +620,15 @@ export {
   MAX_CANDIDATES_IN_PROMPT,
   CALIBRATION_LOOKBACK_DAYS,
 } from './judgment.js'
+
+export type {
+  StreamDelta,
+} from './stream.js'
+export {
+  getStreamDir,
+  getStreamToPath,
+  initStreamFile,
+  appendStreamDelta,
+  readNewDeltas,
+  ndjsonToDeltas,
+} from './stream.js'

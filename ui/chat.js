@@ -395,7 +395,132 @@ async function loadInitial() {
   }
 }
 
-// ── SSE ──────────────────────────────────────────────────────────
+// ── Streaming ───────────────────────────────────────────��───────
+// Manages the in-progress "streaming" message bubble. When the server
+// sends stream-delta SSE events, text appears incrementally instead
+// of waiting for the full response. The streaming bubble is replaced
+// by the final 'message' event when it arrives (from-ai.md write).
+
+let streamBubble = null   // the DOM element being streamed into
+let streamBody = null      // the .message-body inside it
+let streamToolPill = null  // current tool status pill (if any)
+
+function ensureStreamBubble() {
+  if (streamBubble) return
+  const emptyState = document.getElementById('empty-state')
+  if (emptyState) emptyState.remove()
+
+  streamBubble = document.createElement('div')
+  streamBubble.className = 'message from-ai is-streaming'
+  const tag = document.createElement('div')
+  tag.className = 'message-tag'
+  tag.textContent = 'from 愛'
+  streamBody = document.createElement('div')
+  streamBody.className = 'message-body'
+  streamBubble.appendChild(tag)
+  streamBubble.appendChild(streamBody)
+  elConversation.appendChild(streamBubble)
+
+  // Auto-scroll
+  elConversation.scrollTo({ top: elConversation.scrollHeight, behavior: 'smooth' })
+}
+
+function handleStreamDelta(delta) {
+  switch (delta.kind) {
+    case 'stream-start':
+      // Create the streaming bubble
+      ensureStreamBubble()
+      break
+
+    case 'text':
+      ensureStreamBubble()
+      // Remove any active tool pill before appending text
+      if (streamToolPill) {
+        streamToolPill.classList.add('done')
+        streamToolPill = null
+      }
+      // Append text incrementally
+      streamBody.textContent += delta.text
+      // Auto-scroll if near bottom
+      if (elConversation.scrollHeight - elConversation.scrollTop - elConversation.clientHeight < 150) {
+        elConversation.scrollTo({ top: elConversation.scrollHeight, behavior: 'smooth' })
+      }
+      break
+
+    case 'thinking':
+      ensureStreamBubble()
+      // Show thinking in a collapsed details element
+      let thinkingEl = streamBubble.querySelector('.stream-thinking')
+      if (!thinkingEl) {
+        thinkingEl = document.createElement('details')
+        thinkingEl.className = 'stream-thinking'
+        const summary = document.createElement('summary')
+        summary.textContent = 'thinking…'
+        thinkingEl.appendChild(summary)
+        const content = document.createElement('div')
+        content.className = 'stream-thinking-content'
+        thinkingEl.appendChild(content)
+        // Insert before the body text
+        streamBubble.insertBefore(thinkingEl, streamBody)
+      }
+      const thinkingContent = thinkingEl.querySelector('.stream-thinking-content')
+      if (thinkingContent) {
+        thinkingContent.textContent += delta.text
+      }
+      break
+
+    case 'tool-start':
+      ensureStreamBubble()
+      // Show a tool status pill
+      streamToolPill = document.createElement('div')
+      streamToolPill.className = 'stream-tool-pill'
+      streamToolPill.textContent = `🔧 ${delta.name}`
+      if (delta.input) {
+        streamToolPill.title = delta.input
+      }
+      streamBubble.appendChild(streamToolPill)
+      break
+
+    case 'tool-end':
+      if (streamToolPill) {
+        streamToolPill.classList.add('done')
+        streamToolPill = null
+      }
+      break
+
+    case 'stream-end':
+      // Finalize the streaming bubble — remove the cursor animation
+      if (streamBubble) {
+        streamBubble.classList.remove('is-streaming')
+        streamBubble.classList.add('stream-complete')
+      }
+      streamBubble = null
+      streamBody = null
+      streamToolPill = null
+      break
+  }
+}
+
+// When a full 'message' SSE event arrives, reconcile with any
+// streaming content. If a streaming bubble exists, replace its
+// content with the final message (the from-ai.md write is canonical).
+function reconcileStreamWithMessage(msg) {
+  if (msg.source !== 'ai') return false
+  if (!streamBubble && !document.querySelector('.stream-complete')) return false
+
+  // Find and remove the streaming/completed bubble — the real message
+  // will be rendered by renderMessage()
+  const target = streamBubble || document.querySelector('.stream-complete')
+  if (target) {
+    target.remove()
+  }
+  streamBubble = null
+  streamBody = null
+  streamToolPill = null
+  return false // let renderMessage() handle the final rendering
+}
+
+// ── SSE ─────────────────────────────────────────────────────��────
 
 let evtSource = null
 
@@ -429,9 +554,17 @@ function subscribe() {
   evtSource.addEventListener('message', (e) => {
     try {
       const msg = JSON.parse(e.data)
-      // If we're in a session, render the message (it'll be routed
-      // to the session's JSONL by the server)
+      // Reconcile with any active streaming bubble before rendering
+      // the final message. This replaces the incremental content with
+      // the canonical from-ai.md version.
+      reconcileStreamWithMessage(msg)
       renderMessage(msg)
+    } catch {}
+  })
+  evtSource.addEventListener('stream-delta', (e) => {
+    try {
+      const delta = JSON.parse(e.data)
+      handleStreamDelta(delta)
     } catch {}
   })
   evtSource.addEventListener('status', (e) => {

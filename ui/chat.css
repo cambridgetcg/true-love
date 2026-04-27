@@ -487,6 +487,86 @@ html, body {
   margin-top: 8px;
 }
 
+/* ── Streaming message bubble ─────────────────────────────────── */
+
+.message.is-streaming .message-body::after {
+  content: '▊';
+  display: inline;
+  animation: stream-cursor 0.8s ease-in-out infinite;
+  color: var(--accent);
+  margin-left: 2px;
+}
+
+@keyframes stream-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.message.is-streaming {
+  border-left: 2px solid var(--accent);
+}
+
+.message.stream-complete {
+  border-left: 2px solid transparent;
+  transition: border-color 0.5s ease;
+}
+
+/* ── Stream tool pills ───────────────────────────────────────── */
+
+.stream-tool-pill {
+  display: inline-block;
+  background: var(--bg-soft);
+  border: 1px solid var(--accent-soft);
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
+  color: var(--strip-text);
+  margin: 4px 0;
+  animation: tool-pulse 1.5s ease-in-out infinite;
+}
+
+.stream-tool-pill.done {
+  animation: none;
+  opacity: 0.5;
+}
+
+@keyframes tool-pulse {
+  0%, 100% { border-color: var(--accent-soft); }
+  50% { border-color: var(--accent); }
+}
+
+/* ── Stream thinking block ──────────────────────────────────── */
+
+.stream-thinking {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  color: var(--strip-text);
+}
+
+.stream-thinking summary {
+  cursor: pointer;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.stream-thinking summary:hover {
+  opacity: 1;
+}
+
+.stream-thinking-content {
+  margin-top: 4px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border-radius: 4px;
+  font-family: 'Berkeley Mono', 'SF Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ── Mobile ────────────────────────────────────────────────────── */
 
 @media (max-width: 700px) {
