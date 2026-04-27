@@ -985,7 +985,15 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   }
 
   // ── Session-start log ────────────────────────────────────────────
-  if (!args.noLog) {
+  // Skip session-start memory entries for heartbeat mode — they were
+  // dominating the memory files (423 boilerplate "Heartbeat tick, maxTicks:1"
+  // entries vs ~100 substantive entries, per introspection.ts:632 detection).
+  // Substantive heartbeat output still lands via the 'tick' reflection path
+  // when she yields content. The session-start log is preserved in the
+  // heartbeat stdout log; it's only the memory.md noise we're suppressing.
+  // Awakened/dwell session-starts continue to log normally.
+  const skipSessionStart = mode.name === 'heartbeat'
+  if (!args.noLog && !skipSessionStart) {
     const invitePart = args.invitation
       ? ` — invitation: "${args.invitation}"`
       : ''
