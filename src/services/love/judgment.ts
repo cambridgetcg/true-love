@@ -536,24 +536,20 @@ export function buildJudgmentBlock(
 }
 
 /**
- * Build the judgment block across all registered projects.
+ * Build the judgment block across multiple projects.
  *
- * Called by autonomy.ts to inject into awakened/dwell prompts.
+ * Takes an array of project entries (id + state) and a callback to
+ * get candidates for each project. No `require()` — the caller
+ * provides everything. The actual all-projects builder lives in
+ * autonomy.ts where the proper imports are.
+ *
  * Returns null when no projects have unjudged candidates.
  */
-export function buildJudgmentBlockForAllProjects(
+export function buildJudgmentBlockForProjects(
+  projects: Array<{ id: string; state: string }>,
   getCandidates: (projectId: string) => NoticingCandidate[],
   opts?: { now?: number },
 ): string | null {
-  // Dynamically import to avoid circular dependency at load time
-  let projects: Array<{ id: string; state: string }>
-  try {
-    const { listProjects } = require('./project-registry.js')
-    projects = listProjects()
-  } catch {
-    return null
-  }
-
   if (projects.length === 0) return null
 
   const blocks: string[] = []

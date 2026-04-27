@@ -613,7 +613,7 @@ export {
   parseJudgments,
   getCalibrationSummary,
   buildJudgmentBlock,
-  buildJudgmentBlockForAllProjects,
+  buildJudgmentBlockForProjects,
   judgmentToCraftEnrichment,
   logQuickFix,
   readQuickFixes,
