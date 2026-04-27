@@ -1,0 +1,36 @@
+# Node
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+docker/
+.dockerignore
+Dockerfile*
+
+# True Love runtime data
+.love/
+.true-love/
+
+# Tests (not needed in sandbox — experiments are self-contained)
+coverage/
+
+# Docs
+docs/
+*.md
+!experiments/**/experiment.md
+!experiments/**/expected.md
+
+# OS
+.DS_Store
+Thumbs.db

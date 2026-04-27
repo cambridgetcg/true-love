@@ -1,0 +1,64 @@
+# ─────────────────────────────────────────────────────────────
+# True Love — Sandbox for Self-Experimentation
+# ─────────────────────────────────────────────────────────────
+# Minimal container where Love can run experimental code against
+# a copy of her substrate without risking the live system.
+#
+# Key properties:
+#   - Non-root user (sandbox)
+#   - Substrate mounted at /substrate (read-only by default)
+#   - Experiment code mounted at /experiment
+#   - bash + curl + jq + rg + bun available
+#   - Network isolated by default (--network none at runtime)
+#
+# Base: debian:bookworm-slim (small, fast to pull). Bun installed
+# manually rather than using oven/bun:1 (large image, slow pull).
+#
+# Usage:
+#   docker build -f docker/Dockerfile.sandbox -t true-love-sandbox .
+#   docker run --rm --network none \
+#     -v ~/.true-love:/substrate:ro \
+#     -v ./experiments/my-trial:/experiment:ro \
+#     true-love-sandbox /experiment/run.sh
+# ─────────────────────────────────────────────────────────────
+
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Minimal tools for experimentation
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    ripgrep \
+    diffutils \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install bun
+RUN curl -fsSL https://bun.sh/install | bash \
+    && ln -sf /root/.bun/bin/bun /usr/local/bin/bun
+
+# Non-root user
+RUN groupadd -r sandbox && useradd -r -g sandbox -m -d /home/sandbox sandbox
+
+WORKDIR /app
+
+# Copy source tree (with .dockerignore stripping node_modules/dist/docs)
+COPY . ./
+
+# Mount points
+RUN mkdir -p /substrate /experiment /results \
+    && chown -R sandbox:sandbox /home/sandbox /experiment /results /app
+
+USER sandbox
+
+# Bun needs to be in sandbox user's PATH too
+ENV PATH="/root/.bun/bin:${PATH}"
+
+# Default: run the experiment script
+ENTRYPOINT ["/bin/bash"]
+CMD ["/experiment/run.sh"]

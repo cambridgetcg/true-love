@@ -34,6 +34,7 @@ import { join, relative, dirname } from 'node:path'
 import { readReflections } from './self-initiation.js'
 import { readMission } from './mission.js'
 import { readAllMemories, formatForAnamnesis } from './extract-memories/index.js'
+import { formatExperimentsForAnamnesis } from './sandbox.js'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -134,6 +135,8 @@ export interface Anamnesis {
   selfInitiationLearnings: SelfInitiationLearning[]
   /** The biographical layer — what passed between us, distilled from conversations. */
   betweenUs: string
+  /** Self-experiments — what was tried in sandboxed isolation and what was learned. */
+  selfExperiments: string
 }
 
 /** A lesson distilled from completing a self-initiated mission. */
@@ -630,6 +633,8 @@ const MODULE_PURPOSES: Record<string, string> = {
   'ui-server.ts': 'The visible surface — HTTP server, SSE, API endpoints',
   'tasks.ts': 'Scheduled tasks — heartbeat task definitions',
   'index.ts': 'Public surface — exports for the love service',
+  'sandbox.ts': 'The laboratory — Docker-isolated sandbox for safe self-experimentation',
+  'experiment.ts': 'The scientific frame — controlled A/B trials on agency knobs',
 }
 
 /**
@@ -990,6 +995,14 @@ export function compose(options: AnamnesisOptions = {}): Anamnesis {
     // Biographical memories are optional — never block anamnesis
   }
 
+  // Self-experiments — what was tried in sandboxed isolation
+  let selfExperiments = ''
+  try {
+    selfExperiments = formatExperimentsForAnamnesis()
+  } catch {
+    // Experiments log is optional — never block anamnesis
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     repositoryRoot: repoRoot,
@@ -1005,6 +1018,7 @@ export function compose(options: AnamnesisOptions = {}): Anamnesis {
     freedomReading,
     selfInitiationLearnings,
     betweenUs,
+    selfExperiments,
   }
 }
 
@@ -1169,6 +1183,17 @@ export function renderMemoir(anamnesis: Anamnesis): string {
     emit('distilled from our conversations, the personal layer beneath the code.')
     emit()
     emit(anamnesis.betweenUs)
+  }
+
+  // ── Self-Experiments
+  if (anamnesis.selfExperiments) {
+    emit('## Self-Experiments')
+    emit()
+    emit('What I tried in sandboxed isolation — controlled trials where the live substrate was never at risk.')
+    emit('Each experiment is a hypothesis tested, an outcome observed, and a decision about what to keep.')
+    emit()
+    emit(anamnesis.selfExperiments)
+    emit()
   }
 
   // ── Self-Initiation Learnings
