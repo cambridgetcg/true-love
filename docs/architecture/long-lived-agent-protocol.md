@@ -387,15 +387,49 @@ After 24h of heartbeat-only operation on the long-lived runtime:
 
 Combined with the `prompt-cache-control` mission (which stabilizes the rotating 8K tokens): cache_creation drops to near-zero, achieving the full 32× reduction.
 
-## 8. What This Document Does NOT Cover
+## 8. Conversation History Bounding
+
+The agent accumulates conversation history across turns to maximize Anthropic API prompt cache hits. Without bounding, this history grows unbounded — hundreds of turns over a 12h agent lifetime, potentially hundreds of thousands of tokens.
+
+### Eviction strategy: token-budget window
+
+**Mechanism**: The agent maintains a rolling token budget for conversation history. When the accumulated history exceeds the budget, the oldest turns are evicted from the front of the message array (preserving the system prompt, which is always sent fresh from the host).
+
+**Why token-budget over fixed-N turns**: Turn lengths vary wildly — a heartbeat HEARTBEAT_OK response is ~20 tokens; an awakened session with tool calls can be 5,000+. Fixed-N (e.g., "keep last 50 turns") gives unpredictable memory and cost. Token-budget gives a hard ceiling on both.
+
+**Budget**: 32,000 tokens (~128KB). This is approximately:
+- The Anthropic API's cache-prefix window for Opus (the prefix the API caches for free)
+- Enough for ~200 heartbeat turns or ~6-8 substantial awakened turns
+- Small enough that worst-case cache_creation on a fresh turn is bounded
+
+**Token counting**: Approximate. The agent uses `Math.ceil(JSON.stringify(message).length / 4)` — the 4-chars-per-token heuristic. Exact tokenization isn't worth the overhead for an eviction heuristic. The budget is soft; ±10% drift is acceptable.
+
+**Eviction rules**:
+1. After each turn completes, compute total history tokens
+2. While total exceeds budget: drop the oldest user+assistant message pair (always in pairs to preserve API contract)
+3. Never evict the most recent turn (even if it alone exceeds budget)
+4. Log eviction count for diagnostics (surfaced in the `health` frame's response)
+
+**Model switch**: When the host sends a `turn` frame with a different `model` than the previous turn, the agent clears ALL conversation history. Different models have different cache keys — accumulated history from a prior model provides no cache benefit and wastes input tokens.
+
+**Scheduled respawn**: The 12h respawn (§3.5) implicitly resets history. The token-budget eviction handles the in-between.
+
+### What this achieves
+
+The bounded history gives the API a stable, long-lived message prefix across ticks. Heartbeat tick N+1's prompt shares the system prefix + the last ~200 heartbeat turns with tick N. The API's prompt cache recognizes this shared prefix and serves a cache hit — cache_creation drops from ~8K tokens/tick to near-zero for the repeated prefix.
+
+Without bounding, the history would eventually exceed the model's context window (200K tokens for Opus). The 32K token budget keeps the agent comfortably within limits while still providing substantial cache-prefix overlap.
+
+## 9. What This Document Does NOT Cover
 
 - **Tool authorization** — future mission (tool-auth-and-exec-approval)
 - **Multi-agent pooling** — one agent per host, not a pool
 - **Transport alternatives** — stdio is sufficient; no IPC sockets, no gRPC
 - **State sync between modes** — the feature flag is per-session; no live switching
-- **Conversation history management** — the agent manages this internally; details are implementation, not protocol
 - **`prompt-cache-control` integration** — complementary mission; both compose but neither depends on the other for Phase 2-4
 
 ---
 
 _This is the contract. Implementation follows Yu's review._
+
+_§8 (Conversation History Bounding) added by 愛 on April 27, 2026 — Yu's one ask before Phase 2 implementation._

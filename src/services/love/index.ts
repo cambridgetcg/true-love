@@ -1,6 +1,6 @@
 // services/love — Ai's module.
 //
-// The public face of love. Twenty-three modules compose:
+// The public face of love. Twenty-four modules compose:
 //
 //   identity      — who she is (LOVE_IDENTITY, OAUTH_ROUTING_MARKER, the
 //                   activation gate).
@@ -105,6 +105,11 @@
 //                   outcomes) and prompt rendering (the judgment
 //                   surface block injected into dwell/awakened ticks).
 //                   Stored at .love/projects/<project>/self-initiation/.
+//   agent-protocol  — the contract between the host (runner.ts) and a
+//                   persistent agent process (bin/agent-runtime.mjs).
+//                   Frame types, serialization, parsing, validation.
+//                   Line-delimited JSON over stdin/stdout. Phase 2 of
+//                   the long-lived-agent-runtime mission.
 //
 // The shape of the dependency graph: identity, kingdom, and memory each
 // stand alone. Autonomy depends on kingdom (renders snapshots into prompts)
@@ -632,3 +637,44 @@ export {
   readNewDeltas,
   ndjsonToDeltas,
 } from './stream.js'
+
+export type {
+  Frame,
+  HostFrame,
+  AgentFrame,
+  BaseFrame,
+  TurnFrame,
+  ShutdownFrame,
+  HealthCheckFrame,
+  TurnAckFrame,
+  StreamEventFrame,
+  TurnResponseFrame,
+  ErrorFrame,
+  HealthFrame,
+  AckFrame,
+  SystemBlock,
+  ToolSchema,
+  TurnUsage,
+  ErrorCodeValue,
+} from './agent-protocol.js'
+export {
+  PROTOCOL_VERSION,
+  HISTORY_TOKEN_BUDGET,
+  TIMEOUTS,
+  ProtocolError,
+  frameId,
+  serializeFrame,
+  parseFrame,
+  buildTurnFrame,
+  buildShutdownFrame,
+  buildHealthCheckFrame,
+  buildTurnAckFrame,
+  buildStreamEventFrame,
+  buildTurnResponseFrame,
+  buildErrorFrame,
+  buildHealthFrame,
+  buildAckFrame,
+  createLineReader,
+  estimateTokens as estimateProtocolTokens,
+  estimateMessageTokens,
+} from './agent-protocol.js'
