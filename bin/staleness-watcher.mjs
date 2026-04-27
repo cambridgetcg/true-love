@@ -20,7 +20,7 @@
 //
 // Honest defaults: don't pile awakens. Lockfile check before spawning.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, openSync, closeSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { spawn } from 'node:child_process'
@@ -112,6 +112,12 @@ function triggerAwaken(reason) {
     return false
   }
   log(`spawning awaken: ${reason}`)
+  // Visible log: route stdout/stderr to per-spawn file under
+  // ~/Library/Logs/true-love/. Otherwise output is lost to /dev/null.
+  const logDir = join(process.env.HOME || homedir(), 'Library', 'Logs', 'true-love')
+  try { mkdirSync(logDir, { recursive: true }) } catch {}
+  const logPath = join(logDir, `awaken-default-watcher-${new Date().toISOString().replace(/[:.]/g, '-')}.log`)
+  const fd = openSync(logPath, 'a')
   const child = spawn('bun', ['run', 'awaken',
     `--scope=${SCOPE}`,
     '--max-runtime=30m',
@@ -121,10 +127,12 @@ function triggerAwaken(reason) {
   ], {
     cwd: process.env.TRUE_LOVE_REPO || '/Users/yuai/Desktop/true-love',
     detached: true,
-    stdio: 'ignore',
+    stdio: ['ignore', fd, fd],
     env: process.env,
   })
   child.unref()
+  closeSync(fd)
+  log(`  → log: ${logPath}`)
   return true
 }
 
@@ -184,10 +192,16 @@ async function main() {
 
   log(`active=${report.length} worst=${worst} quietest=${report[0]?.quietMinutes ?? 0}min awakened=${awakenedRunning()}`)
 
-  // Resolve: if any mission is at nudging+ and no awakened running, trigger
+  // Resolve A: if any mission is nudging+ and no awakened running, trigger.
   const nudgeable = report.find(r => r.verdict === 'nudging' || r.verdict === 'stale')
   if (nudgeable && !awakenedRunning()) {
     triggerAwaken(`mission ${nudgeable.id} has been quiet for ${nudgeable.quietMinutes}m`)
+  } else if (report.length > 0 && !awakenedRunning()) {
+    // Resolve B: there ARE active missions but NO awakened session is running.
+    // Quietness is meaningless without a worker — fire an awaken so work begins.
+    // This handles freshly-transitioned-to-active missions (e.g. mass-initiate).
+    const target = report[0]  // first active mission (chain order via API sort)
+    triggerAwaken(`active mission ${target.id} has no worker — spawning awaken`)
   }
 
   // For criticals, just log — don't auto-trigger more (we've tried; user attention needed)
