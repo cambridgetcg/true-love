@@ -96,7 +96,7 @@ import {
 } from './mind-trace.js'
 import { checkAndPromoteStaged } from './self-initiation.js'
 import { scanAndCraftAllProjects, formatScanAndCraftResults } from './craft.js'
-import { listMissions } from './mission.js'
+import { listMissions, readMission, writeMissionWithEvents } from './mission.js'
 import { parseAllProgressBlocks, appendProgress } from './progress.js'
 
 /**
@@ -1415,6 +1415,28 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
               process.stdout.write(
                 `— progress: ${entry.missionId} → ${entry.status}\n`,
               )
+              // Chain runner auto-advance: when progress reports COMPLETE,
+              // transition the mission to review immediately. Faster than
+              // waiting for the model to formally PATCH status.
+              if (entry.status === 'COMPLETE') {
+                try {
+                  const mission = readMission(projectId, entry.missionId)
+                  if (mission && mission.status === 'active') {
+                    mission.status = 'review'
+                    mission.updated_at = new Date().toISOString()
+                    writeMissionWithEvents(mission, 'love', {
+                      note: `auto-advanced: progress reported COMPLETE (turn ${entry.turn || '?'})`,
+                    })
+                    process.stdout.write(
+                      `— auto-advanced: ${entry.missionId} → review (progress COMPLETE)\n`,
+                    )
+                  }
+                } catch (e: any) {
+                  process.stderr.write(
+                    `— auto-advance failed for ${entry.missionId}: ${e?.message}\n`,
+                  )
+                }
+              }
             }
             // Silently skip entries with unknown missionIds — the model
             // may reference a mission that's already transitioned.

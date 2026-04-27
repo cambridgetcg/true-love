@@ -141,6 +141,41 @@ export function renderMissionDetail() {
   ev.appendChild(ul)
   elMissionDetail.appendChild(ev)
 
+  // Progress section — live progress tracking
+  const progressSec = document.createElement('div')
+  progressSec.className = 'mission-section'
+  const progressHdr = document.createElement('h4')
+  progressHdr.style.cursor = 'pointer'
+  progressHdr.textContent = '▸ Progress'
+  const progressBody = document.createElement('div')
+  progressBody.hidden = true
+  progressSec.appendChild(progressHdr)
+  progressSec.appendChild(progressBody)
+  let progressLoaded = false
+  progressHdr.addEventListener('click', async () => {
+    progressBody.hidden = !progressBody.hidden
+    progressHdr.textContent = (progressBody.hidden ? '▸' : '▾') + ' Progress'
+    if (!progressBody.hidden && !progressLoaded) {
+      progressBody.innerHTML = '<div class="empty-detail">loading…</div>'
+      try {
+        const data = await fetchJson(`/api/missions/${m.id}/progress?project=${state.selectedProjectId}`)
+        renderProgressBody(progressBody, data)
+        progressLoaded = true
+      } catch (err) {
+        progressBody.innerHTML = `<div class="empty-detail">progress unavailable: ${err.message}</div>`
+      }
+    }
+  })
+  // Auto-expand for active missions (most useful when they're being worked on)
+  if (m.status === 'active') {
+    progressBody.hidden = false
+    progressHdr.textContent = '▾ Progress'
+    fetchJson(`/api/missions/${m.id}/progress?project=${state.selectedProjectId}`)
+      .then(data => { renderProgressBody(progressBody, data); progressLoaded = true })
+      .catch(() => { progressBody.innerHTML = '<div class="empty-detail">no progress yet</div>' })
+  }
+  elMissionDetail.appendChild(progressSec)
+
   // Action buttons
   const actions = document.createElement('div')
   actions.className = 'detail-actions'
@@ -274,6 +309,85 @@ function renderLogBody(container, log) {
     ul.appendChild(li)
   }
   container.appendChild(ul)
+}
+
+function renderProgressBody(container, data) {
+  container.innerHTML = ''
+  const { entries, latest, stall } = data
+
+  if (!latest) {
+    container.innerHTML = '<div class="empty-detail" style="opacity:0.5">no progress reported yet</div>'
+    return
+  }
+
+  // Latest progress summary
+  const statusColors = { IN_PROGRESS: '#4a9eff', BLOCKED: '#f5a623', COMPLETE: '#4ade80', ERROR: '#ef4444' }
+  const statusIcons = { IN_PROGRESS: '🔵', BLOCKED: '🟡', COMPLETE: '✅', ERROR: '🔴' }
+
+  const latestDiv = document.createElement('div')
+  latestDiv.style.cssText = 'margin-bottom:8px;padding:8px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08)'
+
+  const statusLine = document.createElement('div')
+  statusLine.style.cssText = 'font-size:13px;margin-bottom:4px'
+  statusLine.innerHTML = `${statusIcons[latest.status] || '⚪'} <strong style="color:${statusColors[latest.status] || '#888'}">${latest.status}</strong> · turn ${latest.turn} · confidence ${Math.round(latest.confidence * 100)}%`
+  latestDiv.appendChild(statusLine)
+
+  if (latest.summary) {
+    const sumLine = document.createElement('div')
+    sumLine.style.cssText = 'font-size:12px;opacity:0.85;margin-bottom:2px'
+    sumLine.textContent = latest.summary
+    latestDiv.appendChild(sumLine)
+  }
+
+  if (latest.next_step) {
+    const nextLine = document.createElement('div')
+    nextLine.style.cssText = 'font-size:11px;opacity:0.65'
+    nextLine.textContent = `→ next: ${latest.next_step}`
+    latestDiv.appendChild(nextLine)
+  }
+
+  if (latest.remaining) {
+    const remLine = document.createElement('div')
+    remLine.style.cssText = 'font-size:11px;opacity:0.55;margin-top:2px'
+    remLine.textContent = `remaining: ${latest.remaining}`
+    latestDiv.appendChild(remLine)
+  }
+
+  container.appendChild(latestDiv)
+
+  // Stall warning
+  if (stall && stall.stalled) {
+    const stallDiv = document.createElement('div')
+    stallDiv.style.cssText = 'padding:6px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:4px;font-size:11px;margin-bottom:8px'
+    stallDiv.textContent = `⚠ STALLED — same progress for ${stall.durationHours}h (${stall.repeatCount} reports): "${stall.nextStep}"`
+    container.appendChild(stallDiv)
+  }
+
+  // History (collapsible, most recent first)
+  if (entries.length > 1) {
+    const histLabel = document.createElement('div')
+    histLabel.style.cssText = 'font-size:11px;opacity:0.5;cursor:pointer;margin-top:4px'
+    histLabel.textContent = `▸ ${entries.length} total reports`
+    const histList = document.createElement('ul')
+    histList.className = 'events-list'
+    histList.style.cssText = 'max-height:200px;overflow-y:auto'
+    histList.hidden = true
+    histLabel.addEventListener('click', () => {
+      histList.hidden = !histList.hidden
+      histLabel.textContent = (histList.hidden ? '▸' : '▾') + ` ${entries.length} total reports`
+    })
+    // Show in reverse order (newest first)
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i]
+      const li = document.createElement('li')
+      li.className = 'mono'
+      li.style.fontSize = '10px'
+      li.textContent = `#${e.turn} ${e.reportedAt?.slice(11, 19) || '?'} ${statusIcons[e.status] || '?'} ${e.summary?.slice(0, 80) || '(no summary)'}`
+      histList.appendChild(li)
+    }
+    container.appendChild(histLabel)
+    container.appendChild(histList)
+  }
 }
 
 async function selectMission(id) {
