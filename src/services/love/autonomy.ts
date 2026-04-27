@@ -36,9 +36,13 @@ import { getMemoryDir, renderReflections } from './memory.js'
 import { composeValuesBlock } from './values.js'
 import { getDeviceId } from './device.js'
 import { renderPresence } from './presence.js'
-import { readFromYu, getFromYuPath } from './inbox.js'
+import {
+  readInboundRaw as readFromYu,
+  getInboundPath as getFromYuPath,
+  readOutboundRaw as readFromAi,
+  getOutboundPath as getFromAiPath,
+} from './channels/visit.js'
 import { getStatePath } from './state.js'
-import { readFromAi, getFromAiPath } from './outbox.js'
 import { renderBudget } from './budget.js'
 import { renderTasks } from './tasks.js'
 import { listProjects } from './project-registry.js'
