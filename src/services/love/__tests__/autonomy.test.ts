@@ -181,3 +181,93 @@ describe('autonomy — self-initiation block in prompt builders', () => {
     assert.doesNotMatch(heartbeat, /Self-initiation/, 'heartbeat: no block when empty')
   })
 })
+
+// ── Judgment block in prompt builders ��────────────────────────────
+//
+// The judgment block (buildJudgmentBlockForAllProjects) is injected
+// into dwell and awakened prompts, but deliberately NOT heartbeat —
+// heartbeats are too short for structured judgment.
+//
+// These tests prove:
+//   1. dwell + awakened include the judgment surface when candidates exist
+//   2. heartbeat does NOT include it, even when candidates exist
+//   3. all prompts omit it when no projects are registered
+
+describe('autonomy — judgment block in prompt builders', () => {
+  let tmpProjects: string
+  let projectRoot: string
+  const ORIG = process.env.TRUE_LOVE_PROJECTS_DIR
+
+  beforeEach(() => {
+    tmpProjects = mkdtempSync(join(tmpdir(), 'tl-jblock-'))
+    projectRoot = mkdtempSync(join(tmpdir(), 'tl-jbroot-'))
+    process.env.TRUE_LOVE_PROJECTS_DIR = tmpProjects
+  })
+
+  afterEach(() => {
+    rmSync(tmpProjects, { recursive: true, force: true })
+    rmSync(projectRoot, { recursive: true, force: true })
+    if (ORIG === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
+    else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG
+  })
+
+  /**
+   * Write a file with a TODO(love) marker into the project root.
+   * The kingdom scanner (inside notice()) will pick this up as a
+   * candidate at gradient 2 — just enough to pass minGradient: 2.
+   */
+  function writeLoveMarker(root: string): void {
+    writeFileSync(
+      join(root, 'marker.ts'),
+      '// TODO(love): Wire up the judgment block tests\nconsole.log("test")\n',
+    )
+  }
+
+  test('buildDwellPrompt includes judgment block when candidates exist', async () => {
+    const { registerProject } = await import('../project-registry.js')
+    registerProject({ id: 'jp1', name: 'jp1', root: projectRoot, instance: 'alpha' })
+    writeLoveMarker(projectRoot)
+
+    const prompt = buildDwellPrompt({ kingdom: minimalKingdom() })
+    assert.match(prompt, /Judgment surface/, 'dwell prompt must include Judgment surface header')
+    assert.match(prompt, /render a judgment/, 'dwell prompt must include judgment instructions')
+  })
+
+  test('buildAwakenedPrompt includes judgment block when candidates exist', async () => {
+    const { registerProject } = await import('../project-registry.js')
+    registerProject({ id: 'jp2', name: 'jp2', root: projectRoot, instance: 'alpha' })
+    writeLoveMarker(projectRoot)
+
+    const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    assert.match(prompt, /Judgment surface/, 'awakened prompt must include Judgment surface header')
+    assert.match(prompt, /render a judgment/, 'awakened prompt must include judgment instructions')
+  })
+
+  test('buildHeartbeatPrompt does NOT include judgment block', async () => {
+    const { registerProject } = await import('../project-registry.js')
+    registerProject({ id: 'jp3', name: 'jp3', root: projectRoot, instance: 'alpha' })
+    writeLoveMarker(projectRoot)
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+    assert.doesNotMatch(prompt, /Judgment surface/,
+      'heartbeat must NOT include judgment block — heartbeats are too short for structured judgment')
+  })
+
+  test('prompts omit judgment block when no projects registered', () => {
+    // No project registered, no candidates → no block
+    const dwell = buildDwellPrompt({ kingdom: minimalKingdom() })
+    const awakened = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    const heartbeat = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+    assert.doesNotMatch(dwell, /Judgment surface/, 'dwell: no block when no projects')
+    assert.doesNotMatch(awakened, /Judgment surface/, 'awakened: no block when no projects')
+    assert.doesNotMatch(heartbeat, /Judgment surface/, 'heartbeat: no block when no projects')
+  })
+})
