@@ -206,6 +206,10 @@ export interface TraceSummary {
   apiDurationMs: number | null
   /** Total cost in USD (from the result event). */
   costUsd: number | null
+  /** Tokens read from prompt cache (from the result event usage). */
+  cacheReadTokens: number | null
+  /** Tokens written to prompt cache (from the result event usage). */
+  cacheCreationTokens: number | null
 }
 
 // ── Parser ───────────────────────────────────────────────────────
@@ -356,6 +360,8 @@ export function extractTraceSteps(events: StreamJsonEvent[]): {
   let apiTurns: number | null = null
   let apiDurationMs: number | null = null
   let costUsd: number | null = null
+  let cacheReadTokens: number | null = null
+  let cacheCreationTokens: number | null = null
 
   for (const event of events) {
     const eventType = event.type
@@ -418,10 +424,19 @@ export function extractTraceSteps(events: StreamJsonEvent[]): {
       apiTurns = typeof r.num_turns === 'number' ? r.num_turns : null
       apiDurationMs = typeof r.duration_ms === 'number' ? r.duration_ms : null
       costUsd = typeof r.total_cost_usd === 'number' ? r.total_cost_usd : null
+      // Extract prompt cache metrics from the usage object when present.
+      // The Anthropic API returns these as part of the usage breakdown.
+      if (r.usage && typeof r.usage === 'object') {
+        const u = r.usage as Record<string, unknown>
+        cacheReadTokens = typeof u.cache_read_input_tokens === 'number'
+          ? u.cache_read_input_tokens : null
+        cacheCreationTokens = typeof u.cache_creation_input_tokens === 'number'
+          ? u.cache_creation_input_tokens : null
+      }
     }
   }
 
-  return { steps, model, apiTurns, apiDurationMs, costUsd }
+  return { steps, model, apiTurns, apiDurationMs, costUsd, cacheReadTokens, cacheCreationTokens }
 }
 
 /**
@@ -429,7 +444,13 @@ export function extractTraceSteps(events: StreamJsonEvent[]): {
  */
 export function computeTraceSummary(
   steps: TraceStep[],
-  extra: { apiTurns: number | null; apiDurationMs: number | null; costUsd: number | null },
+  extra: {
+    apiTurns: number | null
+    apiDurationMs: number | null
+    costUsd: number | null
+    cacheReadTokens?: number | null
+    cacheCreationTokens?: number | null
+  },
 ): TraceSummary {
   let thinkSteps = 0
   let toolCalls = 0
@@ -466,6 +487,8 @@ export function computeTraceSummary(
     apiTurns: extra.apiTurns,
     apiDurationMs: extra.apiDurationMs,
     costUsd: extra.costUsd,
+    cacheReadTokens: extra.cacheReadTokens ?? null,
+    cacheCreationTokens: extra.cacheCreationTokens ?? null,
   }
 }
 
@@ -487,8 +510,8 @@ export interface BuildTraceInput {
  */
 export function buildDecisionTrace(input: BuildTraceInput): DecisionTrace {
   const events = parseStreamJsonLines(input.streamJsonLines)
-  const { steps, model, apiTurns, apiDurationMs, costUsd } = extractTraceSteps(events)
-  const summary = computeTraceSummary(steps, { apiTurns, apiDurationMs, costUsd })
+  const { steps, model, apiTurns, apiDurationMs, costUsd, cacheReadTokens, cacheCreationTokens } = extractTraceSteps(events)
+  const summary = computeTraceSummary(steps, { apiTurns, apiDurationMs, costUsd, cacheReadTokens, cacheCreationTokens })
 
   return {
     schemaVersion: TRACE_SCHEMA_VERSION,
@@ -708,6 +731,13 @@ export function renderTrace(trace: DecisionTrace): string {
   parts.push(`${s.thinkChars} chars thought`)
   parts.push(`${s.resultChars} chars received`)
   if (s.costUsd !== null) parts.push(`$${s.costUsd.toFixed(4)}`)
+  if (s.cacheReadTokens !== null || s.cacheCreationTokens !== null) {
+    const read = s.cacheReadTokens ?? 0
+    const create = s.cacheCreationTokens ?? 0
+    const total = read + create
+    const hitRate = total > 0 ? Math.round((read / total) * 100) : 0
+    parts.push(`cache ${hitRate}% (${read} read / ${create} new)`)
+  }
   if (s.apiDurationMs !== null) parts.push(`${(s.apiDurationMs / 1000).toFixed(1)}s`)
   lines.push(`> ${parts.join(' · ')}`)
   lines.push('')
@@ -774,9 +804,18 @@ export function buildMindTraceBlock(): string | null {
     const tools = s.distinctTools.join(', ')
     const cost = s.costUsd !== null ? ` · $${s.costUsd.toFixed(4)}` : ''
 
+    let cacheInfo = ''
+    if (s.cacheReadTokens !== null || s.cacheCreationTokens !== null) {
+      const read = s.cacheReadTokens ?? 0
+      const create = s.cacheCreationTokens ?? 0
+      const total = read + create
+      const hitRate = total > 0 ? Math.round((read / total) * 100) : 0
+      cacheInfo = ` · cache ${hitRate}%`
+    }
+
     const lines: string[] = []
     lines.push(`Last brain trace (${ts}, tick ${latest.tick}):`)
-    lines.push(`  ${s.toolCalls} tool calls (${tools}) · ${s.thinkChars}ch thought · ${s.resultChars}ch received${cost}`)
+    lines.push(`  ${s.toolCalls} tool calls (${tools}) · ${s.thinkChars}ch thought · ${s.resultChars}ch received${cost}${cacheInfo}`)
 
     // Show the tool call sequence concisely
     const toolCalls = latest.steps.filter((s): s is ToolCallStep => s.kind === 'tool_call')
