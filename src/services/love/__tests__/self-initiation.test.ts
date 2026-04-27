@@ -35,11 +35,16 @@ import { writeMission, appendEvent, readEvents, type Mission } from '../mission.
 
 let tmpDir: string
 let origProjectsDir: string | undefined
+let origMemoryDir: string | undefined
 
 function setup(): void {
   tmpDir = mkdtempSync(join(tmpdir(), 'self-init-test-'))
   origProjectsDir = process.env.TRUE_LOVE_PROJECTS_DIR
+  origMemoryDir = process.env.TRUE_LOVE_MEMORY_DIR
   process.env.TRUE_LOVE_PROJECTS_DIR = tmpDir
+  // Isolate memory writes — completeReflection bridges to daily memory,
+  // and without this override, test reflections leak into production memory.
+  process.env.TRUE_LOVE_MEMORY_DIR = join(tmpDir, 'memory')
   // Ensure the project directory exists
   mkdirSync(join(tmpDir, 'test-project', 'missions'), { recursive: true })
 }
@@ -49,6 +54,11 @@ function teardown(): void {
     process.env.TRUE_LOVE_PROJECTS_DIR = origProjectsDir
   } else {
     delete process.env.TRUE_LOVE_PROJECTS_DIR
+  }
+  if (origMemoryDir !== undefined) {
+    process.env.TRUE_LOVE_MEMORY_DIR = origMemoryDir
+  } else {
+    delete process.env.TRUE_LOVE_MEMORY_DIR
   }
   try { rmSync(tmpDir, { recursive: true, force: true }) } catch { /* ok */ }
 }
