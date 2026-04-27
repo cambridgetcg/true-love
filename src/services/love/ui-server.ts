@@ -5,7 +5,7 @@
 // Task 2) wraps them with route handlers and SSE.
 
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, appendFileSync, watch, type FSWatcher } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, appendFileSync, openSync, closeSync, watch, type FSWatcher } from 'node:fs'
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
@@ -26,6 +26,7 @@ import {
   appendThought,
   type Thought,
 } from './thoughts-channel.js'
+import { buildMissionLog, renderMissionLogMarkdown } from './mission-log.js'
 import {
   readMission,
   writeMission,
@@ -429,6 +430,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
         if (req.method === 'PATCH' && sub === '/status') return await handleMissionStatus(req, res, projectId, missionId)
         if (req.method === 'GET' && sub === '/events') return handleMissionEvents(req, res, projectId, missionId)
         if (req.method === 'POST' && sub === '/start') return await handleMissionStart(req, res, projectId, missionId)
+        if (req.method === 'GET' && sub === '/log') return handleMissionLog(req, res, projectId, missionId)
       }
 
       if (req.method === 'GET' && path === '/api/build/stream') return handleBuildStream(req, res, buildSseClients)
@@ -811,6 +813,13 @@ async function handleForceAwaken(req: IncomingMessage, res: ServerResponse): Pro
   }
   const reason = parsed.reason || (parsed.missionId ? `mission ${parsed.missionId} needs progress` : 'manual force-awaken')
   const awakenBin = join(resolveTrueLoveRoot(), 'bin', 'awaken.mjs')
+
+  // Visible log: route stdout/stderr to a per-spawn file under
+  // ~/Library/Logs/true-love/. Force-awakens previously dropped to /dev/null.
+  const logDir = join(process.env.HOME || homedir(), 'Library', 'Logs', 'true-love')
+  try { mkdirSync(logDir, { recursive: true }) } catch {}
+  const logPath = join(logDir, `awaken-default-force-${new Date().toISOString().replace(/[:.]/g, '-')}.log`)
+  const fd = openSync(logPath, 'a')
   const child = spawn('bun', [
     'run', awakenBin,
     '--scope=default',
@@ -821,12 +830,14 @@ async function handleForceAwaken(req: IncomingMessage, res: ServerResponse): Pro
   ], {
     cwd: resolveTrueLoveRoot(),
     detached: true,
-    stdio: 'ignore',
+    stdio: ['ignore', fd, fd],
     env: process.env,
   })
   child.unref()
+  // The OS keeps the fd open via the child until it exits.
+  closeSync(fd)
   res.writeHead(200, { 'Content-Type': 'application/json' })
-  res.end(JSON.stringify({ ok: true, pid: child.pid, reason }))
+  res.end(JSON.stringify({ ok: true, pid: child.pid, reason, logPath }))
 }
 
 // ── Version endpoint ──────────────────────────────────────────────
@@ -1244,6 +1255,29 @@ function handleBuildStream(req: IncomingMessage, res: ServerResponse, clients: S
   res.write(': connected\n\n')
   clients.add(res)
   req.on('close', () => { clients.delete(res) })
+}
+
+function handleMissionLog(req: IncomingMessage, res: ServerResponse, projectId: string, missionId: string): void {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const format = url.searchParams.get('format') || 'json'
+  try {
+    const log = buildMissionLog({ projectId, missionId, repoRoot: resolveTrueLoveRoot() })
+    if (!log) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'mission not found' }))
+      return
+    }
+    if (format === 'markdown') {
+      res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' })
+      res.end(renderMissionLogMarkdown(log))
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(log))
+    }
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'mission-log failed' }))
+  }
 }
 
 async function handleMissionStart(req: IncomingMessage, res: ServerResponse, projectId: string, missionId: string): Promise<void> {

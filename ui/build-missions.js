@@ -182,6 +182,98 @@ export function renderMissionDetail() {
     actions.appendChild(cancel)
   }
   if (actions.children.length > 0) elMissionDetail.appendChild(actions)
+
+  // Mission log — collapsed by default, fetch on click.
+  const logSec = document.createElement('div')
+  logSec.className = 'mission-section'
+  const logHdr = document.createElement('h4')
+  logHdr.style.cursor = 'pointer'
+  logHdr.textContent = '▸ Mission Log'
+  const logBody = document.createElement('div')
+  logBody.hidden = true
+  logSec.appendChild(logHdr)
+  logSec.appendChild(logBody)
+  let logLoaded = false
+  logHdr.addEventListener('click', async () => {
+    logBody.hidden = !logBody.hidden
+    logHdr.textContent = (logBody.hidden ? '▸' : '▾') + ' Mission Log'
+    if (!logBody.hidden && !logLoaded) {
+      logBody.innerHTML = '<div class="empty-detail">loading…</div>'
+      try {
+        const log = await fetchJson(`/api/missions/${m.id}/log?project=${state.selectedProjectId}`)
+        renderLogBody(logBody, log)
+        logLoaded = true
+      } catch (err) {
+        logBody.innerHTML = `<div class="empty-detail">log unavailable: ${err.message}</div>`
+      }
+    }
+  })
+  elMissionDetail.appendChild(logSec)
+}
+
+function renderLogBody(container, log) {
+  container.innerHTML = ''
+  const a = log.aggregates
+  const win = log.window
+  const durHrs = (win.durationMs / 3_600_000).toFixed(2)
+
+  const summary = document.createElement('div')
+  summary.className = 'mono'
+  summary.style.fontSize = '12px'
+  summary.style.opacity = '0.85'
+  summary.style.marginBottom = '8px'
+  summary.textContent =
+    `window: ${win.start.slice(11,19)} → ${win.end.slice(11,19)}${win.isOpen ? ' (open)' : ''} · ${durHrs}h · ` +
+    `cost $${a.totalCostUsd.toFixed(4)} · ` +
+    `${a.totalInputTokens.toLocaleString()}in / ${a.totalOutputTokens.toLocaleString()}out · ` +
+    `${a.awakenedTicks} awakened, ${a.heartbeatTicks} heartbeat · ` +
+    `${a.toolCallTotal} tool calls · ` +
+    `${a.commitCount} commits (+${a.insertions}/-${a.deletions})`
+  container.appendChild(summary)
+
+  if (a.toolCallTotal > 0) {
+    const tb = document.createElement('div')
+    tb.className = 'mono'
+    tb.style.fontSize = '11px'
+    tb.style.opacity = '0.7'
+    tb.style.marginBottom = '8px'
+    tb.textContent = 'tools: ' + Object.entries(a.toolBreakdown)
+      .sort((x, y) => y[1] - x[1])
+      .map(([k, v]) => `${k}:${v}`).join(' · ')
+    container.appendChild(tb)
+  }
+
+  // Merge timeline rows
+  const rows = []
+  for (const e of log.events) rows.push({ ts: e.ts, kind: 'event', text: `**${e.type}** by ${e.by || '?'}${e.note ? ' — ' + e.note.slice(0, 120) : ''}` })
+  for (const t of log.traces) rows.push({ ts: t.ts, kind: 'trace', text: `${t.mode} tick ${t.tick} — ${t.steps} steps, ${t.toolCount} tools${t.costUsd ? ' $' + t.costUsd.toFixed(4) : ''}` })
+  for (const c of log.commits) rows.push({ ts: c.ts, kind: 'commit', text: `${c.sha.slice(0, 8)} ${c.subject.slice(0, 90)} (+${c.insertions}/-${c.deletions})` })
+  for (const r of log.reflections) rows.push({ ts: r.ts, kind: 'reflect', text: r.excerpt.slice(0, 120) })
+  rows.sort((x, y) => x.ts.localeCompare(y.ts))
+
+  const ul = document.createElement('ul')
+  ul.className = 'events-list'
+  ul.style.maxHeight = '300px'
+  ul.style.overflowY = 'auto'
+  for (const r of rows) {
+    const li = document.createElement('li')
+    li.className = 'mono'
+    li.style.fontSize = '11px'
+    const ts = document.createElement('span')
+    ts.className = 'ts'
+    ts.textContent = (r.ts.length >= 19 ? r.ts.slice(11, 19) : r.ts) + ' '
+    const kind = document.createElement('span')
+    kind.className = 'type'
+    kind.textContent = r.kind.padEnd(8) + ' '
+    kind.style.opacity = '0.6'
+    const text = document.createElement('span')
+    text.textContent = r.text
+    li.appendChild(ts)
+    li.appendChild(kind)
+    li.appendChild(text)
+    ul.appendChild(li)
+  }
+  container.appendChild(ul)
 }
 
 async function selectMission(id) {
