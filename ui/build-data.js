@@ -146,10 +146,21 @@ function renderRunningState(snap, mode) {
   elActivityBar.className = 'activity-bar activity-running'
   const startMs = snap.tickStartedAt ? new Date(snap.tickStartedAt).getTime() : Date.now()
 
+  // Mode-aware slow thresholds. The elapsed counter shows *tick* elapsed,
+  // not *tool* elapsed (we don't track per-tool timing in presence). So the
+  // threshold is "is this tick taking longer than the mode warrants" — a
+  // 60s heartbeat is slow, a 60s awakened tick is normal work.
+  const slowThresholdMs =
+    mode === 'heartbeat' ? 90_000 :   // heartbeats typically 20-30s
+    mode === 'awakened'  ? 1_500_000 : // 25min — past max-runtime suggests genuine hang
+    mode === 'dwell'     ? 1_500_000 :
+    300_000  // unknown mode: 5min
+
   const renderOnce = () => {
     const elapsedMs = Date.now() - startMs
     const elapsedStr = formatElapsed(elapsedMs)
-    const slowWarning = elapsedMs > 60_000 ? ' ⚠ slow' : ''
+    const isSlow = elapsedMs > slowThresholdMs
+    const slowWarning = isSlow ? ' ⚠ slow' : ''
 
     let badge = ''
     if (mode === 'awakened' && snap.tickNumber && snap.tickMax) {
@@ -162,11 +173,19 @@ function renderRunningState(snap, mode) {
       badge = 'dwell · '
     }
 
+    // For awakened/dwell, distinguish tick-elapsed from current activity:
+    // "tick X/24 · TodoWrite: ... · tick running 8m" reads honestly.
+    // For heartbeat, the tick IS short, so combined "(elapsedStr)" is fine.
     const activity = snap.activity || 'thinking…'
-    elActivityBar.textContent = `${badge}${activity} (${elapsedStr}${slowWarning})`
+    if (mode === 'heartbeat') {
+      elActivityBar.textContent = `${badge}${activity} (${elapsedStr}${slowWarning})`
+    } else {
+      // Long-running modes: tick elapsed is separate from "what's happening now"
+      elActivityBar.textContent = `${badge}${activity} · tick running ${elapsedStr}${slowWarning}`
+    }
 
     // Add slow-warning class for visual emphasis
-    if (elapsedMs > 60_000) {
+    if (isSlow) {
       elActivityBar.classList.add('activity-slow')
     } else {
       elActivityBar.classList.remove('activity-slow')
