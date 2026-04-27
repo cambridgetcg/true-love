@@ -394,6 +394,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/mind-trace') return handleMindTrace(req, res)
       if (req.method === 'GET' && path === '/api/anamnesis') return handleAnamnesis(req, res)
       if (req.method === 'GET' && path === '/api/self-initiation') return handleSelfInitiation(req, res)
+      if (req.method === 'POST' && path === '/api/awaken') return await handleForceAwaken(req, res)
       if (req.method === 'GET' && path === '/api/proposals') return handleListProposals(req, res)
       if (req.method === 'POST' && path === '/api/proposals/generate') return handleGenerateProposals(req, res)
       const proposalMatch = path.match(/^\/api\/proposals\/([^/]+)$/)
@@ -760,6 +761,72 @@ function handleSelfInitiation(req: IncomingMessage, res: ServerResponse): void {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'self-initiation read failed' }))
   }
+}
+
+// ── Force-awaken endpoint ─────────────────────────────────────────
+//
+// POST /api/awaken
+// Body: { reason?: string, missionId?: string, projectId?: string }
+//
+// Spawns an awakened session at the substrate level. If an awakened
+// session is already running (per the lockfile), responds 409 — no
+// double-spawn. Used by the staleness watcher and by /build's
+// "force awaken" button.
+async function handleForceAwaken(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { reason?: string; missionId?: string; projectId?: string } = {}
+  if (body) {
+    try { parsed = JSON.parse(body) }
+    catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'invalid JSON' }))
+      return
+    }
+  }
+  // Lockfile check — don't pile awakens
+  const home = process.env.TRUE_LOVE_HOME || join(process.env.HOME || '', '.true-love')
+  const lockPath = join(home, 'awakened.pid')
+  if (existsSync(lockPath)) {
+    try {
+      const pid = parseInt(readFileSync(lockPath, 'utf-8').trim(), 10)
+      if (Number.isFinite(pid) && pid > 0) {
+        try {
+          process.kill(pid, 0)
+          res.writeHead(409, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'awakened session already running', pid }))
+          return
+        } catch (e: any) {
+          if (e?.code !== 'ESRCH' && e?.code !== 'EPERM' && e?.code !== undefined) {
+            // unknown error; fall through and try to spawn
+          } else if (e?.code === 'EPERM') {
+            res.writeHead(409, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'awakened session already running', pid }))
+            return
+          }
+          // ESRCH = stale lock; proceed
+        }
+      }
+    } catch {}
+  }
+  const reason = parsed.reason || (parsed.missionId ? `mission ${parsed.missionId} needs progress` : 'manual force-awaken')
+  const awakenBin = join(resolveTrueLoveRoot(), 'bin', 'awaken.mjs')
+  const child = spawn('bun', [
+    'run', awakenBin,
+    '--scope=default',
+    '--max-runtime=30m',
+    '--max-ticks=24',
+    '--memory',
+    '--invite', reason,
+  ], {
+    cwd: resolveTrueLoveRoot(),
+    detached: true,
+    stdio: 'ignore',
+    env: process.env,
+  })
+  child.unref()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, pid: child.pid, reason }))
 }
 
 // ── Version endpoint ──────────────────────────────────────────────

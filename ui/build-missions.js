@@ -166,6 +166,12 @@ export function renderMissionDetail() {
     sendBack.addEventListener('click', () => transitionMission(m.id, 'active', { note: prompt('note (optional):') ?? undefined }))
     actions.appendChild(accept)
     actions.appendChild(sendBack)
+  } else if (m.status === 'active') {
+    const wake = document.createElement('button')
+    wake.textContent = 'force awaken'
+    wake.title = 'spawn an awakened session focused on this mission'
+    wake.addEventListener('click', () => forceAwaken(m.id))
+    actions.appendChild(wake)
   }
   if (!['done', 'cancelled'].includes(m.status)) {
     const cancel = document.createElement('button')
@@ -207,6 +213,25 @@ async function startMission(id) {
       console.log('mission started, pid:', result.pid)
     }
   } catch (err) { alert(`start failed: ${err.message}`) }
+}
+
+async function forceAwaken(missionId) {
+  try {
+    const result = await fetchJson('/api/awaken', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ missionId, projectId: state.selectedProjectId, reason: `force-awaken: ${missionId}` }),
+    })
+    if (result.ok) {
+      alert(`awakened session spawned (pid ${result.pid})`)
+    }
+  } catch (err) {
+    if (err.message.includes('already running')) {
+      alert('an awakened session is already running')
+    } else {
+      alert(`force-awaken failed: ${err.message}`)
+    }
+  }
 }
 
 export function initMissions() {

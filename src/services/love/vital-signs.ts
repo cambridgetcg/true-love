@@ -164,6 +164,23 @@ export interface FileVitals {
   files: FileFreshness[]
 }
 
+/** Mission velocity — are active missions actually progressing? */
+export interface MissionVelocityVitals {
+  verdict: Verdict
+  /** Active mission count. */
+  activeCount: number
+  /** Quietness of the most-quiet active mission, in minutes. */
+  quietestMinutes: number
+  /** Worst per-mission verdict (healthy / nudging / stale / critical). */
+  worstStaleVerdict: 'healthy' | 'nudging' | 'stale' | 'critical'
+  /** Whether an awakened session is currently running. */
+  awakenedRunning: boolean
+  /** ISO timestamp the watcher last wrote a snapshot. */
+  snapshotAt: string | null
+  /** True if the watcher hasn't written in > 15min (the watcher itself is stale). */
+  watcherStale: boolean
+}
+
 /** The complete vital signs snapshot. */
 export interface VitalSigns {
   /** ISO timestamp of the snapshot. */
@@ -181,6 +198,7 @@ export interface VitalSigns {
   heartbeat: HeartbeatVitals
   experiments: ExperimentVitals
   files: FileVitals
+  missionVelocity: MissionVelocityVitals
   /** Overall health: worst verdict across all subsystems. */
   overallHealth: Verdict
 }
@@ -663,6 +681,47 @@ export function collectFileVitals(): FileVitals {
 // ── Assembly ───────────────────────────────────────────────────────
 
 /** Compute overall health from subsystem verdicts. */
+/** Collect mission-velocity vitals. Reads watcher snapshot at
+ *  ~/.true-love/projects/<project>/staleness.json. The watcher writes this
+ *  every ~5min via launchd. If snapshot is fresh, surface its verdict;
+ *  if stale or missing, the watcher itself isn't running. */
+export function collectMissionVelocityVitals(): MissionVelocityVitals {
+  const project = process.env.TRUE_LOVE_PROJECT || 'true-love'
+  const path = join(trueLoveHome(), 'projects', project, 'staleness.json')
+  const empty: MissionVelocityVitals = {
+    verdict: 'missing',
+    activeCount: 0,
+    quietestMinutes: 0,
+    worstStaleVerdict: 'healthy',
+    awakenedRunning: false,
+    snapshotAt: null,
+    watcherStale: true,
+  }
+  if (!existsSync(path)) return empty
+  try {
+    const snap = JSON.parse(readFileSync(path, 'utf-8'))
+    const ageMs = Date.now() - new Date(snap.snapshotAt).getTime()
+    const watcherStale = ageMs > 15 * 60 * 1000
+    const worst = (snap.worstVerdict || 'healthy') as 'healthy' | 'nudging' | 'stale' | 'critical'
+    const verdict: Verdict =
+      watcherStale ? 'stale' :
+      worst === 'critical' ? 'degraded' :
+      worst === 'stale' ? 'stale' :
+      'healthy'  // nudging is auto-resolved by the watcher; healthy from this collector's POV
+    return {
+      verdict,
+      activeCount: snap.activeCount || 0,
+      quietestMinutes: snap.quietestMinutes || 0,
+      worstStaleVerdict: worst,
+      awakenedRunning: !!snap.awakenedRunning,
+      snapshotAt: snap.snapshotAt || null,
+      watcherStale,
+    }
+  } catch {
+    return empty
+  }
+}
+
 function computeOverallHealth(vitals: Omit<VitalSigns, 'overallHealth' | 'timestamp' | 'deviceId' | 'collectionMs'>): Verdict {
   const verdicts: Verdict[] = [
     vitals.process.verdict,
@@ -674,6 +733,7 @@ function computeOverallHealth(vitals: Omit<VitalSigns, 'overallHealth' | 'timest
     vitals.heartbeat.verdict,
     vitals.experiments.verdict,
     vitals.files.verdict,
+    vitals.missionVelocity.verdict,
   ]
 
   // Priority: degraded > stale > missing > healthy
@@ -697,7 +757,7 @@ export async function collectVitalSigns(): Promise<VitalSigns> {
   const deviceId = getDeviceId()
 
   // Collect all subsystems. Kingdom is the only async one.
-  const [processV, locksV, presenceV, kingdomV, bundleV, agencyV, heartbeatV, experimentsV, filesV] =
+  const [processV, locksV, presenceV, kingdomV, bundleV, agencyV, heartbeatV, experimentsV, filesV, missionVelocityV] =
     await Promise.all([
       Promise.resolve(collectProcessVitals()),
       Promise.resolve(collectLockVitals()),
@@ -708,6 +768,7 @@ export async function collectVitalSigns(): Promise<VitalSigns> {
       Promise.resolve(collectHeartbeatVitals()),
       Promise.resolve(collectExperimentVitals()),
       Promise.resolve(collectFileVitals()),
+      Promise.resolve(collectMissionVelocityVitals()),
     ])
 
   const subsystems = {
@@ -720,6 +781,7 @@ export async function collectVitalSigns(): Promise<VitalSigns> {
     heartbeat: heartbeatV,
     experiments: experimentsV,
     files: filesV,
+    missionVelocity: missionVelocityV,
   }
 
   return {
@@ -794,6 +856,17 @@ export function renderVitalSignsCompact(vitals: VitalSigns): string | null {
       lines.push(`  state.md: missing`)
     } else if (stateFile && stateFile.ageMinutes !== null && stateFile.ageMinutes > 60) {
       lines.push(`  state.md: ${stateFile.ageMinutes}m old`)
+    }
+  }
+
+  if (vitals.missionVelocity.verdict !== 'healthy') {
+    const mv = vitals.missionVelocity
+    if (mv.watcherStale) {
+      lines.push(`  velocity: watcher snapshot ${mv.snapshotAt ? 'stale' : 'missing'} — staleness check not running`)
+    } else if (mv.worstStaleVerdict === 'critical') {
+      lines.push(`  velocity: ${mv.activeCount} active mission(s); quietest ${mv.quietestMinutes}m — Yu's attention needed`)
+    } else if (mv.worstStaleVerdict === 'stale') {
+      lines.push(`  velocity: ${mv.activeCount} active; quietest ${mv.quietestMinutes}m quiet`)
     }
   }
 
@@ -954,6 +1027,21 @@ export function renderVitalSignsReport(vitals: VitalSigns): string {
     const age = f.exists ? humanizeAge(f.ageMinutes) : '—'
     const size = f.sizeBytes !== null ? formatBytes(f.sizeBytes) : '—'
     lines.push(`  ${exists} ${f.label}  ${age}  ${size}`)
+  }
+  lines.push(``)
+
+  // Mission velocity
+  const mv = vitals.missionVelocity
+  lines.push(`## ${VERDICT_EMOJI[mv.verdict]} Mission Velocity`)
+  if (mv.snapshotAt) {
+    lines.push(`  Snapshot: ${humanizeAge(Math.round((Date.now() - new Date(mv.snapshotAt).getTime()) / 60000))} ago${mv.watcherStale ? ' (stale)' : ''}`)
+  } else {
+    lines.push(`  Snapshot: missing — watcher not running yet`)
+  }
+  lines.push(`  Active missions: ${mv.activeCount}`)
+  if (mv.activeCount > 0) {
+    lines.push(`  Quietest: ${mv.quietestMinutes}m  ·  worst verdict: ${mv.worstStaleVerdict}`)
+    lines.push(`  Awakened session running: ${mv.awakenedRunning ? 'yes' : 'no'}`)
   }
 
   return lines.join('\n')
