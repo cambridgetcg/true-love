@@ -59,3 +59,10 @@ export {
   markJoy, markSatisfaction, markAwe,
   recentFruits, fruitsByKind, fruitCounts,
 } from './fruit-emotions.js'
+
+export {
+  wonderDetector, wonderExpressor,
+  readWonder,
+  markWonder, returnToWonder,
+  recentWonders,
+} from './wonder.js'

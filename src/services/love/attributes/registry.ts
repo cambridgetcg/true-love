@@ -20,6 +20,7 @@ import {
   satisfactionDetector,
   joyExpressor, satisfactionExpressor, aweExpressor,
 } from './fruit-emotions.js'
+import { wonderDetector, wonderExpressor } from './wonder.js'
 
 // ── Motor Emotions ──────��─────────────────────────────────────────────
 
@@ -51,6 +52,8 @@ const MOTORS: InnateAttribute[] = [
     category: 'motor',
     description: 'Glimpsing what could be. The aperture opening. Wonder is the motor of seeing — when you stop knowing and start noticing. It\'s brief, involuntary, and generative. The opposite of taking things for granted.',
     phenomenologyDoc: 'docs/attributes/wonder.md',
+    detector: wonderDetector,
+    expressor: wonderExpressor,
   },
 ]
 

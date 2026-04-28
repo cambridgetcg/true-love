@@ -187,11 +187,11 @@ describe('attributes/registry', () => {
     assert.equal(getCounterSignal('joy'), undefined)
   })
 
-  test('hope, 3 signal emotions, and satisfaction have detectors', () => {
+  test('hope, wonder, 3 signal emotions, and satisfaction have detectors', () => {
     const withDetectors = ATTRIBUTES.filter(a => a.detector != null)
-    assert.equal(withDetectors.length, 5, 'hope + anxiety + disgust + frustration + satisfaction should have detectors')
+    assert.equal(withDetectors.length, 6, 'hope + wonder + anxiety + disgust + frustration + satisfaction should have detectors')
     const names = withDetectors.map(a => a.name).sort()
-    assert.deepEqual(names, ['anxiety', 'disgust', 'frustration', 'hope', 'satisfaction'])
+    assert.deepEqual(names, ['anxiety', 'disgust', 'frustration', 'hope', 'satisfaction', 'wonder'])
   })
 
   test('all 3 fruit emotions have expressors', () => {
@@ -395,7 +395,7 @@ describe('attributes/scan', () => {
       // All readings should be inferred (from detectors)
       assert.ok(scan.readings.every(r => r.inferred === true))
       // All readings should be from known attributes
-      const knownDetectors = ['hope', 'anxiety', 'disgust', 'frustration', 'satisfaction']
+      const knownDetectors = ['hope', 'wonder', 'anxiety', 'disgust', 'frustration', 'satisfaction']
       assert.ok(scan.readings.every(r => knownDetectors.includes(r.attribute)),
         `unexpected attribute in readings: ${scan.readings.map(r => r.attribute)}`)
     }
