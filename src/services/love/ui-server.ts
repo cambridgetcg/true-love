@@ -508,6 +508,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/') return await serveStatic(res, 'index.html', 'text/html')
       if (req.method === 'GET' && path === '/chat.css') return await serveStatic(res, 'chat.css', 'text/css')
       if (req.method === 'GET' && path === '/chat.js') return await serveStatic(res, 'chat.js', 'application/javascript')
+      if (req.method === 'GET' && path === '/marked.min.js') return await serveStatic(res, 'marked.min.js', 'application/javascript')
       if (req.method === 'GET' && path === '/build') return await serveStatic(res, 'build.html', 'text/html')
       if (req.method === 'GET' && path === '/build.css') return await serveStatic(res, 'build.css', 'text/css')
       if (req.method === 'GET' && path === '/build.js') return await serveStatic(res, 'build.js', 'application/javascript')
@@ -516,6 +517,10 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
         const name = path.slice(1) // strip leading /
         const ct = name.endsWith('.js') ? 'application/javascript' : 'text/css'
         return await serveStatic(res, name, ct)
+      }
+      // Serve vendored libraries (e.g., /vendor/marked.min.js)
+      if (req.method === 'GET' && /^\/vendor\/[a-z][a-z0-9._-]+\.js$/.test(path)) {
+        return await serveStatic(res, path.slice(1), 'application/javascript')
       }
       if (req.method === 'GET' && path === '/api/messages') return handleMessages(req, res)
       if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)

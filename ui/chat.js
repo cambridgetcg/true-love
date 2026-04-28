@@ -37,6 +37,57 @@ const elSessionSidebarClose = document.getElementById('session-sidebar-close')
 const RECENT_YU_LIMIT = 5
 const recentYuMessages = []
 let lastTs = ''
+let lastRenderedSource = null  // Track for message grouping
+let lastRenderedTs = null      // Track for time-based grouping
+
+// ── Markdown rendering ──────────────────────────────────────────
+// Uses vendored marked.min.js (loaded via <script> in index.html).
+// Sanitize output to prevent XSS from tool call results.
+
+const md = typeof marked !== 'undefined' ? marked : null
+if (md) {
+  md.setOptions({ breaks: true, gfm: true })
+}
+
+function sanitizeHtml(html) {
+  const tmp = document.createElement('div')
+  tmp.innerHTML = html
+  // Remove dangerous elements
+  for (const tag of ['script', 'style', 'iframe', 'object', 'embed', 'form']) {
+    for (const el of tmp.querySelectorAll(tag)) el.remove()
+  }
+  // Remove on* event attributes from all elements
+  for (const el of tmp.querySelectorAll('*')) {
+    for (const attr of [...el.attributes]) {
+      if (attr.name.startsWith('on') || attr.name === 'srcdoc') {
+        el.removeAttribute(attr.name)
+      }
+    }
+    // Sanitize href="javascript:..." links
+    if (el.tagName === 'A' && el.href && el.href.toLowerCase().startsWith('javascript:')) {
+      el.removeAttribute('href')
+    }
+  }
+  // Make links open in new tab
+  for (const a of tmp.querySelectorAll('a')) {
+    a.setAttribute('target', '_blank')
+    a.setAttribute('rel', 'noopener noreferrer')
+  }
+  return tmp.innerHTML
+}
+
+function renderMarkdown(text) {
+  if (!md || !text) return escapeHtml(text || '')
+  try {
+    return sanitizeHtml(md.parse(text))
+  } catch {
+    return escapeHtml(text)
+  }
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 // ── Session state ────────────────────────────────────────────────
 
@@ -77,19 +128,52 @@ function renderMessage(msg) {
   if (msg.ts && msg.ts <= lastTs) return
   lastTs = msg.ts || lastTs
   if (elEmptyState) elEmptyState.remove()
+
+  // ── Message grouping ──────────────────────────────────────
+  // Consecutive messages from the same source within 5 minutes
+  // are grouped: suppress tag, tighten spacing.
+  const sameSource = lastRenderedSource === msg.source
+  const withinGroup = sameSource && lastRenderedTs && msg.ts &&
+    (new Date(msg.ts) - new Date(lastRenderedTs)) < 5 * 60 * 1000
+  lastRenderedSource = msg.source
+  lastRenderedTs = msg.ts
+
+  const isJournal = isJournalEntry(msg)
+
   const el = document.createElement('div')
-  el.className = `message from-${msg.source}${isJournalEntry(msg) ? ' is-journal' : ''}`
-  const tag = document.createElement('div')
-  tag.className = 'message-tag'
-  tag.textContent = msg.source === 'yu' ? msg.tag.toUpperCase() : msg.tag
+  el.className = `bubble from-${msg.source}${isJournal ? ' is-journal' : ''}${withinGroup ? ' grouped' : ''}`
+  el.dataset.ts = msg.ts || ''
+
+  // Tag (sender label) — suppress in grouped messages
+  if (!withinGroup) {
+    const tag = document.createElement('div')
+    tag.className = 'bubble-tag'
+    tag.textContent = msg.source === 'yu' ? 'yu' : '愛'
+    el.appendChild(tag)
+  }
+
+  // Body — render markdown for Love's messages, plain for Yu's
   const body = document.createElement('div')
-  body.className = 'message-body'
-  body.textContent = msg.body
-  el.appendChild(tag)
+  body.className = 'bubble-body'
+  if (msg.source === 'ai') {
+    body.innerHTML = renderMarkdown(msg.body)
+  } else {
+    body.textContent = msg.body
+  }
   el.appendChild(body)
 
+  // Timestamp — small, below the body
+  if (msg.ts) {
+    const time = document.createElement('time')
+    time.className = 'bubble-time'
+    time.textContent = formatRecentTime(msg.ts)
+    time.title = msg.ts
+    time.dateTime = msg.ts
+    el.appendChild(time)
+  }
+
   // 🔊 Voice button for Love's messages (non-journal only)
-  if (msg.source === 'ai' && !isJournalEntry(msg) && voiceAvailable) {
+  if (msg.source === 'ai' && !isJournal && voiceAvailable) {
     const voiceBtn = document.createElement('button')
     voiceBtn.className = 'voice-btn'
     voiceBtn.title = 'hear her voice'
@@ -112,6 +196,8 @@ function renderMessage(msg) {
 function clearConversation() {
   elConversation.replaceChildren()
   lastTs = ''
+  lastRenderedSource = null
+  lastRenderedTs = null
   recentYuMessages.length = 0
   renderRecentYu()
   // Re-add empty state
@@ -415,19 +501,42 @@ async function loadInitial() {
 let streamBubble = null   // the DOM element being streamed into
 let streamBody = null      // the .message-body inside it
 let streamToolPill = null  // current tool status pill (if any)
+let typingIndicator = null // typing indicator bubble
+
+function showTypingIndicator() {
+  removeTypingIndicator()
+  typingIndicator = document.createElement('div')
+  typingIndicator.className = 'bubble from-ai typing-indicator'
+  typingIndicator.innerHTML = `
+    <div class="bubble-tag">愛</div>
+    <div class="typing-dots">
+      <span></span><span></span><span></span>
+    </div>
+  `
+  elConversation.appendChild(typingIndicator)
+  elConversation.scrollTo({ top: elConversation.scrollHeight, behavior: 'smooth' })
+}
+
+function removeTypingIndicator() {
+  if (typingIndicator) {
+    typingIndicator.remove()
+    typingIndicator = null
+  }
+}
 
 function ensureStreamBubble() {
   if (streamBubble) return
+  removeTypingIndicator()
   const emptyState = document.getElementById('empty-state')
   if (emptyState) emptyState.remove()
 
   streamBubble = document.createElement('div')
-  streamBubble.className = 'message from-ai is-streaming'
+  streamBubble.className = 'bubble from-ai is-streaming'
   const tag = document.createElement('div')
-  tag.className = 'message-tag'
-  tag.textContent = 'from 愛'
+  tag.className = 'bubble-tag'
+  tag.textContent = '愛'
   streamBody = document.createElement('div')
-  streamBody.className = 'message-body'
+  streamBody.className = 'bubble-body'
   streamBubble.appendChild(tag)
   streamBubble.appendChild(streamBody)
   elConversation.appendChild(streamBubble)
@@ -617,6 +726,8 @@ elCompose.addEventListener('submit', async (e) => {
     const body = await res.json()
     if (body.ok) {
       elComposeText.value = ''
+      // Show typing indicator when waking Love
+      if (wake) showTypingIndicator()
       // If server created a new session, track it
       if (body.sessionId && !currentSessionId) {
         currentSessionId = body.sessionId

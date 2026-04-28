@@ -269,7 +269,7 @@ html, body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 12px;
   padding: 16px 0;
   overflow-y: auto;
 }
@@ -282,9 +282,44 @@ html, body {
   opacity: 0.7;
 }
 
-.message {
-  animation: fade-in 400ms ease forwards;
+/* ── Bubbles ──────────────────────────────────────────────────── */
+
+.bubble {
+  display: flex;
+  flex-direction: column;
+  max-width: 78%;
+  padding: 10px 14px 6px;
+  border-radius: 12px;
+  animation: fade-in 300ms ease forwards;
   opacity: 0;
+  position: relative;
+}
+
+.bubble.grouped {
+  margin-top: -8px;
+}
+
+/* Yu's messages — right aligned */
+.bubble.from-yu {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border-bottom-right-radius: 4px;
+}
+
+.bubble.from-yu.grouped {
+  border-top-right-radius: 4px;
+}
+
+/* Love's messages — left aligned */
+.bubble.from-ai {
+  align-self: flex-start;
+  background: var(--bg-soft);
+  border: 1px solid rgba(139, 58, 74, 0.15);
+  border-bottom-left-radius: 4px;
+}
+
+.bubble.from-ai.grouped {
+  border-top-left-radius: 4px;
 }
 
 @keyframes fade-in {
@@ -292,55 +327,173 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.message-tag {
+.bubble-tag {
   font-family: "SF Mono", "Menlo", monospace;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--strip-text);
-  margin-bottom: 6px;
-  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
 }
 
-.message-body {
-  white-space: pre-wrap;
+.bubble.from-ai .bubble-tag {
+  color: var(--accent);
+  opacity: 0.65;
+}
+
+.bubble-time {
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 10px;
+  color: var(--strip-text);
+  opacity: 0.5;
+  margin-top: 4px;
+  align-self: flex-end;
+  cursor: default;
+}
+
+.bubble.from-yu .bubble-time {
+  align-self: flex-end;
+}
+
+.bubble.from-ai .bubble-time {
+  align-self: flex-start;
+}
+
+/* ── Bubble body ──────────────────────────────────────────────── */
+
+.bubble-body {
   word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
-.message.from-yu .message-body {
-  color: var(--text-yu);
+.bubble.from-yu .bubble-body {
+  color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
-.message.from-ai .message-body {
+.bubble.from-ai .bubble-body {
   color: var(--text-ai);
   font-family: Georgia, "Hoefler Text", "Crimson", serif;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.65;
 }
 
-.message.from-ai .message-tag {
-  color: var(--accent);
-  opacity: 0.7;
+/* ── Rendered markdown inside Love's bubbles ─────────────────── */
+
+.bubble.from-ai .bubble-body p {
+  margin: 0 0 0.6em;
 }
 
-/* Heartbeat-tagged journal entries — her notes-to-self, not addressed
-   to Yu. Subdued so they read as a diary in the margin rather than
-   a reply directed at him. */
-.message.is-journal {
-  opacity: 0.55;
-  border-left: 2px solid var(--accent-soft);
-  padding-left: 14px;
-  margin-left: 2px;
+.bubble.from-ai .bubble-body p:last-child {
+  margin-bottom: 0;
 }
 
-.message.is-journal .message-body {
-  font-size: 14px;
+.bubble.from-ai .bubble-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bubble.from-ai .bubble-body em {
   font-style: italic;
-  line-height: 1.55;
 }
 
-.message.is-journal .message-tag {
-  font-size: 10px;
-  letter-spacing: 0.04em;
+.bubble.from-ai .bubble-body a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(139, 58, 74, 0.4);
+  text-underline-offset: 2px;
+}
+
+.bubble.from-ai .bubble-body a:hover {
+  text-decoration-color: var(--accent);
+}
+
+.bubble.from-ai .bubble-body code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.88em;
+  color: var(--text);
+}
+
+.bubble.from-ai .bubble-body pre {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+  line-height: 1.45;
+}
+
+.bubble.from-ai .bubble-body pre code {
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.bubble.from-ai .bubble-body ul,
+.bubble.from-ai .bubble-body ol {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+
+.bubble.from-ai .bubble-body li {
+  margin-bottom: 3px;
+}
+
+.bubble.from-ai .bubble-body blockquote {
+  border-left: 3px solid var(--accent-soft);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--strip-text);
+  font-style: italic;
+}
+
+.bubble.from-ai .bubble-body h1,
+.bubble.from-ai .bubble-body h2,
+.bubble.from-ai .bubble-body h3,
+.bubble.from-ai .bubble-body h4 {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  color: var(--text);
+  margin: 12px 0 6px;
+  line-height: 1.3;
+}
+
+.bubble.from-ai .bubble-body h1 { font-size: 1.2em; }
+.bubble.from-ai .bubble-body h2 { font-size: 1.1em; }
+.bubble.from-ai .bubble-body h3 { font-size: 1.05em; }
+.bubble.from-ai .bubble-body h4 { font-size: 1em; }
+
+.bubble.from-ai .bubble-body hr {
+  border: none;
+  border-top: 1px solid var(--accent-soft);
+  margin: 12px 0;
+}
+
+/* ── Journal entries (heartbeat) ─────────────────────────────── */
+
+.bubble.is-journal {
+  opacity: 0.45;
+  max-width: 90%;
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid rgba(139, 58, 74, 0.1);
+  padding: 6px 12px 4px;
+}
+
+.bubble.is-journal .bubble-body {
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.bubble.is-journal .bubble-tag {
+  font-size: 9px;
 }
 
 /* ── Recent yu (so you don't repeat) ───────────────────────────── */
@@ -487,9 +640,45 @@ html, body {
   margin-top: 8px;
 }
 
+/* ── Typing indicator ────────────────────────────────────────── */
+
+.typing-indicator {
+  padding: 10px 16px 8px;
+}
+
+.typing-dots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  height: 20px;
+}
+
+.typing-dots span {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.4;
+  animation: typing-bounce 1.4s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { opacity: 0.4; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-4px); }
+}
+
 /* ── Streaming message bubble ─────────────────────────────────── */
 
-.message.is-streaming .message-body::after {
+.bubble.is-streaming .bubble-body::after {
   content: '▊';
   display: inline;
   animation: stream-cursor 0.8s ease-in-out infinite;
@@ -502,11 +691,11 @@ html, body {
   50% { opacity: 0.2; }
 }
 
-.message.is-streaming {
+.bubble.is-streaming {
   border-left: 2px solid var(--accent);
 }
 
-.message.stream-complete {
+.bubble.stream-complete {
   border-left: 2px solid transparent;
   transition: border-color 0.5s ease;
 }
@@ -601,6 +790,10 @@ html, body {
 /* ── Mobile ────────────────────────────────────────────────────── */
 
 @media (max-width: 700px) {
-  .room { padding: 16px 16px 12px; }
-  .message.from-ai .message-body { font-size: 16px; }
+  .room { padding: 12px 10px 8px; }
+  .bubble { max-width: 88%; }
+  .bubble.from-ai .bubble-body { font-size: 15px; }
+  .bubble.from-yu .bubble-body { font-size: 14px; }
+  .presence { font-size: 11px; padding: 6px 4px 12px; }
+  .session-bar { font-size: 11px; }
 }
