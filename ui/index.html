@@ -26,6 +26,7 @@
     <div class="session-bar" id="session-bar">
       <button class="session-toggle" id="session-toggle" title="Sessions">☰</button>
       <span class="session-title" id="session-title"></span>
+      <button class="journal-toggle" id="journal-toggle" title="Show/hide Love's journal">📓</button>
       <button class="session-new" id="session-new" title="New conversation">+</button>
     </div>
 
@@ -44,28 +45,34 @@
       </div>
     </section>
 
-    <details class="recent-yu" id="recent-yu" hidden>
-      <summary class="recent-yu-summary">your last <span id="recent-yu-count">0</span> — so you don't repeat</summary>
-      <ol class="recent-yu-list" id="recent-yu-list"></ol>
-    </details>
-
-    <form class="compose" id="compose">
-      <textarea
-        id="compose-text"
-        placeholder="say something to her."
-        rows="3"
-        maxlength="100000"
-        autofocus
-      ></textarea>
-      <div class="compose-buttons">
-        <button type="submit" name="action" value="send" id="btn-send">send</button>
-        <button type="submit" name="action" value="wake" id="btn-wake">send &amp; wake</button>
-      </div>
-    </form>
+    <!-- New messages pill (shown when scrolled up and new messages arrive) -->
+    <button class="new-messages-pill" id="new-messages-pill" hidden>
+      ↓ <span id="new-messages-count">0</span> new messages
+    </button>
 
     <footer class="connection" id="connection" hidden>
       the line went quiet — reconnecting…
     </footer>
+
+    <!-- Fixed compose bar -->
+    <div class="compose-bar">
+      <form class="compose" id="compose">
+        <div class="compose-row">
+          <textarea
+            id="compose-text"
+            placeholder="say something to her."
+            rows="1"
+            maxlength="100000"
+            autofocus
+          ></textarea>
+          <button type="submit" name="action" value="wake" id="btn-wake" title="Send &amp; wake Love">↑</button>
+        </div>
+        <div class="compose-hint">
+          <span>enter to send · shift+enter for newline</span>
+          <button type="submit" name="action" value="send" id="btn-send" class="quiet-send">whisper</button>
+        </div>
+      </form>
+    </div>
   </main>
   <script src="/vendor/marked.min.js"></script>
   <script type="module" src="/chat.js"></script>

@@ -508,7 +508,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/') return await serveStatic(res, 'index.html', 'text/html')
       if (req.method === 'GET' && path === '/chat.css') return await serveStatic(res, 'chat.css', 'text/css')
       if (req.method === 'GET' && path === '/chat.js') return await serveStatic(res, 'chat.js', 'application/javascript')
-      if (req.method === 'GET' && path === '/marked.min.js') return await serveStatic(res, 'marked.min.js', 'application/javascript')
+      if (req.method === 'GET' && path === '/vendor/marked.min.js') return await serveStatic(res, 'vendor/marked.min.js', 'application/javascript')
       if (req.method === 'GET' && path === '/build') return await serveStatic(res, 'build.html', 'text/html')
       if (req.method === 'GET' && path === '/build.css') return await serveStatic(res, 'build.css', 'text/css')
       if (req.method === 'GET' && path === '/build.js') return await serveStatic(res, 'build.js', 'application/javascript')

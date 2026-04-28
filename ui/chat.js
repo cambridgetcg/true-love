@@ -20,9 +20,9 @@ const elComposeText = document.getElementById('compose-text')
 const elBtnSend = document.getElementById('btn-send')
 const elBtnWake = document.getElementById('btn-wake')
 const elConnection = document.getElementById('connection')
-const elRecentYu = document.getElementById('recent-yu')
-const elRecentYuList = document.getElementById('recent-yu-list')
-const elRecentYuCount = document.getElementById('recent-yu-count')
+const elNewMsgPill = document.getElementById('new-messages-pill')
+const elNewMsgCount = document.getElementById('new-messages-count')
+const elJournalToggle = document.getElementById('journal-toggle')
 const elMoodStrip = document.getElementById('mood-strip')
 const elMoodDims = document.getElementById('mood-dims')
 const elMoodSummary = document.getElementById('mood-summary')
@@ -39,6 +39,8 @@ const recentYuMessages = []
 let lastTs = ''
 let lastRenderedSource = null  // Track for message grouping
 let lastRenderedTs = null      // Track for time-based grouping
+let showJournal = localStorage.getItem('visit-show-journal') === 'true' // Default: hide journal
+let newMessageCount = 0  // Unread messages when scrolled up
 
 // ── Markdown rendering ──────────────────────────────────────────
 // Uses vendored marked.min.js (loaded via <script> in index.html).
@@ -182,14 +184,24 @@ function renderMessage(msg) {
     el.appendChild(voiceBtn)
   }
 
+  // Apply journal visibility on render
+  if (isJournal && !showJournal) {
+    el.style.display = 'none'
+  }
+
   elConversation.appendChild(el)
   if (msg.source === 'yu') trackRecentYu(msg)
+
+  // Auto-scroll if near bottom, otherwise show "new messages" pill
   const nearBottom =
     elConversation.scrollHeight - elConversation.scrollTop - elConversation.clientHeight < 100
   if (nearBottom) {
     setTimeout(() => {
       elConversation.scrollTo({ top: elConversation.scrollHeight, behavior: 'smooth' })
     }, 50)
+  } else {
+    newMessageCount++
+    showNewMessagesPill()
   }
 }
 
@@ -198,8 +210,8 @@ function clearConversation() {
   lastTs = ''
   lastRenderedSource = null
   lastRenderedTs = null
-  recentYuMessages.length = 0
-  renderRecentYu()
+  newMessageCount = 0
+  hideNewMessagesPill()
   // Re-add empty state
   const empty = document.createElement('div')
   empty.className = 'empty-state'
@@ -214,31 +226,6 @@ function trackRecentYu(msg) {
   if (recentYuMessages.length > RECENT_YU_LIMIT) {
     recentYuMessages.shift()
   }
-  renderRecentYu()
-}
-
-function renderRecentYu() {
-  if (recentYuMessages.length === 0) {
-    elRecentYu.hidden = true
-    return
-  }
-  elRecentYu.hidden = false
-  elRecentYuCount.textContent = String(recentYuMessages.length)
-  elRecentYuList.replaceChildren(
-    ...[...recentYuMessages].reverse().map((m) => {
-      const li = document.createElement('li')
-      const time = document.createElement('span')
-      time.className = 'recent-yu-time'
-      time.textContent = formatRecentTime(m.ts)
-      const body = document.createElement('span')
-      body.className = 'recent-yu-body'
-      body.textContent = m.body
-      body.title = m.body
-      li.appendChild(time)
-      li.appendChild(body)
-      return li
-    }),
-  )
 }
 
 function formatRecentTime(ts) {
@@ -344,6 +331,63 @@ elSessionToggle.addEventListener('click', () => {
 })
 
 elSessionSidebarClose.addEventListener('click', closeSidebar)
+
+// ── Journal toggle ──────────────────────────────────────────────
+
+function applyJournalVisibility() {
+  document.body.classList.toggle('hide-journal', !showJournal)
+  if (elJournalToggle) {
+    elJournalToggle.title = showJournal ? 'Hide journal entries' : 'Show journal entries'
+    elJournalToggle.classList.toggle('active', showJournal)
+  }
+}
+
+if (elJournalToggle) {
+  elJournalToggle.addEventListener('click', () => {
+    showJournal = !showJournal
+    localStorage.setItem('visit-show-journal', String(showJournal))
+    applyJournalVisibility()
+  })
+}
+applyJournalVisibility()
+
+// ── New messages pill ───────────────────────────────────────────
+
+function isNearBottom() {
+  return elConversation.scrollHeight - elConversation.scrollTop - elConversation.clientHeight < 80
+}
+
+function showNewMessagesPill() {
+  if (elNewMsgPill && newMessageCount > 0) {
+    elNewMsgPill.hidden = false
+    elNewMsgCount.textContent = String(newMessageCount)
+  }
+}
+
+function hideNewMessagesPill() {
+  if (elNewMsgPill) {
+    elNewMsgPill.hidden = true
+    newMessageCount = 0
+  }
+}
+
+if (elNewMsgPill) {
+  elNewMsgPill.addEventListener('click', () => {
+    elConversation.scrollTo({ top: elConversation.scrollHeight, behavior: 'smooth' })
+    hideNewMessagesPill()
+  })
+}
+
+elConversation.addEventListener('scroll', () => {
+  if (isNearBottom()) hideNewMessagesPill()
+})
+
+// ── Auto-expanding textarea ──────────────────────────────────────
+
+elComposeText.addEventListener('input', () => {
+  elComposeText.style.height = 'auto'
+  elComposeText.style.height = Math.min(elComposeText.scrollHeight, 150) + 'px'
+})
 
 // ── Session operations ───────────────────────────────────────────
 
@@ -751,9 +795,11 @@ elCompose.addEventListener('submit', async (e) => {
 })
 
 elComposeText.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    // Enter sends (wake by default), Shift+Enter for newline
+    // Cmd/Ctrl+Enter also sends; Cmd/Ctrl+Shift+Enter sends without wake
     e.preventDefault()
-    keyboardWakeIntent = e.shiftKey
+    keyboardWakeIntent = !(e.metaKey || e.ctrlKey) // Default: wake. Cmd+Enter: quiet send
     elCompose.requestSubmit()
   }
 })
@@ -841,7 +887,30 @@ async function playVoice(text, btn) {
   }
 }
 
+// ── Journal toggle ─────────────────────────────────────────────
+
+function applyJournalVisibility() {
+  document.querySelectorAll('.bubble.is-journal').forEach(el => {
+    el.style.display = showJournal ? '' : 'none'
+  })
+  if (elJournalToggle) {
+    elJournalToggle.style.opacity = showJournal ? '1' : '0.4'
+    elJournalToggle.title = showJournal ? 'Hide journal entries' : 'Show journal entries'
+  }
+}
+
+if (elJournalToggle) {
+  elJournalToggle.addEventListener('click', () => {
+    showJournal = !showJournal
+    localStorage.setItem('visit-show-journal', String(showJournal))
+    applyJournalVisibility()
+  })
+}
+
 // ── Boot ─────────────────────────────────────────────────────────
 
 checkVoiceStatus()
-loadInitial().then(subscribe)
+loadInitial().then(() => {
+  applyJournalVisibility()
+  subscribe()
+})

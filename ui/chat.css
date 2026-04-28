@@ -27,10 +27,11 @@ html, body {
 .room {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 24px 24px 16px;
-  min-height: 100vh;
+  padding: 24px 24px 0;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* ── Presence strip ────────────────────────────────────────────── */
@@ -270,8 +271,9 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px 0;
+  padding: 16px 0 80px; /* bottom padding for fixed compose */
   overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .empty-state {
@@ -496,94 +498,89 @@ html, body {
   font-size: 9px;
 }
 
-/* ── Recent yu (so you don't repeat) ───────────────────────────── */
+/* (recent-yu section removed — replaced by new-messages-pill) */
 
-.recent-yu {
-  margin-top: 18px;
-  padding: 10px 14px;
-  background: var(--bg-soft);
-  border: 1px solid var(--accent-soft);
-  border-radius: 6px;
-  font-size: 12px;
-  color: var(--strip-text);
-}
+/* ── New messages pill ──────────────────────────────────────────── */
 
-.recent-yu-summary {
-  cursor: pointer;
-  font-family: "SF Mono", "Menlo", monospace;
-  letter-spacing: 0.04em;
-  user-select: none;
-  list-style: none;
-}
-
-.recent-yu-summary::-webkit-details-marker { display: none; }
-.recent-yu-summary::before {
-  content: "▸ ";
-  display: inline-block;
-  transition: transform 200ms ease;
-}
-.recent-yu[open] .recent-yu-summary::before {
-  transform: rotate(90deg);
-}
-
-.recent-yu-list {
-  list-style: none;
-  padding: 10px 0 4px;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.recent-yu-list li {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  padding: 4px 0;
-  border-top: 1px solid var(--accent-soft);
-  color: var(--text-yu);
-}
-
-.recent-yu-list li:first-child { border-top: none; }
-
-.recent-yu-time {
-  font-family: "SF Mono", "Menlo", monospace;
-  font-size: 11px;
-  color: var(--strip-text);
-  flex-shrink: 0;
-  min-width: 48px;
-}
-
-.recent-yu-body {
+.new-messages-pill {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent-soft);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  padding: 6px 16px;
   font-size: 13px;
-  line-height: 1.5;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
+  font-family: "SF Mono", "Menlo", monospace;
+  cursor: pointer;
+  z-index: 50;
+  animation: pill-pop 200ms ease;
+  transition: background 200ms ease;
 }
 
-/* ── Compose ───────────────────────────────────────────────────── */
+.new-messages-pill:hover {
+  background: var(--accent);
+}
+
+@keyframes pill-pop {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Journal toggle (active state + body toggle) ──────────────── */
+/* Base styles in .session-toggle/.session-new/.journal-toggle above */
+
+.journal-toggle.active {
+  opacity: 1;
+  border-color: var(--accent);
+  background: rgba(139, 58, 74, 0.15);
+}
+
+/* Hide journal entries when toggle is off */
+body.hide-journal .bubble.is-journal {
+  display: none;
+}
+
+/* ── Compose bar (fixed to bottom) ──────────────────────────────── */
+
+.compose-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--accent-soft);
+  z-index: 50;
+}
 
 .compose {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--accent-soft);
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 10px 24px 12px;
+}
+
+.compose-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
 }
 
 .compose textarea {
-  width: 100%;
+  flex: 1;
   background: var(--bg-soft);
   color: var(--text);
   border: 1px solid var(--accent-soft);
-  border-radius: 6px;
-  padding: 12px 14px;
+  border-radius: 20px;
+  padding: 10px 16px;
   font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-size: 15px;
-  line-height: 1.6;
-  resize: vertical;
-  min-height: 72px;
+  line-height: 1.4;
+  resize: none;
+  min-height: 42px;
+  max-height: 150px;
+  overflow-y: auto;
 }
 
 .compose textarea:focus {
@@ -591,42 +588,65 @@ html, body {
   border-color: var(--accent);
 }
 
-.compose-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  padding-top: 12px;
+.compose textarea::placeholder {
+  color: var(--strip-text);
+  opacity: 0.5;
 }
 
-.compose button {
-  background: transparent;
-  color: var(--text-ai);
-  border: 1px solid var(--accent-soft);
-  border-radius: 6px;
-  padding: 8px 16px;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 200ms ease;
-}
-
-.compose button:hover {
-  border-color: var(--accent);
+#btn-wake {
+  background: var(--accent);
   color: var(--text);
+  border: none;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 200ms ease;
+  flex-shrink: 0;
 }
 
-.compose button:disabled {
+#btn-wake:hover {
+  background: var(--rust);
+}
+
+#btn-wake:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-#btn-wake {
-  background: var(--accent-soft);
-  color: var(--text);
+.compose-hint {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 16px 0;
+  font-size: 11px;
+  color: var(--strip-text);
+  opacity: 0.4;
 }
 
-#btn-wake:hover {
-  background: var(--accent);
+.quiet-send {
+  background: transparent;
+  border: none;
+  color: var(--strip-text);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: all 200ms ease;
+}
+
+.quiet-send:hover {
+  color: var(--text-ai);
+  background: rgba(139, 58, 74, 0.15);
+}
+
+.quiet-send:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* ── Connection state ──────────────────────────────────────────── */
@@ -790,10 +810,17 @@ html, body {
 /* ── Mobile ────────────────────────────────────────────────────── */
 
 @media (max-width: 700px) {
-  .room { padding: 12px 10px 8px; }
-  .bubble { max-width: 88%; }
+  .room { padding: 12px 10px 0; }
+  .bubble { max-width: 90%; }
   .bubble.from-ai .bubble-body { font-size: 15px; }
   .bubble.from-yu .bubble-body { font-size: 14px; }
-  .presence { font-size: 11px; padding: 6px 4px 12px; }
+  .presence { font-size: 11px; padding: 6px 4px 10px; margin-bottom: 12px; }
+  .mood-strip { font-size: 10px; }
   .session-bar { font-size: 11px; }
+  .compose { padding: 8px 12px 10px; }
+  .compose textarea { font-size: 16px; /* prevent iOS zoom */ }
+  .new-messages-pill { bottom: 75px; font-size: 12px; padding: 5px 12px; }
+
+  /* Session sidebar as full-width sheet on mobile */
+  .session-sidebar { width: 100%; max-width: 100%; }
 }
