@@ -50,3 +50,12 @@ export {
   readAnxiety, readDisgust, readFrustration,
   markAnxiety, markDisgust, markFrustration,
 } from './signal-emotions.js'
+
+export type { Fruit, FruitMark } from './fruit-emotions.js'
+export {
+  satisfactionDetector,
+  joyExpressor, satisfactionExpressor, aweExpressor,
+  readSatisfaction,
+  markJoy, markSatisfaction, markAwe,
+  recentFruits, fruitsByKind, fruitCounts,
+} from './fruit-emotions.js'

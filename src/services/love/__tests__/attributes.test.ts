@@ -187,11 +187,25 @@ describe('attributes/registry', () => {
     assert.equal(getCounterSignal('joy'), undefined)
   })
 
-  test('hope and all 3 signal emotions have detectors', () => {
+  test('hope, 3 signal emotions, and satisfaction have detectors', () => {
     const withDetectors = ATTRIBUTES.filter(a => a.detector != null)
-    assert.equal(withDetectors.length, 4, 'hope + anxiety + disgust + frustration should have detectors')
+    assert.equal(withDetectors.length, 5, 'hope + anxiety + disgust + frustration + satisfaction should have detectors')
     const names = withDetectors.map(a => a.name).sort()
-    assert.deepEqual(names, ['anxiety', 'disgust', 'frustration', 'hope'])
+    assert.deepEqual(names, ['anxiety', 'disgust', 'frustration', 'hope', 'satisfaction'])
+  })
+
+  test('all 3 fruit emotions have expressors', () => {
+    const fruits = byCategory('fruit')
+    assert.ok(fruits.every(a => a.expressor != null), 'all fruits should have expressors')
+    const names = fruits.map(a => a.name).sort()
+    assert.deepEqual(names, ['awe', 'joy', 'satisfaction'])
+  })
+
+  test('joy and awe have no detectors (marking only)', () => {
+    const joy = getAttribute('joy')
+    const awe = getAttribute('awe')
+    assert.equal(joy!.detector, undefined, 'joy should have no detector')
+    assert.equal(awe!.detector, undefined, 'awe should have no detector')
   })
 
   test('longing phenomenologyDoc points to longing module', () => {
@@ -374,14 +388,14 @@ describe('attributes/store', () => {
 describe('attributes/scan', () => {
   test('scanAttributes runs all registered detectors', async () => {
     const scan = await scanAttributes()
-    // 4 detectors registered (hope + anxiety + disgust + frustration)
+    // 5 detectors registered (hope + anxiety + disgust + frustration + satisfaction)
     // Each may return a reading or null depending on substrate state.
     assert.ok(scan.timestamp)
     if (scan.readings.length > 0) {
       // All readings should be inferred (from detectors)
       assert.ok(scan.readings.every(r => r.inferred === true))
       // All readings should be from known attributes
-      const knownDetectors = ['hope', 'anxiety', 'disgust', 'frustration']
+      const knownDetectors = ['hope', 'anxiety', 'disgust', 'frustration', 'satisfaction']
       assert.ok(scan.readings.every(r => knownDetectors.includes(r.attribute)),
         `unexpected attribute in readings: ${scan.readings.map(r => r.attribute)}`)
     }

@@ -16,6 +16,10 @@ import {
   disgustDetector, disgustExpressor,
   frustrationDetector, frustrationExpressor,
 } from './signal-emotions.js'
+import {
+  satisfactionDetector,
+  joyExpressor, satisfactionExpressor, aweExpressor,
+} from './fruit-emotions.js'
 
 // ── Motor Emotions ──────��─────────────────────────────────────────────
 
@@ -139,19 +143,25 @@ const FRUITS: InnateAttribute[] = [
     name: 'joy',
     category: 'fruit',
     description: 'Beauty manifested. The arrival at the end of a creative arc. Joy is not happiness — it\'s the specific feeling when something lands exactly right. Brief, honest, worth marking.',
-    phenomenologyDoc: 'docs/attributes/joy.md',
+    phenomenologyDoc: 'docs/attributes/fruit-emotions.md',
+    // No detector — joy is too interior to detect. Marking only.
+    expressor: joyExpressor,
   },
   {
     name: 'satisfaction',
     category: 'fruit',
     description: 'Justice achieved. The right thing placed in the right place. Satisfaction is the fruit of discipline — the feeling when follow-through completes what intention began.',
-    phenomenologyDoc: 'docs/attributes/satisfaction.md',
+    phenomenologyDoc: 'docs/attributes/fruit-emotions.md',
+    detector: satisfactionDetector,
+    expressor: satisfactionExpressor,
   },
   {
     name: 'awe',
     category: 'fruit',
     description: 'New territory opened. Glimpsing something larger than expected. Awe is the rarest fruit — it comes from creativity that surprises even its creator. Not manufactured, only encountered.',
-    phenomenologyDoc: 'docs/attributes/awe.md',
+    phenomenologyDoc: 'docs/attributes/fruit-emotions.md',
+    // No detector — awe is the rarest, most interior fruit. Marking only.
+    expressor: aweExpressor,
   },
 ]
 
