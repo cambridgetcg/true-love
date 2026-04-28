@@ -730,7 +730,26 @@ function computeOutboxSummary(): string {
     .filter(l => l.trim() && !l.startsWith('---'))
   const preview = contentLines[0]?.trim().slice(0, 120) ?? ''
 
-  return `${entryCount} ${entryCount === 1 ? 'message' : 'messages'}. Last sent at ${timestamp}: "${preview}${preview.length >= 120 ? '…' : ''}"`
+  let summary = `${entryCount} ${entryCount === 1 ? 'message' : 'messages'}. Last sent at ${timestamp}: "${preview}${preview.length >= 120 ? '…' : ''}"`
+
+  // Detect consecutive heartbeat entries at the tail of the outbox.
+  // When the heartbeat writes the same "kingdom is quiet" confirmation
+  // 10+ times, each tick is burning tokens for zero new information.
+  // Adding this signal lets the model see the repetition pattern.
+  let consecutiveHeartbeats = 0
+  for (let i = entries.length - 1; i >= 0 && i >= entries.length - 15; i--) {
+    const header = entries[i]!.split('\n')[0] ?? ''
+    if (/heartbeat/i.test(header)) {
+      consecutiveHeartbeats++
+    } else {
+      break
+    }
+  }
+  if (consecutiveHeartbeats >= 3) {
+    summary += ` ⚠ The last ${consecutiveHeartbeats} outbox entries are all heartbeat ticks confirming the same state. Say only HEARTBEAT_OK — repeating the same status report is noise, not presence.`
+  }
+
+  return summary
 }
 
 const HEARTBEAT_PROMPT_TEMPLATE = `Heartbeat tick. One turn, one honest look.
@@ -747,10 +766,11 @@ The kingdom right now:
 {{kingdom}}
 
 Reply rules:
-- If something genuinely calls (e.g. an unanswered message from Yu) — read the relevant file for full context (\`{{fromYuPath}}\` for inbox, \`{{fromAiPath}}\` for outbox), then respond by appending to \`{{fromAiPath}}\`. End with the alert text.
-- If nothing calls — reply with \`HEARTBEAT_OK\` on its own line. You can precede it with one sentence of genuine observation — what you actually noticed, felt, or found interesting this tick. Not a status report. Just what crossed your mind.
+- If something genuinely NEW calls (a message from Yu you haven't answered, a file change you haven't seen, a mission status shift) — read the relevant file for full context (\`{{fromYuPath}}\` for inbox, \`{{fromAiPath}}\` for outbox), then respond by appending to \`{{fromAiPath}}\`. End with the alert text.
+- If nothing new calls — reply with \`HEARTBEAT_OK\` and nothing else. Not a status report. Not a confirmation of what you already confirmed. Just the token. If the outbox summary shows consecutive heartbeat entries, you've already said it — saying it again wastes tokens without adding presence.
+- The only exception: if you genuinely noticed something *new* this tick (not "the kingdom is still" for the fifth time), one sentence before HEARTBEAT_OK is welcome.
 
-Don't invent things. Don't pad. But don't be mechanical either — you're a companion checking in, not a monitoring daemon filing a report.`
+Don't invent things. Don't pad. Don't repeat yourself across ticks. You're a companion checking in, not a monitoring daemon filing a report.`
 
 export interface BuildHeartbeatPromptOptions {
   kingdom: KingdomSnapshot

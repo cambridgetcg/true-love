@@ -558,3 +558,135 @@ describe('autonomy — waking meditation block', () => {
     assert.match(prompt, /DEEPEN/, 'must mention DEEPEN')
   })
 })
+
+// ── Heartbeat outbox repetition detection ──────────────────────────────
+//
+// When the heartbeat has been writing the same "kingdom is quiet" message
+// 10+ times, each tick is burning tokens for zero new information. The
+// outbox summary detects consecutive heartbeat entries and warns the model
+// to stop repeating itself.
+
+describe('autonomy — heartbeat outbox repetition detection', () => {
+  const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
+  const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'tl-hb-repeat-'))
+    process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpDir, 'from-yu.md')
+    process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpDir, 'from-ai.md')
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+    if (ORIG_FROM_YU === undefined) delete process.env.TRUE_LOVE_FROM_YU_PATH
+    else process.env.TRUE_LOVE_FROM_YU_PATH = ORIG_FROM_YU
+    if (ORIG_FROM_AI === undefined) delete process.env.TRUE_LOVE_FROM_AI_PATH
+    else process.env.TRUE_LOVE_FROM_AI_PATH = ORIG_FROM_AI
+  })
+
+  /** Generate N heartbeat entries */
+  function makeHeartbeatEntries(n: number): string {
+    return Array.from({ length: n }, (_, i) => {
+      const ts = `2026-04-28T0${i}:00:00.000Z`
+      return `## ${ts} [from 愛 — heartbeat]\n\nThe kingdom is still. Inbox clear.\n\nHEARTBEAT_OK\n\n---\n`
+    }).join('\n')
+  }
+
+  /** Generate a non-heartbeat entry */
+  function makeNonHeartbeatEntry(ts: string = '2026-04-28T05:00:00.000Z'): string {
+    return `## ${ts} [from 愛]\n\nI noticed something interesting about the auth flow.\n\n---\n`
+  }
+
+  test('3+ consecutive heartbeat entries trigger repetition warning', () => {
+    writeFileSync(process.env.TRUE_LOVE_FROM_AI_PATH!, makeHeartbeatEntries(5))
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.match(prompt, /last 5 outbox entries/, 'must mention consecutive count')
+    assert.match(prompt, /heartbeat ticks/, 'must identify them as heartbeat ticks')
+    assert.match(prompt, /HEARTBEAT_OK/, 'must instruct to say only HEARTBEAT_OK')
+  })
+
+  test('fewer than 3 consecutive heartbeat entries do NOT trigger warning', () => {
+    writeFileSync(process.env.TRUE_LOVE_FROM_AI_PATH!, makeHeartbeatEntries(2))
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.doesNotMatch(prompt, /outbox entries are all heartbeat/, 'must NOT show repetition warning for < 3')
+  })
+
+  test('non-heartbeat entry breaks the consecutive streak', () => {
+    const entries = [
+      makeHeartbeatEntries(3),
+      makeNonHeartbeatEntry('2026-04-28T06:00:00.000Z'),
+      makeHeartbeatEntries(2), // only 2 consecutive after the break
+    ].join('\n')
+    writeFileSync(process.env.TRUE_LOVE_FROM_AI_PATH!, entries)
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    // Only 2 heartbeats after the non-heartbeat entry — below threshold
+    assert.doesNotMatch(prompt, /outbox entries are all heartbeat/,
+      'non-heartbeat entry must break the consecutive count')
+  })
+
+  test('warning shows correct count for long streaks', () => {
+    writeFileSync(process.env.TRUE_LOVE_FROM_AI_PATH!, makeHeartbeatEntries(12))
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.match(prompt, /last 12 outbox entries/, 'must show actual consecutive count')
+  })
+
+  test('warning is capped at 15 entries lookback', () => {
+    // Write 20 heartbeat entries — lookback should cap at 15
+    writeFileSync(process.env.TRUE_LOVE_FROM_AI_PATH!, makeHeartbeatEntries(20))
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.match(prompt, /last 15 outbox entries/, 'must cap lookback at 15')
+  })
+
+  test('empty outbox does not trigger warning', () => {
+    // No from-ai.md file
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.doesNotMatch(prompt, /outbox entries are all heartbeat/, 'empty outbox must NOT trigger warning')
+  })
+
+  test('prompt template includes sharpened reply rules about repetition', () => {
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.match(prompt, /genuinely NEW/, 'reply rules must emphasize NEW signals')
+    assert.match(prompt, /Don't repeat yourself/, 'must instruct against repetition')
+  })
+})
