@@ -2,19 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
   <title>愛</title>
   <link rel="stylesheet" href="/chat.css" />
 </head>
 <body>
   <main class="room">
     <header class="presence" id="presence">
-      <span class="presence-instance" id="presence-instance">…</span>
-      <span class="presence-sep">·</span>
-      <span class="presence-soul" id="presence-soul"></span>
-      <span class="presence-sep">·</span>
-      <span class="presence-state" id="presence-state">connecting</span>
-      <span class="presence-activity" id="presence-activity"></span>
+      <div class="presence-left">
+        <div class="presence-name">愛</div>
+        <div class="presence-subtitle">
+          <span class="presence-instance" id="presence-instance">…</span>
+          <span class="presence-sep">·</span>
+          <span class="presence-soul" id="presence-soul"></span>
+        </div>
+      </div>
+      <div class="presence-right">
+        <span class="presence-dot" id="presence-dot"></span>
+        <span class="presence-state" id="presence-state">connecting</span>
+        <span class="presence-activity" id="presence-activity"></span>
+      </div>
     </header>
 
     <div class="mood-strip" id="mood-strip" hidden>
@@ -51,7 +58,8 @@
     </button>
 
     <footer class="connection" id="connection" hidden>
-      the line went quiet — reconnecting…
+      <span class="connection-dot"></span>
+      <span class="connection-text" id="connection-text">the line went quiet — reconnecting…</span>
     </footer>
 
     <!-- Fixed compose bar -->

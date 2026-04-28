@@ -34,23 +34,65 @@ html, body {
   overflow: hidden;
 }
 
-/* ── Presence strip ────────────────────────────────────────────── */
+/* ── Presence header (contact-style) ──────────────────────────── */
 
 .presence {
-  font-family: "SF Mono", "Menlo", "Consolas", monospace;
-  font-size: 12px;
-  color: var(--strip-text);
-  padding: 8px 4px 16px;
-  border-bottom: 1px solid var(--accent-soft);
-  margin-bottom: 24px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 8px 12px;
+  border-bottom: 1px solid var(--accent-soft);
+  margin-bottom: 16px;
+  transition: all 300ms ease;
+}
+
+.presence-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.presence-name {
+  font-family: Georgia, "Hoefler Text", "Crimson", serif;
+  font-size: 22px;
+  color: var(--text-ai);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.presence-subtitle {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 10px;
+  color: var(--strip-text);
+  opacity: 0.55;
+  display: flex;
+  gap: 5px;
   align-items: baseline;
-  transition: color 300ms ease;
+}
+
+.presence-sep { opacity: 0.4; }
+
+.presence-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.presence-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--strip-text);
+  opacity: 0.4;
+  transition: all 300ms ease;
+  margin-bottom: 2px;
 }
 
 .presence-state {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 13px;
   font-style: italic;
   color: var(--text-ai);
   transition: color 300ms ease, opacity 300ms ease;
@@ -62,14 +104,49 @@ html, body {
 .presence-state.asleep { color: var(--strip-text); opacity: 0.45; }
 .presence-state.gone { color: var(--rust); opacity: 0.6; }
 
+/* Status dot mirrors state */
+.presence-state.writing ~ .presence-dot,
+.presence.has-state-writing .presence-dot {
+  background: var(--accent);
+  opacity: 1;
+  animation: dot-pulse 1.5s ease-in-out infinite;
+}
+.presence.has-state-thinking .presence-dot {
+  background: var(--text-ai);
+  opacity: 0.7;
+  animation: dot-breathe 2.5s ease-in-out infinite;
+}
+.presence.has-state-at-rest .presence-dot {
+  background: var(--strip-text);
+  opacity: 0.4;
+}
+.presence.has-state-asleep .presence-dot {
+  background: var(--strip-text);
+  opacity: 0.2;
+}
+.presence.has-state-gone .presence-dot {
+  background: var(--rust);
+  opacity: 0.5;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes dot-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+
 .presence-activity {
-  flex-basis: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-style: italic;
   color: var(--text-ai);
-  opacity: 0.7;
+  opacity: 0.55;
   font-size: 11px;
-  padding-top: 4px;
   transition: opacity 300ms ease;
+  text-align: right;
 }
 
 .presence-activity:empty { display: none; }
@@ -282,6 +359,28 @@ html, body {
   text-align: center;
   padding: 48px 16px;
   opacity: 0.7;
+}
+
+/* ── Day separators ──────────────────────────────────────────── */
+
+.day-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+  margin: 4px 0;
+}
+
+.day-separator-text {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--strip-text);
+  background: var(--bg);
+  padding: 3px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(139, 58, 74, 0.12);
+  letter-spacing: 0.02em;
+  opacity: 0.65;
 }
 
 /* ── Bubbles ──────────────────────────────────────────────────── */
@@ -658,6 +757,24 @@ body.hide-journal .bubble.is-journal {
   text-align: center;
   padding: 8px;
   margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.connection-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rust);
+  animation: reconnect-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes reconnect-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
 }
 
 /* ── Typing indicator ────────────────────────────────────────── */
@@ -810,17 +927,108 @@ body.hide-journal .bubble.is-journal {
 /* ── Mobile ────────────────────────────────────────────────────── */
 
 @media (max-width: 700px) {
-  .room { padding: 12px 10px 0; }
+  .room {
+    padding: 8px 8px 0;
+    /* iOS safe area — accounts for notch and home indicator */
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+
   .bubble { max-width: 90%; }
   .bubble.from-ai .bubble-body { font-size: 15px; }
   .bubble.from-yu .bubble-body { font-size: 14px; }
-  .presence { font-size: 11px; padding: 6px 4px 10px; margin-bottom: 12px; }
-  .mood-strip { font-size: 10px; }
-  .session-bar { font-size: 11px; }
-  .compose { padding: 8px 12px 10px; }
-  .compose textarea { font-size: 16px; /* prevent iOS zoom */ }
-  .new-messages-pill { bottom: 75px; font-size: 12px; padding: 5px 12px; }
+
+  /* Compact presence header on mobile */
+  .presence {
+    padding: 8px 4px 8px;
+    margin-bottom: 8px;
+  }
+  .presence-name { font-size: 18px; }
+  .presence-subtitle { font-size: 9px; }
+  .presence-state { font-size: 12px; }
+  .presence-activity { font-size: 10px; }
+
+  .mood-strip {
+    font-size: 10px;
+    padding: 0 4px 8px;
+    margin-bottom: 6px;
+  }
+
+  .session-bar {
+    font-size: 11px;
+    padding: 4px 4px 8px;
+    margin-bottom: 8px;
+  }
+
+  /* Larger touch targets for buttons */
+  .session-toggle,
+  .session-new {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .journal-toggle {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  /* Compose bar with safe area */
+  .compose-bar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .compose {
+    padding: 8px 10px 8px;
+  }
+
+  .compose textarea {
+    font-size: 16px; /* prevent iOS zoom on focus */
+    min-height: 38px;
+    padding: 8px 14px;
+  }
+
+  #btn-wake {
+    width: 42px;
+    height: 42px;
+    font-size: 20px;
+  }
+
+  .compose-hint {
+    font-size: 10px;
+    padding: 2px 14px 0;
+  }
+
+  .new-messages-pill {
+    bottom: calc(75px + env(safe-area-inset-bottom));
+    font-size: 12px;
+    padding: 5px 12px;
+  }
+
+  /* Day separators tighter on mobile */
+  .day-separator { padding: 4px 0; margin: 2px 0; }
+  .day-separator-text { font-size: 11px; padding: 2px 10px; }
 
   /* Session sidebar as full-width sheet on mobile */
   .session-sidebar { width: 100%; max-width: 100%; }
+
+  /* Conversation tighter padding */
+  .conversation {
+    gap: 10px;
+    padding: 8px 0 70px;
+  }
+
+  /* Bubble spacing on mobile */
+  .bubble { padding: 8px 12px 5px; }
+  .bubble.grouped { margin-top: -6px; }
+}
+
+/* ── Very small screens (iPhone SE etc.) ─────────────────────── */
+
+@media (max-width: 380px) {
+  .room { padding: 4px 6px 0; }
+  .presence-name { font-size: 16px; }
+  .bubble { max-width: 95%; }
+  .bubble.from-ai .bubble-body { font-size: 14px; }
+  .bubble.from-yu .bubble-body { font-size: 13px; }
 }

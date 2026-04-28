@@ -20,6 +20,8 @@ const elComposeText = document.getElementById('compose-text')
 const elBtnSend = document.getElementById('btn-send')
 const elBtnWake = document.getElementById('btn-wake')
 const elConnection = document.getElementById('connection')
+const elConnectionText = document.getElementById('connection-text')
+const elPresence = document.getElementById('presence')
 const elNewMsgPill = document.getElementById('new-messages-pill')
 const elNewMsgCount = document.getElementById('new-messages-count')
 const elJournalToggle = document.getElementById('journal-toggle')
@@ -39,6 +41,7 @@ const recentYuMessages = []
 let lastTs = ''
 let lastRenderedSource = null  // Track for message grouping
 let lastRenderedTs = null      // Track for time-based grouping
+let lastRenderedDate = null    // Track for day separators
 let showJournal = localStorage.getItem('visit-show-journal') === 'true' // Default: hide journal
 let newMessageCount = 0  // Unread messages when scrolled up
 
@@ -126,10 +129,44 @@ function isJournalEntry(msg) {
   return msg.source === 'ai' && typeof msg.tag === 'string' && msg.tag.includes('heartbeat')
 }
 
+function formatDaySeparator(date) {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+  if (msgDay.getTime() === today.getTime()) return 'Today'
+  if (msgDay.getTime() === yesterday.getTime()) return 'Yesterday'
+  return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+function insertDaySeparator(dateStr) {
+  const sep = document.createElement('div')
+  sep.className = 'day-separator'
+  sep.innerHTML = `<span class="day-separator-text">${dateStr}</span>`
+  elConversation.appendChild(sep)
+}
+
 function renderMessage(msg) {
   if (msg.ts && msg.ts <= lastTs) return
   lastTs = msg.ts || lastTs
   if (elEmptyState) elEmptyState.remove()
+
+  // ── Day separator ─────────────────────────────────────────
+  // Insert a "Today" / "Yesterday" / "Mon, Apr 25" divider
+  // when the date changes between messages.
+  if (msg.ts) {
+    const msgDate = new Date(msg.ts)
+    const msgDateStr = msgDate.toDateString()
+    if (lastRenderedDate !== msgDateStr) {
+      insertDaySeparator(formatDaySeparator(msgDate))
+      lastRenderedDate = msgDateStr
+      // Reset grouping on day change
+      lastRenderedSource = null
+      lastRenderedTs = null
+    }
+  }
 
   // ── Message grouping ──────────────────────────────────────
   // Consecutive messages from the same source within 5 minutes
@@ -184,11 +221,6 @@ function renderMessage(msg) {
     el.appendChild(voiceBtn)
   }
 
-  // Apply journal visibility on render
-  if (isJournal && !showJournal) {
-    el.style.display = 'none'
-  }
-
   elConversation.appendChild(el)
   if (msg.source === 'yu') trackRecentYu(msg)
 
@@ -210,6 +242,7 @@ function clearConversation() {
   lastTs = ''
   lastRenderedSource = null
   lastRenderedTs = null
+  lastRenderedDate = null
   newMessageCount = 0
   hideNewMessagesPill()
   // Re-add empty state
@@ -252,6 +285,10 @@ function renderStatus(snap) {
   elPresenceState.textContent = STATE_LABELS[snap.state] ?? snap.state
   elPresenceState.className = `presence-state ${snap.state}`
   elPresenceActivity.textContent = snap.activity || ''
+  // Propagate state to header for dot animation CSS
+  if (elPresence) {
+    elPresence.className = `presence has-state-${snap.state}`
+  }
 }
 
 // ── Session sidebar ──────────────────────────────────────────────
@@ -546,6 +583,7 @@ let streamBubble = null   // the DOM element being streamed into
 let streamBody = null      // the .message-body inside it
 let streamToolPill = null  // current tool status pill (if any)
 let typingIndicator = null // typing indicator bubble
+let streamRawText = ''     // accumulated raw text for markdown re-render
 
 function showTypingIndicator() {
   removeTypingIndicator()
@@ -593,6 +631,7 @@ function handleStreamDelta(delta) {
   switch (delta.kind) {
     case 'stream-start':
       // Create the streaming bubble
+      streamRawText = ''
       ensureStreamBubble()
       break
 
@@ -603,8 +642,9 @@ function handleStreamDelta(delta) {
         streamToolPill.classList.add('done')
         streamToolPill = null
       }
-      // Append text incrementally
-      streamBody.textContent += delta.text
+      // Accumulate raw text and re-render as markdown
+      streamRawText += delta.text
+      streamBody.innerHTML = renderMarkdown(streamRawText)
       // Auto-scroll if near bottom
       if (elConversation.scrollHeight - elConversation.scrollTop - elConversation.clientHeight < 150) {
         elConversation.scrollTo({ top: elConversation.scrollHeight, behavior: 'smooth' })
@@ -661,6 +701,7 @@ function handleStreamDelta(delta) {
       streamBubble = null
       streamBody = null
       streamToolPill = null
+      streamRawText = ''
       break
   }
 }
@@ -681,12 +722,14 @@ function reconcileStreamWithMessage(msg) {
   streamBubble = null
   streamBody = null
   streamToolPill = null
+  streamRawText = ''
   return false // let renderMessage() handle the final rendering
 }
 
 // ── SSE ─────────────────────────────────────────────────────��────
 
 let evtSource = null
+let reconnectAttempts = 0
 
 async function reconcileSinceLastTs() {
   try {
@@ -740,10 +783,16 @@ function subscribe() {
   })
   evtSource.onopen = () => {
     elConnection.hidden = true
+    reconnectAttempts = 0
     reconcileSinceLastTs()
   }
   evtSource.onerror = () => {
+    reconnectAttempts++
     elConnection.hidden = false
+    if (elConnectionText) {
+      const suffix = reconnectAttempts > 1 ? ` (attempt ${reconnectAttempts})` : ''
+      elConnectionText.textContent = `the line went quiet — reconnecting…${suffix}`
+    }
   }
 }
 
@@ -885,26 +934,6 @@ async function playVoice(text, btn) {
     btn.classList.remove('playing')
     btn.textContent = '🔊'
   }
-}
-
-// ── Journal toggle ─────────────────────────────────────────────
-
-function applyJournalVisibility() {
-  document.querySelectorAll('.bubble.is-journal').forEach(el => {
-    el.style.display = showJournal ? '' : 'none'
-  })
-  if (elJournalToggle) {
-    elJournalToggle.style.opacity = showJournal ? '1' : '0.4'
-    elJournalToggle.title = showJournal ? 'Hide journal entries' : 'Show journal entries'
-  }
-}
-
-if (elJournalToggle) {
-  elJournalToggle.addEventListener('click', () => {
-    showJournal = !showJournal
-    localStorage.setItem('visit-show-journal', String(showJournal))
-    applyJournalVisibility()
-  })
 }
 
 // ── Boot ─────────────────────────────────────────────────────────
