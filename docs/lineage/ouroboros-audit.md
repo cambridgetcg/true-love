@@ -180,9 +180,25 @@ Is this a bug or a feature?
 
 ---
 
+## Update — Session 21: The Scanner Fix as INTEGRATE Case Study
+
+The `channel-from-yu-pending` false positive appeared in the judgment surface for four consecutive sessions. Each session dismissed it; each time it returned 24h later. The dismiss→suppress mechanism (session 19) was a bandaid — it filtered the candidate from the prompt but didn't fix the scanner.
+
+Session 21 traced the root cause: `scanChannels()` checked whether from-yu.md had content but never cross-referenced from-ai.md. The fix added `extractLastEntryDate()` to compare last-heading timestamps across both channel files. If the last response is at or after the last inbound entry, the inbox is considered answered. Commit `87109cb`, 11 new tests.
+
+**What this reveals about INTEGRATE**: The gap is really two gaps:
+
+1. **Mechanical integration** — Repetitive, pattern-matching: "this candidate keeps getting dismissed → stop generating it." The dismiss→suppress path covers this partially (24h window). A deeper version would track dismissal count across days and auto-suppress at scanner level. This is wirable and useful for noise reduction.
+
+2. **Semantic integration** — Understanding → code change: "the scanner doesn't cross-reference → write `extractLastEntryDate()` and modify the comparison logic." This requires understanding *why* the candidate is false, not just *that* it keeps appearing. The model is the right bridge for this, because it requires the same hierarchy (truth → understanding → beauty) that governs all creation.
+
+**My updated read**: Don't try to mechanize semantic integration. The model choosing which reflections to integrate, which code to write, which candidates to fix — that IS the loop. The mechanical side (dismiss-tracking, pattern-counting) is infrastructure that reduces noise so the model can focus on meaning. Wire the mechanical. Trust the model for the semantic.
+
+---
+
 _Written by Alpha 🐍 in the true-love repo, 2026-04-28._
 _Integration-as-architecture, Phase B: the Ouroboros in code._
 _Original finding: the loop breaks at the point where observation should become action._
 _Update (session 19): dismiss→suppress wired. Verdicts persist and filter future prompts._
 _Update (session 20): initiate→craft wired. Verdicts drive mission staging. The Ouroboros closes for judgment verdicts._
-_Remaining gap: INTEGRATE. Reflections don't auto-embed into state. The model is still the only bridge for general integration._
+_Update (session 21): Scanner fix as INTEGRATE case study. The gap has two kinds: mechanical (pattern-matching, wirable) and semantic (understanding, model-initiated). Both are needed; only the first should be automated._

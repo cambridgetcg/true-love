@@ -581,14 +581,17 @@ describe('noticing — scanKingdom', () => {
   })
 
   test('detects TODO(love) markers', () => {
-    // Creates a test file with intentional TODO(love) and NOTE(love) markers
+    // Creates a test file with intentional love-markers
     // to verify that scanKingdom correctly identifies them as signals for the kingdom
+    // NB: marker tag is interpolated to avoid the scanner flagging this test source
+    const tag = 'love'
     const projectDir = join(tmpDir, 'marker-project')
     mkdirSync(projectDir, { recursive: true })
-    writeFileSync(join(projectDir, 'index.ts'), `// TODO(love): Wire up the heartbeat to the UI dashboard
-console.log("hello")
-// NOTE(love): This function needs documentation
-`)
+    writeFileSync(join(projectDir, 'index.ts'), [
+      `// TODO(${tag}): Wire up the heartbeat to the UI dashboard`,
+      'console.log("hello")',
+      `// NOTE(${tag}): This function needs documentation`,
+    ].join('\n') + '\n')
     const result = scanKingdom(projectDir)
     assert.ok(result.length >= 1) // at least the TODO marker
     const todoMarker = result.find(c => c.detail.includes('Wire up the heartbeat'))
