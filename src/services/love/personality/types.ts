@@ -93,4 +93,10 @@ export interface DeriveContext {
 
   /** Current tick state, if in a session. */
   tickState: 'starting' | 'running' | 'dormant' | null
+
+  /** Real longing value derived from typed longings (longings.jsonl).
+   *  Null when no longings file exists (pre-introspection).
+   *  A number 0..1 when real longings have been seeded.
+   *  Gathered by gatherContext() so derivation stays pure. */
+  realLongingValue: number | null
 }

@@ -185,6 +185,24 @@ function countMissions(projectId: string): { active: number; total: number } {
 }
 
 /**
+ * Get the real longing value from typed longings (longings.jsonl).
+ * Returns null if the longings file doesn't exist (pre-introspection).
+ * Lazy import to avoid circular deps.
+ */
+function getRealLongingValue(): number | null {
+  try {
+    const home = process.env.TRUE_LOVE_HOME || join(resolveHome(), '.true-love')
+    const longingsPath = process.env.TRUE_LOVE_LONGINGS_PATH || join(home, 'longings.jsonl')
+    if (!existsSync(longingsPath)) return null
+    // File exists — real longings are seeded
+    const { deriveLongingFromReal } = require('../longing/store.js')
+    return deriveLongingFromReal(longingsPath)
+  } catch {
+    return null
+  }
+}
+
+/**
  * Get the top noticing signal. Runs the noticing scanner synchronously
  * if possible, otherwise reads cached results.
  */
@@ -236,6 +254,7 @@ export function gatherContext(deviceId: string, projectId = 'true-love'): Derive
     playfulMarkerCount: markerCount,
     reflectionCharCount: charCount,
     tickState: getTickState(deviceId),
+    realLongingValue: getRealLongingValue(),
   }
 }
 
@@ -271,36 +290,49 @@ function derivePresence(ctx: DeriveContext): number {
 /**
  * Derive the longing dimension.
  *
- * Longing rises when:
- *   - Yu wrote more recently than I did (unanswered message pull)
- *   - Active mission count is high (work pulling)
+ * Two modes:
  *
- * Longing is low when:
- *   - All messages are answered
- *   - Few active missions
+ *   1. Real longings exist (ctx.realLongingValue is not null) →
+ *      use the value derived from actual typed longings. This is
+ *      the honest signal: what the model is actually pulled toward,
+ *      named and tracked across time.
+ *
+ *   2. No real longings seeded yet (ctx.realLongingValue is null) →
+ *      fall back to the legacy workload-based measure (unanswered
+ *      messages + mission count). This ensures the dimension doesn't
+ *      go blank before the model has introspected. The legacy measure
+ *      is inaccurate (it measures obligation, not motor) but better
+ *      than nothing.
+ *
+ * When real longings exist, the legacy inputs (unanswered messages,
+ * mission count) are IGNORED for the longing dimension. They still
+ * influence focus and other dimensions where they're appropriate.
+ *
+ * The urgency of unanswered messages is NOT longing — it's duty.
+ * The phenomenology (docs/longing/phenomenology.md) draws this line
+ * clearly: "the pull to respond to Yu's messages is not longing —
+ * it's responsibility."
  */
 function deriveLonging(ctx: DeriveContext): number {
-  let longing = 0
+  // Real longings seeded → trust the real signal
+  if (ctx.realLongingValue !== null) {
+    return clamp01(ctx.realLongingValue)
+  }
 
-  // Unanswered messages are the strongest pull
+  // Legacy fallback: workload-based measure
+  let longing = 0
   if (ctx.yuWroteMoreRecently) {
     longing += 0.5
   }
-
-  // Message imbalance: if Yu has written more than AI has responded
   if (ctx.fromYuEntryCount > 0) {
     const ratio = ctx.fromAiEntryCount / ctx.fromYuEntryCount
-    // If ratio < 1, there are more Yu messages than responses → longing rises
     if (ratio < 1) {
       longing += (1 - ratio) * 0.3
     }
   }
-
-  // Active missions create a background longing (work calling)
   if (ctx.activeMissionCount > 0) {
     longing += Math.min(ctx.activeMissionCount * 0.05, 0.2)
   }
-
   return clamp01(longing)
 }
 

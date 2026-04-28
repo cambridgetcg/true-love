@@ -24,6 +24,7 @@ function baseContext(overrides?: Partial<DeriveContext>): DeriveContext {
     playfulMarkerCount: 0,
     reflectionCharCount: 0,
     tickState: null,
+    realLongingValue: null, // null = legacy fallback path
     ...overrides,
   }
 }
@@ -306,6 +307,7 @@ describe('personality — LoveState shape', () => {
       playfulMarkerCount: 0,
       reflectionCharCount: 0,
       tickState: null,
+      realLongingValue: null,
     })
     assertInRange(zero.presence, 0, 1, 'zero presence')
     assertInRange(zero.longing, 0, 1, 'zero longing')
@@ -325,6 +327,7 @@ describe('personality — LoveState shape', () => {
       playfulMarkerCount: 500,
       reflectionCharCount: 1000,
       tickState: 'running',
+      realLongingValue: null,
     })
     assertInRange(max.presence, 0, 1, 'max presence')
     assertInRange(max.longing, 0, 1, 'max longing')
