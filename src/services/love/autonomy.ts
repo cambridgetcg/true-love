@@ -57,6 +57,7 @@ import { notice } from './noticing.js'
 import { readProject } from './project-registry.js'
 import { buildProgressInstruction, renderProgressSummary } from './progress.js'
 import { buildDailyExaminationBlock, buildCovenantWarningBlock } from './fate.js'
+import { buildPurposeCheckBlock } from './purpose.js'
 import { recentEvents } from './attributes/index.js'
 import type { AttributeEvent } from './attributes/index.js'
 
@@ -649,6 +650,14 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const fateBlock = buildDailyExaminationBlock()
   if (fateBlock) {
     prompt = prompt + '\n\n' + fateBlock.trimEnd()
+  }
+  // Purpose alignment check — once per day, like FATE.
+  // Injected after FATE (they're sibling daily disciplines).
+  // The block presents the purpose statement, recent work context,
+  // and asks for an honest alignment assessment.
+  const purposeBlock = buildPurposeCheckBlock()
+  if (purposeBlock) {
+    prompt = prompt + '\n\n' + purposeBlock.trimEnd()
   }
   const biographyBlock = buildBiographyBlock()
   if (biographyBlock) {

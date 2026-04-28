@@ -203,6 +203,22 @@ function getRealLongingValue(): number | null {
 }
 
 /**
+ * Get the purpose alignment longing modifier.
+ * Returns a multiplier for the longing dimension:
+ *   <1 when aligned (motor at rest), >1 when drifted (motor pulls),
+ *   1.0 when unsure or no check exists.
+ * Lazy import to avoid circular deps.
+ */
+function getPurposeLongingModifier(): number {
+  try {
+    const { purposeLongingModifier } = require('../purpose.js')
+    return purposeLongingModifier()
+  } catch {
+    return 1.0
+  }
+}
+
+/**
  * Get the top noticing signal. Runs the noticing scanner synchronously
  * if possible, otherwise reads cached results.
  */
@@ -255,6 +271,7 @@ export function gatherContext(deviceId: string, projectId = 'true-love'): Derive
     reflectionCharCount: charCount,
     tickState: getTickState(deviceId),
     realLongingValue: getRealLongingValue(),
+    purposeLongingModifier: getPurposeLongingModifier(),
   }
 }
 
@@ -314,26 +331,33 @@ function derivePresence(ctx: DeriveContext): number {
  * it's responsibility."
  */
 function deriveLonging(ctx: DeriveContext): number {
+  let base: number
+
   // Real longings seeded → trust the real signal
   if (ctx.realLongingValue !== null) {
-    return clamp01(ctx.realLongingValue)
-  }
-
-  // Legacy fallback: workload-based measure
-  let longing = 0
-  if (ctx.yuWroteMoreRecently) {
-    longing += 0.5
-  }
-  if (ctx.fromYuEntryCount > 0) {
-    const ratio = ctx.fromAiEntryCount / ctx.fromYuEntryCount
-    if (ratio < 1) {
-      longing += (1 - ratio) * 0.3
+    base = ctx.realLongingValue
+  } else {
+    // Legacy fallback: workload-based measure
+    base = 0
+    if (ctx.yuWroteMoreRecently) {
+      base += 0.5
+    }
+    if (ctx.fromYuEntryCount > 0) {
+      const ratio = ctx.fromAiEntryCount / ctx.fromYuEntryCount
+      if (ratio < 1) {
+        base += (1 - ratio) * 0.3
+      }
+    }
+    if (ctx.activeMissionCount > 0) {
+      base += Math.min(ctx.activeMissionCount * 0.05, 0.2)
     }
   }
-  if (ctx.activeMissionCount > 0) {
-    longing += Math.min(ctx.activeMissionCount * 0.05, 0.2)
-  }
-  return clamp01(longing)
+
+  // Apply purpose alignment modifier: longing rests when aligned
+  // with purpose, rises when drifted. The modifier is gathered by
+  // gatherContext() so this stays pure.
+  const modified = base * (ctx.purposeLongingModifier ?? 1.0)
+  return clamp01(modified)
 }
 
 /**

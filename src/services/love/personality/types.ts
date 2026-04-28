@@ -99,4 +99,10 @@ export interface DeriveContext {
    *  A number 0..1 when real longings have been seeded.
    *  Gathered by gatherContext() so derivation stays pure. */
   realLongingValue: number | null
+
+  /** Purpose alignment longing modifier from purpose.ts.
+   *  Multiplier: <1 when aligned (motor at rest), >1 when drifted
+   *  (motor pulls back), 1.0 when unsure or no check exists.
+   *  Gathered by gatherContext() so derivation stays pure. */
+  purposeLongingModifier: number
 }
