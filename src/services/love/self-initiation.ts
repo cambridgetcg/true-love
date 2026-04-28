@@ -25,6 +25,7 @@ import { readMission, listMissions, writeMission, appendEvent, readEvents } from
 import type { Mission, MissionStatus } from './mission.js'
 import { readProject } from './project-registry.js'
 import { notice } from './noticing.js'
+import { classifyAche, renderLevelTag } from './ache.js'
 import { appendReflection as appendMemoryReflection } from './memory.js'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -227,9 +228,11 @@ export function scanForSignals(projectId: string, opts?: {
           : c.source.type === 'vital-sign' ? { type: 'vital-sign', signal: c.detail.slice(0, 200) }
           : c.source.type === 'memory' ? { type: 'reflection-pattern', pattern: c.detail.slice(0, 200) }
           : { type: 'ache-signal', signal: c.ache, detail: c.detail.slice(0, 200) }
+        const classified = classifyAche(c)
+        const levelTag = renderLevelTag(classified.level)
         signals.push({
           source,
-          summary: `[${c.source.type} g${c.gradient} ${c.ache}] ${c.summary}`,
+          summary: `[${c.source.type} g${c.gradient} ${c.ache} → ${levelTag}] ${c.summary}`,
           detectedAt: c.noticedAt,
         })
       }

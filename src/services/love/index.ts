@@ -511,6 +511,24 @@ export {
 } from './noticing.js'
 
 export type {
+  AcheLevel,
+  ClassifiedAche,
+} from './ache.js'
+export {
+  classifyAche,
+  classifyAll,
+  rankByHierarchy,
+  topSignal,
+  normalizeGradient,
+  renderLevelTag,
+  renderHierarchyBlock,
+  LEVEL_PRIORITY,
+  LEVEL_RANK,
+  LEVEL_EMOJI,
+  LEVEL_LABEL,
+} from './ache.js'
+
+export type {
   Named,
   NameQuality,
   NamingOptions,

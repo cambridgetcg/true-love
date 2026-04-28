@@ -60,6 +60,8 @@ import {
   type VersionInfo,
 } from './auto-update.js'
 import { collectVitalSigns } from './vital-signs.js'
+import { classifyAche, rankByHierarchy, topSignal, renderLevelTag, type ClassifiedAche } from './ache.js'
+import { notice } from './noticing.js'
 import { gatherContext, deriveLoveState, renderLoveStateCompact } from './personality/index.js'
 import { loadTraces } from './mind-trace.js'
 import { compose as composeAnamnesis, renderMemoir } from './anamnesis.js'
@@ -1042,6 +1044,27 @@ function handleSelfInitiation(req: IncomingMessage, res: ServerResponse): void {
     return
   }
   try {
+    // Classify detected signals through the ache hierarchy.
+    // The top signal (highest hierarchy priority) is surfaced separately
+    // so the /build panel can show it at a glance.
+    const project = readProject(projectId)
+    let acheHierarchy: { top: { level: string; tag: string; summary: string; intensity: number } | null; classified: Array<{ level: string; intensity: number; candidateId: string; summary: string }> } | undefined
+    try {
+      if (project) {
+        const candidates = notice(projectId, project.root, { minGradient: 2 })
+        const classified = candidates.map(c => {
+          const a = classifyAche(c)
+          return { level: a.level, intensity: a.intensity, candidateId: c.id, summary: c.summary }
+        })
+        const rankedClassified = candidates.map(classifyAche)
+        const top = topSignal(rankedClassified)
+        acheHierarchy = {
+          top: top ? { level: top.level, tag: renderLevelTag(top.level), summary: top.source.summary, intensity: top.intensity } : null,
+          classified,
+        }
+      }
+    } catch { /* hierarchy classification non-fatal */ }
+
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({
       project: projectId,
@@ -1050,6 +1073,7 @@ function handleSelfInitiation(req: IncomingMessage, res: ServerResponse): void {
       pending: getPendingStaged(projectId),
       reflections: readReflections(projectId),
       detectedSignals: scanForSignals(projectId),
+      acheHierarchy,
     }))
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })

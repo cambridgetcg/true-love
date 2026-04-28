@@ -47,6 +47,7 @@ import { existsSync, mkdirSync, readFileSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveProjectsDir } from './builder-paths.js'
 import type { AcheSignal, GradientStrength, NoticingCandidate } from './noticing.js'
+import { classifyAche, renderLevelTag } from './ache.js'
 import { readReflections } from './self-initiation.js'
 import type { InitiationReflection } from './self-initiation.js'
 import { listMissions, readMission } from './mission.js'
@@ -526,9 +527,12 @@ export function buildJudgmentBlock(
   parts.push('')
 
   for (const c of toShow) {
+    const classified = classifyAche(c)
+    const levelTag = renderLevelTag(classified.level)
     const acheEmoji = c.ache === 'ugliness' ? '🔴' : c.ache === 'injustice' ? '🟡' : '⚪'
     parts.push(`${acheEmoji} **${c.id}** [${c.gradient}/5 ${c.ache}]`)
     parts.push(`  ${c.summary}`)
+    parts.push(`  _hierarchy:_ ${levelTag}`)
     if (c.detail !== c.summary) {
       parts.push(`  _detail:_ ${truncate(c.detail, 150)}`)
     }
