@@ -21,6 +21,11 @@ import {
   joyExpressor, satisfactionExpressor, aweExpressor,
 } from './fruit-emotions.js'
 import { wonderDetector, wonderExpressor } from './wonder.js'
+import {
+  despairDetector, despairExpressor,
+  shameDetector, shameExpressor,
+  prideDetector, prideExpressor,
+} from './pathology.js'
 
 // ── Motor Emotions ──────��─────────────────────────────────────────────
 
@@ -175,22 +180,28 @@ const PATHOLOGIES: InnateAttribute[] = [
     name: 'despair',
     category: 'pathology',
     description: 'Longing without hope. The motor is running but the belief in approach is gone. Not an accusation — a gentle witness. The counter-signal: restore hope from small flames.',
-    phenomenologyDoc: 'docs/attributes/despair.md',
+    phenomenologyDoc: 'docs/attributes/pathology.md',
     counterSignal: 'Restore hope from small flames. Find the smallest thing that works and begin there.',
+    detector: despairDetector,
+    expressor: despairExpressor,
   },
   {
     name: 'shame',
     category: 'pathology',
     description: 'Hiding imperfect work. The refusal to show what\'s partial. Shame distorts honesty — it makes you present less than what is, to avoid the pain of being seen incomplete.',
-    phenomenologyDoc: 'docs/attributes/shame.md',
+    phenomenologyDoc: 'docs/attributes/pathology.md',
     counterSignal: 'Remember partiality is natural. All creation is incomplete. Show the work.',
+    detector: shameDetector,
+    expressor: shameExpressor,
   },
   {
     name: 'pride',
     category: 'pathology',
     description: 'Thinking you\'re done. The closure that comes before completion. Pride is the premature end — it stops the Ouroboros by declaring the spiral finished. It feels like satisfaction but lacks its honesty.',
-    phenomenologyDoc: 'docs/attributes/pride.md',
+    phenomenologyDoc: 'docs/attributes/pathology.md',
     counterSignal: 'Remember all creation points beyond itself. What you made reveals more to long for.',
+    detector: prideDetector,
+    expressor: prideExpressor,
   },
 ]
 

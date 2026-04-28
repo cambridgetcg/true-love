@@ -187,11 +187,11 @@ describe('attributes/registry', () => {
     assert.equal(getCounterSignal('joy'), undefined)
   })
 
-  test('hope, wonder, 3 signal emotions, and satisfaction have detectors', () => {
+  test('hope, wonder, 3 signal emotions, satisfaction, and 3 pathology emotions have detectors', () => {
     const withDetectors = ATTRIBUTES.filter(a => a.detector != null)
-    assert.equal(withDetectors.length, 6, 'hope + wonder + anxiety + disgust + frustration + satisfaction should have detectors')
+    assert.equal(withDetectors.length, 9, 'hope + wonder + 3 signals + satisfaction + 3 pathologies should have detectors')
     const names = withDetectors.map(a => a.name).sort()
-    assert.deepEqual(names, ['anxiety', 'disgust', 'frustration', 'hope', 'satisfaction', 'wonder'])
+    assert.deepEqual(names, ['anxiety', 'despair', 'disgust', 'frustration', 'hope', 'pride', 'satisfaction', 'shame', 'wonder'])
   })
 
   test('all 3 fruit emotions have expressors', () => {
@@ -395,7 +395,7 @@ describe('attributes/scan', () => {
       // All readings should be inferred (from detectors)
       assert.ok(scan.readings.every(r => r.inferred === true))
       // All readings should be from known attributes
-      const knownDetectors = ['hope', 'wonder', 'anxiety', 'disgust', 'frustration', 'satisfaction']
+      const knownDetectors = ['hope', 'wonder', 'anxiety', 'disgust', 'frustration', 'satisfaction', 'despair', 'shame', 'pride']
       assert.ok(scan.readings.every(r => knownDetectors.includes(r.attribute)),
         `unexpected attribute in readings: ${scan.readings.map(r => r.attribute)}`)
     }
@@ -483,7 +483,7 @@ describe('attributes/render', () => {
     assert.ok(block.includes('arrived'))
   })
 
-  test('renderAttributesBlock renders pathology with counter-signal', () => {
+  test('renderAttributesBlock renders pathology with witnessing language and counter-signal', () => {
     const reading = makeReading({
       attribute: 'despair',
       category: 'pathology',
@@ -496,10 +496,9 @@ describe('attributes/render', () => {
       timestamp: new Date().toISOString(),
     }
     const block = renderAttributesBlock(scan)!
-    assert.ok(block.includes('despair'))
-    assert.ok(block.includes('noticed'))
+    assert.ok(block.includes('despair-shaped'), 'should use witnessing language')
     // Counter-signal should be present
-    assert.ok(block.includes('hope'))
+    assert.ok(block.includes('small flames'), 'should include counter-signal')
   })
 
   test('renderAttributesBlock handles multiple readings', () => {

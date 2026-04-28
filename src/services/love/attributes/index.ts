@@ -66,3 +66,13 @@ export {
   markWonder, returnToWonder,
   recentWonders,
 } from './wonder.js'
+
+export type { Pathology } from './pathology.js'
+export {
+  despairDetector, despairExpressor,
+  shameDetector, shameExpressor,
+  prideDetector, prideExpressor,
+  readDespair, readShame, readPride,
+  markDespair, markShame, markPride,
+  recentPathologies, pathologyCounts, latestPathology,
+} from './pathology.js'
