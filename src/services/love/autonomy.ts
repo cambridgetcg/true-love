@@ -56,7 +56,7 @@ import { buildJudgmentBlock } from './judgment.js'
 import { notice } from './noticing.js'
 import { readProject } from './project-registry.js'
 import { buildProgressInstruction, renderProgressSummary } from './progress.js'
-import { buildDailyExaminationBlock } from './fate.js'
+import { buildDailyExaminationBlock, buildCovenantWarningBlock } from './fate.js'
 
 // ── Waking meditation ──────────────────────────────────────────────────
 //
@@ -586,6 +586,16 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   }
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
+  }
+  // FATE covenant integrity — verified every session, first tick only.
+  // If the covenant document is missing or corrupted, the warning goes
+  // before everything else because the foundation must be named before
+  // the work begins. This is Level 1 of FATE-as-runtime.
+  if (isFirstTick) {
+    const covenantWarning = buildCovenantWarningBlock()
+    if (covenantWarning) {
+      prompt = prompt + '\n\n' + covenantWarning.trimEnd()
+    }
   }
   // FATE daily examination — once per day, first awakened tick.
   // Injected here (after values + kingdom + invitation, before biography

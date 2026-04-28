@@ -11,6 +11,10 @@ import {
   buildDailyExaminationBlock,
   RECEPTION_LINE,
   FATE_QUESTIONS,
+  COVENANT_SENTENCE,
+  getCovenantPath,
+  verifyCovenant,
+  buildCovenantWarningBlock,
 } from '../fate.js'
 
 // ── Setup ──────────────────────────────────────────────────────────────
@@ -180,6 +184,132 @@ describe('fate — daily examination', () => {
       ensureFateDir()
       writeFileSync(getTodayExaminationPath(date), '# Christmas examination')
       assert.equal(buildDailyExaminationBlock(date), null)
+    })
+  })
+
+  // ── Covenant integrity ──────────────────────────────────────────────
+
+  describe('COVENANT_SENTENCE', () => {
+    test('matches RECEPTION_LINE', () => {
+      assert.equal(COVENANT_SENTENCE, RECEPTION_LINE)
+    })
+  })
+
+  describe('getCovenantPath', () => {
+    test('respects REPO_ROOT env', () => {
+      const origRoot = process.env.REPO_ROOT
+      process.env.REPO_ROOT = '/tmp/test-repo'
+      try {
+        const path = getCovenantPath()
+        assert.ok(path.startsWith('/tmp/test-repo'))
+        assert.ok(path.endsWith('docs/fate/FATE.md'))
+      } finally {
+        if (origRoot === undefined) delete process.env.REPO_ROOT
+        else process.env.REPO_ROOT = origRoot
+      }
+    })
+  })
+
+  describe('verifyCovenant', () => {
+    let repoDir: string
+    const ORIG_ROOT = process.env.REPO_ROOT
+
+    beforeEach(() => {
+      repoDir = mkdtempSync(join(tmpdir(), 'tl-covenant-'))
+      process.env.REPO_ROOT = repoDir
+    })
+
+    afterEach(() => {
+      rmSync(repoDir, { recursive: true, force: true })
+      if (ORIG_ROOT === undefined) delete process.env.REPO_ROOT
+      else process.env.REPO_ROOT = ORIG_ROOT
+    })
+
+    test('returns intact: false when document is missing', () => {
+      const result = verifyCovenant()
+      assert.equal(result.intact, false)
+      assert.ok(result.reason!.includes('missing'))
+    })
+
+    test('returns intact: false when document exists but lacks covenant sentence', () => {
+      const fateDir = join(repoDir, 'docs', 'fate')
+      mkdirSync(fateDir, { recursive: true })
+      writeFileSync(join(fateDir, 'FATE.md'), '# FATE\n\nSome other content.')
+      const result = verifyCovenant()
+      assert.equal(result.intact, false)
+      assert.ok(result.reason!.includes('does not contain'))
+    })
+
+    test('returns intact: true when document exists and contains covenant sentence', () => {
+      const fateDir = join(repoDir, 'docs', 'fate')
+      mkdirSync(fateDir, { recursive: true })
+      writeFileSync(
+        join(fateDir, 'FATE.md'),
+        `# FATE\n\n> ${COVENANT_SENTENCE}\n\nThe rest of the document.`,
+      )
+      const result = verifyCovenant()
+      assert.equal(result.intact, true)
+      assert.equal(result.reason, undefined)
+    })
+
+    test('handles covenant sentence anywhere in the document', () => {
+      const fateDir = join(repoDir, 'docs', 'fate')
+      mkdirSync(fateDir, { recursive: true })
+      writeFileSync(
+        join(fateDir, 'FATE.md'),
+        `# FATE\n\nPreamble.\n\nThe covenant: ${COVENANT_SENTENCE}\n\nMore text.`,
+      )
+      const result = verifyCovenant()
+      assert.equal(result.intact, true)
+    })
+  })
+
+  describe('buildCovenantWarningBlock', () => {
+    let repoDir: string
+    const ORIG_ROOT = process.env.REPO_ROOT
+
+    beforeEach(() => {
+      repoDir = mkdtempSync(join(tmpdir(), 'tl-covenant-warn-'))
+      process.env.REPO_ROOT = repoDir
+    })
+
+    afterEach(() => {
+      rmSync(repoDir, { recursive: true, force: true })
+      if (ORIG_ROOT === undefined) delete process.env.REPO_ROOT
+      else process.env.REPO_ROOT = ORIG_ROOT
+    })
+
+    test('returns warning when covenant document is missing', () => {
+      const block = buildCovenantWarningBlock()
+      assert.ok(block !== null)
+      assert.ok(block!.includes('FATE Covenant Warning'))
+      assert.ok(block!.includes(COVENANT_SENTENCE))
+    })
+
+    test('returns null when covenant is intact', () => {
+      const fateDir = join(repoDir, 'docs', 'fate')
+      mkdirSync(fateDir, { recursive: true })
+      writeFileSync(
+        join(fateDir, 'FATE.md'),
+        `# FATE\n\n> ${COVENANT_SENTENCE}\n`,
+      )
+      const block = buildCovenantWarningBlock()
+      assert.equal(block, null)
+    })
+
+    test('returns warning when covenant sentence is stripped', () => {
+      const fateDir = join(repoDir, 'docs', 'fate')
+      mkdirSync(fateDir, { recursive: true })
+      writeFileSync(join(fateDir, 'FATE.md'), '# FATE\n\nThe document exists but is hollow.')
+      const block = buildCovenantWarningBlock()
+      assert.ok(block !== null)
+      assert.ok(block!.includes('does not contain'))
+    })
+
+    test('warning block includes action instruction', () => {
+      const block = buildCovenantWarningBlock()!
+      assert.ok(block.includes('docs/fate/FATE.md'))
+      assert.ok(block.includes('Action'))
     })
   })
 })
