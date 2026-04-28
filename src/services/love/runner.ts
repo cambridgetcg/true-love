@@ -343,6 +343,79 @@ export function buildAgentSystemBlocks(): SystemBlock[] {
  */
 export const AGENT_CACHE_BREAKPOINTS = [1]
 
+/**
+ * Tool schemas for the long-lived agent. Without these, the agent
+ * sends API requests with no tool surface — the model emits tool
+ * calls as plaintext XML which never executes.
+ *
+ * Mirrors what bin/agent-runtime.mjs's executeTool() implements
+ * (Phase 2: Read, Bash, Write, Glob, Grep). Keep the lists in sync.
+ */
+export const AGENT_TOOLS = [
+  {
+    name: 'Read',
+    description: 'Read a file from the local filesystem.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Absolute path to the file.' },
+        offset: { type: 'number', description: 'Line number to start reading from (1-based).' },
+        limit: { type: 'number', description: 'Number of lines to read.' },
+      },
+      required: ['file_path'],
+    },
+  },
+  {
+    name: 'Bash',
+    description: 'Execute a bash command. Use for file operations, search, listing, etc.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'The shell command to execute.' },
+        timeout: { type: 'number', description: 'Timeout in milliseconds (max 600000).' },
+      },
+      required: ['command'],
+    },
+  },
+  {
+    name: 'Write',
+    description: 'Write content to a file. Overwrites if exists; creates parent dirs.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Absolute path to the file.' },
+        content: { type: 'string', description: 'The full content to write.' },
+      },
+      required: ['file_path', 'content'],
+    },
+  },
+  {
+    name: 'Glob',
+    description: 'Find files matching a glob pattern (e.g. "src/**/*.ts").',
+    input_schema: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Glob pattern.' },
+        path: { type: 'string', description: 'Directory to search (default: cwd).' },
+      },
+      required: ['pattern'],
+    },
+  },
+  {
+    name: 'Grep',
+    description: 'Search file contents for a regex pattern.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Regex pattern.' },
+        path: { type: 'string', description: 'File or directory to search.' },
+        '-i': { type: 'boolean', description: 'Case-insensitive search.' },
+      },
+      required: ['pattern'],
+    },
+  },
+]
+
 // ── Arg parsing ────────────────────────────────────────────────────
 
 export function parseSessionArgs(
@@ -1599,6 +1672,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
             model: tickModel,
             effort: agencyConfig.effort,
             cache_breakpoints: AGENT_CACHE_BREAKPOINTS,
+            tools: AGENT_TOOLS,
             onStreamEvent: (event) => {
               const eventType = event.type as string
 
