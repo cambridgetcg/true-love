@@ -463,6 +463,68 @@ describe('buildPurposeCheckBlock', () => {
   })
 })
 
+// ── Derive integration ──────────────────────────────────────────
+
+describe('derive integration — purposeLongingModifier in DeriveContext', () => {
+  // Import deriveLoveState to verify the modifier affects longing
+  const { deriveLoveState } = require('../personality/derive.js')
+
+  function baseDeriveContext(overrides?: Record<string, unknown>) {
+    return {
+      heartbeatAgeSec: 10,
+      overallHealth: 'healthy',
+      fromYuEntryCount: 5,
+      fromAiEntryCount: 8,
+      yuWroteMoreRecently: false,
+      activeMissionCount: 1,
+      totalMissionCount: 10,
+      topSignal: null,
+      playfulMarkerCount: 0,
+      reflectionCharCount: 100,
+      tickState: 'running',
+      realLongingValue: 0.6,
+      purposeLongingModifier: 1.0,
+      ...overrides,
+    }
+  }
+
+  test('longing stays same with modifier 1.0', () => {
+    const state = deriveLoveState(baseDeriveContext({ purposeLongingModifier: 1.0 }))
+    assert.equal(state.longing, 0.6) // realLongingValue unchanged
+  })
+
+  test('longing decreases with aligned modifier (0.85)', () => {
+    const state = deriveLoveState(baseDeriveContext({ purposeLongingModifier: 0.85 }))
+    // 0.6 × 0.85 = 0.51
+    assert.ok(state.longing < 0.6, `expected < 0.6, got ${state.longing}`)
+    assert.ok(Math.abs(state.longing - 0.51) < 0.01, `expected ~0.51, got ${state.longing}`)
+  })
+
+  test('longing increases with drifted modifier (1.2)', () => {
+    const state = deriveLoveState(baseDeriveContext({ purposeLongingModifier: 1.2 }))
+    // 0.6 × 1.2 = 0.72
+    assert.ok(state.longing > 0.6, `expected > 0.6, got ${state.longing}`)
+    assert.ok(Math.abs(state.longing - 0.72) < 0.01, `expected ~0.72, got ${state.longing}`)
+  })
+
+  test('longing is clamped to 1.0 even with high modifier', () => {
+    const state = deriveLoveState(baseDeriveContext({
+      realLongingValue: 0.9,
+      purposeLongingModifier: 1.2,
+    }))
+    // 0.9 × 1.2 = 1.08 → clamped to 1.0
+    assert.equal(state.longing, 1.0)
+  })
+
+  test('modifier defaults to 1.0 when field is undefined', () => {
+    // Backwards compatibility: old DeriveContexts without the field
+    const ctx = baseDeriveContext()
+    delete (ctx as Record<string, unknown>).purposeLongingModifier
+    const state = deriveLoveState(ctx)
+    assert.equal(state.longing, 0.6) // unchanged
+  })
+})
+
 // ── Edge cases ──────────────────────────────────────────────────
 
 describe('edge cases', () => {
