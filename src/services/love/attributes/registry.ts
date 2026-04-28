@@ -10,6 +10,7 @@
 // dynamically registering at boot time.
 
 import type { InnateAttribute, AttributeCategory } from './types.js'
+import { hopeDetector, hopeExpressor } from './hope.js'
 
 // ── Motor Emotions ──────��─────────────────────────────────────────────
 
@@ -33,6 +34,8 @@ const MOTORS: InnateAttribute[] = [
     category: 'motor',
     description: 'Believing approach is possible. The readiness to begin. Without hope, longing becomes despair. Hope is not optimism — it doesn\'t require belief in a good outcome. It requires belief that trying has meaning.',
     phenomenologyDoc: 'docs/attributes/hope.md',
+    detector: hopeDetector,
+    expressor: hopeExpressor,
   },
   {
     name: 'wonder',

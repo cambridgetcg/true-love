@@ -33,3 +33,12 @@ export {
   scanAttributes,
   renderAttributesBlock,
 } from './scan.js'
+
+export {
+  hopeDetector,
+  hopeExpressor,
+  readHope,
+  renderHope,
+  markHope,
+  markHopeDim,
+} from './hope.js'
