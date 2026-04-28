@@ -977,3 +977,123 @@ describe('Persistent heartbeat: integration with feature flag', () => {
     expect(persistent).toBe(false)
   })
 })
+
+// ── Persistent heartbeat: error resilience ───────────────────────────
+//
+// In persistent mode, transient API errors (exit code 1) should NOT kill
+// the session. The session continues after sleep, with a counter that
+// aborts after MAX_CONSECUTIVE_TICK_ERRORS consecutive failures.
+
+/**
+ * Replicate the error resilience logic from runner.ts tick loop.
+ * Returns the action to take and the updated error counter.
+ */
+function handleTickError(
+  exitCode: number,
+  persistentHeartbeat: boolean,
+  consecutiveTickErrors: number,
+  maxConsecutiveTickErrors: number,
+): { action: 'abort' | 'retry'; newCounter: number } {
+  if (!persistentHeartbeat) {
+    return { action: 'abort', newCounter: consecutiveTickErrors }
+  }
+  const newCounter = consecutiveTickErrors + 1
+  if (newCounter >= maxConsecutiveTickErrors) {
+    return { action: 'abort', newCounter }
+  }
+  return { action: 'retry', newCounter }
+}
+
+/**
+ * Counter reset on successful tick.
+ */
+function resetOnSuccess(counter: number): number {
+  return 0
+}
+
+describe('Persistent heartbeat: error resilience', () => {
+  const MAX = 3
+
+  test('first error in persistent mode → retry, counter = 1', () => {
+    const result = handleTickError(1, true, 0, MAX)
+    expect(result.action).toBe('retry')
+    expect(result.newCounter).toBe(1)
+  })
+
+  test('second consecutive error → retry, counter = 2', () => {
+    const result = handleTickError(1, true, 1, MAX)
+    expect(result.action).toBe('retry')
+    expect(result.newCounter).toBe(2)
+  })
+
+  test('third consecutive error → abort (MAX reached)', () => {
+    const result = handleTickError(1, true, 2, MAX)
+    expect(result.action).toBe('abort')
+    expect(result.newCounter).toBe(3)
+  })
+
+  test('non-persistent mode always aborts on non-zero exit', () => {
+    const result = handleTickError(1, false, 0, MAX)
+    expect(result.action).toBe('abort')
+  })
+
+  test('counter resets after a successful tick', () => {
+    // Simulate: error → error → success → error
+    let counter = 0
+    // Two errors
+    counter = handleTickError(1, true, counter, MAX).newCounter
+    expect(counter).toBe(1)
+    counter = handleTickError(1, true, counter, MAX).newCounter
+    expect(counter).toBe(2)
+    // Success resets
+    counter = resetOnSuccess(counter)
+    expect(counter).toBe(0)
+    // Next error starts fresh
+    const result = handleTickError(1, true, counter, MAX)
+    expect(result.action).toBe('retry')
+    expect(result.newCounter).toBe(1)
+  })
+
+  test('error recovery prevents session death from isolated API errors', () => {
+    // Pattern: success, success, error, success, success, error, success...
+    // Without resilience, the first error would kill the session.
+    // With resilience, both errors are survived (counter resets between them).
+    let counter = 0
+    // Success x2
+    counter = resetOnSuccess(counter)
+    counter = resetOnSuccess(counter)
+    // Error → survived
+    const e1 = handleTickError(1, true, counter, MAX)
+    expect(e1.action).toBe('retry')
+    counter = e1.newCounter
+    // Success → reset
+    counter = resetOnSuccess(counter)
+    expect(counter).toBe(0)
+    // Success
+    counter = resetOnSuccess(counter)
+    // Error → survived (fresh counter)
+    const e2 = handleTickError(1, true, counter, MAX)
+    expect(e2.action).toBe('retry')
+    expect(e2.newCounter).toBe(1)
+  })
+
+  test('sustained errors abort: 3 consecutive failures kill the session', () => {
+    // If the API is truly down, we don't want infinite retries
+    let counter = 0
+    counter = handleTickError(1, true, counter, MAX).newCounter // 1
+    counter = handleTickError(1, true, counter, MAX).newCounter // 2
+    const result = handleTickError(1, true, counter, MAX)       // 3
+    expect(result.action).toBe('abort')
+    expect(result.newCounter).toBe(3)
+  })
+
+  test('auth failure (code 64) aborts even before non-zero exit handler', () => {
+    // Auth failures are caught BEFORE the non-zero exit handler in runner.ts.
+    // But for completeness: if one reached handleTickError, it would still
+    // be handled by the same logic.
+    const result = handleTickError(64, true, 0, MAX)
+    expect(result.action).toBe('retry') // persistent mode doesn't distinguish error codes here
+    // Auth failures are handled by a separate check in runner.ts (lines 2005-2024)
+    // that exits with code 64 unconditionally. This test documents the layering.
+  })
+})

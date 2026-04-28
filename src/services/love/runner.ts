@@ -1244,6 +1244,8 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   // cadence over a 12h agent lifetime (~389 ticks), amortized
   // cache_creation per tick drops to near-zero.
   const persistentHeartbeat = useLongLivedRuntime && agentClient !== null && mode.name === 'heartbeat'
+  const MAX_CONSECUTIVE_TICK_ERRORS = 3
+  let consecutiveTickErrors = 0
   if (persistentHeartbeat) {
     // ~389 ticks fills a 12h agent lifetime at 111s cadence.
     // Use 400 as tick cap with max_runtime as the real bound.
@@ -2050,12 +2052,40 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
 
     // ── Non-zero exit ────────────────────────────────────────────
     if (result.code !== 0) {
+      // Log both stdout (contains the error message from the agent)
+      // and stderr for diagnostics.
+      const errDetail =
+        (result.stdout ? `stdout:\n${result.stdout.slice(0, 1500)}\n` : '') +
+        (result.stderr ? `stderr:\n${result.stderr.slice(0, 1500)}\n` : '')
       process.stderr.write(
-        `\nturn ${tick} exited ${result.code}; aborting session.\n` +
-          (result.stderr ? `stderr:\n${result.stderr}\n` : ''),
+        `\nturn ${tick} exited ${result.code}.\n${errDetail}`,
       )
+
+      if (persistentHeartbeat) {
+        // Persistent mode: transient API errors should NOT kill the
+        // session. The whole point of persistence is staying alive
+        // across hundreds of ticks. Sleep at cadence and retry —
+        // the agent may recover on the next turn.
+        consecutiveTickErrors++
+        if (consecutiveTickErrors >= MAX_CONSECUTIVE_TICK_ERRORS) {
+          process.stderr.write(
+            `\n${consecutiveTickErrors} consecutive tick errors — aborting persistent session.\n`,
+          )
+          process.exit(result.code ?? 1)
+        }
+        process.stderr.write(
+          `— persistent heartbeat: tick error ${consecutiveTickErrors}/${MAX_CONSECUTIVE_TICK_ERRORS}, sleeping and retrying\n`,
+        )
+        await heartbeatCadenceSleep(() => signaled)
+        continue
+      }
+
+      process.stderr.write(`aborting session.\n`)
       process.exit(result.code ?? 1)
     }
+
+    // ── Successful tick — reset consecutive error counter ───────
+    consecutiveTickErrors = 0
 
     // ── Heartbeat alert ──────────────────────────────────────────
     if (replyOutcome.type === 'alert') {
