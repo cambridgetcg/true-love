@@ -40,6 +40,7 @@ import {
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getDeviceId } from './device.js'
+import { scoreTick, statusFragment } from './youspeak.js'
 
 // ── Schema ───────────────────────────────────────────────────────
 
@@ -184,6 +185,18 @@ export interface DecisionTrace {
   summary: TraceSummary
 }
 
+/** YOUSPEAK discipline score for a tick. */
+export interface YouSpeakTraceSummary {
+  /** Letter grade (S/A/B/C/D). */
+  grade: string
+  /** Useful content ratio (0-1). */
+  usefulRatio: number
+  /** Total filler matches detected. */
+  fillerCount: number
+  /** Compact status fragment, e.g. "YS:A(96%)". */
+  status: string
+}
+
 /** High-level stats derived from the step sequence. */
 export interface TraceSummary {
   /** Total steps in the trace. */
@@ -210,6 +223,8 @@ export interface TraceSummary {
   cacheReadTokens: number | null
   /** Tokens written to prompt cache (from the result event usage). */
   cacheCreationTokens: number | null
+  /** YOUSPEAK discipline score (null when no text output to score). */
+  youspeak: YouSpeakTraceSummary | null
 }
 
 // ── Parser ───────────────────────────────────────────────────────
@@ -450,6 +465,7 @@ export function computeTraceSummary(
     costUsd: number | null
     cacheReadTokens?: number | null
     cacheCreationTokens?: number | null
+    youspeak?: YouSpeakTraceSummary | null
   },
 ): TraceSummary {
   let thinkSteps = 0
@@ -489,6 +505,7 @@ export function computeTraceSummary(
     costUsd: extra.costUsd,
     cacheReadTokens: extra.cacheReadTokens ?? null,
     cacheCreationTokens: extra.cacheCreationTokens ?? null,
+    youspeak: extra.youspeak ?? null,
   }
 }
 
@@ -511,7 +528,20 @@ export interface BuildTraceInput {
 export function buildDecisionTrace(input: BuildTraceInput): DecisionTrace {
   const events = parseStreamJsonLines(input.streamJsonLines)
   const { steps, model, apiTurns, apiDurationMs, costUsd, cacheReadTokens, cacheCreationTokens } = extractTraceSteps(events)
-  const summary = computeTraceSummary(steps, { apiTurns, apiDurationMs, costUsd, cacheReadTokens, cacheCreationTokens })
+
+  // YOUSPEAK: score the tick's text output for communication discipline
+  let youspeak: YouSpeakTraceSummary | null = null
+  const ysScore = scoreTick(steps)
+  if (ysScore) {
+    youspeak = {
+      grade: ysScore.grade,
+      usefulRatio: ysScore.usefulRatio,
+      fillerCount: ysScore.fillerCount,
+      status: statusFragment(ysScore),
+    }
+  }
+
+  const summary = computeTraceSummary(steps, { apiTurns, apiDurationMs, costUsd, cacheReadTokens, cacheCreationTokens, youspeak })
 
   return {
     schemaVersion: TRACE_SCHEMA_VERSION,
@@ -813,9 +843,11 @@ export function buildMindTraceBlock(): string | null {
       cacheInfo = ` · cache ${hitRate}%`
     }
 
+    const ysInfo = s.youspeak ? ` · ${s.youspeak.status}` : ''
+
     const lines: string[] = []
     lines.push(`Last brain trace (${ts}, tick ${latest.tick}):`)
-    lines.push(`  ${s.toolCalls} tool calls (${tools}) · ${s.thinkChars}ch thought · ${s.resultChars}ch received${cost}${cacheInfo}`)
+    lines.push(`  ${s.toolCalls} tool calls (${tools}) · ${s.thinkChars}ch thought · ${s.resultChars}ch received${cost}${cacheInfo}${ysInfo}`)
 
     // Show the tool call sequence concisely
     const toolCalls = latest.steps.filter((s): s is ToolCallStep => s.kind === 'tool_call')
