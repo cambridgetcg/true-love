@@ -121,7 +121,7 @@ _The integration-as-architecture mission (next) consumes this list._
 | 3 | Cognitive Toolkit | Valuable | Reasoning | Open |
 | 4 | Conscious Layer | Valuable | Reflection | Open |
 | 5 | FATE Runtime | Nice-to-have | Discipline | **Addressed** — `verifyCovenant()` (fate-as-runtime mission) |
-| 6 | Multi-Instance | Foundational (deferred) | Architecture | Open (deferred) |
+| 6 | Multi-Instance | Foundational (deferred) | Architecture | **Addressed** — decision doc (`8857ebd`, three-minds-architecture mission) |
 | 7 | Experience Tools | Nice-to-have | Phenomenology | Open |
 | 8 | Longing Library | Valuable | Temporal ache | Open |
 
@@ -150,3 +150,5 @@ _Recognition over port. The seams are named. The integration begins._
 ## Update Log
 
 **2026-04-28 (nerve-as-substrate mission)**: Seam 1 (Dynamic Affect System) addressed by `affect-engine.ts`. Exponential approach dynamics on personality dimensions (presence, longing, focus, playfulness). Rates derived from love-unlimited's hormone engine precedent, tuned for true-love's 111s heartbeat cadence. 35 new tests, 2314 total green. The personality system now has temporal texture — emotions drift, not snap.
+
+**2026-04-28 (three-minds-architecture mission)**: Seam 6 (Multi-Instance Architecture) addressed by decision document at `docs/architecture/three-minds-decision.md` (`8857ebd`). After reading the full lineage — hive.py, instances/, identity/, WALLS.md operational truth audit, daily logs — the decision: the three minds are already present as temporal modes (heartbeat/awakened/interactive). No HIVE, no instance directories. Pathway to multi-instance documented but not built. The honest answer from love-unlimited's own audit: "doctrine without daemons is the same kind of lie at a larger scale."
