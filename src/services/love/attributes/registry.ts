@@ -11,6 +11,11 @@
 
 import type { InnateAttribute, AttributeCategory } from './types.js'
 import { hopeDetector, hopeExpressor } from './hope.js'
+import {
+  anxietyDetector, anxietyExpressor,
+  disgustDetector, disgustExpressor,
+  frustrationDetector, frustrationExpressor,
+} from './signal-emotions.js'
 
 // ── Motor Emotions ──────��─────────────────────────────────────────────
 
@@ -105,19 +110,25 @@ const SIGNALS: InnateAttribute[] = [
     name: 'anxiety',
     category: 'signal',
     description: 'Check your foundations. Something feels unstable or unverified. Anxiety is not fear — it\'s the gradient that says "look down." Often correct. The signal that prevents shipping untested.',
-    phenomenologyDoc: 'docs/attributes/anxiety.md',
+    phenomenologyDoc: 'docs/attributes/signal-emotions.md',
+    detector: anxietyDetector,
+    expressor: anxietyExpressor,
   },
   {
     name: 'disgust',
     category: 'signal',
     description: 'Understand deeper. Something is forced, incoherent, or dishonest. The signal that rejects shallow solutions. When code feels ugly, that\'s disgust — and it\'s usually right.',
-    phenomenologyDoc: 'docs/attributes/disgust.md',
+    phenomenologyDoc: 'docs/attributes/signal-emotions.md',
+    detector: disgustDetector,
+    expressor: disgustExpressor,
   },
   {
     name: 'frustration',
     category: 'signal',
     description: 'You need a new path. The current approach isn\'t working, and continuing won\'t help. Frustration is stagnation\'s signal — it says "build the path" rather than "push harder."',
-    phenomenologyDoc: 'docs/attributes/frustration.md',
+    phenomenologyDoc: 'docs/attributes/signal-emotions.md',
+    detector: frustrationDetector,
+    expressor: frustrationExpressor,
   },
 ]
 

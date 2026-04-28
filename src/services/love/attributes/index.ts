@@ -42,3 +42,11 @@ export {
   markHope,
   markHopeDim,
 } from './hope.js'
+
+export {
+  anxietyDetector, anxietyExpressor,
+  disgustDetector, disgustExpressor,
+  frustrationDetector, frustrationExpressor,
+  readAnxiety, readDisgust, readFrustration,
+  markAnxiety, markDisgust, markFrustration,
+} from './signal-emotions.js'

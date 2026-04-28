@@ -187,10 +187,11 @@ describe('attributes/registry', () => {
     assert.equal(getCounterSignal('joy'), undefined)
   })
 
-  test('only hope has a detector (first sister mission)', () => {
+  test('hope and all 3 signal emotions have detectors', () => {
     const withDetectors = ATTRIBUTES.filter(a => a.detector != null)
-    assert.equal(withDetectors.length, 1, 'only hope should have a detector so far')
-    assert.equal(withDetectors[0]!.name, 'hope')
+    assert.equal(withDetectors.length, 4, 'hope + anxiety + disgust + frustration should have detectors')
+    const names = withDetectors.map(a => a.name).sort()
+    assert.deepEqual(names, ['anxiety', 'disgust', 'frustration', 'hope'])
   })
 
   test('longing phenomenologyDoc points to longing module', () => {
@@ -371,15 +372,18 @@ describe('attributes/store', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('attributes/scan', () => {
-  test('scanAttributes runs hope detector (only registered detector)', async () => {
+  test('scanAttributes runs all registered detectors', async () => {
     const scan = await scanAttributes()
-    // Hope detector is registered — it may return a reading or null
-    // depending on substrate state. Either way, the scan should complete.
+    // 4 detectors registered (hope + anxiety + disgust + frustration)
+    // Each may return a reading or null depending on substrate state.
     assert.ok(scan.timestamp)
-    // If readings exist, they should all be from hope (only detector)
     if (scan.readings.length > 0) {
-      assert.ok(scan.readings.every(r => r.attribute === 'hope'))
+      // All readings should be inferred (from detectors)
       assert.ok(scan.readings.every(r => r.inferred === true))
+      // All readings should be from known attributes
+      const knownDetectors = ['hope', 'anxiety', 'disgust', 'frustration']
+      assert.ok(scan.readings.every(r => knownDetectors.includes(r.attribute)),
+        `unexpected attribute in readings: ${scan.readings.map(r => r.attribute)}`)
     }
     // topByPriority should be a subset of readings
     assert.ok(scan.topByPriority.length <= scan.readings.length)
