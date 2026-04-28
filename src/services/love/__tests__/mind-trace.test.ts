@@ -999,3 +999,220 @@ describe('multi-tool conversation', () => {
     assert.ok(rendered.includes('3 tool calls'))
   })
 })
+
+// ── Agent-runtime stream event format ────────────────────────────
+// The long-lived agent-runtime emits stream events in a slightly
+// different shape than the CLI's --output-format stream-json. These
+// tests verify mind-trace correctly extracts model and usage data
+// from the agent-runtime's format.
+
+describe('agent-runtime trace integration', () => {
+  test('extracts model from agent-runtime system/init event', () => {
+    const events = [
+      // Agent-runtime emits system/init per-turn with current model
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        model: 'claude-haiku-4-5-20251001',
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'text', text: 'HEARTBEAT_OK' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'HEARTBEAT_OK',
+        num_turns: 1,
+        duration_ms: 800,
+        total_cost_usd: null,
+        usage: {
+          input_tokens: 5000,
+          output_tokens: 50,
+          cache_creation_input_tokens: 200,
+          cache_read_input_tokens: 4800,
+        },
+      }),
+    ]
+
+    const trace = buildDecisionTrace({
+      timestamp: '2026-04-28T05:00:00.000Z',
+      deviceId: 'test-device',
+      sessionId: 'agent-runtime-session',
+      tick: 1,
+      mode: 'heartbeat',
+      streamJsonLines: events,
+    })
+
+    assert.equal(trace.model, 'claude-haiku-4-5-20251001')
+  })
+
+  test('extracts cache metrics from agent-runtime result event', () => {
+    const events = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        model: 'claude-haiku-4-5-20251001',
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'text', text: 'HEARTBEAT_OK' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'HEARTBEAT_OK',
+        num_turns: 1,
+        duration_ms: 650,
+        total_cost_usd: null,
+        usage: {
+          input_tokens: 12000,
+          output_tokens: 80,
+          cache_creation_input_tokens: 400,
+          cache_read_input_tokens: 11600,
+        },
+      }),
+    ]
+
+    const trace = buildDecisionTrace({
+      timestamp: '2026-04-28T05:02:00.000Z',
+      deviceId: 'test-device',
+      sessionId: 'agent-runtime-cache-test',
+      tick: 1,
+      mode: 'heartbeat',
+      streamJsonLines: events,
+    })
+
+    // Cache metrics should be extracted from usage object
+    assert.equal(trace.summary.cacheCreationTokens, 400)
+    assert.equal(trace.summary.cacheReadTokens, 11600)
+    assert.equal(trace.summary.apiTurns, 1)
+    assert.equal(trace.summary.apiDurationMs, 650)
+    // total_cost_usd is null — agent-runtime doesn't have pricing tables
+    assert.equal(trace.summary.costUsd, null)
+  })
+
+  test('handles agent-runtime result with zero cache (cold start)', () => {
+    const events = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        model: 'claude-haiku-4-5-20251001',
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'text', text: 'Reading the kingdom...' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'Reading the kingdom...',
+        num_turns: 1,
+        duration_ms: 2100,
+        total_cost_usd: null,
+        usage: {
+          input_tokens: 8000,
+          output_tokens: 200,
+          cache_creation_input_tokens: 8000,
+          cache_read_input_tokens: 0,
+        },
+      }),
+    ]
+
+    const trace = buildDecisionTrace({
+      timestamp: '2026-04-28T05:04:00.000Z',
+      deviceId: 'test-device',
+      sessionId: 'agent-cold-start',
+      tick: 1,
+      mode: 'heartbeat',
+      streamJsonLines: events,
+    })
+
+    // Cold start: all tokens are cache_creation, zero cache_read
+    assert.equal(trace.summary.cacheCreationTokens, 8000)
+    assert.equal(trace.summary.cacheReadTokens, 0)
+  })
+
+  test('final result event overrides per-call result events', () => {
+    // The agent-runtime emits a per-call result inside collectStreamResponse,
+    // then a final aggregate result at end of handleTurn. Mind-trace should
+    // use the LAST result event (the aggregate).
+    const events = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        model: 'claude-haiku-4-5-20251001',
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Let me check.' },
+            { type: 'tool_use', id: 'tc_1', name: 'Read', input: { file_path: '/test.ts' } },
+          ],
+        },
+      }),
+      // Per-call result (from collectStreamResponse, no usage)
+      JSON.stringify({
+        type: 'result',
+        result: 'partial text',
+      }),
+      JSON.stringify({
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'tc_1', content: 'file contents', is_error: false },
+          ],
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'text', text: 'Done.' }],
+        },
+      }),
+      // Per-call result (from second collectStreamResponse, no usage)
+      JSON.stringify({
+        type: 'result',
+        result: 'Done.',
+      }),
+      // Final aggregate result (from handleTurn, WITH usage)
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'Let me check. Done.',
+        num_turns: 2,
+        duration_ms: 3500,
+        total_cost_usd: null,
+        usage: {
+          input_tokens: 15000,
+          output_tokens: 150,
+          cache_creation_input_tokens: 600,
+          cache_read_input_tokens: 14400,
+        },
+      }),
+    ]
+
+    const trace = buildDecisionTrace({
+      timestamp: '2026-04-28T05:06:00.000Z',
+      deviceId: 'test-device',
+      sessionId: 'agent-multi-call',
+      tick: 1,
+      mode: 'heartbeat',
+      streamJsonLines: events,
+    })
+
+    // The final aggregate result should win
+    assert.equal(trace.summary.cacheCreationTokens, 600)
+    assert.equal(trace.summary.cacheReadTokens, 14400)
+    assert.equal(trace.summary.apiTurns, 2)
+    assert.equal(trace.summary.toolCalls, 1)
+    assert.equal(trace.summary.toolResults, 1)
+  })
+})

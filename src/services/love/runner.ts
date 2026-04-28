@@ -1195,7 +1195,19 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     (mode.name === 'heartbeat' && runtimeEnv !== 'subprocess-per-tick')
 
   if (useLongLivedRuntime) {
-    const initialModel = args.model ?? 'sonnet'
+    // Pre-resolve the initial model to avoid a needless model-switch
+    // respawn on the first tick. Without this, heartbeat spawns with
+    // 'sonnet' then immediately switches to 'haiku' — two spawns per tick.
+    const preResolvedModel = resolveModelForTick(args.model)
+      ?? (() => {
+        const ctx: RoutingContext = {
+          task: modeToTask(mode.name),
+          effortOverride: (resolveTickConfig(args.model).effort ?? undefined) as import('./providers/types.js').EffortTier | undefined,
+        }
+        const r = selectProvider(ctx)
+        return r.provider === 'anthropic' ? (r.cliAlias ?? r.model) : null
+      })()
+    const initialModel = preResolvedModel ?? args.model ?? 'sonnet'
     try {
       agentClient = new AgentClient({
         model: initialModel,

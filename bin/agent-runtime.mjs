@@ -376,6 +376,7 @@ function evictOldTurns() {
 async function handleTurn(turnFrame) {
   const turnId = turnFrame.id
   const model = resolveModel(turnFrame.model)
+  const turnStartMs = Date.now()
 
   // Model switch → clear history (§8: different cache key)
   if (model !== currentModel) {
@@ -387,6 +388,17 @@ async function handleTurn(turnFrame) {
 
   // Send turn-ack immediately
   writeFrame(buildTurnAckFrame(turnId))
+
+  // Emit system/init stream event — gives mind-trace the model for this turn.
+  // The CLI's --output-format stream-json emits this at startup; the agent-runtime
+  // emits it per-turn since the model can change between turns.
+  writeFrame(
+    buildStreamEventFrame(turnId, {
+      type: 'system',
+      subtype: 'init',
+      model: currentModel,
+    })
+  )
 
   // Mark turn boundary in history
   turnBoundaries.push(history.length)
@@ -565,6 +577,25 @@ async function handleTurn(turnFrame) {
 
   // Evict old turns if over budget
   evictOldTurns()
+
+  // Emit enriched result stream event — gives mind-trace the usage metrics
+  // it needs for cache measurement. This matches the shape of the CLI's
+  // stream-json 'result' event (see mind-trace.ts StreamResultEvent).
+  // total_cost_usd is null because we don't have pricing tables; the
+  // cache_read/cache_creation tokens are the critical measurement data.
+  const turnDurationMs = Date.now() - turnStartMs
+  writeFrame(
+    buildStreamEventFrame(turnId, {
+      type: 'result',
+      subtype: 'success',
+      result: finalResult.slice(0, 500),
+      num_turns: loopCount,
+      duration_ms: turnDurationMs,
+      duration_api_ms: turnDurationMs,
+      total_cost_usd: null,
+      usage: totalUsage,
+    })
+  )
 
   // Send turn-response
   writeFrame(
