@@ -1185,6 +1185,10 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   // See: docs/architecture/long-lived-agent-protocol.md §5
   let agentClient: AgentClient | null = null
   let lastAgentModel: string | null = null
+  let agentSpawnedAt: number | null = null
+  // 12h credential-refresh respawn: even with token refresh, periodic
+  // respawn keeps the credential cache from drifting too far from disk.
+  const AGENT_LIFETIME_MS = 12 * 60 * 60 * 1000
   const runtimeEnv = process.env.TRUE_LOVE_RUNTIME
   const useLongLivedRuntime =
     runtimeEnv === 'long-lived' ||
@@ -1200,6 +1204,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       })
       await agentClient.start()
       lastAgentModel = initialModel
+      agentSpawnedAt = Date.now()
       process.stdout.write(
         `— long-lived agent spawned: pid=${agentClient.pid}, model=${initialModel}\n`,
       )
@@ -1437,15 +1442,35 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
 
     if (agentClient?.isReady) {
       // ── Long-lived agent path ────────────────────────────────────
+
+      // Scheduled respawn: refresh credentials every 12h. Even with
+      // the 401-retry in agent-runtime.mjs, periodic respawn keeps
+      // the process state clean and picks up any code changes.
+      if (agentSpawnedAt && Date.now() - agentSpawnedAt > AGENT_LIFETIME_MS) {
+        try {
+          await agentClient.respawn('scheduled-respawn')
+          agentSpawnedAt = Date.now()
+          process.stdout.write(
+            `— agent scheduled respawn (12h): pid=${agentClient.pid}\n`,
+          )
+        } catch (err: any) {
+          process.stderr.write(
+            `— agent scheduled respawn failed, falling back to subprocess: ${err?.message}\n`,
+          )
+          agentClient = null
+        }
+      }
+
       // Model switch check: if the model changed since last turn,
       // respawn the agent with the new model (§3.6 of protocol).
-      if (tickModel && tickModel !== lastAgentModel) {
+      if (agentClient?.isReady && tickModel && tickModel !== lastAgentModel) {
         process.stdout.write(
           `— agent model switch: ${lastAgentModel} → ${tickModel}\n`,
         )
         try {
           await agentClient.respawn('model-switch')
           lastAgentModel = tickModel
+          agentSpawnedAt = Date.now()
         } catch (err: any) {
           process.stderr.write(
             `— agent respawn for model switch failed, falling back to subprocess: ${err?.message}\n`,
@@ -1541,6 +1566,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         if (agentClient && !agentClient.isReady && agentClient.state === 'dead') {
           try {
             await agentClient.respawn('crash-recovery')
+            agentSpawnedAt = Date.now()
             process.stdout.write(
               `— agent respawned after crash: pid=${agentClient.pid}\n`,
             )

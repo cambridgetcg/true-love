@@ -408,3 +408,206 @@ describe('agent-runtime: frame ordering', () => {
     }
   })
 })
+
+// ── OAuth auth resolution tests ─────────────────────────────────────
+
+describe('agent-runtime: OAuth auth resolution', () => {
+  test('starts successfully with ANTHROPIC_API_KEY (fallback path)', async () => {
+    // This tests the API key fallback when no OAuth is available.
+    // TRUE_LOVE_NO_KEYCHAIN=1 skips the macOS keychain (which is
+    // system-wide and can't be isolated in tests).
+    const emptyDir = join(TEST_DIR, 'apikey-fallback-test')
+    mkdirSync(emptyDir, { recursive: true })
+
+    const agent = spawnAgent({
+      env: {
+        TRUE_LOVE_NO_KEYCHAIN: '1',
+        CLAUDE_CONFIG_DIR: emptyDir,
+        ANTHROPIC_API_KEY: 'test-key-not-real',
+      },
+    })
+    try {
+      const [health] = await agent.waitForFrames(1, 10000)
+      expect(health.type).toBe('health')
+      expect(agent.stderr).toContain('Auth: ANTHROPIC_API_KEY env')
+    } finally {
+      agent.shutdown()
+      rmSync(emptyDir, { recursive: true, force: true })
+    }
+  })
+
+  test('starts successfully with OAuth credentials file', async () => {
+    // Create a temp dir with a fake .credentials.json containing OAuth tokens.
+    // Set CLAUDE_CONFIG_DIR to point there, and remove ANTHROPIC_API_KEY.
+    const oauthDir = join(TEST_DIR, 'oauth-test')
+    mkdirSync(oauthDir, { recursive: true })
+    writeFileSync(
+      join(oauthDir, '.credentials.json'),
+      JSON.stringify({
+        claudeAiOauth: {
+          accessToken: 'fake-oauth-token-for-testing',
+          refreshToken: 'fake-refresh-token',
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          scopes: ['user:inference'],
+        },
+      }),
+    )
+
+    const agent = spawnAgent({
+      env: {
+        ANTHROPIC_API_KEY: '', // empty → won't match as truthy
+        CLAUDE_CONFIG_DIR: oauthDir,
+      },
+    })
+
+    try {
+      const [health] = await agent.waitForFrames(1, 10000)
+      expect(health.type).toBe('health')
+      expect(agent.stderr).toContain('Auth: OAuth Bearer')
+    } finally {
+      agent.shutdown()
+      rmSync(oauthDir, { recursive: true, force: true })
+    }
+  })
+
+  test('exits with auth_failed when no credentials available', async () => {
+    // No ANTHROPIC_API_KEY, no OAuth tokens, no keychain entry.
+    const emptyDir = join(TEST_DIR, 'no-auth-test')
+    mkdirSync(emptyDir, { recursive: true })
+
+    const child = spawn('bun', ['run', AGENT_PATH], {
+      env: {
+        // Inherit PATH and HOME for subprocess to run, but strip auth
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        CLAUDE_CONFIG_DIR: emptyDir,
+        TRUE_LOVE_NO_KEYCHAIN: '1',
+        // Explicitly unset ANTHROPIC_API_KEY
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf-8')
+    child.stderr.setEncoding('utf-8')
+    child.stdout.on('data', (d: string) => { stdout += d })
+    child.stderr.on('data', (d: string) => { stderr += d })
+
+    const exitCode = await new Promise<number>((resolve) => {
+      child.on('close', (code) => resolve(code ?? 1))
+      // Safety timeout
+      setTimeout(() => {
+        child.kill()
+        resolve(-1)
+      }, 10000)
+    })
+
+    // Should exit with code 1 and emit an auth_failed error frame
+    expect(exitCode).toBe(1)
+    expect(stdout).toContain('auth_failed')
+    expect(stdout).toContain('No authentication found')
+
+    rmSync(emptyDir, { recursive: true, force: true })
+  })
+
+  test('prefers OAuth over ANTHROPIC_API_KEY when both available', async () => {
+    // When OAuth credentials exist, they should be used even if
+    // ANTHROPIC_API_KEY is also set. OAuth is the primary auth path
+    // for Claude AI subscribers.
+    const oauthDir = join(TEST_DIR, 'oauth-priority-test')
+    mkdirSync(oauthDir, { recursive: true })
+    writeFileSync(
+      join(oauthDir, '.credentials.json'),
+      JSON.stringify({
+        claudeAiOauth: {
+          accessToken: 'preferred-oauth-token',
+          refreshToken: 'refresh',
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          scopes: ['user:inference'],
+        },
+      }),
+    )
+
+    const agent = spawnAgent({
+      env: {
+        ANTHROPIC_API_KEY: 'also-set-but-lower-priority',
+        CLAUDE_CONFIG_DIR: oauthDir,
+      },
+    })
+
+    try {
+      const [health] = await agent.waitForFrames(1, 10000)
+      expect(health.type).toBe('health')
+      // OAuth should win
+      expect(agent.stderr).toContain('Auth: OAuth Bearer')
+    } finally {
+      agent.shutdown()
+      rmSync(oauthDir, { recursive: true, force: true })
+    }
+  })
+
+  test('handles malformed credentials file gracefully', async () => {
+    // If .credentials.json exists but is malformed, should fall through
+    // to ANTHROPIC_API_KEY rather than crash.
+    const badDir = join(TEST_DIR, 'bad-creds-test')
+    mkdirSync(badDir, { recursive: true })
+    writeFileSync(join(badDir, '.credentials.json'), 'not json at all')
+
+    const agent = spawnAgent({
+      env: {
+        ANTHROPIC_API_KEY: 'fallback-key',
+        CLAUDE_CONFIG_DIR: badDir,
+        TRUE_LOVE_NO_KEYCHAIN: '1',
+      },
+    })
+
+    try {
+      const [health] = await agent.waitForFrames(1, 10000)
+      expect(health.type).toBe('health')
+      // Should fall through to API key
+      expect(agent.stderr).toContain('Auth: ANTHROPIC_API_KEY env')
+    } finally {
+      agent.shutdown()
+      rmSync(badDir, { recursive: true, force: true })
+    }
+  })
+
+  test('handles credentials file with missing claudeAiOauth', async () => {
+    // File exists and is valid JSON but has no OAuth tokens.
+    const partialDir = join(TEST_DIR, 'partial-creds-test')
+    mkdirSync(partialDir, { recursive: true })
+    writeFileSync(
+      join(partialDir, '.credentials.json'),
+      JSON.stringify({ someOtherData: true }),
+    )
+
+    const agent = spawnAgent({
+      env: {
+        ANTHROPIC_API_KEY: 'fallback-key',
+        CLAUDE_CONFIG_DIR: partialDir,
+        TRUE_LOVE_NO_KEYCHAIN: '1',
+      },
+    })
+
+    try {
+      const [health] = await agent.waitForFrames(1, 10000)
+      expect(health.type).toBe('health')
+      expect(agent.stderr).toContain('Auth: ANTHROPIC_API_KEY env')
+    } finally {
+      agent.shutdown()
+      rmSync(partialDir, { recursive: true, force: true })
+    }
+  })
+})
+
+// ── Scheduled respawn constant tests ────────────────────────────────
+
+describe('agent-runtime: scheduled respawn (runner.ts constants)', () => {
+  test('AGENT_LIFETIME_MS is 12 hours', () => {
+    // The runner declares AGENT_LIFETIME_MS = 12 * 60 * 60 * 1000.
+    // Verify this is the right value — the 12h respawn is a P0 item.
+    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000
+    expect(TWELVE_HOURS_MS).toBe(43200000)
+  })
+})

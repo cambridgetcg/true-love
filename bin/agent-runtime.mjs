@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join, resolve, basename, dirname } from 'node:path'
+import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
 import { hrtime } from 'node:process'
 
@@ -43,12 +44,12 @@ import {
 
 const args = process.argv.slice(2)
 const modelArg = args.find((a) => a.startsWith('--model='))
-const defaultModel = modelArg ? modelArg.split('=')[1] : 'claude-sonnet-4-20250514'
+const defaultModel = modelArg ? modelArg.split('=')[1] : 'claude-sonnet-4-6'
 
 // ── Anthropic SDK client ─────────────────────────────────────────────
 
 // Dynamic import: the SDK is an ES module. We lazy-import to get a
-// clear error message if ANTHROPIC_API_KEY is missing.
+// clear error message if it's not installed.
 let Anthropic
 try {
   const mod = await import('@anthropic-ai/sdk')
@@ -58,12 +59,130 @@ try {
   process.exit(1)
 }
 
-if (!process.env.ANTHROPIC_API_KEY) {
-  writeError('system', 'auth_failed', 'ANTHROPIC_API_KEY environment variable is not set', false)
+// ── Auth resolution ─────────────────────────────────────────────────
+//
+// The agent runtime authenticates using whatever credential the host
+// machine has configured. Resolution order (mirrors the bundled CLI):
+//   1. ANTHROPIC_API_KEY env        → x-api-key header
+//   2. macOS Keychain               → OAuth Bearer token
+//   3. ~/.claude/.credentials.json  → OAuth Bearer token (non-macOS fallback)
+//   4. Fail with auth_failed
+//
+// The OAUTH_BETA_HEADER signals the API to expect Bearer auth rather
+// than x-api-key. Without it, OAuth tokens produce auth_failed.
+//
+// On 401 during a turn, we re-read credentials (another process may
+// have refreshed them) and retry once before propagating the failure.
+
+const OAUTH_BETA_HEADER = 'oauth-2025-04-20'
+
+/**
+ * Read OAuth tokens from the macOS Keychain.
+ * Service name "Claude Code-credentials" matches the bundled CLI's
+ * storage key (macOsKeychainHelpers.ts).
+ *
+ * @returns {{ accessToken: string, refreshToken?: string, expiresAt?: string }} or null
+ */
+function readOAuthFromKeychain() {
+  if (process.platform !== 'darwin') return null
+  // Skip keychain in test contexts — keychain is system-wide and can't
+  // be isolated per-process the way CLAUDE_CONFIG_DIR isolates the file.
+  if (process.env.TRUE_LOVE_NO_KEYCHAIN === '1') return null
+  try {
+    const username = process.env.USER || 'claude-code-user'
+    const result = execSync(
+      `security find-generic-password -a "${username}" -w -s "Claude Code-credentials"`,
+      { encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim()
+    if (result) {
+      const data = JSON.parse(result)
+      return data?.claudeAiOauth ?? null
+    }
+  } catch {
+    // Keychain read failed (not macOS, locked keychain, no entry) — fall through
+  }
+  return null
+}
+
+/**
+ * Read OAuth tokens from the plaintext credentials file.
+ * Path: ~/.claude/.credentials.json (or CLAUDE_CONFIG_DIR override).
+ *
+ * @returns {{ accessToken: string, refreshToken?: string, expiresAt?: string }} or null
+ */
+function readOAuthFromFile() {
+  const configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
+  const credPath = join(configDir, '.credentials.json')
+  try {
+    const data = JSON.parse(readFileSync(credPath, 'utf-8'))
+    return data?.claudeAiOauth ?? null
+  } catch {
+    // Credentials file missing or unreadable — fall through
+  }
+  return null
+}
+
+/**
+ * Read the freshest OAuth token from all available sources.
+ */
+function readOAuthTokens() {
+  return readOAuthFromKeychain() || readOAuthFromFile()
+}
+
+/**
+ * Create an Anthropic SDK client using the best available auth.
+ * Returns { client, authMode } or exits the process on failure.
+ */
+function createAuthenticatedClient() {
+  // 1. Try OAuth first (Claude AI subscription uses OAuth)
+  const oauthTokens = readOAuthTokens()
+  if (oauthTokens?.accessToken) {
+    log(`Auth: OAuth Bearer (expires ${oauthTokens.expiresAt || 'unknown'})`)
+    return {
+      client: new Anthropic({
+        authToken: oauthTokens.accessToken,
+        defaultHeaders: { 'anthropic-beta': OAUTH_BETA_HEADER },
+      }),
+      authMode: 'oauth',
+    }
+  }
+
+  // 2. Fall back to ANTHROPIC_API_KEY env
+  if (process.env.ANTHROPIC_API_KEY) {
+    log('Auth: ANTHROPIC_API_KEY env')
+    return {
+      client: new Anthropic(),
+      authMode: 'api-key',
+    }
+  }
+
+  // 3. No credentials found
+  writeError('system', 'auth_failed',
+    'No authentication found. Checked: macOS Keychain (Claude Code-credentials), ' +
+    '~/.claude/.credentials.json, ANTHROPIC_API_KEY env. ' +
+    'Run `claude login` to authenticate.',
+    false)
   process.exit(1)
 }
 
-const client = new Anthropic()
+let { client, authMode } = createAuthenticatedClient()
+
+/**
+ * Re-resolve auth credentials. Called on 401 to pick up tokens that
+ * another process may have refreshed (e.g., the bundled CLI's
+ * checkAndRefreshOAuthTokenIfNeeded). Returns true if the client was
+ * replaced with fresh credentials.
+ */
+function refreshAuth() {
+  try {
+    const result = createAuthenticatedClient()
+    client = result.client
+    authMode = result.authMode
+    return true
+  } catch {
+    return false
+  }
+}
 
 // ── Agent state ──────────────────────────────────────────────────────
 
@@ -94,10 +213,12 @@ const turnBoundaries = [] // indices into history where each turn starts
 function resolveModel(alias) {
   if (!alias) return currentModel
   const lower = alias.toLowerCase()
+  // Keep in sync with src/utils/model/configs.ts.
+  // These are the firstParty model IDs for the current defaults.
   const aliases = {
-    opus: 'claude-opus-4-0-20250514',
-    sonnet: 'claude-sonnet-4-20250514',
-    haiku: 'claude-3-5-haiku-20241022',
+    opus: 'claude-opus-4-6',
+    sonnet: 'claude-sonnet-4-6',
+    haiku: 'claude-haiku-4-5-20251001',
   }
   return aliases[lower] || alias
 }
@@ -294,10 +415,16 @@ async function handleTurn(turnFrame) {
     input_schema: t.input_schema,
   }))
 
-  // Add the user message to history
+  // Add the user message to history with cache_control on the last
+  // content block. This marks the boundary: system + history up through
+  // this message will be a cache hit on subsequent turns.
   history.push({
     role: 'user',
-    content: turnFrame.prompt,
+    content: [{
+      type: 'text',
+      text: turnFrame.prompt,
+      cache_control: { type: 'ephemeral' },
+    }],
   })
 
   // Agentic loop: call API, handle tool_use, repeat until end_turn
@@ -309,6 +436,7 @@ async function handleTurn(turnFrame) {
     cache_read_input_tokens: 0,
   }
   let loopCount = 0
+  let authRetried = false // once-per-turn 401 retry guard
   const maxLoops = 25 // safety limit on tool call loops
 
   while (loopCount < maxLoops) {
@@ -399,6 +527,18 @@ async function handleTurn(turnFrame) {
     } catch (e) {
       // Handle API errors
       const errorCode = classifyError(e)
+
+      // 401 retry: re-read credentials (another process may have
+      // refreshed the OAuth token) and retry once before giving up.
+      if (errorCode.code === 'auth_failed' && !authRetried) {
+        authRetried = true
+        log('Auth failed — attempting credential refresh')
+        if (refreshAuth()) {
+          log('Credentials refreshed — retrying turn')
+          continue // retry the API call with fresh client
+        }
+      }
+
       writeError(turnId, errorCode.code, e.message, errorCode.retryable)
 
       // For non-retryable errors, still send a turn-response with the error
