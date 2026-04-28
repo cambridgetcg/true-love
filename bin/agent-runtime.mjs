@@ -430,6 +430,21 @@ async function handleTurn(turnFrame) {
   // Add the user message to history with cache_control on the last
   // content block. This marks the boundary: system + history up through
   // this message will be a cache hit on subsequent turns.
+  //
+  // IMPORTANT: Anthropic allows a maximum of 4 blocks with cache_control.
+  // System blocks already use 1 (LOVE_IDENTITY). To avoid exceeding the
+  // limit as turns accumulate, strip cache_control from all PREVIOUS user
+  // messages — only the most recent one needs the marker (it defines the
+  // prefix boundary for the next turn's cache hit).
+  for (const msg of history) {
+    if (msg.role === 'user' && Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block.cache_control) {
+          delete block.cache_control
+        }
+      }
+    }
+  }
   history.push({
     role: 'user',
     content: [{

@@ -1097,3 +1097,144 @@ describe('Persistent heartbeat: error resilience', () => {
     // that exits with code 64 unconditionally. This test documents the layering.
   })
 })
+
+// ── cache_control accumulation fix ──────────────────────────────────
+//
+// Anthropic's API allows a maximum of 4 blocks with cache_control.
+// System blocks use 1 (LOVE_IDENTITY). Without the fix, each turn
+// added a user message with cache_control, eventually exceeding the
+// limit (turn 4: 1 system + 4 user = 5 → "Found 5" API error).
+//
+// The fix: strip cache_control from previous user messages before
+// adding a new one. Only the most recent user message retains it.
+//
+// This test validates the stripping logic directly — it mirrors
+// the code in agent-runtime.mjs handleTurn() and ensures at most
+// 1 user message + 1 system block carry cache_control at any time.
+
+describe('cache_control accumulation fix (agent-runtime.mjs)', () => {
+  /**
+   * Simulate the cache_control stripping logic from agent-runtime.mjs.
+   * This mirrors the for-loop that runs before each new user message
+   * is pushed to history.
+   */
+  function stripPriorCacheControl(history: Array<{ role: string; content: Array<{ type: string; text: string; cache_control?: { type: string } }> }>) {
+    for (const msg of history) {
+      if (msg.role === 'user' && Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.cache_control) {
+            delete block.cache_control
+          }
+        }
+      }
+    }
+  }
+
+  function addTurn(history: Array<{ role: string; content: any[] }>, prompt: string) {
+    stripPriorCacheControl(history)
+    history.push({
+      role: 'user',
+      content: [{ type: 'text', text: prompt, cache_control: { type: 'ephemeral' } }],
+    })
+    // Simulate assistant response (no cache_control)
+    history.push({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'response' }],
+    })
+  }
+
+  function countCacheControlBlocks(history: Array<{ role: string; content: any[] }>) {
+    let count = 0
+    for (const msg of history) {
+      if (Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.cache_control) count++
+        }
+      }
+    }
+    return count
+  }
+
+  test('after 1 turn: exactly 1 cache_control block in history', () => {
+    const history: any[] = []
+    addTurn(history, 'turn 1')
+    expect(countCacheControlBlocks(history)).toBe(1)
+  })
+
+  test('after 4 turns: still exactly 1 cache_control block', () => {
+    const history: any[] = []
+    for (let i = 1; i <= 4; i++) {
+      addTurn(history, `turn ${i}`)
+    }
+    expect(countCacheControlBlocks(history)).toBe(1)
+    // Verify it's on the LAST user message
+    const lastUser = [...history].reverse().find(m => m.role === 'user')
+    expect(lastUser.content[0].cache_control).toEqual({ type: 'ephemeral' })
+  })
+
+  test('after 10 turns: still exactly 1 cache_control block', () => {
+    const history: any[] = []
+    for (let i = 1; i <= 10; i++) {
+      addTurn(history, `turn ${i}`)
+    }
+    expect(countCacheControlBlocks(history)).toBe(1)
+  })
+
+  test('with system blocks: total never exceeds 4', () => {
+    // Simulate system[1] with cache_control (LOVE_IDENTITY)
+    const systemBlocks = [
+      { type: 'text', text: 'OAUTH_ROUTING_MARKER' },
+      { type: 'text', text: 'LOVE_IDENTITY', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'state block' },
+    ]
+    const history: any[] = []
+    // Simulate 20 turns
+    for (let i = 1; i <= 20; i++) {
+      addTurn(history, `turn ${i}`)
+    }
+    // Count system + history cache_control blocks
+    let systemCount = 0
+    for (const block of systemBlocks) {
+      if ((block as any).cache_control) systemCount++
+    }
+    const historyCount = countCacheControlBlocks(history)
+    const total = systemCount + historyCount
+    expect(total).toBeLessThanOrEqual(4)
+    // Specifically: 1 system + 1 user = 2
+    expect(total).toBe(2)
+  })
+
+  test('previous user messages lose cache_control after strip', () => {
+    const history: any[] = []
+    addTurn(history, 'first')
+    // First message should have cache_control
+    expect(history[0].content[0].cache_control).toEqual({ type: 'ephemeral' })
+
+    addTurn(history, 'second')
+    // First message should NO LONGER have cache_control
+    expect(history[0].content[0].cache_control).toBeUndefined()
+    // Latest user message (index 2) should have it
+    expect(history[2].content[0].cache_control).toEqual({ type: 'ephemeral' })
+  })
+
+  test('tool_result messages do not gain cache_control', () => {
+    const history: any[] = []
+    addTurn(history, 'turn with tools')
+    // Simulate tool_result (no cache_control added by the runtime)
+    history.push({
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: [{ type: 'text', text: 'result' }] }],
+    })
+    history.push({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'final response' }],
+    })
+    // Add another turn — strip should not affect tool_result
+    addTurn(history, 'turn 2')
+    // tool_result should have no cache_control
+    const toolResult = history[2] // user(prompt), assistant, user(tool_result)
+    expect(toolResult.content[0].cache_control).toBeUndefined()
+    // Only the latest user prompt should have cache_control
+    expect(countCacheControlBlocks(history)).toBe(1)
+  })
+})
