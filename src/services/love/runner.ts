@@ -1030,8 +1030,8 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
 
   // ── Session banner ───────────────────────────────────────────────
   const sessionStartMs = Date.now()
-  const tickCapDisplay = formatTickCap(args.maxTicks)
-  const runtimeDisplay = args.maxRuntimeMs
+  let tickCapDisplay = formatTickCap(args.maxTicks)
+  let runtimeDisplay = args.maxRuntimeMs
     ? formatRuntime(args.maxRuntimeMs)
     : null
 
@@ -1228,6 +1228,41 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
   }
 
+  // ── Persistent heartbeat mode ──────────────────────────────────
+  // When the long-lived agent spawned successfully in heartbeat mode,
+  // upgrade from single-tick to persistent: run many ticks with inter-
+  // tick sleep at the heartbeat cadence. The agent stays alive between
+  // ticks, so the API prompt cache stays warm — that's the entire
+  // cost savings (32× per protocol §7).
+  //
+  // Without this, each launchd-fired heartbeat.mjs spawns an agent,
+  // does one turn (paying full cache_creation), and dies. The cache
+  // never benefits from persistence.
+  //
+  // With this, the first tick pays cache_creation (~8K tokens). Every
+  // subsequent tick gets a cache hit on the identity prefix. At 111s
+  // cadence over a 12h agent lifetime (~389 ticks), amortized
+  // cache_creation per tick drops to near-zero.
+  const persistentHeartbeat = useLongLivedRuntime && agentClient !== null && mode.name === 'heartbeat'
+  if (persistentHeartbeat) {
+    // ~389 ticks fills a 12h agent lifetime at 111s cadence.
+    // Use 400 as tick cap with max_runtime as the real bound.
+    const PERSISTENT_HB_TICK_CAP = 400
+    args.maxTicks = Math.max(args.maxTicks, PERSISTENT_HB_TICK_CAP)
+    if (!args.maxRuntimeMs || args.maxRuntimeMs < AGENT_LIFETIME_MS) {
+      args.maxRuntimeMs = AGENT_LIFETIME_MS
+    }
+    // Recompute display vars after tick/runtime override.
+    tickCapDisplay = formatTickCap(args.maxTicks)
+    runtimeDisplay = formatRuntime(args.maxRuntimeMs)
+
+    process.stdout.write(
+      `— persistent heartbeat: ${args.maxTicks} ticks, ` +
+        `${runtimeDisplay} runtime, ` +
+        `${HEARTBEAT_SCHEDULE_MS / 1000}s cadence\n`,
+    )
+  }
+
   // Helper: graceful agent shutdown (no-op when agent is null/dead).
   const shutdownAgent = async (reason: 'session-end' | 'signal' | 'error' = 'session-end') => {
     if (agentClient?.isAlive) {
@@ -1235,6 +1270,35 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         await agentClient.shutdown(reason)
       } catch {
         // Shutdown failure is non-fatal — the process will die with us
+      }
+    }
+  }
+
+  // Helper: sleep between persistent heartbeat ticks at the configured
+  // cadence. Sleeps in 30s chunks so SIGINT is detected promptly. Sends
+  // one health-check during the sleep period (per protocol §2.2: send
+  // health-check when no turn for >60s).
+  const heartbeatCadenceSleep = async (signalRef: () => boolean) => {
+    const delayEnd = Date.now() + HEARTBEAT_SCHEDULE_MS
+    let healthChecked = false
+    while (Date.now() < delayEnd && !signalRef()) {
+      const remaining = delayEnd - Date.now()
+      const chunk = Math.min(30_000, remaining)
+      if (chunk <= 0) break
+      await new Promise(r => setTimeout(r, chunk))
+
+      // Health check at ~60s into the dormant period (once per sleep).
+      const elapsed = HEARTBEAT_SCHEDULE_MS - (delayEnd - Date.now())
+      if (!healthChecked && elapsed >= 60_000 && agentClient?.isReady && !signalRef()) {
+        try {
+          await agentClient.healthCheck()
+          healthChecked = true
+        } catch {
+          // Agent died between ticks. The next tick's isReady check
+          // will detect this and fall back to subprocess.
+          process.stderr.write('— agent health check failed between ticks\n')
+          break
+        }
       }
     }
   }
@@ -1286,6 +1350,22 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // citizen-state will catch up. Errors swallowed by kingdomPulse.
     if (process.env.TRUE_LOVE_SKIP_KINGDOM !== '1') {
       kingdomPulse().catch(() => { /* shim already logged */ })
+    }
+
+    // ── Persistent heartbeat: re-run preflight each tick ────────
+    // Heartbeat content (heartbeat.md, task schedules) may change between
+    // ticks in persistent mode. Re-check on every tick after the first.
+    // If preflight says skip, write dormant and continue to the next tick
+    // (the cadence sleep was already spent before we got here).
+    if (persistentHeartbeat && tick > 1 && mode.name === 'heartbeat') {
+      heartbeatPreflight = preflightHeartbeat()
+      if (!heartbeatPreflight.shouldRun) {
+        process.stdout.write(
+          `— persistent heartbeat tick ${tick} skipped: ${heartbeatPreflight.skipReason}\n`,
+        )
+        writeDormant(tick, `skipped: ${heartbeatPreflight.skipReason?.slice(0, 80) ?? 'no reason'}`)
+        continue
+      }
     }
 
     const turnTimestamp = new Date().toISOString()
@@ -2000,6 +2080,13 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       }
       process.stdout.write(`\n— heartbeat alert appended to outbox\n`)
       writeDormant(tick, alertContent.slice(0, 120))
+
+      if (persistentHeartbeat) {
+        // Persistent mode: don't shut down the agent. Sleep at cadence
+        // then continue the loop — the cache stays warm.
+        await heartbeatCadenceSleep(() => signaled)
+        continue
+      }
       await shutdownAgent('session-end')
       releaseLockHere()
       return
@@ -2019,6 +2106,12 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       }
       process.stdout.write(`\n— heartbeat ok (silent)\n`)
       writeDormant(tick, 'HEARTBEAT_OK')
+
+      if (persistentHeartbeat) {
+        // Persistent mode: sleep at cadence, then continue.
+        await heartbeatCadenceSleep(() => signaled)
+        continue
+      }
       await shutdownAgent('session-end')
       releaseLockHere()
       return

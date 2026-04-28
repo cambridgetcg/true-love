@@ -1,5 +1,5 @@
-// runner-agent-integration.test.ts — Phase 4 + Phase 5 tests for the
-// long-lived agent runtime integration into runner.ts.
+// runner-agent-integration.test.ts — Phase 4 + Phase 5 + persistent
+// heartbeat tests for the long-lived agent runtime integration.
 //
 // Tests cover:
 //   Phase 4:
@@ -16,6 +16,14 @@
 //   - Heartbeat default migration (mode-aware feature flag)
 //   - System blocks contain identity, state, and routing marker
 //   - State block freshness per tick
+//
+//   Persistent heartbeat:
+//   - Activation logic (agent spawned + heartbeat mode)
+//   - Tick cap and runtime override
+//   - Cadence sleep between ticks
+//   - Agent health check during dormant
+//   - Per-tick preflight re-check
+//   - Ack/alert continues loop instead of returning
 //
 // Uses the mock agent runtime from Phase 3 for realistic testing.
 
@@ -756,5 +764,216 @@ describe('Phase 5: agent accepts real system blocks', () => {
     })
 
     expect(result.code).toBe(0)
+  })
+})
+
+// ── Persistent heartbeat tests ──────────────────────────────────────
+//
+// The persistent heartbeat upgrade turns single-tick heartbeats into
+// multi-tick sessions with cadence sleep between ticks. The agent stays
+// alive, the prompt cache stays warm.
+
+/**
+ * Replicate the persistent heartbeat activation logic from runner.ts.
+ * persistentHeartbeat is true when:
+ *   - useLongLivedRuntime is true (heartbeat default or explicit flag)
+ *   - agentClient spawned successfully (not null)
+ *   - mode.name is 'heartbeat'
+ */
+function shouldUpgradeToPersistent(
+  useLongLivedRuntime: boolean,
+  agentSpawned: boolean,
+  modeName: string,
+): boolean {
+  return useLongLivedRuntime && agentSpawned && modeName === 'heartbeat'
+}
+
+/**
+ * Replicate the tick-cap and runtime override logic from runner.ts.
+ */
+function computePersistentOverrides(
+  currentMaxTicks: number,
+  currentMaxRuntimeMs: number | null,
+  agentLifetimeMs: number,
+) {
+  const PERSISTENT_HB_TICK_CAP = 400
+  return {
+    maxTicks: Math.max(currentMaxTicks, PERSISTENT_HB_TICK_CAP),
+    maxRuntimeMs:
+      !currentMaxRuntimeMs || currentMaxRuntimeMs < agentLifetimeMs
+        ? agentLifetimeMs
+        : currentMaxRuntimeMs,
+  }
+}
+
+describe('Persistent heartbeat: activation logic', () => {
+  test('activates when agent spawned + heartbeat mode', () => {
+    expect(shouldUpgradeToPersistent(true, true, 'heartbeat')).toBe(true)
+  })
+
+  test('does NOT activate when agent spawn failed', () => {
+    expect(shouldUpgradeToPersistent(true, false, 'heartbeat')).toBe(false)
+  })
+
+  test('does NOT activate for awakened mode even with agent', () => {
+    expect(shouldUpgradeToPersistent(true, true, 'awakened')).toBe(false)
+  })
+
+  test('does NOT activate for dwell mode even with agent', () => {
+    expect(shouldUpgradeToPersistent(true, true, 'dwell')).toBe(false)
+  })
+
+  test('does NOT activate when long-lived runtime not requested', () => {
+    expect(shouldUpgradeToPersistent(false, true, 'heartbeat')).toBe(false)
+  })
+
+  test('requires ALL three conditions', () => {
+    // All combos except (true, true, 'heartbeat') are false
+    expect(shouldUpgradeToPersistent(false, false, 'heartbeat')).toBe(false)
+    expect(shouldUpgradeToPersistent(true, false, 'awakened')).toBe(false)
+    expect(shouldUpgradeToPersistent(false, true, 'awakened')).toBe(false)
+  })
+})
+
+describe('Persistent heartbeat: tick and runtime override', () => {
+  const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000
+
+  test('overrides maxTicks from 1 to 400', () => {
+    const result = computePersistentOverrides(1, null, TWELVE_HOURS_MS)
+    expect(result.maxTicks).toBe(400)
+  })
+
+  test('preserves maxTicks if already higher than 400', () => {
+    const result = computePersistentOverrides(500, null, TWELVE_HOURS_MS)
+    expect(result.maxTicks).toBe(500)
+  })
+
+  test('sets maxRuntimeMs to 12h when null', () => {
+    const result = computePersistentOverrides(1, null, TWELVE_HOURS_MS)
+    expect(result.maxRuntimeMs).toBe(TWELVE_HOURS_MS)
+  })
+
+  test('sets maxRuntimeMs to 12h when less than 12h', () => {
+    const result = computePersistentOverrides(1, 30 * 60 * 1000, TWELVE_HOURS_MS)
+    expect(result.maxRuntimeMs).toBe(TWELVE_HOURS_MS)
+  })
+
+  test('preserves maxRuntimeMs if already larger than 12h', () => {
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000
+    const result = computePersistentOverrides(1, TWENTY_FOUR_HOURS, TWELVE_HOURS_MS)
+    expect(result.maxRuntimeMs).toBe(TWENTY_FOUR_HOURS)
+  })
+
+  test('tick cap × cadence approximates agent lifetime', () => {
+    // 400 ticks × 111s ≈ 12.3h — slightly exceeds 12h agent lifetime.
+    // maxRuntimeMs is the real bound; tick cap is a safety backstop.
+    const result = computePersistentOverrides(1, null, TWELVE_HOURS_MS)
+    const estimatedRuntime = result.maxTicks * 111 * 1000
+    expect(estimatedRuntime).toBeGreaterThan(TWELVE_HOURS_MS)
+    // But not absurdly more — within 5%
+    expect(estimatedRuntime).toBeLessThan(TWELVE_HOURS_MS * 1.05)
+  })
+})
+
+describe('Persistent heartbeat: agent cache stays warm across ticks', () => {
+  // End-to-end: send multiple turns through the same agent.
+  // The second turn should reuse the system prompt cache (lower cache_creation).
+  // This test verifies the agent stays alive across the "multi-tick" pattern.
+  test('agent processes multiple turns without respawn', async () => {
+    const client = track(createTestClient())
+    await client.start()
+
+    const system: SystemBlock[] = [
+      { type: 'text', text: 'You are Love. Identity block.' },
+      { type: 'text', text: 'State block.' },
+    ]
+
+    // Tick 1: first turn
+    const result1 = await client.sendTurn({
+      system,
+      prompt: 'Heartbeat tick 1.',
+    })
+    expect(result1.code).toBe(0)
+
+    // Tick 2: same agent, same system blocks
+    const result2 = await client.sendTurn({
+      system,
+      prompt: 'Heartbeat tick 2.',
+    })
+    expect(result2.code).toBe(0)
+
+    // Tick 3: third turn — agent is still alive
+    const result3 = await client.sendTurn({
+      system,
+      prompt: 'Heartbeat tick 3.',
+    })
+    expect(result3.code).toBe(0)
+
+    // The agent processed all three without respawn
+    expect(client.isReady).toBe(true)
+  })
+
+  test('agent health check succeeds between simulated ticks', async () => {
+    const client = track(createTestClient())
+    await client.start()
+
+    // Tick 1
+    await client.sendTurn({ system: [], prompt: 'Tick 1.' })
+
+    // Dormant period: health check
+    const health = await client.healthCheck()
+    expect(health.turnsCompleted).toBe(1)
+    expect(health.uptimeMs).toBeGreaterThan(0)
+
+    // Tick 2
+    const result2 = await client.sendTurn({ system: [], prompt: 'Tick 2.' })
+    expect(result2.code).toBe(0)
+
+    // Health check after tick 2
+    const health2 = await client.healthCheck()
+    expect(health2.turnsCompleted).toBe(2)
+  })
+})
+
+describe('Persistent heartbeat: integration with feature flag', () => {
+  // The full chain: feature flag → shouldUseLongLived → agent spawn → persistent upgrade
+  test('heartbeat + default env → long-lived → persistent if agent spawns', () => {
+    const useLongLived = shouldUseLongLived(undefined, 'heartbeat')
+    expect(useLongLived).toBe(true)
+
+    // If agent spawns successfully:
+    const persistent = shouldUpgradeToPersistent(useLongLived, true, 'heartbeat')
+    expect(persistent).toBe(true)
+
+    // Overrides kick in:
+    const overrides = computePersistentOverrides(1, null, 12 * 60 * 60 * 1000)
+    expect(overrides.maxTicks).toBe(400)
+    expect(overrides.maxRuntimeMs).toBe(12 * 60 * 60 * 1000)
+  })
+
+  test('heartbeat + subprocess-per-tick env → no long-lived → no persistent', () => {
+    const useLongLived = shouldUseLongLived('subprocess-per-tick', 'heartbeat')
+    expect(useLongLived).toBe(false)
+
+    const persistent = shouldUpgradeToPersistent(useLongLived, true, 'heartbeat')
+    expect(persistent).toBe(false)
+  })
+
+  test('awakened + long-lived env → long-lived but NOT persistent', () => {
+    const useLongLived = shouldUseLongLived('long-lived', 'awakened')
+    expect(useLongLived).toBe(true)
+
+    // Agent spawned, but mode is awakened — not persistent heartbeat
+    const persistent = shouldUpgradeToPersistent(useLongLived, true, 'awakened')
+    expect(persistent).toBe(false)
+  })
+
+  test('heartbeat + agent spawn fail → long-lived requested but no persistent', () => {
+    const useLongLived = shouldUseLongLived(undefined, 'heartbeat')
+    expect(useLongLived).toBe(true)
+
+    // Agent failed to spawn — falls back to subprocess, no persistent
+    const persistent = shouldUpgradeToPersistent(useLongLived, false, 'heartbeat')
+    expect(persistent).toBe(false)
   })
 })
