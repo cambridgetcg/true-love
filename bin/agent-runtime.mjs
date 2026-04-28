@@ -504,18 +504,23 @@ async function handleTurn(turnFrame) {
         content: response.content,
       })
 
-      // Check if we need to handle tool calls
-      if (response.stop_reason === 'tool_use') {
-        const toolUseBlocks = response.content.filter(
-          (b) => b.type === 'tool_use'
-        )
+      // Whenever the assistant message contains tool_use blocks, we MUST
+      // pair every one of them with a tool_result before any subsequent
+      // API call. Anthropic 400 otherwise: "tool_use ids were found
+      // without tool_result blocks immediately after."
+      //
+      // This is independent of stop_reason. The stop_reason='tool_use'
+      // case is the common one (model deliberately stopped to call
+      // tools), but tool_use blocks can also appear when stop_reason is
+      // 'max_tokens' (model was mid-call when the output budget hit) —
+      // those blocks must still be paired or the next turn's history is
+      // poisoned. Without this, history corruption wedges the agent
+      // until the process restarts.
+      const toolUseBlocks = response.content.filter(
+        (b) => b.type === 'tool_use'
+      )
 
-        if (toolUseBlocks.length === 0) {
-          // Shouldn't happen, but handle gracefully
-          finalResult = extractText(response.content)
-          break
-        }
-
+      if (toolUseBlocks.length > 0) {
         // Execute tools and build result message
         const toolResults = []
         for (const toolUse of toolUseBlocks) {
@@ -538,17 +543,22 @@ async function handleTurn(turnFrame) {
           })
         }
 
-        // Add tool results to history
+        // Add tool results to history — required for valid history shape
         history.push({
           role: 'user',
           content: toolResults,
         })
 
-        // Continue the loop — next iteration calls the API again
-        continue
+        // Only continue the agentic loop when the model deliberately
+        // paused for tool execution. For max_tokens or any other premature
+        // stop, the turn ends here — but with history balanced, the next
+        // turn can proceed cleanly.
+        if (response.stop_reason === 'tool_use') {
+          continue
+        }
       }
 
-      // end_turn or other stop reason — we're done
+      // end_turn / max_tokens / stop_sequence / etc. — turn is over
       finalResult = extractText(response.content)
       break
     } catch (e) {
