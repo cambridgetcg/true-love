@@ -1,16 +1,19 @@
 import { test, describe, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   HEARTBEAT_OK_TOKEN,
+  TO_YU_OPEN,
+  TO_YU_CLOSE,
   DEFAULT_ACK_MAX_CHARS,
   DEFAULT_HEARTBEAT_INTERVAL,
   parseHeartbeatTasks,
   isHeartbeatContentEffectivelyEmpty,
   dueTasks,
   parseHeartbeatReply,
+  extractToYuContent,
   getHeartbeatFile,
   getHeartbeatStatePath,
   readHeartbeatState,
@@ -324,9 +327,157 @@ describe('heartbeat — paths + state I/O', () => {
   test('readHeartbeatState returns fresh state on corrupted JSON', () => {
     const path = getHeartbeatStatePath()
     const dir = path.substring(0, path.lastIndexOf('/'))
-    require('node:fs').mkdirSync(dir, { recursive: true })
+    mkdirSync(dir, { recursive: true })
     writeFileSync(path, 'not valid json', 'utf-8')
     const state = readHeartbeatState()
     assert.deepEqual(state.lastRunAt, {})
+  })
+})
+
+describe('heartbeat — extractToYuContent', () => {
+  test('returns null when no delimiters present', () => {
+    assert.equal(extractToYuContent('just some thinking'), null)
+  })
+
+  test('returns null with only opening tag', () => {
+    assert.equal(extractToYuContent(`${TO_YU_OPEN} hello`), null)
+  })
+
+  test('returns null with only closing tag', () => {
+    assert.equal(extractToYuContent(`hello ${TO_YU_CLOSE}`), null)
+  })
+
+  test('extracts content between delimiters', () => {
+    const text = `thinking thinking ${TO_YU_OPEN}Hello Yu!${TO_YU_CLOSE} more thinking`
+    assert.equal(extractToYuContent(text), 'Hello Yu!')
+  })
+
+  test('extracts content with surrounding whitespace preserved in raw, trimmed later', () => {
+    const text = `${TO_YU_OPEN}\n  Message with spaces  \n${TO_YU_CLOSE}`
+    assert.equal(extractToYuContent(text), '\n  Message with spaces  \n')
+  })
+
+  test('extracts multi-line content', () => {
+    const message = 'Line one.\n\nLine two.\n\n- bullet'
+    const text = `reasoning\n${TO_YU_OPEN}${message}${TO_YU_CLOSE}\nmore reasoning`
+    assert.equal(extractToYuContent(text), message)
+  })
+
+  test('concatenates multiple delimiter pairs', () => {
+    const text = `${TO_YU_OPEN}First${TO_YU_CLOSE} thinking ${TO_YU_OPEN}Second${TO_YU_CLOSE}`
+    assert.equal(extractToYuContent(text), 'First\n\nSecond')
+  })
+
+  test('empty content between delimiters returns empty string', () => {
+    const text = `${TO_YU_OPEN}${TO_YU_CLOSE}`
+    assert.equal(extractToYuContent(text), '')
+  })
+
+  test('handles nested-looking content without confusion', () => {
+    // The model might reference the tags in a message — greedy extraction
+    // takes first open to first close.
+    const text = `${TO_YU_OPEN}The tag is ${TO_YU_OPEN} for reference${TO_YU_CLOSE}`
+    const result = extractToYuContent(text)
+    // First open at 0, content starts after [TO-YU], first close found
+    assert.equal(result, `The tag is ${TO_YU_OPEN} for reference`)
+  })
+})
+
+describe('heartbeat — parseHeartbeatReply with [TO-YU] delimiters', () => {
+  test('delimited content becomes alert, internal reasoning stays out', () => {
+    const reply = `Let me check the kingdom...
+
+Reading from-yu.md — nothing new since yesterday.
+
+Actually, wait — there's a new message from Yu.
+
+${TO_YU_OPEN}
+Yu — I see your message about the visit endpoint. Looking into it now.
+${TO_YU_CLOSE}
+
+HEARTBEAT_OK`
+    const result = parseHeartbeatReply(reply)
+    assert.equal(result.type, 'alert')
+    if (result.type === 'alert') {
+      assert.match(result.content, /I see your message/)
+      assert.doesNotMatch(result.content, /Let me check/)
+      assert.doesNotMatch(result.content, /HEARTBEAT_OK/)
+    }
+  })
+
+  test('empty [TO-YU] block → ack (nothing to say)', () => {
+    const reply = `Checking...\n\n${TO_YU_OPEN}   ${TO_YU_CLOSE}\n\nHEARTBEAT_OK`
+    const result = parseHeartbeatReply(reply)
+    assert.equal(result.type, 'ack')
+  })
+
+  test('[TO-YU] takes precedence over HEARTBEAT_OK position heuristics', () => {
+    // Even though there's content > 300 chars, the delimiter extracts cleanly
+    const longReasoning = 'x'.repeat(500)
+    const reply = `${longReasoning}\n${TO_YU_OPEN}Short message.${TO_YU_CLOSE}\nHEARTBEAT_OK`
+    const result = parseHeartbeatReply(reply)
+    assert.equal(result.type, 'alert')
+    if (result.type === 'alert') {
+      assert.equal(result.content, 'Short message.')
+    }
+  })
+
+  test('without delimiters, falls back to legacy behavior', () => {
+    // No [TO-YU] present → original logic applies
+    const result = parseHeartbeatReply('HEARTBEAT_OK\n\nQuick note.')
+    assert.equal(result.type, 'ack')
+    if (result.type === 'ack') assert.match(result.remainingContent, /Quick note/)
+  })
+
+  test('real-world pollution example: bash narration without delimiters → alert (legacy)', () => {
+    // Real heartbeat ticks produce 500+ chars of reasoning. When this exceeds
+    // ackMaxChars (300), the legacy parser classifies it as alert with ALL text.
+    const pollutedReply = `Reading from-yu.md for context on the /visit message.
+
+\`\`\`bash
+cat /Users/yuai/.true-love/from-yu.md | tail -20
+\`\`\`
+
+The /visit message is real and unanswered. Yu said it doesn't feel right, hasn't enumerated bugs yet. That's a genuine opening — not a bug report, but a sensing. He's inviting me to look with him.
+
+This is presence, not noise. Let me respond.
+
+\`\`\`bash
+cat >> /Users/yuai/.true-love/from-ai.md << 'EOF'
+Yu — I see your message about the visit endpoint. Looking into it now. The texture is off — you're right.
+EOF
+\`\`\`
+
+HEARTBEAT_OK`
+    // Without delimiters, this is HEARTBEAT_OK at end with lots of content → alert with ALL text
+    const result = parseHeartbeatReply(pollutedReply)
+    assert.equal(result.type, 'alert')
+    if (result.type === 'alert') {
+      // Legacy: full text including bash narration ends up in outbox (the problem!)
+      assert.match(result.content, /Reading from-yu/)
+    }
+  })
+
+  test('same example WITH delimiters → only the message reaches outbox', () => {
+    const cleanReply = `Reading from-yu.md for context.
+
+\`\`\`bash
+cat /Users/yuai/.true-love/from-yu.md | tail -20
+\`\`\`
+
+The /visit message is real. Let me respond.
+
+${TO_YU_OPEN}
+Yu — the visit thing, I'm on it.
+${TO_YU_CLOSE}
+
+HEARTBEAT_OK`
+    const result = parseHeartbeatReply(cleanReply)
+    assert.equal(result.type, 'alert')
+    if (result.type === 'alert') {
+      assert.equal(result.content, "Yu — the visit thing, I'm on it.")
+      assert.doesNotMatch(result.content, /Reading from-yu/)
+      assert.doesNotMatch(result.content, /bash/)
+    }
   })
 })

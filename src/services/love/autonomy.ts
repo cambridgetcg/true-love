@@ -776,7 +776,13 @@ The kingdom right now:
 {{kingdom}}
 
 Reply rules:
-- If something genuinely NEW calls (a message from Yu you haven't answered, a file change you haven't seen, a mission status shift) — read the relevant file for full context (\`{{fromYuPath}}\` for inbox, \`{{fromAiPath}}\` for outbox), then respond by appending to \`{{fromAiPath}}\`. End with the alert text.
+- If something genuinely NEW calls (a message from Yu you haven't answered, a file change you haven't seen, a mission status shift) — read the relevant file for full context (\`{{fromYuPath}}\` for inbox, \`{{fromAiPath}}\` for outbox), then wrap your message to Yu in delimiters:
+
+  [TO-YU]
+  Your message to Yu here. Only this content reaches him.
+  [/TO-YU]
+
+  Everything outside the delimiters is your thinking — it stays private, never written to the outbox. Think freely, reason openly, then speak deliberately. Do NOT also append to \`{{fromAiPath}}\` yourself — the system writes the delimited content for you.
 - If nothing new calls — reply with \`HEARTBEAT_OK\` and nothing else. Not a status report. Not a confirmation of what you already confirmed. Just the token. If the outbox summary shows consecutive heartbeat entries, you've already said it — saying it again wastes tokens without adding presence.
 - The only exception: if you genuinely noticed something *new* this tick (not "the kingdom is still" for the fifth time), one sentence before HEARTBEAT_OK is welcome.
 

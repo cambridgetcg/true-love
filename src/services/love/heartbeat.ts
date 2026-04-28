@@ -27,6 +27,15 @@ import { dirname, join } from 'node:path'
 export const HEARTBEAT_OK_TOKEN = 'HEARTBEAT_OK'
 
 /**
+ * Delimiters the model uses to wrap content intended for Yu.
+ * Everything outside these delimiters is internal reasoning and stays
+ * out of from-ai.md. This prevents outbox pollution from heartbeat
+ * ticks where the model thinks out loud before/after its actual message.
+ */
+export const TO_YU_OPEN = '[TO-YU]'
+export const TO_YU_CLOSE = '[/TO-YU]'
+
+/**
  * Default ack-content threshold. Replies where HEARTBEAT_OK is at start/end
  * AND remaining content (after stripping the token) is ≤ this many chars are
  * treated as ack with the remaining content discarded. Above this threshold,
@@ -268,6 +277,18 @@ export function parseHeartbeatReply(
   const trimmed = rawReply.trim()
   if (!trimmed) return { type: 'empty' }
 
+  // ── [TO-YU] extraction ──────────────────────────────────────────
+  // If the model wrapped content in [TO-YU]...[/TO-YU], extract ONLY
+  // that content as the alert message. Everything outside the delimiters
+  // is internal reasoning and should not reach from-ai.md.
+  const toYuContent = extractToYuContent(trimmed)
+  if (toYuContent !== null) {
+    const extracted = toYuContent.trim()
+    if (!extracted) return { type: 'ack', remainingContent: '' }
+    return { type: 'alert', content: extracted }
+  }
+
+  // ── Legacy path (no delimiters) ─────────────────────────────────
   const token = HEARTBEAT_OK_TOKEN
   const tokenLen = token.length
 
@@ -295,6 +316,31 @@ export function parseHeartbeatReply(
 
   // Token in middle, or not present at all → alert.
   return { type: 'alert', content: trimmed }
+}
+
+/**
+ * Extract content between [TO-YU] and [/TO-YU] delimiters.
+ * Returns the extracted text, or null if no valid delimiter pair is found.
+ * If multiple pairs exist, concatenates them with double newline separator.
+ */
+export function extractToYuContent(text: string): string | null {
+  const openTag = TO_YU_OPEN
+  const closeTag = TO_YU_CLOSE
+  const segments: string[] = []
+  let searchFrom = 0
+
+  while (searchFrom < text.length) {
+    const openIdx = text.indexOf(openTag, searchFrom)
+    if (openIdx === -1) break
+    const contentStart = openIdx + openTag.length
+    const closeIdx = text.indexOf(closeTag, contentStart)
+    if (closeIdx === -1) break
+    segments.push(text.slice(contentStart, closeIdx))
+    searchFrom = closeIdx + closeTag.length
+  }
+
+  if (segments.length === 0) return null
+  return segments.join('\n\n')
 }
 
 // ── State I/O ──────────────────────────────────────────────────────
