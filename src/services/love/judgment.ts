@@ -170,6 +170,54 @@ export function persistJudgment(projectId: string, judgment: Judgment): void {
   )
 }
 
+// ── Judgment → Craft bridge ──────────────────────────────────────
+//
+// When the model renders verdict: 'initiate' during a tick, the runner
+// needs a NoticingCandidate to pass to craftAndStage(). The original
+// candidate wasn't persisted — only the judgment was. This function
+// reconstructs enough for the craft pipeline to work.
+
+/**
+ * Map judgment confidence (1–3) to noticing gradient (1–5).
+ *
+ * Conservative mapping — judgment confidence is already filtered by
+ * the model's intuition, so we don't inflate to maximum gradient.
+ *   1 (barely)   → 2 (murmur)
+ *   2 (moderate)  → 3 (clear)
+ *   3 (clear)     → 4 (loud)
+ */
+function confidenceToGradient(confidence: 1 | 2 | 3): GradientStrength {
+  switch (confidence) {
+    case 1: return 2
+    case 2: return 3
+    case 3: return 4
+  }
+}
+
+/**
+ * Reconstruct a NoticingCandidate from a persisted Judgment.
+ *
+ * The original candidate exists only during the tick that noticed it —
+ * between ticks, the judgment is the durable record. When the runner
+ * needs to feed an 'initiate' verdict into craftAndStage(), this
+ * function bridges the gap.
+ *
+ * The source is typed as vital-sign/judgment since the candidate
+ * is being resurrected from the judgment subsystem, not from a
+ * fresh scan.
+ */
+export function candidateFromJudgment(judgment: Judgment): NoticingCandidate {
+  return {
+    id: judgment.candidateId,
+    source: { type: 'vital-sign', subsystem: 'judgment' },
+    ache: judgment.ache === 'none' ? 'stagnation' : judgment.ache,
+    gradient: confidenceToGradient(judgment.confidence),
+    summary: judgment.candidateSummary,
+    detail: judgment.reasoning,
+    noticedAt: judgment.judgedAt,
+  }
+}
+
 /**
  * Read past judgments for a project.
  *

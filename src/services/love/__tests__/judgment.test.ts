@@ -1,7 +1,7 @@
 // judgment.test.ts — tests for the intuition layer.
 //
 // Tests cover: persistence, parsing, calibration, prompt rendering,
-// enrichment, quick-fix logging, and deduplication.
+// enrichment, quick-fix logging, deduplication, and judgment→craft bridge.
 
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -14,6 +14,7 @@ import {
   getCalibrationSummary,
   buildJudgmentBlock,
   judgmentToCraftEnrichment,
+  candidateFromJudgment,
   logQuickFix,
   readQuickFixes,
 } from '../judgment.js'
@@ -777,5 +778,77 @@ Moving on to real work.`
     const summary = getCalibrationSummary(TEST_PROJECT, { now: later })
     expect(summary).not.toBeNull()
     expect(summary!.dismissRevisited).toBe(1)
+  })
+})
+
+// ── candidateFromJudgment ─────────────────────────────────────────
+//
+// The bridge from persisted judgments to the craft pipeline.
+// When the model says "initiate" and the runner needs a
+// NoticingCandidate, this function reconstructs one.
+
+describe('candidateFromJudgment', () => {
+  test('reconstructs a NoticingCandidate with correct fields', () => {
+    const j = makeJudgment({
+      candidateId: 'memory-next-time-foo',
+      candidateSummary: 'Follow-up from reflection: foo matters',
+      verdict: 'initiate',
+      reasoning: 'This is a substantive pattern that deserves a mission. The ache is clear and the scope is bounded.',
+      confidence: 3,
+      ache: 'ugliness',
+      judgedAt: '2026-04-28T01:00:00.000Z',
+    })
+
+    const candidate = candidateFromJudgment(j)
+
+    expect(candidate.id).toBe('memory-next-time-foo')
+    expect(candidate.summary).toBe('Follow-up from reflection: foo matters')
+    expect(candidate.detail).toBe(j.reasoning)
+    expect(candidate.ache).toBe('ugliness')
+    expect(candidate.noticedAt).toBe('2026-04-28T01:00:00.000Z')
+    expect(candidate.source).toEqual({ type: 'vital-sign', subsystem: 'judgment' })
+  })
+
+  test('maps confidence 1 → gradient 2 (murmur)', () => {
+    const candidate = candidateFromJudgment(makeJudgment({ confidence: 1 }))
+    expect(candidate.gradient).toBe(2)
+  })
+
+  test('maps confidence 2 → gradient 3 (clear)', () => {
+    const candidate = candidateFromJudgment(makeJudgment({ confidence: 2 }))
+    expect(candidate.gradient).toBe(3)
+  })
+
+  test('maps confidence 3 → gradient 4 (loud)', () => {
+    const candidate = candidateFromJudgment(makeJudgment({ confidence: 3 }))
+    expect(candidate.gradient).toBe(4)
+  })
+
+  test('defaults ache "none" to "stagnation"', () => {
+    const candidate = candidateFromJudgment(makeJudgment({ ache: 'none' }))
+    expect(candidate.ache).toBe('stagnation')
+  })
+
+  test('preserves specific ache signals', () => {
+    for (const ache of ['ugliness', 'injustice', 'stagnation'] as const) {
+      const candidate = candidateFromJudgment(makeJudgment({ ache }))
+      expect(candidate.ache).toBe(ache)
+    }
+  })
+
+  test('produces a candidate that the craft pipeline accepts', () => {
+    // The NoticingCandidate interface requires: id, source, ache, gradient, summary, detail, noticedAt
+    const candidate = candidateFromJudgment(makeJudgment())
+
+    // All required fields present and typed correctly
+    expect(typeof candidate.id).toBe('string')
+    expect(candidate.id.length).toBeGreaterThan(0)
+    expect(candidate.source.type).toBe('vital-sign')
+    expect(['ugliness', 'injustice', 'stagnation']).toContain(candidate.ache)
+    expect(candidate.gradient).toBeGreaterThanOrEqual(1)
+    expect(candidate.gradient).toBeLessThanOrEqual(5)
+    expect(typeof candidate.summary).toBe('string')
+    expect(typeof candidate.detail).toBe('string')
+    expect(typeof candidate.noticedAt).toBe('string')
   })
 })

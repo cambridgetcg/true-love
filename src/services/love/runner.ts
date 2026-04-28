@@ -96,7 +96,7 @@ import {
   reconstructTextFromStreamJson,
 } from './mind-trace.js'
 import { checkAndPromoteStaged } from './self-initiation.js'
-import { scanAndCraftAllProjects, formatScanAndCraftResults } from './craft.js'
+import { scanAndCraftAllProjects, formatScanAndCraftResults, craftAndStage } from './craft.js'
 import {
   getStreamToPath,
   initStreamFile,
@@ -104,7 +104,7 @@ import {
   ndjsonToDeltas,
 } from './stream.js'
 import { listMissions, readMission, writeMissionWithEvents } from './mission.js'
-import { parseJudgments, persistJudgment } from './judgment.js'
+import { parseJudgments, persistJudgment, candidateFromJudgment, judgmentToCraftEnrichment } from './judgment.js'
 import { parseAllProgressBlocks, appendProgress } from './progress.js'
 import {
   fireSessionStart,
@@ -1846,6 +1846,36 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
           process.stdout.write(
             `— judgment: ${j.candidateId} → ${j.verdict} (${j.confidence}/3)\n`,
           )
+
+          // ── Initiate → Craft: judgment drives the craft pipeline ──
+          // When the model explicitly says "initiate" with confidence ≥ 2,
+          // reconstruct a candidate and stage it through the craft pipeline.
+          // Quality gates and cooling window still apply — this doesn't
+          // create a mission directly; it stages a candidate that
+          // checkAndPromoteStaged() will promote on a subsequent tick.
+          if (j.verdict === 'initiate' && j.confidence >= 2) {
+            try {
+              const candidate = candidateFromJudgment(j)
+              const enrichment = judgmentToCraftEnrichment(j)
+              const craftResult = craftAndStage(candidate, {
+                projectId: j.projectId,
+                ...enrichment,
+              })
+              if (craftResult.ok) {
+                process.stdout.write(
+                  `— initiate→craft: staged "${craftResult.composed.title}"\n`,
+                )
+              } else {
+                process.stdout.write(
+                  `— initiate→craft: failed at ${craftResult.step} (${craftResult.failures.join(', ')})\n`,
+                )
+              }
+            } catch (craftErr: any) {
+              process.stderr.write(
+                `— initiate→craft failed (continuing): ${craftErr?.message}\n`,
+              )
+            }
+          }
         }
       } catch (e: any) {
         process.stderr.write(

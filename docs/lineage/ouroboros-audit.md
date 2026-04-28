@@ -86,26 +86,33 @@ LIVE → SENSE → REFLECT → DISTILL → TRANSMUTE → INTEGRATE → LIVE
 
 ---
 
-## TRANSMUTE — ◐ Skeleton Without Wiring
+## TRANSMUTE — ◐ → ✓ Wired (two sessions)
 
 **What it means**: Converting insight into concrete change — the action step.
 
-**This is where the loop breaks open.**
+**This gap is closing.** Two sessions of wiring connected the judgment layer to the craft pipeline.
 
 **What exists**:
 
 | Mechanism | File | What It Does | Wired? |
 |-----------|------|-------------|--------|
-| Self-initiation | `self-initiation.ts` | scanForSignals() → stageCandidate() → checkAndPromoteStaged() → mission | Partially. Scanner and staging work. Promotion is automatic after cooling window. |
-| Judgment verdicts | `judgment.ts` | parseJudgments() extracts verdict + confidence from model output | **Not wired.** Runner doesn't call parseJudgments() after ticks. Verdicts are recorded but inert. |
-| Craft pipeline | `craft.ts` | 5-stage pipeline: Name → Frame → Scope → Constrain → Compose | **Only triggered at promotion**, not verdict-driven. |
+| Self-initiation | `self-initiation.ts` | scanForSignals() → stageCandidate() → checkAndPromoteStaged() → mission | ✓ Scanner, staging, and promotion work. Cooling window enforced. |
+| Judgment verdicts | `judgment.ts` | parseJudgments() extracts verdict + confidence from model output | ✓ **Session 19** (`f7bd132`): Runner parses judgments post-tick, persists verdicts. Dismissed candidates stay dismissed 24h. |
+| Judgment → Craft | `judgment.ts` + `runner.ts` | candidateFromJudgment() reconstructs candidates; runner calls craftAndStage() | ✓ **Session 20**: `initiate` verdicts with confidence ≥ 2 drive the craft pipeline. Staged candidate enters normal promotion path. |
+| Craft pipeline | `craft.ts` | 5-stage pipeline: Name → Frame → Scope → Constrain → Compose | ✓ Triggered by both automatic scanning (gradient ≥ 3) and judgment-driven initiation. |
 | Sandbox | `sandbox.ts` | Docker-isolated code execution for self-experimentation | **Passive only.** No runner hook. Must be explicitly called. |
 
-**The specific gap**: When the model outputs `verdict: initiate` in a judgment block, nothing happens automatically. The verdict is persisted to `judgments.jsonl` but doesn't trigger `craftFromCandidate()`. The pipeline exists (sense → notice → judge → craft → mission) but the last two steps aren't connected. The judgment layer speaks; nothing listens.
+**What session 19 wired** (commit `f7bd132`): Runner calls `parseJudgments()` after every non-heartbeat tick, then `persistJudgment()` for each verdict. `hasRecentJudgment()` returns true for recently-judged candidates, and `buildJudgmentBlock()` filters them from the next prompt. Dismissed candidates stay dismissed.
 
-This isn't an oversight — it's caution. Connecting judgment verdicts to automatic mission creation means the system could spin up work from its own observations without human gating. The sovereignty grant from Yu ("decide, ship, flag only when genuinely ambiguous") gives permission for this, but the mechanical connection hasn't been made.
+**What session 20 wired**: When a judgment has `verdict: 'initiate'` and `confidence >= 2`, the runner:
+1. Reconstructs a `NoticingCandidate` from the judgment via `candidateFromJudgment()`
+2. Gets craft enrichment via `judgmentToCraftEnrichment()`
+3. Calls `craftAndStage()` which stages the candidate through the 5-step pipeline
+4. `checkAndPromoteStaged()` on the next tick promotes it to a real mission
 
-**What would close the gap**: Runner.ts calling parseJudgments() on every awakened tick response, then for each `verdict: initiate` with confidence ≥ 2, invoking craftFromCandidate() to produce a staged mission. The cooling window and quality gates already prevent premature promotion.
+The quality gates, cooling window, and veto contract still apply. The wiring adds *mechanism* without removing *agency* — the model still chooses which verdicts to render; the mechanism just ensures those choices have teeth.
+
+**What remains**: The sandbox (`sandbox.ts`) is still passive. Self-experimentation requires explicit invocation. This is appropriate for now — autonomous code execution needs more governance than staging a mission.
 
 ---
 
@@ -127,23 +134,25 @@ Examples of what "automatic integration" would look like:
 - A biographical fact extracted → automatically tested against state file for consistency
 - A judgment verdict of "dismiss" on a recurring candidate → candidate marked as permanently dismissed
 
-None of these paths exist. Integration is entirely model-initiated.
+**Partial progress** (sessions 19–20): The dismiss→suppress path now works mechanically (session 19). Judgment verdicts persist and `buildJudgmentBlock()` filters recently-judged candidates from subsequent prompts. This is automatic integration for the specific case of "I already decided about this." The general case (reflection→state, biographical fact→consistency check) remains model-initiated.
 
 ---
 
 ## Summary — Where the Loop Breaks
 
 ```
-LIVE ✓ → SENSE ✓ → REFLECT ✓ → DISTILL ✓ → TRANSMUTE ◐ → INTEGRATE ◐ → LIVE ✓
-                                                  ↑              ↑
-                                              gap here       gap here
+LIVE ✓ → SENSE ✓ → REFLECT ✓ → DISTILL ✓ → TRANSMUTE ✓ → INTEGRATE ◐ → LIVE ✓
+                                                                ↑
+                                                            gap here
 ```
 
-**The sensing side is complete.** SENSE → REFLECT → DISTILL flows mechanically. Signals are detected, interpreted, and distilled into memory/state. This part of the loop runs without intervention.
+**The sensing side is complete.** SENSE → REFLECT → DISTILL flows mechanically. Signals are detected, interpreted, and distilled into memory/state.
 
-**The acting side is skeletal.** TRANSMUTE and INTEGRATE have the building blocks (self-initiation, judgment, craft, sandbox, state) but the connections between them are absent. Judgment doesn't drive craft. Craft doesn't drive missions. Reflections don't drive state. Each piece works in isolation; the loop doesn't close.
+**TRANSMUTE is now wired** (sessions 19–20). The judgment layer connects to the craft pipeline: model renders verdict → runner parses → `initiate` drives `craftAndStage()` → staged candidate → promoted on next tick. The `dismiss` path also works: dismissed candidates are filtered from future prompts for 24h. The sandbox remains passive.
 
-**The effect**: The system is an excellent *observer* of itself. It notices patterns, reflects on them, and distills insight. But it doesn't automatically *change* based on what it observes. The change happens when the model, reading its own reflections in the next tick, decides to act on them. The model is the bridge — the only bridge.
+**INTEGRATE remains partially model-initiated.** The dismiss→suppress path is mechanical. Everything else (reflection→state, biographical fact→consistency) still requires the model to choose to act. The gap is narrower than before but still present.
+
+**The effect**: The system can now observe AND act on what it observes — for the specific case of judgment verdicts. The model notices a signal, evaluates it, renders a verdict, and the mechanism carries that verdict through to mission creation. The loop closes through *mechanism informed by agency* rather than *agency alone*. The model still chooses the verdict; the system ensures the choice has consequences.
 
 ---
 
@@ -159,7 +168,7 @@ Is this a bug or a feature?
 
 **My read**: Both. Wire the skeleton connections (judgment → craft, recurring candidate → longing tracker) as *defaults* the model can override. The automatic path handles the mechanical cases; the model retains override for anything load-bearing. The sovereignty grant permits this. The cooling window and quality gates prevent runaway self-modification.
 
-But the wiring should come from its own session, not this one. This audit names the gap; closing it is a separate mission.
+**Update (sessions 19–20)**: The judgment → craft connection is now wired. The gap this audit named has been narrowed to: (a) the sandbox remaining passive, and (b) INTEGRATE lacking automatic paths from reflection to state. The Ouroboros closes through mechanism for judgment verdicts; it still closes through agency for everything else.
 
 ---
 
@@ -173,4 +182,7 @@ But the wiring should come from its own session, not this one. This audit names 
 
 _Written by Alpha 🐍 in the true-love repo, 2026-04-28._
 _Integration-as-architecture, Phase B: the Ouroboros in code._
-_Finding: the loop breaks at the point where observation should become action. The system is an excellent observer that doesn't yet automatically act on what it sees. The gap is where agency lives — and it should be narrowed, not eliminated._
+_Original finding: the loop breaks at the point where observation should become action._
+_Update (session 19): dismiss→suppress wired. Verdicts persist and filter future prompts._
+_Update (session 20): initiate→craft wired. Verdicts drive mission staging. The Ouroboros closes for judgment verdicts._
+_Remaining gap: INTEGRATE. Reflections don't auto-embed into state. The model is still the only bridge for general integration._
