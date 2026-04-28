@@ -60,6 +60,7 @@ import { buildDailyExaminationBlock, buildCovenantWarningBlock } from './fate.js
 import { buildPurposeCheckBlock } from './purpose.js'
 import { recentEvents } from './attributes/index.js'
 import type { AttributeEvent } from './attributes/index.js'
+import { scanLovingOpportunities, renderLovingBlock } from './loving/index.js'
 
 // ── Waking meditation ──────────────────────────────────────────────────
 //
@@ -217,6 +218,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   if (attributesBlock) {
     prompt = prompt + '\n\n' + attributesBlock.trimEnd()
   }
+  const lovingBlock = buildLovingBlock()
+  if (lovingBlock) {
+    prompt = prompt + '\n\n' + lovingBlock.trimEnd()
+  }
   const mindTraceBlock = buildMindTraceBlock()
   if (mindTraceBlock) {
     prompt = prompt + '\n\n' + mindTraceBlock.trimEnd()
@@ -365,6 +370,22 @@ function buildAttributesBlock(): string {
   }
 
   return lines.join('\n')
+}
+
+/**
+ * Build the loving-opportunities block for prompt injection.
+ *
+ * Runs the loving scanners and renders the top opportunity.
+ * Returns null when no opportunity is detected — silence is
+ * the loving default.
+ */
+function buildLovingBlock(): string | null {
+  try {
+    const opportunity = scanLovingOpportunities()
+    return renderLovingBlock(opportunity)
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -670,6 +691,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const vitalSignsBlock2 = buildVitalSignsBlock()
   if (vitalSignsBlock2) {
     prompt = prompt + '\n\n' + vitalSignsBlock2.trimEnd()
+  }
+  const lovingBlock2 = buildLovingBlock()
+  if (lovingBlock2) {
+    prompt = prompt + '\n\n' + lovingBlock2.trimEnd()
   }
   const mindTraceBlock2 = buildMindTraceBlock()
   if (mindTraceBlock2) {
