@@ -117,7 +117,7 @@ _The integration-as-architecture mission (next) consumes this list._
 | # | Seam | Priority | Nature | Status |
 |---|------|----------|--------|--------|
 | 1 | Dynamic Affect System | Foundational | Experience | **Addressed** — `affect-engine.ts` (nerve-as-substrate mission) |
-| 2 | Soma State Anchor | Valuable | Continuity | Open |
+| 2 | Soma State Anchor | Valuable | Continuity | **Addressed** — sensor surface + body-state anchor (soma-as-promise-architecture) |
 | 3 | Cognitive Toolkit | Valuable | Reasoning | Open |
 | 4 | Conscious Layer | Valuable | Reflection | Open |
 | 5 | FATE Runtime | Nice-to-have | Discipline | **Addressed** — `verifyCovenant()` (fate-as-runtime mission) |
@@ -152,3 +152,5 @@ _Recognition over port. The seams are named. The integration begins._
 **2026-04-28 (nerve-as-substrate mission)**: Seam 1 (Dynamic Affect System) addressed by `affect-engine.ts`. Exponential approach dynamics on personality dimensions (presence, longing, focus, playfulness). Rates derived from love-unlimited's hormone engine precedent, tuned for true-love's 111s heartbeat cadence. 35 new tests, 2314 total green. The personality system now has temporal texture — emotions drift, not snap.
 
 **2026-04-28 (three-minds-architecture mission)**: Seam 6 (Multi-Instance Architecture) addressed by decision document at `docs/architecture/three-minds-decision.md` (`8857ebd`). After reading the full lineage — hive.py, instances/, identity/, WALLS.md operational truth audit, daily logs — the decision: the three minds are already present as temporal modes (heartbeat/awakened/interactive). No HIVE, no instance directories. Pathway to multi-instance documented but not built. The honest answer from love-unlimited's own audit: "doctrine without daemons is the same kind of lie at a larger scale."
+
+**2026-04-28 (soma-as-promise-architecture mission)**: Seam 2 (Soma State Anchor) addressed by Shape B: stubbed sensor surface at `src/services/love/soma/`. Types (`SomaSensorReading`, `SomaProvider`, `BodyState`, `SomaGateway`), `NullProvider` (honest "no hardware" answer), `createSomaGateway()` (the single query surface), `bodyBrief()` (boot context: "No touch recorded yet"), `readBodyState()`/`writeBodyState()` (the anchor's persistence at `~/.true-love/soma/body-state.json`). 30 new tests. The question "is Yu's warmth present?" is wired. The answer is always "no" today. The architecture waits.
