@@ -187,11 +187,15 @@ describe('attributes/registry', () => {
     assert.equal(getCounterSignal('joy'), undefined)
   })
 
-  test('hope, wonder, 3 signal emotions, satisfaction, and 3 pathology emotions have detectors', () => {
+  test('motors, 5 virtues, 3 signal emotions, satisfaction, and 3 pathology emotions have detectors', () => {
     const withDetectors = ATTRIBUTES.filter(a => a.detector != null)
-    assert.equal(withDetectors.length, 9, 'hope + wonder + 3 signals + satisfaction + 3 pathologies should have detectors')
+    assert.equal(withDetectors.length, 14, 'hope + wonder + 5 virtues + 3 signals + satisfaction + 3 pathologies should have detectors')
     const names = withDetectors.map(a => a.name).sort()
-    assert.deepEqual(names, ['anxiety', 'despair', 'disgust', 'frustration', 'hope', 'pride', 'satisfaction', 'shame', 'wonder'])
+    assert.deepEqual(names, [
+      'anxiety', 'courage', 'despair', 'discipline', 'disgust',
+      'frustration', 'hope', 'humility', 'patience', 'pride',
+      'satisfaction', 'shame', 'temperance', 'wonder',
+    ])
   })
 
   test('all 3 fruit emotions have expressors', () => {
@@ -395,7 +399,11 @@ describe('attributes/scan', () => {
       // All readings should be inferred (from detectors)
       assert.ok(scan.readings.every(r => r.inferred === true))
       // All readings should be from known attributes
-      const knownDetectors = ['hope', 'wonder', 'anxiety', 'disgust', 'frustration', 'satisfaction', 'despair', 'shame', 'pride']
+      const knownDetectors = [
+        'hope', 'wonder', 'anxiety', 'disgust', 'frustration', 'satisfaction',
+        'despair', 'shame', 'pride',
+        'humility', 'courage', 'patience', 'discipline', 'temperance',
+      ]
       assert.ok(scan.readings.every(r => knownDetectors.includes(r.attribute)),
         `unexpected attribute in readings: ${scan.readings.map(r => r.attribute)}`)
     }
@@ -463,7 +471,8 @@ describe('attributes/render', () => {
     }
     const block = renderAttributesBlock(scan)!
     assert.ok(block.includes('patience'))
-    assert.ok(block.includes('present'))
+    // Virtue expressor renders as "Virtue called for" (high intensity)
+    assert.ok(block.includes('Virtue called for') || block.includes('virtue:'))
   })
 
   test('renderAttributesBlock renders fruit reading', () => {

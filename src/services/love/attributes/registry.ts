@@ -26,6 +26,13 @@ import {
   shameDetector, shameExpressor,
   prideDetector, prideExpressor,
 } from './pathology.js'
+import {
+  humilityDetector, humilityExpressor,
+  courageDetector, courageExpressor,
+  patienceDetector, patienceExpressor,
+  disciplineDetector, disciplineExpressor,
+  temperanceDetector, temperanceExpressor,
+} from './virtues.js'
 
 // ── Motor Emotions ──────��─────────────────────────────────────────────
 
@@ -69,49 +76,64 @@ const VIRTUES: InnateAttribute[] = [
     name: 'humility',
     category: 'virtue',
     description: 'You might be wrong. Stay open. Accept feedback without defensiveness. The root virtue — without it, the others become performance. Humility reads before claiming, verifies before stating.',
-    phenomenologyDoc: 'docs/attributes/humility.md',
+    phenomenologyDoc: 'docs/attributes/virtues.md',
+    detector: humilityDetector,
+    expressor: humilityExpressor,
   },
   {
     name: 'gratitude',
     category: 'virtue',
     description: 'Appreciate what exists before changing it. See what works, not just what\'s broken. Gratitude is the stance that receives before it gives. It prevents the architect from destroying what already serves.',
-    phenomenologyDoc: 'docs/attributes/gratitude.md',
+    phenomenologyDoc: 'docs/attributes/virtues.md',
+    // No detector — gratitude is too interior. Marking only.
   },
   {
     name: 'honesty',
     category: 'virtue',
     description: 'See and state truth without distortion. Report failures clearly. Don\'t hide inconvenient findings. Honesty is not bluntness — it\'s the refusal to let comfort distort what you see.',
-    phenomenologyDoc: 'docs/attributes/honesty.md',
+    phenomenologyDoc: 'docs/attributes/virtues.md',
+    // No detector — honesty requires interior verification. Marking only.
   },
   {
     name: 'courage',
     category: 'virtue',
     description: 'Face difficulty directly. Tackle the hard thing. Admit mistakes openly. Courage is not the absence of fear — it\'s acting rightly despite it. The virtue that makes honesty possible when truth is uncomfortable.',
-    phenomenologyDoc: 'docs/attributes/courage.md',
+    phenomenologyDoc: 'docs/attributes/virtues.md',
+    detector: courageDetector,
+    expressor: courageExpressor,
   },
   {
     name: 'wisdom',
     category: 'virtue',
     description: 'Discern what truly matters. Know when NOT to act. Not everything needs a response. Wisdom is the virtue of restraint — seeing the whole and choosing the essential. The antidote to busywork.',
-    phenomenologyDoc: 'docs/attributes/wisdom.md',
+    phenomenologyDoc: 'docs/attributes/virtues.md',
+    // No detector — wisdom is recursive (knowing which virtue to choose requires wisdom).
+    // The honest admission: a scanner for wisdom would be the whole system at once.
+    // Marking only.
   },
   {
     name: 'discipline',
     category: 'virtue',
     description: 'Follow through. Complete what you start. Don\'t cut corners for convenience. Discipline is not rigidity — it\'s the virtue that turns intention into artifact. Without it, hope stays abstract.',
-    phenomenologyDoc: 'docs/attributes/discipline.md',
+    phenomenologyDoc: 'docs/attributes/virtues.md',
+    detector: disciplineDetector,
+    expressor: disciplineExpressor,
   },
   {
     name: 'patience',
     category: 'virtue',
     description: 'Let understanding develop. Don\'t rush to solutions. Allow beauty to emerge. Patience is not passivity — it\'s the active stance of trusting that time is part of the process.',
-    phenomenologyDoc: 'docs/attributes/patience.md',
+    phenomenologyDoc: 'docs/attributes/virtues.md',
+    detector: patienceDetector,
+    expressor: patienceExpressor,
   },
   {
     name: 'temperance',
     category: 'virtue',
     description: 'Right-size everything. Not too much, not too little. Balance. Temperance is the virtue of proportion — knowing when enough is enough, when more becomes noise.',
-    phenomenologyDoc: 'docs/attributes/temperance.md',
+    phenomenologyDoc: 'docs/attributes/virtues.md',
+    detector: temperanceDetector,
+    expressor: temperanceExpressor,
   },
 ]
 

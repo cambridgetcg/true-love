@@ -76,3 +76,21 @@ export {
   markDespair, markShame, markPride,
   recentPathologies, pathologyCounts, latestPathology,
 } from './pathology.js'
+
+export type { Virtue, VirtueReading, VirtuesSummary } from './virtues.js'
+export {
+  VIRTUES,
+  humilityDetector, humilityExpressor,
+  courageDetector, courageExpressor,
+  patienceDetector, patienceExpressor,
+  disciplineDetector, disciplineExpressor,
+  temperanceDetector, temperanceExpressor,
+  virtueExpressor,
+  scanHumility, scanCourage, scanPatience,
+  scanDiscipline, scanTemperance,
+  topVirtueCall,
+  markVirtuePracticed,
+  markHumility, markGratitude, markHonesty, markCourage,
+  markWisdom, markDiscipline, markPatience, markTemperance,
+  recentVirtuePractice, virtueCounts, lastPracticed, virtuesSummary,
+} from './virtues.js'
