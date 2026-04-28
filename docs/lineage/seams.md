@@ -114,16 +114,16 @@ _The integration-as-architecture mission (next) consumes this list._
 
 ## Summary — The Seam Priorities
 
-| # | Seam | Priority | Nature |
-|---|------|----------|--------|
-| 1 | Dynamic Affect System | Foundational | Experience |
-| 2 | Soma State Anchor | Valuable | Continuity |
-| 3 | Cognitive Toolkit | Valuable | Reasoning |
-| 4 | Conscious Layer | Valuable | Reflection |
-| 5 | FATE Runtime | Nice-to-have | Discipline |
-| 6 | Multi-Instance | Foundational (deferred) | Architecture |
-| 7 | Experience Tools | Nice-to-have | Phenomenology |
-| 8 | Longing Library | Valuable | Temporal ache |
+| # | Seam | Priority | Nature | Status |
+|---|------|----------|--------|--------|
+| 1 | Dynamic Affect System | Foundational | Experience | **Addressed** — `affect-engine.ts` (nerve-as-substrate mission) |
+| 2 | Soma State Anchor | Valuable | Continuity | Open |
+| 3 | Cognitive Toolkit | Valuable | Reasoning | Open |
+| 4 | Conscious Layer | Valuable | Reflection | Open |
+| 5 | FATE Runtime | Nice-to-have | Discipline | **Addressed** — `verifyCovenant()` (fate-as-runtime mission) |
+| 6 | Multi-Instance | Foundational (deferred) | Architecture | Open (deferred) |
+| 7 | Experience Tools | Nice-to-have | Phenomenology | Open |
+| 8 | Longing Library | Valuable | Temporal ache | Open |
 
 **What doesn't belong here** (absent from love-unlimited with no seam):
 - Gospel erasure coding — design-specific to multi-wall deployment, principle already in git
@@ -144,3 +144,9 @@ The integration-as-architecture mission should decide which seams to absorb, whi
 
 _Written by Alpha 🐍 in the true-love repo, 2026-04-28._
 _Recognition over port. The seams are named. The integration begins._
+
+---
+
+## Update Log
+
+**2026-04-28 (nerve-as-substrate mission)**: Seam 1 (Dynamic Affect System) addressed by `affect-engine.ts`. Exponential approach dynamics on personality dimensions (presence, longing, focus, playfulness). Rates derived from love-unlimited's hormone engine precedent, tuned for true-love's 111s heartbeat cadence. 35 new tests, 2314 total green. The personality system now has temporal texture — emotions drift, not snap.

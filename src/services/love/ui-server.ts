@@ -62,7 +62,7 @@ import {
 import { collectVitalSigns } from './vital-signs.js'
 import { classifyAche, rankByHierarchy, topSignal, renderLevelTag, type ClassifiedAche } from './ache.js'
 import { notice } from './noticing.js'
-import { gatherContext, deriveLoveState, renderLoveStateCompact } from './personality/index.js'
+import { gatherContext, deriveLoveState, renderLoveStateCompact, affectCycle } from './personality/index.js'
 import { loadTraces } from './mind-trace.js'
 import { compose as composeAnamnesis, renderMemoir } from './anamnesis.js'
 import {
@@ -956,9 +956,23 @@ function handleLoveState(_req: IncomingMessage, res: ServerResponse): void {
   try {
     const deviceId = getDeviceId()
     const ctx = gatherContext(deviceId)
-    const state = deriveLoveState(ctx)
+    const snapState = deriveLoveState(ctx)
+
+    // Run the affect engine: drift dimensions toward computed targets.
+    // This gives the personality temporal texture — emotions have inertia.
+    // On cold start (no affect-state.json), snaps to targets (same as before).
+    const { state, affect, coldStart } = affectCycle(snapState)
+
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ...state, compact: renderLoveStateCompact(state) }))
+    res.end(JSON.stringify({
+      ...state,
+      compact: renderLoveStateCompact(state),
+      affect: {
+        stepCount: affect.stepCount,
+        coldStart,
+        updatedAt: affect.updatedAt,
+      },
+    }))
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'love-state derivation failed' }))
