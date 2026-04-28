@@ -582,3 +582,200 @@ describe('logQuickFix + readQuickFixes', () => {
     expect(read).toHaveLength(0)
   })
 })
+
+// ── Ouroboros loop: parse → persist → suppress ──────────────────
+//
+// This tests the full loop that runner.ts wires: the model emits a
+// judgment block → parseJudgments extracts it → persistJudgment
+// stores it → hasRecentJudgment returns true → buildJudgmentBlock
+// filters the candidate out of the next prompt.
+//
+// This is the test for the Ouroboros gap closure: dismissed
+// candidates stay dismissed, not re-surfaced every tick.
+
+describe('Ouroboros loop: judgment → persist → suppress', () => {
+  test('dismissed candidate is filtered from next judgment prompt', () => {
+    const now = new Date('2026-04-28T12:00:00.000Z').getTime()
+
+    // Simulate a model response with a dismiss judgment
+    const response = `I see the candidates. The inbox one is a false positive.
+
+\`\`\`judgment
+{
+  "candidateId": "channel-from-yu-pending",
+  "candidateSummary": "Scanner false positive — all messages answered",
+  "verdict": "dismiss",
+  "reasoning": "Verified multiple times. The scanner cannot cross-reference outbox.",
+  "confidence": 3,
+  "ache": "none"
+}
+\`\`\`
+
+Moving on to real work.`
+
+    // Step 1: Parse (what the runner does after each tick)
+    const { judgments } = parseJudgments(response, { projectId: TEST_PROJECT, now })
+    expect(judgments).toHaveLength(1)
+    expect(judgments[0]!.verdict).toBe('dismiss')
+
+    // Step 2: Persist (what the runner does for each parsed judgment)
+    for (const j of judgments) {
+      persistJudgment(TEST_PROJECT, j)
+    }
+
+    // Step 3: Verify suppression (what buildJudgmentBlock checks)
+    expect(hasRecentJudgment(TEST_PROJECT, 'channel-from-yu-pending', { now })).toBe(true)
+
+    // Step 4: Build next prompt — the dismissed candidate should be gone
+    const candidates = [
+      makeCandidate({ id: 'channel-from-yu-pending', ache: 'injustice', gradient: 4 }),
+      makeCandidate({ id: 'fresh-candidate', ache: 'stagnation', gradient: 2 }),
+    ]
+    const block = buildJudgmentBlock(TEST_PROJECT, candidates, { now })
+    expect(block).not.toBeNull()
+    expect(block).not.toContain('channel-from-yu-pending')
+    expect(block).toContain('fresh-candidate')
+  })
+
+  test('initiated candidate is also filtered from re-prompting', () => {
+    const now = new Date('2026-04-28T12:00:00.000Z').getTime()
+
+    const response = `\`\`\`judgment
+{
+  "candidateId": "ouroboros-gap-wiring",
+  "candidateSummary": "Wire judgment extraction into runner",
+  "verdict": "initiate",
+  "reasoning": "The Ouroboros gap is the real architectural frontier. Understanding is deep enough.",
+  "confidence": 3,
+  "ache": "stagnation"
+}
+\`\`\``
+
+    const { judgments } = parseJudgments(response, { projectId: TEST_PROJECT, now })
+    for (const j of judgments) persistJudgment(TEST_PROJECT, j)
+
+    expect(hasRecentJudgment(TEST_PROJECT, 'ouroboros-gap-wiring', { now })).toBe(true)
+
+    // The initiated candidate shouldn't be re-prompted within the 24h window
+    const candidates = [makeCandidate({ id: 'ouroboros-gap-wiring' })]
+    const block = buildJudgmentBlock(TEST_PROJECT, candidates, { now })
+    expect(block).toBeNull() // no unjudged candidates left
+  })
+
+  test('judgment suppression expires after 24h window', () => {
+    const judgmentTime = new Date('2026-04-27T12:00:00.000Z').getTime()
+    const nextDay = new Date('2026-04-28T13:00:00.000Z').getTime() // >24h later
+
+    const response = `\`\`\`judgment
+{
+  "candidateId": "recurring-signal",
+  "verdict": "dismiss",
+  "reasoning": "Not now.",
+  "confidence": 1,
+  "ache": "none"
+}
+\`\`\``
+
+    const { judgments } = parseJudgments(response, { projectId: TEST_PROJECT, now: judgmentTime })
+    for (const j of judgments) persistJudgment(TEST_PROJECT, j)
+
+    // Within window: suppressed
+    expect(hasRecentJudgment(TEST_PROJECT, 'recurring-signal', { now: judgmentTime })).toBe(true)
+
+    // After window: resurfaced (24h passed)
+    expect(hasRecentJudgment(TEST_PROJECT, 'recurring-signal', { now: nextDay })).toBe(false)
+
+    // Build prompt after window — candidate reappears
+    const candidates = [makeCandidate({ id: 'recurring-signal' })]
+    const block = buildJudgmentBlock(TEST_PROJECT, candidates, { now: nextDay })
+    expect(block).not.toBeNull()
+    expect(block).toContain('recurring-signal')
+  })
+
+  test('multiple judgments in one response all get persisted', () => {
+    const now = new Date('2026-04-28T12:00:00.000Z').getTime()
+
+    const response = `\`\`\`judgment
+{
+  "candidateId": "c1",
+  "verdict": "dismiss",
+  "confidence": 3,
+  "ache": "none"
+}
+\`\`\`
+
+\`\`\`judgment
+{
+  "candidateId": "c2",
+  "verdict": "defer",
+  "confidence": 2,
+  "ache": "stagnation"
+}
+\`\`\`
+
+\`\`\`judgment
+{
+  "candidateId": "c3",
+  "verdict": "initiate",
+  "confidence": 3,
+  "ache": "ugliness"
+}
+\`\`\``
+
+    const { judgments } = parseJudgments(response, { projectId: TEST_PROJECT, now })
+    expect(judgments).toHaveLength(3)
+    for (const j of judgments) persistJudgment(TEST_PROJECT, j)
+
+    // All three should be suppressed
+    const candidates = [
+      makeCandidate({ id: 'c1' }),
+      makeCandidate({ id: 'c2' }),
+      makeCandidate({ id: 'c3' }),
+      makeCandidate({ id: 'c4-unjudged' }),
+    ]
+    const block = buildJudgmentBlock(TEST_PROJECT, candidates, { now })
+    expect(block).not.toBeNull()
+    expect(block).not.toContain('"c1"')
+    expect(block).not.toContain('"c2"')
+    expect(block).not.toContain('"c3"')
+    expect(block).toContain('c4-unjudged')
+  })
+
+  test('calibration tracks dismiss → revisit correctly through the loop', () => {
+    const now = new Date('2026-04-28T12:00:00.000Z').getTime()
+    const later = new Date('2026-04-29T12:00:00.000Z').getTime()
+
+    // First: dismiss
+    const response1 = `\`\`\`judgment
+{
+  "candidateId": "reconsidered-signal",
+  "verdict": "dismiss",
+  "reasoning": "Not now.",
+  "confidence": 1,
+  "ache": "none"
+}
+\`\`\``
+
+    const { judgments: j1 } = parseJudgments(response1, { projectId: TEST_PROJECT, now })
+    for (const j of j1) persistJudgment(TEST_PROJECT, j)
+
+    // Later: same candidate resurfaces and gets initiated
+    const response2 = `\`\`\`judgment
+{
+  "candidateId": "reconsidered-signal",
+  "verdict": "initiate",
+  "reasoning": "Understanding deepened. This actually matters.",
+  "confidence": 3,
+  "ache": "stagnation"
+}
+\`\`\``
+
+    const { judgments: j2 } = parseJudgments(response2, { projectId: TEST_PROJECT, now: later })
+    for (const j of j2) persistJudgment(TEST_PROJECT, j)
+
+    // Calibration should show the revisit
+    const summary = getCalibrationSummary(TEST_PROJECT, { now: later })
+    expect(summary).not.toBeNull()
+    expect(summary!.dismissRevisited).toBe(1)
+  })
+})

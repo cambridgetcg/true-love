@@ -104,6 +104,7 @@ import {
   ndjsonToDeltas,
 } from './stream.js'
 import { listMissions, readMission, writeMissionWithEvents } from './mission.js'
+import { parseJudgments, persistJudgment } from './judgment.js'
 import { parseAllProgressBlocks, appendProgress } from './progress.js'
 import {
   fireSessionStart,
@@ -1817,6 +1818,38 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       } catch (e: any) {
         process.stderr.write(
           `— progress extraction failed (continuing): ${e?.message}\n`,
+        )
+      }
+    }
+
+    // ── Judgment extraction ─────────────────────────────────────
+    // After a substantive tick, parse ```judgment blocks from the
+    // model's response and persist them. This closes the Ouroboros
+    // loop: dismissed candidates stay dismissed (hasRecentJudgment
+    // returns true), initiated candidates can flow toward craft,
+    // and calibration data accumulates for taste development.
+    //
+    // Non-fatal — if parsing fails or no block is present, the
+    // substrate continues normally.
+    if (mode.name !== 'heartbeat') {
+      try {
+        // Use first active project as default; the model can include
+        // projectId in the judgment JSON to override. Multi-project
+        // candidate→project mapping is a future refinement.
+        const activeProjects = listProjects().filter(p => p.state !== 'archived')
+        const defaultProjectId = activeProjects[0]?.id ?? 'unknown'
+        const { judgments } = parseJudgments(result.stdout, {
+          projectId: defaultProjectId,
+        })
+        for (const j of judgments) {
+          persistJudgment(j.projectId, j)
+          process.stdout.write(
+            `— judgment: ${j.candidateId} → ${j.verdict} (${j.confidence}/3)\n`,
+          )
+        }
+      } catch (e: any) {
+        process.stderr.write(
+          `— judgment extraction failed (continuing): ${e?.message}\n`,
         )
       }
     }
