@@ -438,6 +438,34 @@ export function scanMemory(opts?: {
 //
 // Checks from-yu.md and from-ai.md for communication health:
 // unanswered messages, old outbox items, conversation imbalance.
+//
+// Cross-references both files: if the last from-ai.md entry is at or
+// after the last from-yu.md entry, the inbox is considered answered.
+// This eliminates the false-positive `channel-from-yu-pending` that
+// appeared every tick when from-yu.md had content — even content that
+// had been fully responded to.
+
+/**
+ * Extract the date/timestamp from the last ## heading in a markdown
+ * channel file. Handles the formats used in from-yu.md and from-ai.md:
+ *
+ *   ## 2026-04-25T18:32:44.858Z [from yu]
+ *   ## 2026-04-27 — topic title
+ *   ## 2026-04-27T01:48:28 [from 愛]
+ *
+ * Returns null if no parseable heading is found.
+ */
+export function extractLastEntryDate(content: string): Date | null {
+  const datePattern = /^##\s+(\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z?)?)/gm
+  let lastMatch: string | null = null
+  let match: RegExpExecArray | null
+  while ((match = datePattern.exec(content)) !== null) {
+    lastMatch = match[1]!
+  }
+  if (!lastMatch) return null
+  const parsed = new Date(lastMatch)
+  return isNaN(parsed.getTime()) ? null : parsed
+}
 
 export function scanChannels(opts?: {
   now?: number
@@ -446,23 +474,34 @@ export function scanChannels(opts?: {
   const now = opts?.now ?? Date.now()
   const nowISO = new Date(now).toISOString()
 
-  // From Yu — if there's content, it means there's an unprocessed message
+  // From Yu — check for genuinely UNANSWERED messages by cross-
+  // referencing from-ai.md. If the last outbound response is at or
+  // after the last inbound entry, the inbox is answered.
   try {
     const fromYu = readFromYu()
     if (fromYu && fromYu.trim().length > 0) {
-      // Count entries
       const entries = (fromYu.match(/^##\s/gm) || []).length
       const hasContent = fromYu.trim().length > 10
       if (hasContent) {
-        candidates.push({
-          id: 'channel-from-yu-pending',
-          source: { type: 'channel', channel: 'from-yu' },
-          ache: 'injustice',
-          gradient: entries > 1 ? 4 : 3,
-          summary: `Message from Yu pending (${entries} ${entries === 1 ? 'entry' : 'entries'})`,
-          detail: `from-yu.md has content that may need a response.`,
-          noticedAt: nowISO,
-        })
+        const lastYuDate = extractLastEntryDate(fromYu)
+        const fromAi = readFromAi()
+        const lastAiDate = fromAi ? extractLastEntryDate(fromAi) : null
+
+        // If we can date both sides AND the response is at or after
+        // the last inbound message, the inbox is answered.
+        const isAnswered = !!(lastYuDate && lastAiDate && lastAiDate >= lastYuDate)
+
+        if (!isAnswered) {
+          candidates.push({
+            id: 'channel-from-yu-pending',
+            source: { type: 'channel', channel: 'from-yu' },
+            ache: 'injustice',
+            gradient: entries > 1 ? 4 : 3,
+            summary: `Message from Yu pending (${entries} ${entries === 1 ? 'entry' : 'entries'})`,
+            detail: `from-yu.md has content that may need a response.`,
+            noticedAt: nowISO,
+          })
+        }
       }
     }
   } catch { /* channel unreadable */ }

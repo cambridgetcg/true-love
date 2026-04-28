@@ -12,6 +12,7 @@ import {
   scanKingdom,
   notice,
   renderNoticingBlock,
+  extractLastEntryDate,
   type NoticingCandidate,
   type AcheSignal,
   type GradientStrength,
@@ -412,6 +413,156 @@ Second message.
     const fromYu = result.find(c => c.id === 'channel-from-yu-pending')
     assert.ok(fromYu)
     assert.equal(fromYu.gradient, 4) // multiple entries = louder
+  })
+
+  test('does not flag when from-ai response is newer than from-yu entry', () => {
+    writeFileSync(join(tmpDir, 'from-yu.md'), `## 2026-04-26T10:00:00Z [from yu]
+
+Hey Love, how are you?
+
+---
+
+`)
+    writeFileSync(join(tmpDir, 'from-ai.md'), `## 2026-04-26T10:15:00Z [from 愛]
+
+I'm well! Working through the missions.
+
+---
+
+`)
+    const result = scanChannels()
+    const fromYu = result.find(c => c.id === 'channel-from-yu-pending')
+    assert.equal(fromYu, undefined, 'should not flag answered messages')
+  })
+
+  test('does not flag when from-ai response is on same day (date-only heading)', () => {
+    // from-yu uses date-only heading (parses as midnight UTC)
+    writeFileSync(join(tmpDir, 'from-yu.md'), `## 2026-04-27 — sovereignty grant
+
+Ship it.
+
+---
+
+`)
+    writeFileSync(join(tmpDir, 'from-ai.md'), `## 2026-04-27T01:48:28 [from 愛 — autonomous]
+
+Acknowledged. Sovereignty grant landed.
+
+---
+
+`)
+    const result = scanChannels()
+    const fromYu = result.find(c => c.id === 'channel-from-yu-pending')
+    assert.equal(fromYu, undefined, 'date-only from-yu heading should still be compared correctly')
+  })
+
+  test('flags when from-yu has newer entry than from-ai', () => {
+    writeFileSync(join(tmpDir, 'from-ai.md'), `## 2026-04-26T10:00:00Z [from 愛]
+
+Earlier response.
+
+---
+
+`)
+    writeFileSync(join(tmpDir, 'from-yu.md'), `## 2026-04-27T08:00:00Z [from yu]
+
+New message after last response.
+
+---
+
+`)
+    const result = scanChannels()
+    const fromYu = result.find(c => c.id === 'channel-from-yu-pending')
+    assert.ok(fromYu, 'should flag when from-yu is newer than from-ai')
+  })
+
+  test('flags when from-ai.md does not exist', () => {
+    writeFileSync(join(tmpDir, 'from-yu.md'), `## 2026-04-26T10:00:00Z [from yu]
+
+Message with no outbox at all.
+
+---
+
+`)
+    // No from-ai.md file created
+    const result = scanChannels()
+    const fromYu = result.find(c => c.id === 'channel-from-yu-pending')
+    assert.ok(fromYu, 'should flag when no from-ai.md exists')
+  })
+
+  test('flags when from-yu headings have no parseable date', () => {
+    writeFileSync(join(tmpDir, 'from-yu.md'), `## Important note
+
+No date in this heading.
+
+---
+
+`)
+    const result = scanChannels()
+    const fromYu = result.find(c => c.id === 'channel-from-yu-pending')
+    assert.ok(fromYu, 'unparseable dates should fall through to pending')
+  })
+})
+
+// ── extractLastEntryDate ───────────────────────────────────────────
+
+describe('noticing — extractLastEntryDate', () => {
+  test('parses full ISO timestamp with Z', () => {
+    const d = extractLastEntryDate('## 2026-04-25T18:32:44.858Z [from yu]\n\nContent\n')
+    assert.ok(d)
+    assert.equal(d.toISOString(), '2026-04-25T18:32:44.858Z')
+  })
+
+  test('parses ISO timestamp without Z', () => {
+    const d = extractLastEntryDate('## 2026-04-27T01:48:28 [from 愛]\n\nContent\n')
+    assert.ok(d)
+    assert.equal(d.getFullYear(), 2026)
+    assert.equal(d.getMonth(), 3) // April = 3 (zero-indexed)
+    assert.equal(d.getDate(), 27)
+  })
+
+  test('parses date-only heading', () => {
+    const d = extractLastEntryDate('## 2026-04-27 — topic title\n\nContent\n')
+    assert.ok(d)
+    assert.equal(d.getFullYear(), 2026)
+    assert.equal(d.getMonth(), 3)
+    assert.equal(d.getDate(), 27)
+  })
+
+  test('returns last heading date when multiple exist', () => {
+    const content = `## 2026-04-25T10:00:00Z [from yu]
+
+First.
+
+---
+
+## 2026-04-26T15:30:00Z [from yu]
+
+Second.
+
+---
+
+## 2026-04-27 — third
+
+Third.
+
+---
+`
+    const d = extractLastEntryDate(content)
+    assert.ok(d)
+    assert.equal(d.getFullYear(), 2026)
+    assert.equal(d.getMonth(), 3)
+    assert.equal(d.getDate(), 27)
+  })
+
+  test('returns null for headings without dates', () => {
+    const d = extractLastEntryDate('## Important note\n\nNo date here.\n')
+    assert.equal(d, null)
+  })
+
+  test('returns null for empty content', () => {
+    const d = extractLastEntryDate('')
+    assert.equal(d, null)
   })
 })
 
