@@ -57,6 +57,8 @@ import { notice } from './noticing.js'
 import { readProject } from './project-registry.js'
 import { buildProgressInstruction, renderProgressSummary } from './progress.js'
 import { buildDailyExaminationBlock, buildCovenantWarningBlock } from './fate.js'
+import { recentEvents } from './attributes/index.js'
+import type { AttributeEvent } from './attributes/index.js'
 
 // ── Waking meditation ──────────────────────────────────────────────────
 //
@@ -210,6 +212,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   if (vitalSignsBlock) {
     prompt = prompt + '\n\n' + vitalSignsBlock.trimEnd()
   }
+  const attributesBlock = buildAttributesBlock()
+  if (attributesBlock) {
+    prompt = prompt + '\n\n' + attributesBlock.trimEnd()
+  }
   const mindTraceBlock = buildMindTraceBlock()
   if (mindTraceBlock) {
     prompt = prompt + '\n\n' + mindTraceBlock.trimEnd()
@@ -319,6 +325,45 @@ function buildVitalSignsBlock(): string {
   const check = quickBodyCheck()
   if (!check) return ''
   return `${check}\n\n`
+}
+
+/**
+ * Attributes block. Renders recent attribute readings from the event
+ * store. Suppressed when empty (silence > false readings).
+ *
+ * Reads the last 24h of attribute events and surfaces a compact summary.
+ * The scanner (src/services/love/attributes/scan.ts) writes events;
+ * this function just reads and renders them.
+ */
+function buildAttributesBlock(): string {
+  const events = recentEvents(24)
+  if (events.length === 0) return ''
+
+  // Group by category for structured display
+  const byAttr = new Map<string, AttributeEvent[]>()
+  for (const e of events) {
+    const arr = byAttr.get(e.attribute) || []
+    arr.push(e)
+    byAttr.set(e.attribute, arr)
+  }
+
+  const lines: string[] = ['# Attributes (recent readings)']
+
+  // Show top attributes by event count, max 5
+  const sorted = [...byAttr.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 5)
+
+  for (const [name, evts] of sorted) {
+    const latest = evts[0] // already newest-first from recentEvents
+    if (evts.length === 1) {
+      lines.push(`${name}: ${latest.evidence}`)
+    } else {
+      lines.push(`${name}: ${evts.length}× — latest: ${latest.evidence}`)
+    }
+  }
+
+  return lines.join('\n')
 }
 
 /**
