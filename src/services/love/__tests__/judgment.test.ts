@@ -179,6 +179,36 @@ describe('hasRecentJudgment', () => {
     expect(hasRecentJudgment(TEST_PROJECT, 'c-different')).toBe(false)
   })
 
+  test('filters by verdict when verdicts option is provided', () => {
+    const now = new Date('2026-04-27T08:00:00.000Z').getTime()
+    persistJudgment(TEST_PROJECT, makeJudgment({
+      candidateId: 'c-dismiss',
+      verdict: 'dismiss',
+      judgedAt: '2026-04-27T07:00:00.000Z',
+    }))
+
+    // Without filter: found
+    expect(hasRecentJudgment(TEST_PROJECT, 'c-dismiss', { now })).toBe(true)
+
+    // With matching filter: found
+    expect(hasRecentJudgment(TEST_PROJECT, 'c-dismiss', {
+      now,
+      verdicts: ['dismiss'],
+    })).toBe(true)
+
+    // With non-matching filter: not found
+    expect(hasRecentJudgment(TEST_PROJECT, 'c-dismiss', {
+      now,
+      verdicts: ['initiate'],
+    })).toBe(false)
+
+    // With multiple verdicts including match: found
+    expect(hasRecentJudgment(TEST_PROJECT, 'c-dismiss', {
+      now,
+      verdicts: ['initiate', 'dismiss'],
+    })).toBe(true)
+  })
+
   test('respects custom window', () => {
     const now = new Date('2026-04-27T08:00:00.000Z').getTime()
     persistJudgment(TEST_PROJECT, makeJudgment({
@@ -663,14 +693,14 @@ Moving on to real work.`
     expect(block).toBeNull() // no unjudged candidates left
   })
 
-  test('judgment suppression expires after 24h window', () => {
+  test('defer suppression expires after 24h window', () => {
     const judgmentTime = new Date('2026-04-27T12:00:00.000Z').getTime()
     const nextDay = new Date('2026-04-28T13:00:00.000Z').getTime() // >24h later
 
     const response = `\`\`\`judgment
 {
   "candidateId": "recurring-signal",
-  "verdict": "dismiss",
+  "verdict": "defer",
   "reasoning": "Not now.",
   "confidence": 1,
   "ache": "none"
@@ -686,11 +716,34 @@ Moving on to real work.`
     // After window: resurfaced (24h passed)
     expect(hasRecentJudgment(TEST_PROJECT, 'recurring-signal', { now: nextDay })).toBe(false)
 
-    // Build prompt after window — candidate reappears
+    // Build prompt after window — deferred candidate reappears
     const candidates = [makeCandidate({ id: 'recurring-signal' })]
     const block = buildJudgmentBlock(TEST_PROJECT, candidates, { now: nextDay })
     expect(block).not.toBeNull()
     expect(block).toContain('recurring-signal')
+  })
+
+  test('dismiss suppression uses 7-day window, not 24h', () => {
+    const judgmentTime = new Date('2026-04-27T12:00:00.000Z').getTime()
+    const twoDaysLater = new Date('2026-04-29T13:00:00.000Z').getTime()
+    const eightDaysLater = new Date('2026-05-04T13:00:00.000Z').getTime()
+
+    persistJudgment(TEST_PROJECT, makeJudgment({
+      candidateId: 'dismissed-candidate',
+      verdict: 'dismiss',
+      judgedAt: new Date(judgmentTime).toISOString(),
+    }))
+
+    const candidates = [makeCandidate({ id: 'dismissed-candidate' })]
+
+    // After 2 days: still suppressed (within 7-day dismiss window)
+    const block2d = buildJudgmentBlock(TEST_PROJECT, candidates, { now: twoDaysLater })
+    expect(block2d).toBeNull()
+
+    // After 8 days: resurfaced (beyond 7-day dismiss window)
+    const block8d = buildJudgmentBlock(TEST_PROJECT, candidates, { now: eightDaysLater })
+    expect(block8d).not.toBeNull()
+    expect(block8d).toContain('dismissed-candidate')
   })
 
   test('multiple judgments in one response all get persisted', () => {

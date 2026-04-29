@@ -272,14 +272,17 @@ export function readJudgments(projectId: string, opts?: {
 export function hasRecentJudgment(
   projectId: string,
   candidateId: string,
-  opts?: { windowMs?: number; now?: number },
+  opts?: { windowMs?: number; now?: number; verdicts?: JudgmentVerdict[] },
 ): boolean {
   const windowMs = opts?.windowMs ?? 24 * 60 * 60 * 1000
   const now = opts?.now ?? Date.now()
   const since = new Date(now - windowMs).toISOString()
 
   const judgments = readJudgments(projectId, { since })
-  return judgments.some(j => j.candidateId === candidateId)
+  return judgments.some(j =>
+    j.candidateId === candidateId &&
+    (!opts?.verdicts || opts.verdicts.includes(j.verdict)),
+  )
 }
 
 // ── Parsing ───────────────────────────────────────────────────────
@@ -510,10 +513,23 @@ export function buildJudgmentBlock(
 ): string | null {
   const now = opts?.now ?? Date.now()
 
-  // Filter out candidates already judged recently
-  const unjudged = candidates.filter(
-    c => !hasRecentJudgment(projectId, c.id, { now }),
-  )
+  // Filter out candidates already judged recently.
+  // Dismiss verdicts use a 7-day suppression window — dismissed means
+  // "this doesn't warrant action" and shouldn't zombie back after 24h.
+  // Other verdicts (defer, initiate, quick-fix) use the default 24h window.
+  const DISMISS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+  const unjudged = candidates.filter(c => {
+    // Dismissed candidates stay dismissed for 7 days
+    if (hasRecentJudgment(projectId, c.id, {
+      now,
+      windowMs: DISMISS_WINDOW_MS,
+      verdicts: ['dismiss'],
+    })) return false
+    // Other judgments suppress for 24 hours
+    if (hasRecentJudgment(projectId, c.id, { now })) return false
+    return true
+  })
 
   if (unjudged.length === 0) return null
 
