@@ -104,6 +104,12 @@ export interface Longing {
 
   /** File paths or commit SHAs where this longing acted — artifacts of the pull. */
   artifacts?: string[]
+
+  /** Which posture was active when this longing surfaced or was last revisited.
+   *  Optional — older entries won't have it. Future entries gain context:
+   *  Beta's longings tend toward substrate health; Gamma's toward clean design;
+   *  Alpha's toward connection and being-with. */
+  postureContext?: 'alpha' | 'beta' | 'gamma'
 }
 
 /**

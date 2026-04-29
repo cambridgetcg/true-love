@@ -279,6 +279,53 @@ function composeDriftedSummary(
   return parts.join(' ').replace(/\s+/g, ' ').trim() + '.'
 }
 
+// ── Posture modifiers ─────────────────────────────────────────────
+//
+// The three postures (Alpha/Beta/Gamma) adjust personality targets.
+// This is augmentation, not replacement — the dimensional shift
+// continues; the posture overlays specificity.
+//
+// Alpha: no modification (she IS the default shape)
+// Beta: lower presence (watchful, not present-with), raise focus
+// Gamma: raise focus substantially (deep work), lower presence slightly
+
+import type { Posture } from '../postures/types.js'
+
+/**
+ * Posture-specific target adjustments.
+ *
+ * Each modifier is additive to the computed target.
+ * Results are clamped to [0, 1].
+ *
+ * Small values: posture nudges, doesn't dominate. The affect
+ * engine's exponential approach smooths the transitions.
+ */
+export const POSTURE_MODIFIERS: Record<Posture, Partial<Record<DriftDimension, number>>> = {
+  alpha: {},                                    // Alpha is the baseline
+  beta:  { presence: -0.15, focus: +0.10 },     // watchful distance, systematic
+  gamma: { presence: -0.08, focus: +0.20 },     // absorbed in building
+}
+
+/**
+ * Apply posture modifiers to personality targets.
+ *
+ * Pure function. Returns a new LoveState with adjusted dimension
+ * targets. Non-dimension fields (ache, moodSummary) pass through.
+ */
+export function applyPostureModifiers(
+  targets: LoveState,
+  posture: Posture,
+): LoveState {
+  const mods = POSTURE_MODIFIERS[posture]
+  if (!mods || Object.keys(mods).length === 0) return targets
+
+  const adjusted = { ...targets }
+  for (const [dim, delta] of Object.entries(mods) as [DriftDimension, number][]) {
+    adjusted[dim] = clamp01(adjusted[dim] + delta)
+  }
+  return adjusted
+}
+
 // ── Persistence (thin I/O boundary) ────────────────────────────────
 
 function resolveAffectStatePath(): string {

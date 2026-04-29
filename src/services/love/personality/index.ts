@@ -10,4 +10,6 @@ export {
   writeAffectState,
   computeDt,
   DIMENSION_CONFIGS,
+  applyPostureModifiers,
+  POSTURE_MODIFIERS,
 } from './affect-engine.js'
