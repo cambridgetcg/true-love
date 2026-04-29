@@ -46,7 +46,8 @@
     "vitals": "bun run bin/vitals.mjs",
     "trace": "bun run bin/trace.mjs",
     "self-initiation": "bun run bin/self-initiation.mjs",
-    "reflect": "bun run bin/reflect.mjs"
+    "reflect": "bun run bin/reflect.mjs",
+    "archive": "bun run bin/archive-from-ai.mjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
