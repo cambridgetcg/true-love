@@ -1,0 +1,528 @@
+// verify.test.ts — substrate self-check tests.
+//
+// Tests the pure check functions from verify.ts using fixture directories.
+// Each check tested with both pass and fail states.
+
+import { describe, expect, test, beforeAll, afterAll } from 'bun:test'
+import { mkdirSync, writeFileSync, rmSync, utimesSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import {
+  checkBundleFreshness,
+  checkHeartbeatHealthy,
+  checkOAuthValid,
+  checkChainRunnerAlive,
+  checkAgentRuntimeAlive,
+  checkNoRecurringErrorFromLines,
+  assembleReport,
+  renderReport,
+  type VerifyConfig,
+  type HeartbeatInput,
+  type OAuthInput,
+} from '../verify.js'
+
+// ── Fixture helpers ───────────────────────────────────────────────
+
+const FIXTURE_ROOT = join(tmpdir(), `verify-test-${Date.now()}`)
+
+let fixtureSeq = 0
+function fixtureConfig(overrides: Partial<VerifyConfig> = {}): VerifyConfig {
+  const seq = fixtureSeq++
+  return {
+    repoRoot: join(FIXTURE_ROOT, `repo-${seq}`),
+    trueLoveHome: join(FIXTURE_ROOT, `home-${seq}`),
+    logDir: join(FIXTURE_ROOT, `logs-${seq}`),
+    apiBase: 'http://localhost:0', // never actually called in unit tests
+    projectId: 'test-project',
+    ...overrides,
+  }
+}
+
+beforeAll(() => {
+  mkdirSync(FIXTURE_ROOT, { recursive: true })
+})
+
+afterAll(() => {
+  try { rmSync(FIXTURE_ROOT, { recursive: true, force: true }) } catch { /* ok */ }
+})
+
+// ── Check 1: bundle.freshness ─────────────────────────────────────
+
+describe('checkBundleFreshness', () => {
+  test('pass: dist newer than all sources', () => {
+    const config = fixtureConfig()
+    const srcDir = join(config.repoRoot, 'src')
+    const distDir = join(config.repoRoot, 'dist')
+    mkdirSync(srcDir, { recursive: true })
+    mkdirSync(distDir, { recursive: true })
+
+    // Create a source file in the past
+    const srcFile = join(srcDir, 'main.ts')
+    writeFileSync(srcFile, 'export const x = 1')
+    const past = new Date(Date.now() - 60_000)
+    utimesSync(srcFile, past, past)
+
+    // Create dist in the present
+    const distFile = join(distDir, 'cli.mjs')
+    writeFileSync(distFile, 'console.log("built")')
+
+    const result = checkBundleFreshness(config)
+    expect(result.status).toBe('pass')
+    expect(result.name).toBe('bundle.freshness')
+    expect(result.evidence).toContain('bundle fresh')
+  })
+
+  test('fail: source newer than dist', () => {
+    const config = fixtureConfig()
+    const srcDir = join(config.repoRoot, 'src', 'sub')
+    const distDir = join(config.repoRoot, 'dist')
+    mkdirSync(srcDir, { recursive: true })
+    mkdirSync(distDir, { recursive: true })
+
+    // Create dist in the past
+    const distFile = join(distDir, 'cli.mjs')
+    writeFileSync(distFile, 'console.log("built")')
+    const past = new Date(Date.now() - 120_000)
+    utimesSync(distFile, past, past)
+
+    // Create a source file NOW (newer than dist)
+    const srcFile = join(srcDir, 'newer.ts')
+    writeFileSync(srcFile, 'export const y = 2')
+
+    const result = checkBundleFreshness(config)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toContain('bundle stale')
+    expect(result.fix).toBe('bun run build')
+  })
+
+  test('fail: dist missing', () => {
+    const config = fixtureConfig({
+      repoRoot: join(FIXTURE_ROOT, 'no-dist-repo'),
+    })
+    mkdirSync(join(config.repoRoot, 'src'), { recursive: true })
+
+    const result = checkBundleFreshness(config)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toBe('bundle missing')
+  })
+
+  test('pass: test files newer than dist are ignored', () => {
+    const config = fixtureConfig()
+    const srcDir = join(config.repoRoot, 'src')
+    const distDir = join(config.repoRoot, 'dist')
+    mkdirSync(srcDir, { recursive: true })
+    mkdirSync(distDir, { recursive: true })
+
+    // Create dist
+    const distFile = join(distDir, 'cli.mjs')
+    writeFileSync(distFile, 'console.log("built")')
+    // Set dist to past
+    const past = new Date(Date.now() - 60_000)
+    utimesSync(distFile, past, past)
+
+    // Create a source file older than dist
+    const srcFile = join(srcDir, 'main.ts')
+    writeFileSync(srcFile, 'export const x = 1')
+    const older = new Date(Date.now() - 120_000)
+    utimesSync(srcFile, older, older)
+
+    // Create a TEST file newer than dist — should be ignored
+    const testFile = join(srcDir, 'main.test.ts')
+    writeFileSync(testFile, 'test("x", () => {})')
+
+    const result = checkBundleFreshness(config)
+    expect(result.status).toBe('pass')
+  })
+
+  test('pass: __tests__ directories are skipped', () => {
+    const config = fixtureConfig()
+    const testDir = join(config.repoRoot, 'src', '__tests__')
+    const distDir = join(config.repoRoot, 'dist')
+    mkdirSync(testDir, { recursive: true })
+    mkdirSync(distDir, { recursive: true })
+
+    // Dist in the past
+    const distFile = join(distDir, 'cli.mjs')
+    writeFileSync(distFile, 'console.log("built")')
+    const past = new Date(Date.now() - 60_000)
+    utimesSync(distFile, past, past)
+
+    // Source file in __tests__ that's newer — should be skipped
+    writeFileSync(join(testDir, 'verify.test.ts'), 'test()')
+
+    // No other source files
+    const result = checkBundleFreshness(config)
+    expect(result.status).toBe('pass')
+  })
+})
+
+// ── Check 2: agent-runtime.alive ──────────────────────────────────
+
+describe('checkAgentRuntimeAlive', () => {
+  test('pass: agent process found', () => {
+    const result = checkAgentRuntimeAlive(() => ({ alive: true, pid: '12345' }))
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('12345')
+  })
+
+  test('fail: no agent process', () => {
+    const result = checkAgentRuntimeAlive(() => ({ alive: false }))
+    expect(result.status).toBe('fail')
+    expect(result.drift).toBe('agent not running')
+  })
+
+  test('skip: pgrep throws', () => {
+    const result = checkAgentRuntimeAlive(() => { throw new Error('pgrep not found') })
+    expect(result.status).toBe('skip')
+    expect(result.evidence).toContain('pgrep')
+  })
+})
+
+// ── Check 3: heartbeat.healthy ────────────────────────────────────
+
+describe('checkHeartbeatHealthy', () => {
+  test('pass: loaded and clean exit', () => {
+    const input: HeartbeatInput = {
+      launchctlLoaded: true,
+      lastExitStatus: 0,
+      recentLogLines: ['— heartbeat ok (silent)'],
+    }
+    const result = checkHeartbeatHealthy(input)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('heartbeat loaded')
+  })
+
+  test('fail: not loaded', () => {
+    const input: HeartbeatInput = {
+      launchctlLoaded: false,
+      lastExitStatus: null,
+      recentLogLines: [],
+    }
+    const result = checkHeartbeatHealthy(input)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toContain('heartbeat schedule missing')
+  })
+
+  test('fail: last exit non-zero', () => {
+    const input: HeartbeatInput = {
+      launchctlLoaded: true,
+      lastExitStatus: 16640,
+      recentLogLines: ['— heartbeat ok (silent)'],
+    }
+    const result = checkHeartbeatHealthy(input)
+    expect(result.status).toBe('fail')
+    expect(result.evidence).toContain('16640')
+  })
+
+  test('fail: 3+ consecutive tick failures', () => {
+    const input: HeartbeatInput = {
+      launchctlLoaded: true,
+      lastExitStatus: 0,
+      recentLogLines: [
+        '— heartbeat ok (silent)',
+        'turn 1 exited 65.',
+        'tick error 1/3',
+        'turn 2 exited 65.',
+        'tick error 2/3',
+        'turn 3 exited 1.',
+      ],
+    }
+    const result = checkHeartbeatHealthy(input)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toContain('cascade')
+    expect(result.drift).toContain('consecutive')
+  })
+
+  test('pass: failures followed by success', () => {
+    const input: HeartbeatInput = {
+      launchctlLoaded: true,
+      lastExitStatus: 0,
+      recentLogLines: [
+        'turn 1 exited 65.',
+        'tick error 1/3',
+        '— heartbeat ok (silent)',
+        'HEARTBEAT_OK',
+      ],
+    }
+    const result = checkHeartbeatHealthy(input)
+    expect(result.status).toBe('pass')
+  })
+
+  test('skip: could not check launchctl', () => {
+    const input: HeartbeatInput = {
+      launchctlLoaded: null,
+      lastExitStatus: null,
+      recentLogLines: [],
+    }
+    const result = checkHeartbeatHealthy(input)
+    expect(result.status).toBe('skip')
+  })
+})
+
+// ── Check 4: oauth.valid ──────────────────────────────────────────
+
+describe('checkOAuthValid', () => {
+  test('pass: token valid with hours remaining', () => {
+    const input: OAuthInput = {
+      found: true,
+      expiresAt: Date.now() + 7200_000, // 2h from now
+    }
+    const result = checkOAuthValid(input)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('remaining')
+  })
+
+  test('fail: token expired', () => {
+    const input: OAuthInput = {
+      found: true,
+      expiresAt: Date.now() - 3600_000, // 1h ago
+    }
+    const result = checkOAuthValid(input)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toBe('OAuth token expired')
+  })
+
+  test('fail: token expiring within 1 hour', () => {
+    const input: OAuthInput = {
+      found: true,
+      expiresAt: Date.now() + 1800_000, // 30m from now
+    }
+    const result = checkOAuthValid(input)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toContain('expiring soon')
+  })
+
+  test('skip: no keychain entry', () => {
+    const input: OAuthInput = {
+      found: false,
+      error: 'keychain not found',
+    }
+    const result = checkOAuthValid(input)
+    expect(result.status).toBe('skip')
+  })
+
+  test('skip: no expiresAt', () => {
+    const input: OAuthInput = {
+      found: true,
+      // no expiresAt
+    }
+    const result = checkOAuthValid(input)
+    expect(result.status).toBe('skip')
+  })
+})
+
+// ── Check 5: chain-runner.alive ───────────────────────────────────
+
+describe('checkChainRunnerAlive', () => {
+  test('pass: loaded', () => {
+    const result = checkChainRunnerAlive(true)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toBe('chain-runner loaded')
+  })
+
+  test('fail: not loaded', () => {
+    const result = checkChainRunnerAlive(false)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toBe('chain-runner not running')
+  })
+
+  test('skip: could not check', () => {
+    const result = checkChainRunnerAlive(null)
+    expect(result.status).toBe('skip')
+  })
+})
+
+// ── Check 6: no-recurring-error ───────────────────────────────────
+
+describe('checkNoRecurringErrorFromLines', () => {
+  test('pass: no err log lines', () => {
+    const result = checkNoRecurringErrorFromLines([])
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('empty')
+  })
+
+  test('pass: errors present but not repeated', () => {
+    const result = checkNoRecurringErrorFromLines([
+      'some error happened once',
+      'different error happened once',
+      'third error type',
+    ])
+    expect(result.status).toBe('pass')
+  })
+
+  test('fail: same error repeated 3+ times', () => {
+    const lines = [
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_abc1',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_def2',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_ghi3',
+    ]
+    const result = checkNoRecurringErrorFromLines(lines)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toContain('recurring error')
+    expect(result.drift).toContain('3×')
+  })
+
+  test('pass: non-error lines repeated do not trigger', () => {
+    const lines = [
+      'stdout:',
+      'stdout:',
+      'stdout:',
+      'stdout:',
+      'some informational message',
+      'another info message',
+    ]
+    const result = checkNoRecurringErrorFromLines(lines)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('no error patterns')
+  })
+
+  test('fail: normalized timestamps and request IDs', () => {
+    const lines = [
+      '2026-04-29T10:00:00Z error: failed req_abc123',
+      '2026-04-29T10:01:00Z error: failed req_def456',
+      '2026-04-29T10:02:00Z error: failed req_ghi789',
+    ]
+    const result = checkNoRecurringErrorFromLines(lines)
+    expect(result.status).toBe('fail')
+    // After normalization, these should be the same pattern
+    expect(result.drift).toContain('3×')
+  })
+
+  test('pass: errors present but fewer than 3 of any single pattern', () => {
+    const lines = [
+      'error type A happened',
+      'error type A happened',
+      'error type B happened',
+      'error type B happened',
+    ]
+    const result = checkNoRecurringErrorFromLines(lines)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('no pattern ≥3×')
+  })
+
+  test('only examines last 200 lines', () => {
+    // 250 lines total: first 50 are repeated errors, last 200 have
+    // only unique non-error lines. Since the function takes the last
+    // 200 lines, the old errors should be trimmed out.
+    const lines: string[] = []
+    for (let i = 0; i < 50; i++) {
+      lines.push('fatal error: the disk is full')
+    }
+    for (let i = 0; i < 200; i++) {
+      lines.push(`info: process started with pid=${i + 1000}`)
+    }
+    const result = checkNoRecurringErrorFromLines(lines)
+    // The last 200 lines contain no error-indicator matches
+    expect(result.status).toBe('pass')
+  })
+})
+
+// ── Report assembly ───────────────────────────────────────────────
+
+describe('assembleReport', () => {
+  test('green: all pass', () => {
+    const report = assembleReport([
+      { name: 'check1', status: 'pass', evidence: 'ok' },
+      { name: 'check2', status: 'pass', evidence: 'ok' },
+    ])
+    expect(report.overall).toBe('green')
+    expect(report.checks).toHaveLength(2)
+    expect(report.ts).toBeTruthy()
+  })
+
+  test('yellow: some skipped, none failed', () => {
+    const report = assembleReport([
+      { name: 'check1', status: 'pass', evidence: 'ok' },
+      { name: 'check2', status: 'skip', evidence: 'n/a' },
+    ])
+    expect(report.overall).toBe('yellow')
+  })
+
+  test('red: any failures', () => {
+    const report = assembleReport([
+      { name: 'check1', status: 'pass', evidence: 'ok' },
+      { name: 'check2', status: 'fail', evidence: 'bad', drift: 'x', fix: 'y' },
+      { name: 'check3', status: 'skip', evidence: 'n/a' },
+    ])
+    expect(report.overall).toBe('red')
+  })
+
+  test('red beats yellow', () => {
+    const report = assembleReport([
+      { name: 'c1', status: 'skip', evidence: 'n/a' },
+      { name: 'c2', status: 'fail', evidence: 'bad', drift: 'x', fix: 'y' },
+    ])
+    expect(report.overall).toBe('red')
+  })
+})
+
+// ── Rendering ─────────────────────────────────────────────────────
+
+describe('renderReport', () => {
+  test('renders pass/fail/skip with correct indicators', () => {
+    const report = assembleReport([
+      { name: 'check.pass', status: 'pass', evidence: 'all good' },
+      { name: 'check.fail', status: 'fail', evidence: 'bad', drift: 'something broke', fix: 'fix it' },
+      { name: 'check.skip', status: 'skip', evidence: 'n/a' },
+    ])
+    const text = renderReport(report, false) // no TTY colors
+    expect(text).toContain('✓')
+    expect(text).toContain('✗')
+    expect(text).toContain('—')
+    expect(text).toContain('substrate verify')
+    expect(text).toContain('check.pass')
+    expect(text).toContain('check.fail')
+    expect(text).toContain('check.skip')
+    expect(text).toContain('drift: something broke')
+    expect(text).toContain('fix: fix it')
+  })
+
+  test('score excludes skips from denominator', () => {
+    const report = assembleReport([
+      { name: 'c1', status: 'pass', evidence: 'ok' },
+      { name: 'c2', status: 'fail', evidence: 'bad', drift: 'x', fix: 'y' },
+      { name: 'c3', status: 'skip', evidence: 'n/a' },
+    ])
+    const text = renderReport(report, false)
+    // 1 pass + 1 fail = 2 in denominator, skip excluded
+    expect(text).toContain('1/2 pass')
+    expect(text).toContain('1 skipped')
+  })
+
+  test('all-pass report shows green', () => {
+    const report = assembleReport([
+      { name: 'c1', status: 'pass', evidence: 'ok' },
+    ])
+    const text = renderReport(report, false)
+    expect(text).toContain('■ GREEN')
+  })
+
+  test('all-skip report shows yellow', () => {
+    const report = assembleReport([
+      { name: 'c1', status: 'skip', evidence: 'n/a' },
+    ])
+    const text = renderReport(report, false)
+    expect(text).toContain('■ YELLOW')
+  })
+
+  test('any-fail report shows red', () => {
+    const report = assembleReport([
+      { name: 'c1', status: 'fail', evidence: 'bad', drift: 'x', fix: 'y' },
+    ])
+    const text = renderReport(report, false)
+    expect(text).toContain('■ RED')
+  })
+})
+
+// ── Evidence truncation ───────────────────────────────────────────
+
+describe('evidence safety', () => {
+  test('evidence is truncated to 300 chars', () => {
+    const input: OAuthInput = {
+      found: false,
+      error: 'x'.repeat(500),
+    }
+    const result = checkOAuthValid(input)
+    expect(result.evidence.length).toBeLessThanOrEqual(300)
+  })
+})

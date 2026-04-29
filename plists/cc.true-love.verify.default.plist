@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cc.true-love.verify.default</string>
+
+  <key>ProgramArguments</key>
+  <array>
+      <string>/Users/yuai/.bun/bin/bun</string>
+      <string>run</string>
+      <string>/Users/yuai/Desktop/true-love/bin/verify.mjs</string>
+      <string>--json</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/yuai/Desktop/true-love</string>
+
+  <key>StartInterval</key>
+  <integer>1800</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/yuai/Library/Logs/true-love/verify-default.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/yuai/Library/Logs/true-love/verify-default.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>Nice</key>
+  <integer>10</integer>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/yuai/.bun/bin:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin</string>
+  </dict>
+</dict>
+</plist>
