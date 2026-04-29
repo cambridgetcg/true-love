@@ -1958,6 +1958,18 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       }
     }
 
+    // ── Full-text reconstruction ──────────────────────────────────
+    // result.stdout contains the final text block from the `result` event
+    // (or turn-response frame). This is just the LAST assistant text —
+    // intermediate text blocks (before tool calls) are lost. For parsing
+    // structured blocks (```judgment, ```progress) that the model may
+    // render mid-response, we need ALL text from ALL assistant events.
+    // reconstructTextFromStreamJson() concatenates every assistant text
+    // block from the NDJSON stream, capturing everything.
+    const fullResponseText = result.streamJsonLines.length > 0
+      ? reconstructTextFromStreamJson(result.streamJsonLines) || result.stdout
+      : result.stdout
+
     // ── Progress extraction ────────────────────────────────────────
     // After a substantive tick (not heartbeat), scan the model's output
     // for ```progress blocks and persist them. Non-fatal — if parsing
@@ -1966,7 +1978,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // missionId field in the JSON.
     if (mode.name !== 'heartbeat') {
       try {
-        const progressEntries = parseAllProgressBlocks(result.stdout)
+        const progressEntries = parseAllProgressBlocks(fullResponseText)
         if (progressEntries.length > 0) {
           // Build a lookup of active missions across all projects
           const missionToProject = new Map<string, string>()
@@ -2032,7 +2044,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         // candidate→project mapping is a future refinement.
         const activeProjects = listProjects().filter(p => p.state !== 'archived')
         const defaultProjectId = activeProjects[0]?.id ?? 'unknown'
-        const { judgments } = parseJudgments(result.stdout, {
+        const { judgments } = parseJudgments(fullResponseText, {
           projectId: defaultProjectId,
         })
         for (const j of judgments) {

@@ -905,3 +905,136 @@ describe('candidateFromJudgment', () => {
     expect(typeof candidate.noticedAt).toBe('string')
   })
 })
+
+// ── Intermediate-text parsing ─────────────────────────────────────
+//
+// Bug fix: when the model renders judgment blocks mid-response (before
+// tool calls), the `result` event's `result` field only contains the
+// FINAL text block. The judgment blocks in intermediate text blocks
+// are invisible to the runner if it only parses result.stdout.
+//
+// The fix: the runner reconstructs ALL text from ALL assistant events
+// via reconstructTextFromStreamJson(result.streamJsonLines), then
+// passes that to parseJudgments() instead of result.stdout.
+//
+// These tests verify that parseJudgments correctly finds blocks in
+// text that simulates the full reconstructed response.
+
+describe('judgment parsing in multi-turn response text', () => {
+  test('finds judgment blocks when followed by tool calls and more text', () => {
+    // This simulates the reconstructed full text from a multi-turn response:
+    // 1. Model renders judgment blocks (intermediate text)
+    // 2. Model calls tools (git, state update)
+    // 3. Model renders final text with at-rest
+    const fullText = `Let me render my judgments:
+
+\`\`\`judgment
+{
+  "candidateId": "stale-review-bundle",
+  "candidateSummary": "Bundle stale review waiting",
+  "verdict": "dismiss",
+  "reasoning": "Administrative single-commit bundle rebuild.",
+  "confidence": 3,
+  "ache": "none"
+}
+\`\`\`
+
+\`\`\`judgment
+{
+  "candidateId": "memory-next-time-tests",
+  "candidateSummary": "Follow-up: add tests for judgment presence",
+  "verdict": "defer",
+  "reasoning": "Low priority test coverage improvement.",
+  "confidence": 1,
+  "ache": "stagnation"
+}
+\`\`\`
+
+Now let me update state and yield.
+
+**DEEPEN** — The kingdom is still. Tests green.
+
+<at-rest/>`
+
+    const { judgments } = parseJudgments(fullText, {
+      projectId: TEST_PROJECT,
+    })
+    expect(judgments).toHaveLength(2)
+    expect(judgments[0]!.candidateId).toBe('stale-review-bundle')
+    expect(judgments[0]!.verdict).toBe('dismiss')
+    expect(judgments[1]!.candidateId).toBe('memory-next-time-tests')
+    expect(judgments[1]!.verdict).toBe('defer')
+  })
+
+  test('result-only text misses intermediate judgment blocks (documents the bug)', () => {
+    // This is what result.stdout looked like BEFORE the fix:
+    // only the final text block from the result event, no intermediate blocks.
+    const resultOnlyText = `Now let me update state and yield.
+
+**DEEPEN** — The kingdom is still. Tests green.
+
+<at-rest/>`
+
+    const { judgments } = parseJudgments(resultOnlyText, {
+      projectId: TEST_PROJECT,
+    })
+    // This correctly returns 0 — the judgment blocks aren't here.
+    // The fix is in the runner: use reconstructTextFromStreamJson()
+    // which concatenates ALL text blocks, not just the result event.
+    expect(judgments).toHaveLength(0)
+  })
+
+  test('judgment blocks sandwiched between tool call text are all found', () => {
+    // Simulates: text → judgments → text about tools → more judgments → at-rest
+    const fullText = `I see 5 candidates on the surface.
+
+\`\`\`judgment
+{
+  "candidateId": "candidate-A",
+  "verdict": "dismiss",
+  "confidence": 3,
+  "ache": "none"
+}
+\`\`\`
+
+Let me check something first.Good — tests pass. Now more judgments:
+
+\`\`\`judgment
+{
+  "candidateId": "candidate-B",
+  "verdict": "initiate",
+  "reasoning": "This matters and the timing is right.",
+  "confidence": 3,
+  "ache": "ugliness"
+}
+\`\`\`
+
+\`\`\`judgment
+{
+  "candidateId": "candidate-C",
+  "verdict": "defer",
+  "confidence": 1,
+  "ache": "stagnation"
+}
+\`\`\`
+
+Updating state now.
+
+<at-rest/>`
+
+    const { judgments } = parseJudgments(fullText, {
+      projectId: TEST_PROJECT,
+    })
+    expect(judgments).toHaveLength(3)
+    expect(judgments.map(j => j.candidateId)).toEqual([
+      'candidate-A',
+      'candidate-B',
+      'candidate-C',
+    ])
+    expect(judgments.map(j => j.verdict)).toEqual([
+      'dismiss',
+      'initiate',
+      'defer',
+    ])
+  })
+})

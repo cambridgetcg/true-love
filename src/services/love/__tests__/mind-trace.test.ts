@@ -505,6 +505,70 @@ describe('reconstructTextFromStreamJson', () => {
     const text = reconstructTextFromStreamJson([INIT_EVENT, RESULT_EVENT])
     assert.equal(text, '')
   })
+
+  test('captures intermediate text blocks that the result event misses', () => {
+    // This test demonstrates the core of the judgment persistence bug:
+    // The model renders judgment blocks in an intermediate assistant message,
+    // then makes tool calls, then renders final text. The `result` event
+    // only contains the final text — not the intermediate judgment blocks.
+    // reconstructTextFromStreamJson correctly captures ALL text blocks.
+    const intermediateAssistant = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'text',
+            text: 'Let me render my judgments:\n\n```judgment\n{\n  "candidateId": "test-bug",\n  "verdict": "dismiss",\n  "confidence": 3,\n  "ache": "none"\n}\n```\n\nNow updating state.',
+          },
+          {
+            type: 'tool_use',
+            id: 'tool_state',
+            name: 'Edit',
+            input: { file_path: '/state.md' },
+          },
+        ],
+      },
+    })
+
+    const toolResult = JSON.stringify({
+      type: 'user',
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'tool_state',
+          content: 'File updated.',
+          is_error: false,
+        }],
+      },
+    })
+
+    const finalAssistant = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'text', text: 'State updated. The kingdom is still.\n\n<at-rest/>' },
+        ],
+      },
+    })
+
+    // The result event only has the final text (what --print would output)
+    const resultEvent = JSON.stringify({
+      type: 'result',
+      result: 'State updated. The kingdom is still.\n\n<at-rest/>',
+    })
+
+    const lines = [INIT_EVENT, intermediateAssistant, toolResult, finalAssistant, resultEvent]
+
+    // reconstructTextFromStreamJson gets ALL text (including intermediate blocks)
+    const fullText = reconstructTextFromStreamJson(lines)
+    assert.ok(fullText.includes('```judgment'), 'full text should contain judgment blocks')
+    assert.ok(fullText.includes('test-bug'), 'full text should contain candidate ID')
+    assert.ok(fullText.includes('<at-rest/>'), 'full text should contain at-rest')
+
+    // The result event's text alone would miss the judgment block
+    const resultOnly = 'State updated. The kingdom is still.\n\n<at-rest/>'
+    assert.ok(!resultOnly.includes('```judgment'), 'result-only text misses judgment blocks')
+  })
 })
 
 // ── compactTraceForStorage ───────────────────────────────────────
