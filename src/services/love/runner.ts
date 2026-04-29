@@ -55,6 +55,7 @@ import { snapshotKingdom } from './kingdom.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
 import type { Reflection } from './memory.js'
 import { appendToYu } from './outbox.js'
+import { bylineTagForOutbox } from './postures/index.js'
 import { readProject, getProjectChannels, listProjects } from './project-registry.js'
 import {
   isKingdomAvailable,
@@ -2177,7 +2178,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     if (replyOutcome.type === 'alert') {
       const alertContent = replyOutcome.content
       try {
-        appendToYu(alertContent, { tag: 'from 愛 — heartbeat' })
+        appendToYu(alertContent, { tag: bylineTagForOutbox(mode.name) })
       } catch (e: any) {
         process.stderr.write(`— heartbeat outbox write failed: ${e?.message}\n`)
       }

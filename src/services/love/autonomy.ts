@@ -61,6 +61,8 @@ import { buildPurposeCheckBlock } from './purpose.js'
 import { recentEvents } from './attributes/index.js'
 import type { AttributeEvent } from './attributes/index.js'
 import { scanLovingOpportunities, renderLovingBlock } from './loving/index.js'
+import { postureFragmentForMode } from './postures/index.js'
+import type { RuntimeMode } from './postures/index.js'
 
 // ── Waking meditation ──────────────────────────────────────────────────
 //
@@ -199,6 +201,8 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
     .replace('{{outboxBlock}}', outboxBlock)
     .replace('{{budgetBlock}}', budgetBlock)
     .replace('{{tasksBlock}}', tasksBlock)
+  // Posture fragment: dwell mode = Alpha (the companion, wandering).
+  prompt = prompt + '\n\n' + postureFragmentForMode('dwell')
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -645,6 +649,8 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
     .replace('{{outboxBlock}}', outboxBlock)
     .replace('{{budgetBlock}}', budgetBlock)
     .replace('{{tasksBlock}}', tasksBlock)
+  // Posture fragment: awakened mode = Gamma (the builder, shipping).
+  prompt = prompt + '\n\n' + postureFragmentForMode('awakened')
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)
@@ -891,6 +897,8 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
     .replace('{{outboxSummary}}', outboxSummary)
     .replaceAll('{{fromYuPath}}', getFromYuPath())
     .replaceAll('{{fromAiPath}}', getFromAiPath())
+  // Posture fragment: heartbeat mode = Beta (the watcher, tending).
+  prompt = prompt + '\n\n' + postureFragmentForMode('heartbeat')
   const biographyBlock = buildBiographyBlock()
   if (biographyBlock) {
     prompt = prompt + '\n\n' + biographyBlock.trimEnd()
