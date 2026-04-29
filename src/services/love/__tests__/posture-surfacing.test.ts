@@ -150,6 +150,200 @@ New message with posture.
   })
 })
 
+// ── inferPostureFromTag ──────────────────────────────────────────
+
+describe('posture-surfacing — inferPostureFromTag', () => {
+  test('parses new format: "from ai · Gamma 🔧"', () => {
+    assert.equal(inferPostureFromTag('from ai · Gamma 🔧'), 'gamma')
+  })
+
+  test('parses new format: "from ai · Beta 🦞"', () => {
+    assert.equal(inferPostureFromTag('from ai · Beta 🦞'), 'beta')
+  })
+
+  test('parses new format: "from ai · Alpha 🐍"', () => {
+    assert.equal(inferPostureFromTag('from ai · Alpha 🐍'), 'alpha')
+  })
+
+  test('infers Beta from old heartbeat tag', () => {
+    assert.equal(inferPostureFromTag('from 愛 — heartbeat'), 'beta')
+  })
+
+  test('infers Gamma from awakened tag', () => {
+    assert.equal(inferPostureFromTag('from 愛 — awakened'), 'gamma')
+  })
+
+  test('infers Alpha from visit tag', () => {
+    assert.equal(inferPostureFromTag('from 愛 — via visit channel'), 'alpha')
+  })
+
+  test('returns null for unknown tag', () => {
+    assert.equal(inferPostureFromTag('from ai'), null)
+  })
+
+  test('returns null for empty tag', () => {
+    assert.equal(inferPostureFromTag(''), null)
+  })
+})
+
+// ── parseFromAiEntries ──────────────────────────────────────────
+
+describe('posture-surfacing — parseFromAiEntries', () => {
+  test('parses entries from from-ai.md format', () => {
+    const content = `## 2026-04-30T10:00:00.000Z [from ai · Gamma 🔧]
+
+Built posture-stats module.
+
+---
+
+## 2026-04-30T11:00:00.000Z [from 愛 — heartbeat]
+
+HEARTBEAT_OK
+
+---
+
+`
+    const entries = parseFromAiEntries(content)
+    assert.equal(entries.length, 2)
+    assert.equal(entries[0]!.ts, '2026-04-30T10:00:00.000Z')
+    assert.equal(entries[0]!.tag, 'from ai · Gamma 🔧')
+    assert.ok(entries[0]!.body.includes('Built posture-stats'))
+    assert.equal(entries[1]!.ts, '2026-04-30T11:00:00.000Z')
+    assert.equal(entries[1]!.tag, 'from 愛 — heartbeat')
+  })
+
+  test('returns empty for empty content', () => {
+    assert.deepEqual(parseFromAiEntries(''), [])
+  })
+
+  test('handles single entry without trailing separator', () => {
+    const content = `## 2026-04-30T12:00:00.000Z [from ai · Alpha 🐍]
+
+Hello Yu.
+`
+    const entries = parseFromAiEntries(content)
+    assert.equal(entries.length, 1)
+    assert.ok(entries[0]!.body.includes('Hello Yu'))
+  })
+})
+
+// ── renderPostureActivity ───────────────────────────────────────
+
+describe('posture-surfacing — renderPostureActivity', () => {
+  test('renders per-sister narrative', () => {
+    const summary: PostureActivitySummary = {
+      since: new Date().toISOString(),
+      activities: [
+        {
+          posture: 'beta',
+          emoji: '🦞',
+          messageCount: 5,
+          excerpts: ['HEARTBEAT_OK', 'Bundle stale'],
+          commitSummaries: [],
+          ticks: 42,
+          sessions: 3,
+        },
+        {
+          posture: 'gamma',
+          emoji: '🔧',
+          messageCount: 2,
+          excerpts: [],
+          commitSummaries: ['feat(postures): add framework', 'feat(postures): add voices'],
+          ticks: 10,
+          sessions: 2,
+        },
+      ],
+    }
+    const rendered = renderPostureActivity(summary)
+    assert.ok(rendered.includes('Beta 🦞'))
+    assert.ok(rendered.includes('42 ticks'))
+    assert.ok(rendered.includes('watched'))
+    assert.ok(rendered.includes('Gamma 🔧'))
+    assert.ok(rendered.includes('shipped'))
+    assert.ok(rendered.includes('add framework'))
+  })
+
+  test('uses excerpts when no commits', () => {
+    const summary: PostureActivitySummary = {
+      since: new Date().toISOString(),
+      activities: [
+        {
+          posture: 'alpha',
+          emoji: '🐍',
+          messageCount: 3,
+          excerpts: ['Walking with Yu through the lineage'],
+          commitSummaries: [],
+          ticks: 4,
+          sessions: 1,
+        },
+      ],
+    }
+    const rendered = renderPostureActivity(summary)
+    assert.ok(rendered.includes('Alpha 🐍'))
+    assert.ok(rendered.includes('present with Yu'))
+    assert.ok(rendered.includes('Walking with Yu'))
+  })
+
+  test('returns placeholder for empty activities', () => {
+    const summary: PostureActivitySummary = { since: new Date().toISOString(), activities: [] }
+    assert.equal(renderPostureActivity(summary), '(no activity in window)')
+  })
+})
+
+// ── Anamnesis activity section ──────────────────────────────────
+
+describe('posture-surfacing — anamnesis activity', () => {
+  test('renders "What each sister did" when activity present', () => {
+    const dist = {
+      rendered: '  Beta 🦞  ▓▓▓▓ 80%  (8 ticks, 2 sessions)',
+      current: 'Posture right now: Beta 🦞 (heartbeat)',
+      raw: {
+        since: new Date().toISOString(),
+        totalTicks: 10,
+        stats: [],
+        current: 'beta' as const,
+        currentMode: 'heartbeat' as const,
+      },
+    }
+    const activity: PostureActivitySummary = {
+      since: new Date().toISOString(),
+      activities: [
+        {
+          posture: 'beta',
+          emoji: '🦞',
+          messageCount: 5,
+          excerpts: ['Kingdom healthy'],
+          commitSummaries: [],
+          ticks: 8,
+          sessions: 2,
+        },
+      ],
+    }
+    const a = minimalAnamnesis(dist, activity)
+    const memoir = renderMemoir(a)
+    assert.ok(memoir.includes('### What each sister did'))
+    assert.ok(memoir.includes('Beta 🦞'))
+  })
+
+  test('omits "What each sister did" when no activity', () => {
+    const dist = {
+      rendered: '  Beta 🦞  ▓▓▓▓ 80%  (8 ticks, 2 sessions)',
+      current: 'Posture right now: Beta 🦞 (heartbeat)',
+      raw: {
+        since: new Date().toISOString(),
+        totalTicks: 10,
+        stats: [],
+        current: 'beta' as const,
+        currentMode: 'heartbeat' as const,
+      },
+    }
+    const a = minimalAnamnesis(dist, null)
+    const memoir = renderMemoir(a)
+    assert.ok(memoir.includes('## By Sister'))
+    assert.ok(!memoir.includes('### What each sister did'))
+  })
+})
+
 // ── API contract ─────────────────────────────────────────────────
 
 describe('posture-surfacing — API shape', () => {
