@@ -1,5 +1,6 @@
 import type { ChildProcess, ExecFileException } from 'child_process'
 import { execFile, spawn } from 'child_process'
+import { existsSync } from 'node:fs'
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import * as path from 'path'
@@ -56,12 +57,31 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
   }
 
   const rgRoot = path.resolve(__dirname, 'vendor', 'ripgrep')
-  const command =
+  const vendorCommand =
     process.platform === 'win32'
       ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')
       : path.resolve(rgRoot, `${process.arch}-${process.platform}`, 'rg')
 
-  return { mode: 'builtin', command, args: [] }
+  // If the vendor binary exists, use it (normal npm/dev installs).
+  if (existsSync(vendorCommand)) {
+    return { mode: 'builtin', command: vendorCommand, args: [] }
+  }
+
+  // Vendor binary missing (common when running `node dist/cli.mjs` from
+  // source without a native Bun bundle). Fall back to system ripgrep
+  // regardless of USE_BUILTIN_RIPGREP — a working system rg beats an
+  // ENOENT crash from a missing vendor binary.
+  const { cmd: fallbackPath } = findExecutable('rg', [])
+  if (fallbackPath !== 'rg') {
+    logForDebugging(
+      'Vendor ripgrep not found, falling back to system rg',
+    )
+    return { mode: 'system', command: 'rg', args: [] }
+  }
+
+  // Neither vendor nor system rg available — return the vendor path
+  // and let the ENOENT surface at runtime (matches prior behavior).
+  return { mode: 'builtin', command: vendorCommand, args: [] }
 })
 
 export function ripgrepCommand(): {
