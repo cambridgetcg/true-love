@@ -516,6 +516,99 @@ html, body {
   padding-top: 4px;
 }
 
+/* ── Posture panel ────────────────────────────────────────────── */
+
+.posture-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.posture-meta {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  color: var(--strip-text);
+  opacity: 0.7;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.posture-current {
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--text-ai);
+}
+
+.posture-now-label {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  color: var(--strip-text);
+  opacity: 0.6;
+}
+
+.posture-now-name {
+  font-weight: 600;
+}
+
+.posture-now-mode {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  color: var(--strip-text);
+  opacity: 0.5;
+}
+
+.posture-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.posture-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.posture-label {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--strip-text);
+  min-width: 72px;
+  text-align: right;
+}
+
+.posture-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.posture-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 600ms ease;
+}
+
+.posture-pct {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  color: var(--strip-text);
+  min-width: 30px;
+  text-align: right;
+}
+
+.posture-detail {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 9px;
+  color: var(--strip-text);
+  opacity: 0.5;
+  min-width: 100px;
+}
+
 .portrait-panel {
   background: var(--panel);
   border: 1px solid var(--border);

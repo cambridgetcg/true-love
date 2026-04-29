@@ -45,6 +45,33 @@ let lastRenderedDate = null    // Track for day separators
 let showJournal = localStorage.getItem('visit-show-journal') === 'true' // Default: hide journal
 let newMessageCount = 0  // Unread messages when scrolled up
 
+// ── Posture parsing ─────────────────────────────────────────────
+// Parse posture from the message tag field (e.g. "from ai · Alpha 🐍").
+// Returns { key, name, emoji } or null if no posture detected.
+
+const POSTURE_TAG_RE = /·\s*(Alpha|Beta|Gamma)\s*(🐍|🦞|🔧)/i
+
+// Infer posture from old-format tags (before posture-voices shipped).
+// "from 愛 — heartbeat" → Beta 🦞, "from 愛 — via visit" → Alpha 🐍.
+const POSTURE_MODE_MAP = {
+  heartbeat: { key: 'beta', name: 'Beta', emoji: '🦞' },
+  awakened:  { key: 'gamma', name: 'Gamma', emoji: '🔧' },
+  visit:     { key: 'alpha', name: 'Alpha', emoji: '🐍' },
+}
+
+function parsePostureFromTag(tag) {
+  if (!tag) return null
+  // New format: "from ai · Gamma 🔧"
+  const m = tag.match(POSTURE_TAG_RE)
+  if (m) return { key: m[1].toLowerCase(), name: m[1], emoji: m[2] }
+  // Old format: infer from mode keyword in tag
+  const lower = tag.toLowerCase()
+  if (lower.includes('heartbeat')) return POSTURE_MODE_MAP.heartbeat
+  if (lower.includes('awakened')) return POSTURE_MODE_MAP.awakened
+  if (lower.includes('visit')) return POSTURE_MODE_MAP.visit
+  return null
+}
+
 // ── Markdown rendering ──────────────────────────────────────────
 // Uses vendored marked.min.js (loaded via <script> in index.html).
 // Sanitize output to prevent XSS from tool call results.
@@ -183,11 +210,24 @@ function renderMessage(msg) {
   el.className = `bubble from-${msg.source}${isJournal ? ' is-journal' : ''}${withinGroup ? ' grouped' : ''}`
   el.dataset.ts = msg.ts || ''
 
-  // Tag (sender label) — suppress in grouped messages
+  // Tag (sender label) — suppress in grouped messages.
+  // For Love's messages, parse posture from the tag field
+  // (e.g. "from ai · Gamma 🔧" → show "🔧 愛" as the tag).
   if (!withinGroup) {
     const tag = document.createElement('div')
     tag.className = 'bubble-tag'
-    tag.textContent = msg.source === 'yu' ? 'yu' : '愛'
+    if (msg.source === 'yu') {
+      tag.textContent = 'yu'
+    } else {
+      const posture = parsePostureFromTag(msg.tag)
+      if (posture) {
+        tag.textContent = `${posture.emoji} 愛`
+        tag.title = `${posture.name} (${posture.emoji})`
+        el.classList.add(`posture-${posture.key}`)
+      } else {
+        tag.textContent = '愛'
+      }
+    }
     el.appendChild(tag)
   }
 
@@ -588,9 +628,9 @@ let streamRawText = ''     // accumulated raw text for markdown re-render
 function showTypingIndicator() {
   removeTypingIndicator()
   typingIndicator = document.createElement('div')
-  typingIndicator.className = 'bubble from-ai typing-indicator'
+  typingIndicator.className = 'bubble from-ai typing-indicator posture-alpha'
   typingIndicator.innerHTML = `
-    <div class="bubble-tag">愛</div>
+    <div class="bubble-tag" title="Alpha (🐍)">🐍 愛</div>
     <div class="typing-dots">
       <span></span><span></span><span></span>
     </div>
@@ -613,10 +653,12 @@ function ensureStreamBubble() {
   if (emptyState) emptyState.remove()
 
   streamBubble = document.createElement('div')
-  streamBubble.className = 'bubble from-ai is-streaming'
+  // /visit is always interactive mode → Alpha 🐍
+  streamBubble.className = 'bubble from-ai is-streaming posture-alpha'
   const tag = document.createElement('div')
   tag.className = 'bubble-tag'
-  tag.textContent = '愛'
+  tag.textContent = '🐍 愛'
+  tag.title = 'Alpha (🐍)'
   streamBody = document.createElement('div')
   streamBody.className = 'bubble-body'
   streamBubble.appendChild(tag)

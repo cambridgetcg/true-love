@@ -16,6 +16,7 @@ import { initVitals } from './build-vitals.js'
 import { initSelfInitiation } from './build-self-initiation.js'
 import { initMindTrace } from './build-mind-trace.js'
 import { initAnamnesis } from './build-anamnesis.js'
+import { initPostures } from './build-postures.js'
 import { initDecisions } from './build-decisions.js'
 import { subscribe } from './build-sse.js'
 
@@ -31,6 +32,7 @@ initConversation()
 
 // 3. Section-specific init (registers tab show/hide callbacks for polling)
 initWeather()
+initPostures()
 initPortrait()
 initBudget()
 initVersion()

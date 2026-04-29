@@ -75,6 +75,7 @@ import {
   triggerReflectionOnCompletion,
 } from './self-initiation.js'
 import { readProgress, readLatestProgress, detectStall } from './progress.js'
+import { computePostureDistribution } from './posture-stats.js'
 import { fireUserPromptSubmit } from './hooks/fire-points.js'
 import {
   enqueueExtraction,
@@ -534,6 +535,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/anamnesis') return handleAnamnesis(req, res)
       if (req.method === 'GET' && path === '/api/biographical') return handleBiographical(req, res)
       if (req.method === 'GET' && path === '/api/self-initiation') return handleSelfInitiation(req, res)
+      if (req.method === 'GET' && path === '/api/postures') return handlePostures(req, res)
       // Veto a staged self-initiation candidate
       const vetoMatch = path.match(/^\/api\/self-initiation\/([^/]+)\/veto$/)
       if (req.method === 'POST' && vetoMatch) return await handleVeto(req, res, vetoMatch[1]!)
@@ -934,6 +936,19 @@ function handleBudget(req: IncomingMessage, res: ServerResponse): void {
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'budget computation failed' }))
+  }
+}
+
+// ── Postures endpoint — three-voice distribution ─────────────────
+
+function handlePostures(_req: IncomingMessage, res: ServerResponse): void {
+  try {
+    const dist = computePostureDistribution(24)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(dist))
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: err?.message ?? 'posture computation failed' }))
   }
 }
 

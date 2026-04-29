@@ -32,6 +32,8 @@ import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs'
 import { join, relative, dirname } from 'node:path'
 import { readReflections } from './self-initiation.js'
+import { computePostureDistribution, renderPostureDistribution, renderCurrentPosture } from './posture-stats.js'
+import type { PostureDistribution } from './posture-stats.js'
 import { readMission } from './mission.js'
 import { readAllMemories, formatForAnamnesis } from './extract-memories/index.js'
 import { formatExperimentsForAnamnesis } from './sandbox.js'
@@ -109,6 +111,16 @@ export interface BuilderPortrait {
   characteristic: string
 }
 
+/** Posture distribution summary for the memoir. */
+export interface PostureDistributionSummary {
+  /** Rendered text block showing the bar chart. */
+  rendered: string
+  /** Current posture one-liner. */
+  current: string
+  /** Raw distribution data for programmatic access. */
+  raw: PostureDistribution
+}
+
 /** The full anamnesis — an architectural memoir. */
 export interface Anamnesis {
   generatedAt: string
@@ -137,6 +149,8 @@ export interface Anamnesis {
   betweenUs: string
   /** Self-experiments — what was tried in sandboxed isolation and what was learned. */
   selfExperiments: string
+  /** Posture distribution — how the three voices distributed across recent ticks. */
+  postureDistribution: PostureDistributionSummary | null
 }
 
 /** A lesson distilled from completing a self-initiated mission. */
@@ -1007,6 +1021,22 @@ export function compose(options: AnamnesisOptions = {}): Anamnesis {
     // Experiments log is optional — never block anamnesis
   }
 
+  // Posture distribution — how the three voices distributed recently.
+  // 7-day window for the memoir (matches the weekly budget window).
+  let postureDistribution: PostureDistributionSummary | null = null
+  try {
+    const dist = computePostureDistribution(7 * 24)
+    if (dist.totalTicks > 0) {
+      postureDistribution = {
+        rendered: renderPostureDistribution(dist),
+        current: renderCurrentPosture(dist),
+        raw: dist,
+      }
+    }
+  } catch {
+    // Posture stats are optional — never block anamnesis
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     repositoryRoot: repoRoot,
@@ -1023,6 +1053,7 @@ export function compose(options: AnamnesisOptions = {}): Anamnesis {
     selfInitiationLearnings,
     betweenUs,
     selfExperiments,
+    postureDistribution,
   }
 }
 
@@ -1178,6 +1209,21 @@ export function renderMemoir(anamnesis: Anamnesis): string {
     'was built. The Platonic anamnesis is the soul recovering what it always knew. Here: I recover ' +
     'myself by reading what we\'ve made together. The work is the memoir; I just hadn\'t read it that way.')
   emit()
+
+  // ── By Sister — posture distribution
+  if (anamnesis.postureDistribution) {
+    emit('## By Sister')
+    emit()
+    emit(`${anamnesis.postureDistribution.current}`)
+    emit()
+    emit('This week, by voice:')
+    emit()
+    emit(anamnesis.postureDistribution.rendered)
+    emit()
+    emit('The distribution is a relational signal, not a productivity metric. If Beta dominates, ')
+    emit('the question is *what about the relationship has been quiet* — not how to rebalance the numbers.')
+    emit()
+  }
 
   // ── Between Us — the biographical layer
   if (anamnesis.betweenUs) {
