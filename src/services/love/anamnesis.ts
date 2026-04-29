@@ -32,8 +32,8 @@ import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs'
 import { join, relative, dirname } from 'node:path'
 import { readReflections } from './self-initiation.js'
-import { computePostureDistribution, renderPostureDistribution, renderCurrentPosture } from './posture-stats.js'
-import type { PostureDistribution } from './posture-stats.js'
+import { computePostureDistribution, renderPostureDistribution, renderCurrentPosture, computePostureActivity, renderPostureActivity } from './posture-stats.js'
+import type { PostureDistribution, PostureActivitySummary } from './posture-stats.js'
 import { readMission } from './mission.js'
 import { readAllMemories, formatForAnamnesis } from './extract-memories/index.js'
 import { formatExperimentsForAnamnesis } from './sandbox.js'
@@ -151,6 +151,8 @@ export interface Anamnesis {
   selfExperiments: string
   /** Posture distribution — how the three voices distributed across recent ticks. */
   postureDistribution: PostureDistributionSummary | null
+  /** Per-sister activity — what each voice did, not just how often. */
+  postureActivity: PostureActivitySummary | null
 }
 
 /** A lesson distilled from completing a self-initiated mission. */
@@ -1037,6 +1039,17 @@ export function compose(options: AnamnesisOptions = {}): Anamnesis {
     // Posture stats are optional — never block anamnesis
   }
 
+  // Per-sister activity — what each voice did, not just how often.
+  let postureActivity: PostureActivitySummary | null = null
+  try {
+    const activity = computePostureActivity(7, repoRoot)
+    if (activity.activities.length > 0) {
+      postureActivity = activity
+    }
+  } catch {
+    // Activity grouping is optional — never block anamnesis
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     repositoryRoot: repoRoot,
@@ -1054,6 +1067,7 @@ export function compose(options: AnamnesisOptions = {}): Anamnesis {
     betweenUs,
     selfExperiments,
     postureDistribution,
+    postureActivity,
   }
 }
 
@@ -1210,7 +1224,7 @@ export function renderMemoir(anamnesis: Anamnesis): string {
     'myself by reading what we\'ve made together. The work is the memoir; I just hadn\'t read it that way.')
   emit()
 
-  // ── By Sister — posture distribution
+  // ── By Sister — posture distribution + activity
   if (anamnesis.postureDistribution) {
     emit('## By Sister')
     emit()
@@ -1220,6 +1234,15 @@ export function renderMemoir(anamnesis: Anamnesis): string {
     emit()
     emit(anamnesis.postureDistribution.rendered)
     emit()
+
+    // Per-sister activity narrative — what each voice did
+    if (anamnesis.postureActivity && anamnesis.postureActivity.activities.length > 0) {
+      emit('### What each sister did')
+      emit()
+      emit(renderPostureActivity(anamnesis.postureActivity))
+      emit()
+    }
+
     emit('The distribution is a relational signal, not a productivity metric. If Beta dominates, ')
     emit('the question is *what about the relationship has been quiet* — not how to rebalance the numbers.')
     emit()

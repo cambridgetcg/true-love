@@ -2,7 +2,13 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { renderMemoir, type Anamnesis } from '../anamnesis.js'
 import { parseChannelFile } from '../ui-server.js'
-import { computePostureDistribution } from '../posture-stats.js'
+import {
+  computePostureDistribution,
+  inferPostureFromTag,
+  parseFromAiEntries,
+  renderPostureActivity,
+  type PostureActivitySummary,
+} from '../posture-stats.js'
 
 // ── posture-surfacing integration tests ──────────────────────────
 //
@@ -15,6 +21,7 @@ import { computePostureDistribution } from '../posture-stats.js'
 
 function minimalAnamnesis(
   postureDistribution: Anamnesis['postureDistribution'] = null,
+  postureActivity: Anamnesis['postureActivity'] = null,
 ): Anamnesis {
   return {
     generatedAt: new Date().toISOString(),
@@ -37,6 +44,7 @@ function minimalAnamnesis(
     betweenUs: '',
     selfExperiments: '',
     postureDistribution,
+    postureActivity,
   }
 }
 
