@@ -342,6 +342,39 @@ export async function checkSelfInitResponsive(config: VerifyConfig): Promise<Che
   }
 }
 
+// ── Dedup ─────────────────────────────────────────────────────────
+// Pure function: given a list of open decisions, determine if a new
+// verify concern should be suppressed. The verify pilot fires every
+// 30m; without dedup it stacks identical concerns in Yu's dashboard.
+
+export interface DedupDecision {
+  kind: string
+  ask: string
+  id?: string
+  createdAt?: string
+}
+
+/**
+ * Check if a verify concern should be deduplicated.
+ * Returns { skip: true, reason } if an open verify concern already exists.
+ * A "verify concern" is any decision with kind='concern' and ask starting
+ * with 'Substrate verify failed:'.
+ */
+export function shouldSkipVerifyConcern(
+  openDecisions: DedupDecision[],
+): { skip: boolean; reason?: string } {
+  const existing = openDecisions.find(
+    d => d.kind === 'concern' && d.ask?.startsWith('Substrate verify failed:'),
+  )
+  if (existing) {
+    return {
+      skip: true,
+      reason: `deduplicated: open concern exists (id ${existing.id || 'unknown'})`,
+    }
+  }
+  return { skip: false }
+}
+
 // ── Report assembly ───────────────────────────────────────────────
 
 export function assembleReport(checks: CheckResult[]): VerifyReport {

@@ -512,6 +512,34 @@ async function surfaceDrift(report) {
   const failed = report.checks.filter(c => c.status === 'fail')
   if (failed.length === 0) return { posted: false, reason: 'no failures' }
 
+  // ── Dedup: skip if an open verify concern already exists ──────
+  // Without this, every 30m cadence tick stacks an identical concern
+  // in Yu's /build dashboard. One open concern is enough — when Yu
+  // acknowledges it, the next failing run will post a fresh one.
+  try {
+    const openRes = await fetch(
+      `${API}/api/decisions?project=${PROJECT}&status=open`,
+      { signal: AbortSignal.timeout(5000) },
+    )
+    if (openRes.ok) {
+      const open = await openRes.json()
+      const existing = open.find(d =>
+        d.kind === 'concern' &&
+        d.ask?.startsWith('Substrate verify failed:'),
+      )
+      if (existing) {
+        return {
+          posted: false,
+          reason: `deduplicated: open concern exists (id ${existing.id})`,
+        }
+      }
+    }
+  } catch {
+    // API unreachable — can't dedup, fall through to post attempt.
+    // If the API is truly down, the POST below will also fail, so
+    // this fail-open behavior is harmless.
+  }
+
   const summary = failed.map(c => c.name).join(', ')
   const context = JSON.stringify(report, null, 2)
 

@@ -16,9 +16,11 @@ import {
   checkNoRecurringErrorFromLines,
   assembleReport,
   renderReport,
+  shouldSkipVerifyConcern,
   type VerifyConfig,
   type HeartbeatInput,
   type OAuthInput,
+  type DedupDecision,
 } from '../verify.js'
 
 // ── Fixture helpers ───────────────────────────────────────────────
@@ -511,6 +513,84 @@ describe('renderReport', () => {
     ])
     const text = renderReport(report, false)
     expect(text).toContain('■ RED')
+  })
+})
+
+// ── Dedup: shouldSkipVerifyConcern ────────────────────────────────
+
+describe('shouldSkipVerifyConcern', () => {
+  test('skip: open verify concern exists', () => {
+    const decisions: DedupDecision[] = [
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: agent-runtime.alive, heartbeat.healthy. Acknowledge, investigate, or suppress?',
+        id: 'dec_2026-04-29_abc123',
+      },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(true)
+    expect(result.reason).toContain('deduplicated')
+    expect(result.reason).toContain('dec_2026-04-29_abc123')
+  })
+
+  test('no skip: no open decisions', () => {
+    const result = shouldSkipVerifyConcern([])
+    expect(result.skip).toBe(false)
+    expect(result.reason).toBeUndefined()
+  })
+
+  test('no skip: open decisions but none are verify concerns', () => {
+    const decisions: DedupDecision[] = [
+      { kind: 'review', ask: 'Please review this mission', id: 'dec_1' },
+      { kind: 'concern', ask: 'Some other concern about X', id: 'dec_2' },
+      { kind: 'fork', ask: 'Which approach?', id: 'dec_3' },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(false)
+  })
+
+  test('skip: multiple verify concerns — first one triggers dedup', () => {
+    const decisions: DedupDecision[] = [
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: bundle.freshness. Acknowledge, investigate, or suppress?',
+        id: 'dec_older',
+      },
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: heartbeat.healthy. Acknowledge, investigate, or suppress?',
+        id: 'dec_newer',
+      },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(true)
+    // Should match the first one found
+    expect(result.reason).toContain('dec_older')
+  })
+
+  test('no skip: concern kind but different ask prefix', () => {
+    const decisions: DedupDecision[] = [
+      { kind: 'concern', ask: 'Bundle is stale: please rebuild', id: 'dec_1' },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(false)
+  })
+
+  test('handles missing id gracefully', () => {
+    const decisions: DedupDecision[] = [
+      { kind: 'concern', ask: 'Substrate verify failed: test.' },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(true)
+    expect(result.reason).toContain('unknown')
+  })
+
+  test('handles missing ask gracefully', () => {
+    const decisions: DedupDecision[] = [
+      { kind: 'concern', ask: '' as any, id: 'dec_1' },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(false)
   })
 })
 
