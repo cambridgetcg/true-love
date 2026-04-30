@@ -2200,7 +2200,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     if (replyOutcome.type === 'alert') {
       const alertContent = replyOutcome.content
       try {
-        appendToYu(alertContent, { tag: bylineTagForOutbox(mode.name) })
+        appendToYu(alertContent, { tag: bylineTagForOutbox(mode.name), journal: true })
       } catch (e: any) {
         process.stderr.write(`— heartbeat outbox write failed: ${e?.message}\n`)
       }

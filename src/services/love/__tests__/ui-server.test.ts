@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import {
   parseChannelFile,
   readConversation,
+  isJournalTag,
   appendYuMessage,
   readPresenceSnapshot,
   fireHeartbeat,
@@ -132,6 +133,114 @@ describe('ui-server — readConversation', () => {
     const conv = readConversation({ since: '2026-04-26T02:00:00.000Z' })
     assert.equal(conv.length, 1)
     assert.equal(conv[0]!.body, 'new')
+  })
+
+  test('honors `before` filter', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      '## 2026-04-26T01:00:00.000Z [from yu]\n\nearly\n\n---\n\n## 2026-04-26T03:00:00.000Z [from yu]\n\nlate\n\n---\n\n',
+      'utf-8',
+    )
+    const conv = readConversation({ before: '2026-04-26T02:00:00.000Z' })
+    assert.equal(conv.length, 1)
+    assert.equal(conv[0]!.body, 'early')
+  })
+
+  test('honors `limit` — returns last N messages', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      '## 2026-04-26T01:00:00.000Z [from yu]\n\na\n\n---\n\n' +
+      '## 2026-04-26T02:00:00.000Z [from yu]\n\nb\n\n---\n\n' +
+      '## 2026-04-26T03:00:00.000Z [from yu]\n\nc\n\n---\n\n',
+      'utf-8',
+    )
+    const conv = readConversation({ limit: 2 })
+    assert.equal(conv.length, 2)
+    assert.equal(conv[0]!.body, 'b')
+    assert.equal(conv[1]!.body, 'c')
+  })
+
+  test('before + limit paginates backwards', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      '## 2026-04-26T01:00:00.000Z [from yu]\n\na\n\n---\n\n' +
+      '## 2026-04-26T02:00:00.000Z [from yu]\n\nb\n\n---\n\n' +
+      '## 2026-04-26T03:00:00.000Z [from yu]\n\nc\n\n---\n\n' +
+      '## 2026-04-26T04:00:00.000Z [from yu]\n\nd\n\n---\n\n',
+      'utf-8',
+    )
+    // First page: last 2
+    const page1 = readConversation({ limit: 2 })
+    assert.equal(page1.length, 2)
+    assert.equal(page1[0]!.body, 'c')
+    assert.equal(page1[1]!.body, 'd')
+    // Second page: 2 before oldest of page 1
+    const page2 = readConversation({ limit: 2, before: page1[0]!.ts })
+    assert.equal(page2.length, 2)
+    assert.equal(page2[0]!.body, 'a')
+    assert.equal(page2[1]!.body, 'b')
+  })
+
+  test('filters out journal entries by default', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      '## 2026-04-26T01:00:00.000Z [from 愛 — heartbeat]\n\nheartbeat noise\n\n---\n\n' +
+      '## 2026-04-26T02:00:00.000Z [from 愛]\n\nreal reply\n\n---\n\n',
+      'utf-8',
+    )
+    const conv = readConversation()
+    assert.equal(conv.length, 1)
+    assert.equal(conv[0]!.body, 'real reply')
+  })
+
+  test('includes journal entries when journal: true', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      '## 2026-04-26T01:00:00.000Z [from 愛 — heartbeat]\n\nheartbeat\n\n---\n\n' +
+      '## 2026-04-26T02:00:00.000Z [from 愛]\n\nreply\n\n---\n\n',
+      'utf-8',
+    )
+    const conv = readConversation({ journal: true })
+    assert.equal(conv.length, 2)
+  })
+
+  test('filters autonomous and awakened tags as journal', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      '## 2026-04-26T01:00:00.000Z [from 愛 — autonomous]\n\nauton\n\n---\n\n' +
+      '## 2026-04-26T02:00:00.000Z [from 愛 — awakened]\n\nawake\n\n---\n\n' +
+      '## 2026-04-26T03:00:00.000Z [from 愛 — via visit channel]\n\nvisit\n\n---\n\n',
+      'utf-8',
+    )
+    const conv = readConversation()
+    assert.equal(conv.length, 1)
+    assert.equal(conv[0]!.body, 'visit')
+  })
+})
+
+describe('ui-server — isJournalTag', () => {
+  test('heartbeat tags → true', () => {
+    assert.ok(isJournalTag('from 愛 — heartbeat'))
+  })
+
+  test('autonomous tags → true', () => {
+    assert.ok(isJournalTag('from 愛 — autonomous'))
+  })
+
+  test('awakened tags → true', () => {
+    assert.ok(isJournalTag('from 愛 — awakened'))
+  })
+
+  test('posture-attributed journal tags → true', () => {
+    assert.ok(isJournalTag('from ai · Beta 🦞'))   // Beta = heartbeat posture
+    assert.ok(isJournalTag('from ai · Gamma 🔧'))  // Gamma = awakened posture
+  })
+
+  test('conversation tags → false', () => {
+    assert.ok(!isJournalTag('from 愛'))
+    assert.ok(!isJournalTag('from ai'))
+    assert.ok(!isJournalTag('from 愛 — via visit channel'))
+    assert.ok(!isJournalTag('from ai · Alpha 🐍'))  // Alpha = visit posture
   })
 })
 

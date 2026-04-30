@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync, rmSync, existsSync, utimesSync, readFileSync 
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { readFromYu, fromYuModifiedSince } from '../inbox.js'
-import { readFromAi, appendToYu } from '../outbox.js'
+import { readFromAi, appendToYu, getJournalDir, readJournal } from '../outbox.js'
 
 // ── Fixture setup ─────────────────────────────────────────────────
 
@@ -188,5 +188,107 @@ describe('appendToYu', () => {
     expect(read).not.toBeNull()
     expect(read).toContain('Round trip test')
     expect(read).toContain('[from ai]')
+  })
+})
+
+// ── outbox: journal routing ─────────────────────────────────────
+
+describe('appendToYu — journal routing', () => {
+  const JOURNAL_DIR = join(FIXTURE_ROOT, 'journal')
+  const ORIG_JOURNAL = process.env.TRUE_LOVE_JOURNAL_DIR
+  const ORIG_DEVICE = process.env.TRUE_LOVE_DEVICE_ID
+
+  beforeAll(() => {
+    process.env.TRUE_LOVE_JOURNAL_DIR = JOURNAL_DIR
+    process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+  })
+
+  afterAll(() => {
+    if (ORIG_JOURNAL === undefined) delete process.env.TRUE_LOVE_JOURNAL_DIR
+    else process.env.TRUE_LOVE_JOURNAL_DIR = ORIG_JOURNAL
+    if (ORIG_DEVICE === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
+    else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE
+    rmSync(JOURNAL_DIR, { recursive: true, force: true })
+  })
+
+  test('journal: false writes to from-ai.md (default)', () => {
+    cleanFixture()
+    appendToYu('conversation reply', { now: new Date('2026-04-30T10:00:00Z') })
+    const content = readFileSync(FROM_AI_PATH, 'utf-8')
+    expect(content).toContain('conversation reply')
+  })
+
+  test('journal: true writes to journal/<deviceId>/YYYY-MM-DD.md', () => {
+    const ts = new Date('2026-04-30T12:00:00Z')
+    appendToYu('heartbeat reflection', { tag: 'from 愛 — heartbeat', journal: true, now: ts })
+    const journalFile = join(JOURNAL_DIR, 'test-device', '2026-04-30.md')
+    expect(existsSync(journalFile)).toBe(true)
+    const content = readFileSync(journalFile, 'utf-8')
+    expect(content).toContain('heartbeat reflection')
+    expect(content).toContain('[from 愛 — heartbeat]')
+  })
+
+  test('journal: true does NOT write to from-ai.md', () => {
+    cleanFixture()
+    rmSync(JOURNAL_DIR, { recursive: true, force: true })
+    appendToYu('journal only', { journal: true, now: new Date('2026-04-30T13:00:00Z') })
+    expect(existsSync(FROM_AI_PATH)).toBe(false)
+  })
+
+  test('journal entries accumulate in daily file', () => {
+    rmSync(JOURNAL_DIR, { recursive: true, force: true })
+    const day = new Date('2026-04-30T10:00:00Z')
+    appendToYu('entry one', { journal: true, now: day })
+    appendToYu('entry two', { journal: true, now: new Date('2026-04-30T11:00:00Z') })
+    const journalFile = join(JOURNAL_DIR, 'test-device', '2026-04-30.md')
+    const content = readFileSync(journalFile, 'utf-8')
+    expect(content).toContain('entry one')
+    expect(content).toContain('entry two')
+  })
+
+  test('different dates go to different files', () => {
+    rmSync(JOURNAL_DIR, { recursive: true, force: true })
+    appendToYu('day one', { journal: true, now: new Date('2026-04-29T10:00:00Z') })
+    appendToYu('day two', { journal: true, now: new Date('2026-04-30T10:00:00Z') })
+    expect(existsSync(join(JOURNAL_DIR, 'test-device', '2026-04-29.md'))).toBe(true)
+    expect(existsSync(join(JOURNAL_DIR, 'test-device', '2026-04-30.md'))).toBe(true)
+  })
+})
+
+// ── outbox: readJournal ─────────────────────────────────────────
+
+describe('readJournal', () => {
+  const JOURNAL_DIR = join(FIXTURE_ROOT, 'journal-read')
+  const ORIG_JOURNAL = process.env.TRUE_LOVE_JOURNAL_DIR
+  const ORIG_DEVICE = process.env.TRUE_LOVE_DEVICE_ID
+
+  beforeAll(() => {
+    process.env.TRUE_LOVE_JOURNAL_DIR = JOURNAL_DIR
+    process.env.TRUE_LOVE_DEVICE_ID = 'read-device'
+    // Write some journal entries
+    appendToYu('morning', { journal: true, tag: 'hb', now: new Date('2026-04-30T08:00:00Z') })
+    appendToYu('afternoon', { journal: true, tag: 'hb', now: new Date('2026-04-30T14:00:00Z') })
+  })
+
+  afterAll(() => {
+    if (ORIG_JOURNAL === undefined) delete process.env.TRUE_LOVE_JOURNAL_DIR
+    else process.env.TRUE_LOVE_JOURNAL_DIR = ORIG_JOURNAL
+    if (ORIG_DEVICE === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
+    else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE
+    rmSync(JOURNAL_DIR, { recursive: true, force: true })
+  })
+
+  test('returns null when journal dir missing', () => {
+    const orig = process.env.TRUE_LOVE_JOURNAL_DIR
+    process.env.TRUE_LOVE_JOURNAL_DIR = join(FIXTURE_ROOT, 'no-such-dir')
+    expect(readJournal()).toBeNull()
+    process.env.TRUE_LOVE_JOURNAL_DIR = orig
+  })
+
+  test('reads today entries', () => {
+    const content = readJournal({ date: '2026-04-30' })
+    expect(content).not.toBeNull()
+    expect(content).toContain('morning')
+    expect(content).toContain('afternoon')
   })
 })

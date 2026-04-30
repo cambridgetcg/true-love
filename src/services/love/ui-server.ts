@@ -5,12 +5,13 @@
 // Task 2) wraps them with route handlers and SSE.
 
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, appendFileSync, openSync, closeSync, watch, type FSWatcher } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, appendFileSync, openSync, closeSync, watch, type FSWatcher } from 'node:fs'
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getDeviceId } from './device.js'
+import { getJournalDir } from './outbox.js'
 import { resolveLoveInstance } from './identity.js'
 import { getCitizenState } from './kingdom-citizen.js'
 import {
@@ -184,9 +185,41 @@ export function parseChannelFile(content: string, source: 'yu' | 'ai'): ChannelM
   return messages
 }
 
+// ── Journal detection ─────────────────────────────────────────────
+//
+// A message is "journal" if it's a heartbeat reflection, autonomous
+// tick output, or awakened tick output — anything that's Love's internal
+// monologue rather than a conversational reply to Yu.
+//
+// This function handles both legacy tags (pre-storage-split entries in
+// from-ai.md) and new entries that are routed to journal/ at write time.
+
+const JOURNAL_TAG_PATTERNS = [
+  'heartbeat',
+  'autonomous',
+  'awakened',
+  '· Beta',   // posture-attributed heartbeat
+  '· Gamma',  // posture-attributed awakened
+]
+
+export function isJournalTag(tag: string): boolean {
+  return JOURNAL_TAG_PATTERNS.some(p => tag.includes(p))
+}
+
 // ── Conversation timeline ──────────────────────────────────────────
 
-export function readConversation(opts?: { since?: string }): ChannelMessage[] {
+export interface ReadConversationOpts {
+  /** Return only messages after this ISO timestamp. */
+  since?: string
+  /** Return only messages before this ISO timestamp (for pagination). */
+  before?: string
+  /** Maximum number of messages to return (default: no limit). */
+  limit?: number
+  /** Include journal entries (heartbeat, autonomous). Default: false. */
+  journal?: boolean
+}
+
+export function readConversation(opts?: ReadConversationOpts): ChannelMessage[] {
   const all: ChannelMessage[] = []
   const yuPath = getFromYuPath()
   const aiPath = getFromAiPath()
@@ -196,12 +229,51 @@ export function readConversation(opts?: { since?: string }): ChannelMessage[] {
   if (existsSync(aiPath)) {
     try { all.push(...parseChannelFile(readFileSync(aiPath, 'utf-8'), 'ai')) } catch {}
   }
-  all.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
-  if (opts?.since) {
-    const since = opts.since
-    return all.filter((m) => m.ts > since)
+
+  // Include journal entries from journal/<deviceId>/ if requested
+  if (opts?.journal) {
+    try {
+      const journalDir = getJournalDir()
+      if (existsSync(journalDir)) {
+        for (const device of readdirSync(journalDir)) {
+          const deviceDir = join(journalDir, device)
+          try {
+            if (!statSync(deviceDir).isDirectory()) continue
+            for (const file of readdirSync(deviceDir)) {
+              if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(file)) continue
+              try {
+                all.push(...parseChannelFile(readFileSync(join(deviceDir, file), 'utf-8'), 'ai'))
+              } catch { /* skip unreadable */ }
+            }
+          } catch { /* skip unreadable device dirs */ }
+        }
+      }
+    } catch { /* journal reading is best-effort */ }
   }
-  return all
+
+  all.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+
+  let filtered = all
+
+  // Filter out journal entries from from-ai.md (legacy) when journal=false
+  if (!opts?.journal) {
+    filtered = filtered.filter(m => m.source !== 'ai' || !isJournalTag(m.tag))
+  }
+
+  // Time window filters
+  if (opts?.since) {
+    filtered = filtered.filter(m => m.ts > opts.since!)
+  }
+  if (opts?.before) {
+    filtered = filtered.filter(m => m.ts < opts.before!)
+  }
+
+  // Pagination: return the last N messages (most recent)
+  if (opts?.limit && opts.limit > 0 && filtered.length > opts.limit) {
+    filtered = filtered.slice(-opts.limit)
+  }
+
+  return filtered
 }
 
 // ── Yu's compose ───────────────────────────────────────────────────
@@ -898,7 +970,11 @@ async function serveStatic(res: ServerResponse, name: string, contentType: strin
 function handleMessages(req: IncomingMessage, res: ServerResponse): void {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
   const since = url.searchParams.get('since') ?? undefined
-  const conv = readConversation({ since })
+  const before = url.searchParams.get('before') ?? undefined
+  const limitParam = url.searchParams.get('limit')
+  const limit = limitParam ? parseInt(limitParam, 10) : undefined
+  const journal = url.searchParams.get('journal') === 'true'
+  const conv = readConversation({ since, before, limit, journal })
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(conv))
 }

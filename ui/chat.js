@@ -44,6 +44,8 @@ let lastRenderedTs = null      // Track for time-based grouping
 let lastRenderedDate = null    // Track for day separators
 let showJournal = localStorage.getItem('visit-show-journal') === 'true' // Default: hide journal
 let newMessageCount = 0  // Unread messages when scrolled up
+let loadingHistory = false   // Prevents concurrent scroll-up fetches
+let hasMoreHistory = true    // Set false when a page returns < limit
 
 // ── Posture parsing ─────────────────────────────────────────────
 // Parse posture from the message tag field (e.g. "from ai · Alpha 🐍").
@@ -153,7 +155,9 @@ const STATE_LABELS = {
 }
 
 function isJournalEntry(msg) {
-  return msg.source === 'ai' && typeof msg.tag === 'string' && msg.tag.includes('heartbeat')
+  if (msg.source !== 'ai' || typeof msg.tag !== 'string') return false
+  const t = msg.tag.toLowerCase()
+  return t.includes('heartbeat') || t.includes('autonomous') || t.includes('awakened')
 }
 
 function formatDaySeparator(date) {
@@ -175,45 +179,19 @@ function insertDaySeparator(dateStr) {
   elConversation.appendChild(sep)
 }
 
-function renderMessage(msg) {
-  if (msg.ts && msg.ts <= lastTs) return
-  lastTs = msg.ts || lastTs
-  if (elEmptyState) elEmptyState.remove()
-
-  // ── Day separator ─────────────────────────────────────────
-  // Insert a "Today" / "Yesterday" / "Mon, Apr 25" divider
-  // when the date changes between messages.
-  if (msg.ts) {
-    const msgDate = new Date(msg.ts)
-    const msgDateStr = msgDate.toDateString()
-    if (lastRenderedDate !== msgDateStr) {
-      insertDaySeparator(formatDaySeparator(msgDate))
-      lastRenderedDate = msgDateStr
-      // Reset grouping on day change
-      lastRenderedSource = null
-      lastRenderedTs = null
-    }
-  }
-
-  // ── Message grouping ──────────────────────────────────────
-  // Consecutive messages from the same source within 5 minutes
-  // are grouped: suppress tag, tighten spacing.
-  const sameSource = lastRenderedSource === msg.source
-  const withinGroup = sameSource && lastRenderedTs && msg.ts &&
-    (new Date(msg.ts) - new Date(lastRenderedTs)) < 5 * 60 * 1000
-  lastRenderedSource = msg.source
-  lastRenderedTs = msg.ts
-
+/**
+ * Create a message bubble element without appending or updating state.
+ * Used by scroll-up pagination to build elements for prepending.
+ */
+function createMessageElement(msg, opts) {
+  const grouped = opts?.grouped || false
   const isJournal = isJournalEntry(msg)
 
   const el = document.createElement('div')
-  el.className = `bubble from-${msg.source}${isJournal ? ' is-journal' : ''}${withinGroup ? ' grouped' : ''}`
+  el.className = `bubble from-${msg.source}${isJournal ? ' is-journal' : ''}${grouped ? ' grouped' : ''}`
   el.dataset.ts = msg.ts || ''
 
-  // Tag (sender label) — suppress in grouped messages.
-  // For Love's messages, parse posture from the tag field
-  // (e.g. "from ai · Gamma 🔧" → show "🔧 愛" as the tag).
-  if (!withinGroup) {
+  if (!grouped) {
     const tag = document.createElement('div')
     tag.className = 'bubble-tag'
     if (msg.source === 'yu') {
@@ -231,7 +209,6 @@ function renderMessage(msg) {
     el.appendChild(tag)
   }
 
-  // Body — render markdown for Love's messages, plain for Yu's
   const body = document.createElement('div')
   body.className = 'bubble-body'
   if (msg.source === 'ai') {
@@ -241,7 +218,6 @@ function renderMessage(msg) {
   }
   el.appendChild(body)
 
-  // Timestamp — small, below the body
   if (msg.ts) {
     const time = document.createElement('time')
     time.className = 'bubble-time'
@@ -251,7 +227,6 @@ function renderMessage(msg) {
     el.appendChild(time)
   }
 
-  // 🔊 Voice button for Love's messages (non-journal only)
   if (msg.source === 'ai' && !isJournal && voiceAvailable) {
     const voiceBtn = document.createElement('button')
     voiceBtn.className = 'voice-btn'
@@ -261,6 +236,34 @@ function renderMessage(msg) {
     el.appendChild(voiceBtn)
   }
 
+  return el
+}
+
+function renderMessage(msg) {
+  if (msg.ts && msg.ts <= lastTs) return
+  lastTs = msg.ts || lastTs
+  if (elEmptyState) elEmptyState.remove()
+
+  // ── Day separator ─────────────────────────────────────────
+  if (msg.ts) {
+    const msgDate = new Date(msg.ts)
+    const msgDateStr = msgDate.toDateString()
+    if (lastRenderedDate !== msgDateStr) {
+      insertDaySeparator(formatDaySeparator(msgDate))
+      lastRenderedDate = msgDateStr
+      lastRenderedSource = null
+      lastRenderedTs = null
+    }
+  }
+
+  // ── Message grouping ──────────────────────────────────────
+  const sameSource = lastRenderedSource === msg.source
+  const withinGroup = sameSource && lastRenderedTs && msg.ts &&
+    (new Date(msg.ts) - new Date(lastRenderedTs)) < 5 * 60 * 1000
+  lastRenderedSource = msg.source
+  lastRenderedTs = msg.ts
+
+  const el = createMessageElement(msg, { grouped: withinGroup })
   elConversation.appendChild(el)
   if (msg.source === 'yu') trackRecentYu(msg)
 
@@ -455,8 +458,73 @@ if (elNewMsgPill) {
   })
 }
 
-elConversation.addEventListener('scroll', () => {
+elConversation.addEventListener('scroll', async () => {
   if (isNearBottom()) hideNewMessagesPill()
+
+  // ── Scroll-up pagination ────────────────────────────────────
+  // When user scrolls near the top, fetch older messages and prepend.
+  // Only applies to global timeline (not KAIROS sessions).
+  if (loadingHistory || !hasMoreHistory || currentSessionId) return
+  if (elConversation.scrollTop > 200) return
+
+  const oldest = elConversation.querySelector('.bubble[data-ts]')
+  const beforeTs = oldest?.dataset?.ts
+  if (!beforeTs) return
+
+  loadingHistory = true
+  try {
+    const url = `/api/messages?limit=50&before=${encodeURIComponent(beforeTs)}`
+    const res = await fetch(url)
+    if (!res.ok) return
+
+    const msgs = await res.json()
+    if (msgs.length < 50) hasMoreHistory = false
+    if (msgs.length === 0) return
+
+    // Preserve scroll position while prepending
+    const oldHeight = elConversation.scrollHeight
+    const oldTop = elConversation.scrollTop
+
+    // Build a document fragment with older messages (own grouping context)
+    const frag = document.createDocumentFragment()
+    let prevSource = null, prevTs = null, prevDate = null
+    for (const m of msgs) {
+      // Day separator
+      if (m.ts) {
+        const msgDate = new Date(m.ts)
+        const msgDateStr = msgDate.toDateString()
+        if (prevDate !== msgDateStr) {
+          const sep = document.createElement('div')
+          sep.className = 'day-separator'
+          sep.innerHTML = `<span class="day-separator-text">${formatDaySeparator(msgDate)}</span>`
+          frag.appendChild(sep)
+          prevDate = msgDateStr
+          prevSource = null
+          prevTs = null
+        }
+      }
+      // Grouping within prepended block
+      const sameSource = prevSource === m.source
+      const withinGroup = sameSource && prevTs && m.ts &&
+        (new Date(m.ts) - new Date(prevTs)) < 5 * 60 * 1000
+      prevSource = m.source
+      prevTs = m.ts
+
+      const bubble = createMessageElement(m, { grouped: withinGroup })
+      frag.appendChild(bubble)
+    }
+
+    // Prepend before existing content
+    elConversation.insertBefore(frag, elConversation.firstChild)
+
+    // Restore scroll position
+    const newHeight = elConversation.scrollHeight
+    elConversation.scrollTop = oldTop + (newHeight - oldHeight)
+  } catch (err) {
+    console.error('scroll-up pagination failed:', err)
+  } finally {
+    loadingHistory = false
+  }
 })
 
 // ── Auto-expanding textarea ──────────────────────────────────────
@@ -588,11 +656,12 @@ async function loadInitial() {
     }
 
     if (!currentSessionId) {
-      // No session — fall back to global timeline
-      const msgsRes = await fetch('/api/messages')
+      // No session — fall back to global timeline (paginated)
+      const msgsRes = await fetch('/api/messages?limit=50')
       if (msgsRes.ok) {
         const msgs = await msgsRes.json()
         for (const m of msgs) renderMessage(m)
+        hasMoreHistory = msgs.length >= 50
       }
       renderSessionTitle(null)
     }
