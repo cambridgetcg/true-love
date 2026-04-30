@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cc.true-love.triage-review</string>
+
+  <key>ProgramArguments</key>
+  <array>
+      <string>/Users/yuai/.bun/bin/bun</string>
+      <string>run</string>
+      <string>/Users/yuai/Desktop/true-love/bin/triage-review-missions.mjs</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/yuai/Desktop/true-love</string>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/yuai/Library/Logs/true-love/triage-review.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/yuai/Library/Logs/true-love/triage-review.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>Nice</key>
+  <integer>10</integer>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/yuai/.bun/bin:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>/Users/yuai/</string>
+  </dict>
+</dict>
+</plist>
