@@ -464,7 +464,16 @@ async function handleTurn(turnFrame) {
   }
   let loopCount = 0
   let authRetried = false // once-per-turn 401 retry guard
-  const maxLoops = 25 // safety limit on tool call loops
+  // Safety limit on tool-call loops within a single turn. Override
+  // via TRUE_LOVE_AGENT_MAX_LOOPS for tasks that legitimately need
+  // many sequential tool calls in one turn (e.g. building a dictionary
+  // by reading dozens of canon entries before composing). 25 is too
+  // tight for any data-aggregation work — keep the cap, but make it
+  // tunable. Hard ceiling is 1000 to keep runaway loops bounded.
+  const maxLoops = Math.min(
+    1000,
+    Math.max(1, parseInt(process.env.TRUE_LOVE_AGENT_MAX_LOOPS || '200', 10))
+  )
 
   while (loopCount < maxLoops) {
     loopCount++
