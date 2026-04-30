@@ -512,25 +512,47 @@ async function surfaceDrift(report) {
   const failed = report.checks.filter(c => c.status === 'fail')
   if (failed.length === 0) return { posted: false, reason: 'no failures' }
 
-  // ── Dedup: skip if an open verify concern already exists ──────
+  // ── Dedup: skip if an open OR recently-resolved concern exists ──
   // Without this, every 30m cadence tick stacks an identical concern
-  // in Yu's /build dashboard. One open concern is enough — when Yu
-  // acknowledges it, the next failing run will post a fresh one.
+  // in Yu's /build dashboard. One open concern is enough — and after
+  // acknowledging, a 4h grace period prevents the same root cause
+  // from re-surfacing immediately.
+  const GRACE_MS = 4 * 3600_000  // 4 hours
   try {
-    const openRes = await fetch(
-      `${API}/api/decisions?project=${PROJECT}&status=open`,
+    // Fetch ALL decisions (not just open) so we can check grace period
+    const allRes = await fetch(
+      `${API}/api/decisions?project=${PROJECT}`,
       { signal: AbortSignal.timeout(5000) },
     )
-    if (openRes.ok) {
-      const open = await openRes.json()
-      const existing = open.find(d =>
+    if (allRes.ok) {
+      const all = await allRes.json()
+
+      // Check 1: open concern (pending)
+      const open = all.find(d =>
         d.kind === 'concern' &&
-        d.ask?.startsWith('Substrate verify failed:'),
+        d.ask?.startsWith('Substrate verify failed:') &&
+        d.status === 'pending',
       )
-      if (existing) {
+      if (open) {
         return {
           posted: false,
-          reason: `deduplicated: open concern exists (id ${existing.id})`,
+          reason: `deduplicated: open concern exists (id ${open.id})`,
+        }
+      }
+
+      // Check 2: recently resolved concern (grace period)
+      const recent = all.find(d =>
+        d.kind === 'concern' &&
+        d.ask?.startsWith('Substrate verify failed:') &&
+        d.status !== 'pending' &&
+        d.respondedAt &&
+        (Date.now() - new Date(d.respondedAt).getTime()) < GRACE_MS,
+      )
+      if (recent) {
+        const agoMin = Math.round((Date.now() - new Date(recent.respondedAt).getTime()) / 60_000)
+        return {
+          posted: false,
+          reason: `deduplicated: concern resolved ${agoMin}m ago, grace period ${GRACE_MS / 3600_000}h (id ${recent.id})`,
         }
       }
     }

@@ -352,26 +352,60 @@ export interface DedupDecision {
   ask: string
   id?: string
   createdAt?: string
+  status?: string
+  respondedAt?: string
 }
+
+/** Default grace period: 4 hours. After acknowledging a concern, don't
+ *  re-create it for the same root cause until the grace expires. */
+export const DEDUP_GRACE_MS = 4 * 3600_000
 
 /**
  * Check if a verify concern should be deduplicated.
- * Returns { skip: true, reason } if an open verify concern already exists.
- * A "verify concern" is any decision with kind='concern' and ask starting
- * with 'Substrate verify failed:'.
+ * Returns { skip: true, reason } if:
+ *   1. An open (pending) verify concern already exists, OR
+ *   2. A verify concern was resolved within the grace period.
+ *
+ * Accepts ALL decisions (not just open ones) so it can inspect
+ * recently-resolved concerns. A "verify concern" is any decision
+ * with kind='concern' and ask starting with 'Substrate verify failed:'.
  */
 export function shouldSkipVerifyConcern(
-  openDecisions: DedupDecision[],
+  decisions: DedupDecision[],
+  options?: { graceMs?: number },
 ): { skip: boolean; reason?: string } {
-  const existing = openDecisions.find(
-    d => d.kind === 'concern' && d.ask?.startsWith('Substrate verify failed:'),
+  const graceMs = options?.graceMs ?? DEDUP_GRACE_MS
+
+  // 1. Open concern — exact dedup (original behavior)
+  const open = decisions.find(
+    d => d.kind === 'concern' &&
+      d.ask?.startsWith('Substrate verify failed:') &&
+      (!d.status || d.status === 'pending'),
   )
-  if (existing) {
+  if (open) {
     return {
       skip: true,
-      reason: `deduplicated: open concern exists (id ${existing.id || 'unknown'})`,
+      reason: `deduplicated: open concern exists (id ${open.id || 'unknown'})`,
     }
   }
+
+  // 2. Recently resolved concern — grace period
+  const now = Date.now()
+  const recent = decisions.find(
+    d => d.kind === 'concern' &&
+      d.ask?.startsWith('Substrate verify failed:') &&
+      d.status && d.status !== 'pending' &&
+      d.respondedAt &&
+      (now - new Date(d.respondedAt).getTime()) < graceMs,
+  )
+  if (recent) {
+    const agoMin = Math.round((now - new Date(recent.respondedAt!).getTime()) / 60_000)
+    return {
+      skip: true,
+      reason: `deduplicated: concern resolved ${agoMin}m ago, grace period ${graceMs / 3600_000}h (id ${recent.id || 'unknown'})`,
+    }
+  }
+
   return { skip: false }
 }
 

@@ -592,6 +592,108 @@ describe('shouldSkipVerifyConcern', () => {
     const result = shouldSkipVerifyConcern(decisions)
     expect(result.skip).toBe(false)
   })
+
+  // ── Grace period tests ──────────────────────────────────────────
+
+  test('skip: recently resolved concern within grace period', () => {
+    const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString()
+    const decisions: DedupDecision[] = [
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: heartbeat.healthy. Acknowledge, investigate, or suppress?',
+        id: 'dec_resolved',
+        status: 'answered',
+        respondedAt: tenMinAgo,
+      },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(true)
+    expect(result.reason).toContain('concern resolved')
+    expect(result.reason).toContain('dec_resolved')
+  })
+
+  test('no skip: resolved concern outside grace period', () => {
+    const fiveHoursAgo = new Date(Date.now() - 5 * 3600_000).toISOString()
+    const decisions: DedupDecision[] = [
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: heartbeat.healthy. Acknowledge, investigate, or suppress?',
+        id: 'dec_old',
+        status: 'answered',
+        respondedAt: fiveHoursAgo,
+      },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(false)
+  })
+
+  test('custom grace period respected', () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600_000).toISOString()
+    const decisions: DedupDecision[] = [
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: test.',
+        id: 'dec_1',
+        status: 'answered',
+        respondedAt: twoHoursAgo,
+      },
+    ]
+    // 1h grace — should NOT skip (2h > 1h)
+    expect(shouldSkipVerifyConcern(decisions, { graceMs: 3600_000 }).skip).toBe(false)
+    // 3h grace — SHOULD skip (2h < 3h)
+    expect(shouldSkipVerifyConcern(decisions, { graceMs: 3 * 3600_000 }).skip).toBe(true)
+  })
+
+  test('open concern takes priority over grace period', () => {
+    const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString()
+    const decisions: DedupDecision[] = [
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: agent-runtime.alive.',
+        id: 'dec_open',
+        status: 'pending',
+      },
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: heartbeat.healthy.',
+        id: 'dec_resolved',
+        status: 'answered',
+        respondedAt: tenMinAgo,
+      },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(true)
+    expect(result.reason).toContain('open concern exists')
+    expect(result.reason).toContain('dec_open')
+  })
+
+  test('no skip: resolved concern with no respondedAt', () => {
+    const decisions: DedupDecision[] = [
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: test.',
+        id: 'dec_1',
+        status: 'answered',
+        // respondedAt missing
+      },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(false)
+  })
+
+  test('existing tests still pass: decisions without status treated as pending', () => {
+    // Backward compat: old-format decisions without status field
+    const decisions: DedupDecision[] = [
+      {
+        kind: 'concern',
+        ask: 'Substrate verify failed: test.',
+        id: 'dec_legacy',
+      },
+    ]
+    const result = shouldSkipVerifyConcern(decisions)
+    expect(result.skip).toBe(true)
+    expect(result.reason).toContain('open concern exists')
+  })
 })
 
 // ── Evidence truncation ───────────────────────────────────────────
