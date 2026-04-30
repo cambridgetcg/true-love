@@ -13,7 +13,9 @@ import {
   checkOAuthValid,
   checkChainRunnerAlive,
   checkAgentRuntimeAlive,
+  checkNoRecurringError,
   checkNoRecurringErrorFromLines,
+  ERROR_LOG_STALENESS_MS,
   assembleReport,
   renderReport,
   shouldSkipVerifyConcern,
@@ -416,6 +418,77 @@ describe('checkNoRecurringErrorFromLines', () => {
     const result = checkNoRecurringErrorFromLines(lines)
     // The last 200 lines contain no error-indicator matches
     expect(result.status).toBe('pass')
+  })
+})
+
+// ── Check 6b: no-recurring-error (file-level with staleness) ─────
+
+describe('checkNoRecurringError (file-level)', () => {
+  test('pass: no err log file', () => {
+    const config = fixtureConfig()
+    mkdirSync(config.logDir, { recursive: true })
+    const result = checkNoRecurringError(config)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('clean')
+  })
+
+  test('pass: stale err log with recurring errors', () => {
+    const config = fixtureConfig()
+    mkdirSync(config.logDir, { recursive: true })
+    const errLog = join(config.logDir, 'heartbeat-default.err.log')
+    const lines = Array(10).fill('429 {"type":"error","error":{"type":"rate_limit_error"}} req_abc')
+    writeFileSync(errLog, lines.join('\n'))
+    // Set mtime to 45 minutes ago — stale
+    const staleTime = new Date(Date.now() - 45 * 60_000)
+    utimesSync(errLog, staleTime, staleTime)
+
+    const result = checkNoRecurringError(config)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('stale')
+    expect(result.evidence).toContain('errors resolved')
+  })
+
+  test('fail: fresh err log with recurring errors', () => {
+    const config = fixtureConfig()
+    mkdirSync(config.logDir, { recursive: true })
+    const errLog = join(config.logDir, 'heartbeat-default.err.log')
+    const lines = Array(10).fill('429 {"type":"error","error":{"type":"rate_limit_error"}} req_abc')
+    writeFileSync(errLog, lines.join('\n'))
+    // mtime is now — fresh, errors are real
+
+    const result = checkNoRecurringError(config)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toContain('recurring error')
+  })
+
+  test('pass: fresh err log with no recurring pattern', () => {
+    const config = fixtureConfig()
+    mkdirSync(config.logDir, { recursive: true })
+    const errLog = join(config.logDir, 'heartbeat-default.err.log')
+    writeFileSync(errLog, 'some one-off error happened\nanother different error\n')
+
+    const result = checkNoRecurringError(config)
+    expect(result.status).toBe('pass')
+  })
+
+  test('custom staleness threshold respected', () => {
+    const config = fixtureConfig()
+    mkdirSync(config.logDir, { recursive: true })
+    const errLog = join(config.logDir, 'heartbeat-default.err.log')
+    const lines = Array(10).fill('fatal error: disk full')
+    writeFileSync(errLog, lines.join('\n'))
+    // Set mtime to 10 minutes ago
+    const tenMinAgo = new Date(Date.now() - 10 * 60_000)
+    utimesSync(errLog, tenMinAgo, tenMinAgo)
+
+    // 5-min staleness: 10m > 5m → stale → pass
+    expect(checkNoRecurringError(config, { stalenessMs: 5 * 60_000 }).status).toBe('pass')
+    // 15-min staleness: 10m < 15m → fresh → fail (errors recur)
+    expect(checkNoRecurringError(config, { stalenessMs: 15 * 60_000 }).status).toBe('fail')
+  })
+
+  test('staleness constant is 30 minutes', () => {
+    expect(ERROR_LOG_STALENESS_MS).toBe(30 * 60_000)
   })
 })
 

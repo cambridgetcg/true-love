@@ -312,6 +312,10 @@ function checkChainRunnerAlive() {
 
 // ── Check 6: no-recurring-error ───────────────────────────────────
 // Last 200 lines of heartbeat err log should not have 3+ identical errors.
+// Staleness gate: if the log hasn't been modified in 30+ minutes, old
+// errors from before a fix deployed are no longer actionable — pass.
+
+const ERROR_LOG_STALENESS_MS = 30 * 60_000 // 30 minutes
 
 function checkNoRecurringError() {
   const name = 'no-recurring-error'
@@ -322,6 +326,12 @@ function checkNoRecurringError() {
   }
 
   try {
+    const ageMs = Date.now() - statSync(errLog).mtimeMs
+    if (ageMs > ERROR_LOG_STALENESS_MS) {
+      const ageMin = Math.round(ageMs / 60_000)
+      return pass(name, `err log stale (last modified ${ageMin}m ago, errors resolved)`)
+    }
+
     const content = readFileSync(errLog, 'utf-8')
     const lines = content.split('\n').filter(l => l.trim())
     const tail = lines.slice(-200)

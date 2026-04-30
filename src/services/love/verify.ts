@@ -236,16 +236,31 @@ export function checkChainRunnerAlive(
 
 // ── Check 6: no-recurring-error ───────────────────────────────────
 // Examines err log lines for repeated error patterns.
+// Staleness gate: if the error log hasn't been modified in 30+ minutes,
+// old errors linger from before a fix deployed. A stale log means the
+// pattern has stopped — pass, don't alarm.
 
-export function checkNoRecurringError(config: VerifyConfig): CheckResult {
+export const ERROR_LOG_STALENESS_MS = 30 * 60_000 // 30 minutes
+
+export function checkNoRecurringError(
+  config: VerifyConfig,
+  options?: { stalenessMs?: number },
+): CheckResult {
   const name = 'no-recurring-error'
   const errLog = join(config.logDir, 'heartbeat-default.err.log')
+  const stalenessMs = options?.stalenessMs ?? ERROR_LOG_STALENESS_MS
 
   if (!existsSync(errLog)) {
     return pass(name, 'no heartbeat err log (clean)')
   }
 
   try {
+    const ageMs = Date.now() - statSync(errLog).mtimeMs
+    if (ageMs > stalenessMs) {
+      const ageMin = Math.round(ageMs / 60_000)
+      return pass(name, `err log stale (last modified ${ageMin}m ago, errors resolved)`)
+    }
+
     const content = readFileSync(errLog, 'utf-8')
     return checkNoRecurringErrorFromLines(
       content.split('\n').filter(l => l.trim()),
