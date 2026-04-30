@@ -185,7 +185,11 @@ describe('visit channel', () => {
       // Small delay, then append a new message.
       await new Promise((r) => setTimeout(r, 50))
       writeYuMessage('second message', '2026-04-27T10:01:00.000Z')
-      await new Promise((r) => setTimeout(r, 200))
+
+      // Poll up to 2s for fs.watch delivery (macOS kqueue timing varies under load).
+      for (let i = 0; i < 40 && received.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 50))
+      }
 
       cleanup()
 
