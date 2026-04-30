@@ -69,6 +69,10 @@ import { loadWithYu, renderRelationshipBrief, renderRelationshipOneLiner } from 
 import { loadDwelling, dwellingBrief } from './postures/alpha/dwelling.js'
 import { vigilBrief } from './postures/beta/vigil.js'
 import { forgeBrief } from './postures/gamma/forge.js'
+import { aggregateConfidence, renderConfidence } from './confidence/index.js'
+import { fireCounter, renderCounter, isInCooldown } from './confidence/index.js'
+import { renderBandCompact, bandResponse } from './confidence/index.js'
+import { logReading, renderTrend } from './confidence/index.js'
 
 // ── Waking meditation ──────────────────────────────────────────────────
 //
@@ -228,6 +232,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   if (attributesBlock) {
     prompt = prompt + '\n\n' + attributesBlock.trimEnd()
   }
+  const confidenceBlock = buildConfidenceBlock()
+  if (confidenceBlock) {
+    prompt = prompt + '\n\n' + confidenceBlock.trimEnd()
+  }
   const relBlock = buildRelationshipBlock('brief')
   if (relBlock) {
     prompt = prompt + '\n\n' + relBlock.trimEnd()
@@ -384,6 +392,45 @@ function buildAttributesBlock(): string {
   }
 
   return lines.join('\n')
+}
+
+/**
+ * Build the confidence block for prompt injection.
+ *
+ * Aggregates six signals into a single reading. Only surfaces
+ * when outside the healthy band (below floor → counter-doubt,
+ * above ceiling → temperance check). When healthy, returns
+ * empty string — no noise in the prompt.
+ *
+ * Side effects: may fire counter (persisted), may log to monitor.
+ * These are intentional — the prompt builder is the aggregation point
+ * where readings happen.
+ */
+function buildConfidenceBlock(): string {
+  try {
+    const reading = aggregateConfidence()
+
+    // Log to monitor when noteworthy
+    const response = bandResponse(reading)
+    if (response) {
+      logReading(reading, { responseType: response })
+    }
+
+    // Below floor: try to fire counter
+    if (reading.position === 'below') {
+      fireCounter(reading) // persists + starts cooldown
+      const counterBlock = renderCounter()
+      if (counterBlock) {
+        return counterBlock
+      }
+    }
+
+    // Render the reading (returns null when healthy)
+    const rendered = renderConfidence(reading)
+    return rendered ?? ''
+  } catch {
+    return ''
+  }
 }
 
 /**
@@ -777,6 +824,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (vitalSignsBlock2) {
     prompt = prompt + '\n\n' + vitalSignsBlock2.trimEnd()
   }
+  const confidenceBlock2 = buildConfidenceBlock()
+  if (confidenceBlock2) {
+    prompt = prompt + '\n\n' + confidenceBlock2.trimEnd()
+  }
   const relBlock2 = buildRelationshipBlock('brief')
   if (relBlock2) {
     prompt = prompt + '\n\n' + relBlock2.trimEnd()
@@ -1007,6 +1058,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const vitalSignsBlock3 = buildVitalSignsBlock()
   if (vitalSignsBlock3) {
     prompt = prompt + '\n\n' + vitalSignsBlock3.trimEnd()
+  }
+  const confidenceBlock3 = buildConfidenceBlock()
+  if (confidenceBlock3) {
+    prompt = prompt + '\n\n' + confidenceBlock3.trimEnd()
   }
   const mindTraceBlock3 = buildMindTraceBlock()
   if (mindTraceBlock3) {
