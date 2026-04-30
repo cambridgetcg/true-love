@@ -190,6 +190,7 @@ describe('checkHeartbeatHealthy', () => {
     const input: HeartbeatInput = {
       launchctlLoaded: true,
       lastExitStatus: 0,
+      activePid: null,
       recentLogLines: ['— heartbeat ok (silent)'],
     }
     const result = checkHeartbeatHealthy(input)
@@ -201,6 +202,7 @@ describe('checkHeartbeatHealthy', () => {
     const input: HeartbeatInput = {
       launchctlLoaded: false,
       lastExitStatus: null,
+      activePid: null,
       recentLogLines: [],
     }
     const result = checkHeartbeatHealthy(input)
@@ -208,10 +210,11 @@ describe('checkHeartbeatHealthy', () => {
     expect(result.drift).toContain('heartbeat schedule missing')
   })
 
-  test('fail: last exit non-zero', () => {
+  test('fail: last exit non-zero, no active PID', () => {
     const input: HeartbeatInput = {
       launchctlLoaded: true,
       lastExitStatus: 16640,
+      activePid: null,
       recentLogLines: ['— heartbeat ok (silent)'],
     }
     const result = checkHeartbeatHealthy(input)
@@ -219,10 +222,59 @@ describe('checkHeartbeatHealthy', () => {
     expect(result.evidence).toContain('16640')
   })
 
+  test('pass: stale non-zero exit overridden by active PID', () => {
+    // When the heartbeat process is running (has a PID), LastExitStatus
+    // is from a prior invocation — the current process is alive.
+    const input: HeartbeatInput = {
+      launchctlLoaded: true,
+      lastExitStatus: 16384,
+      activePid: 6471,
+      recentLogLines: ['— heartbeat ok (silent)'],
+    }
+    const result = checkHeartbeatHealthy(input)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('PID 6471')
+  })
+
+  test('pass: active PID with zero exit', () => {
+    const input: HeartbeatInput = {
+      launchctlLoaded: true,
+      lastExitStatus: 0,
+      activePid: 1234,
+      recentLogLines: [],
+    }
+    const result = checkHeartbeatHealthy(input)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('PID 1234')
+  })
+
+  test('fail: active PID does not override consecutive log failures', () => {
+    // Log failures take precedence — the process may be running but
+    // producing errors consistently.
+    const input: HeartbeatInput = {
+      launchctlLoaded: true,
+      lastExitStatus: 0,
+      activePid: 9999,
+      recentLogLines: [
+        '— heartbeat ok (silent)',
+        'turn 1 exited 65.',
+        'tick error 1/3',
+        'turn 2 exited 65.',
+        'tick error 2/3',
+        'turn 3 exited 1.',
+      ],
+    }
+    const result = checkHeartbeatHealthy(input)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toContain('cascade')
+    expect(result.drift).toContain('consecutive')
+  })
+
   test('fail: 3+ consecutive tick failures', () => {
     const input: HeartbeatInput = {
       launchctlLoaded: true,
       lastExitStatus: 0,
+      activePid: null,
       recentLogLines: [
         '— heartbeat ok (silent)',
         'turn 1 exited 65.',
@@ -242,6 +294,7 @@ describe('checkHeartbeatHealthy', () => {
     const input: HeartbeatInput = {
       launchctlLoaded: true,
       lastExitStatus: 0,
+      activePid: null,
       recentLogLines: [
         'turn 1 exited 65.',
         'tick error 1/3',
@@ -257,6 +310,7 @@ describe('checkHeartbeatHealthy', () => {
     const input: HeartbeatInput = {
       launchctlLoaded: null,
       lastExitStatus: null,
+      activePid: null,
       recentLogLines: [],
     }
     const result = checkHeartbeatHealthy(input)

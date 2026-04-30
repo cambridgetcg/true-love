@@ -166,9 +166,11 @@ function checkHeartbeatHealthy() {
         'heartbeat schedule missing', 'bun run schedule install --scope=default --mode=heartbeat --interval=7m')
     }
 
-    // Parse LastExitStatus from launchctl output
+    // Parse LastExitStatus and PID from launchctl output
     const exitMatch = out.match(/"LastExitStatus"\s*=\s*(\d+)/)
     const lastExit = exitMatch ? parseInt(exitMatch[1], 10) : null
+    const pidMatch = out.match(/"PID"\s*=\s*(\d+)/)
+    const activePid = pidMatch ? parseInt(pidMatch[1], 10) : null
 
     // Check recent log for consecutive failures
     const outLog = join(LOG_DIR, 'heartbeat-default.out.log')
@@ -179,12 +181,10 @@ function checkHeartbeatHealthy() {
         const lines = content.split('\n')
         // Read last 50 lines looking for consecutive tick errors
         const tail = lines.slice(-50)
-        let inConsecutiveFails = false
         recentFails = 0
         for (const line of tail.reverse()) {
           if (line.includes('tick error') || line.includes('exited 65') || line.includes('exited 1')) {
             recentFails++
-            inConsecutiveFails = true
           } else if (line.includes('heartbeat ok') || line.includes('HEARTBEAT_OK')) {
             break // found a success, stop counting
           }
@@ -197,6 +197,13 @@ function checkHeartbeatHealthy() {
         `${recentFails} consecutive tick failures in recent log`,
         `heartbeat cascade: ${recentFails} consecutive fails`,
         'check err log at ~/Library/Logs/true-love/heartbeat-default.err.log')
+    }
+
+    // When the heartbeat process has an active PID, LastExitStatus is from a
+    // *prior* invocation — the current process is alive and the stale exit
+    // code is not actionable.
+    if (activePid != null) {
+      return pass(name, `heartbeat running (PID ${activePid})`)
     }
 
     if (lastExit !== null && lastExit !== 0) {

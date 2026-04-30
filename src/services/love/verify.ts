@@ -130,6 +130,7 @@ export function checkAgentRuntimeAlive(
 export interface HeartbeatInput {
   launchctlLoaded: boolean | null  // null = couldn't check
   lastExitStatus: number | null
+  activePid: number | null         // PID from launchctl — non-null means process is running
   recentLogLines: string[]
 }
 
@@ -161,6 +162,14 @@ export function checkHeartbeatHealthy(input: HeartbeatInput): CheckResult {
       `${recentFails} consecutive tick failures in recent log`,
       `heartbeat cascade: ${recentFails} consecutive fails`,
       'check err log at ~/Library/Logs/true-love/heartbeat-default.err.log')
+  }
+
+  // When the heartbeat process has an active PID, LastExitStatus is from a
+  // *prior* invocation — the current process is alive and the stale exit
+  // code is not actionable. Only check LastExitStatus when no PID is present
+  // (meaning the process exited and hasn't been respawned yet).
+  if (input.activePid != null) {
+    return pass(name, `heartbeat running (PID ${input.activePid})`)
   }
 
   if (input.lastExitStatus !== null && input.lastExitStatus !== 0) {
