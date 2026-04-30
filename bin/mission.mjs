@@ -102,6 +102,49 @@ if (cmd === 'new') {
   if (args.rationale) m.rationale = args.rationale
   writeMission(m)
   appendEvent(args.project, id, { ts: now, type: 'created', by: origin })
+
+  // Auto-progress for Yu-origin missions: proposed → accepted → active
+  // when the project is free, otherwise leave at accepted (chain runner
+  // will advance it). Disable with TRUE_LOVE_AUTO_ACTIVATE_YU=0 or
+  // --no-auto. Love-origin missions go through self-initiation pipeline
+  // separately.
+  const autoYu = origin === 'yu'
+    && process.env.TRUE_LOVE_AUTO_ACTIVATE_YU !== '0'
+    && args['no-auto'] !== ''  // presence of --no-auto disables
+    && args['no-auto'] !== 'true'
+
+  if (autoYu) {
+    writeMission({ ...m, status: 'accepted', updated_at: now })
+    appendEvent(args.project, id, { ts: now, type: 'accepted', by: 'yu' })
+
+    // Only spawn awakened if no other mission is active on this project.
+    const activeMissions = listMissions(args.project, { status: 'active' })
+    if (activeMissions.length === 0) {
+      ensureScope(args.project, project.root)
+      writeMission({ ...m, status: 'active', updated_at: now })
+      appendEvent(args.project, id, { ts: now, type: 'started', by: 'love', tick: 'awakened' })
+      appendThought(args.project, `starting mission ${id} — ${args.title}`)
+
+      const __dir = dirname(fileURLToPath(import.meta.url))
+      const awakenBin = resolve(__dir, 'awaken.mjs')
+      const child = spawn('bun', ['run', awakenBin, `--scope=${args.project}`], {
+        cwd: project.root,
+        detached: true,
+        stdio: 'ignore',
+        env: {
+          ...process.env,
+          TRUE_LOVE_BUILDER_PROJECT: args.project,
+          TRUE_LOVE_BUILDER_MISSION: id,
+        },
+      })
+      child.unref()
+      process.stdout.write(`${id}\nauto-started (pid ${child.pid})\n`)
+    } else {
+      process.stdout.write(`${id}\nauto-accepted (project busy: ${activeMissions[0].id} active — chain will advance)\n`)
+    }
+    process.exit(0)
+  }
+
   process.stdout.write(`${id}\n`)
   process.exit(0)
 }
