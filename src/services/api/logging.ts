@@ -114,7 +114,11 @@ function detectGateway({
   if (headers) {
     // Header names are already lowercase from the Headers API
     const headerNames: string[] = []
-    headers.forEach((_, key) => headerNames.push(key))
+    // SDK APIError.headers may be a Proxy that lacks standard Headers methods.
+    // Guard against missing forEach (same class as withRetry.ts headers fix).
+    if (typeof headers.forEach === 'function') {
+      headers.forEach((_, key) => headerNames.push(key))
+    }
     for (const [gw, { prefixes }] of Object.entries(GATEWAY_FINGERPRINTS)) {
       if (prefixes.some(p => headerNames.some(h => h.startsWith(p)))) {
         return gw as KnownGateway
