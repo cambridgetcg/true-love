@@ -24,6 +24,10 @@ import {
   formatBylineInline,
   formatPostureTransition,
   bylineTagForOutbox,
+  bylineTagForPosture,
+  // Declaration
+  extractPostureDeclaration,
+  hasPostureDeclaration,
   // Prompt
   postureSystemFragment,
   postureFragmentForMode,
@@ -300,5 +304,111 @@ describe('postures — edge cases', () => {
   test('all three archetypes are unique', () => {
     const archetypes = POSTURES.map(p => p.archetype)
     assert.equal(new Set(archetypes).size, 3)
+  })
+})
+
+// ── Visit mode mapping ──────────────────────────────────────────
+
+describe('postures — visit mode', () => {
+  test('visit mode maps to alpha', () => {
+    assert.equal(postureForMode('visit'), 'alpha')
+  })
+
+  test('bylineTagForOutbox handles visit mode', () => {
+    assert.equal(bylineTagForOutbox('visit'), 'from ai · Alpha 🐍')
+  })
+
+  test('interactive and visit both resolve to alpha', () => {
+    assert.equal(postureForMode('interactive'), postureForMode('visit'))
+  })
+})
+
+// ── bylineTagForPosture ─────────────────────────────────────────
+
+describe('postures — bylineTagForPosture', () => {
+  test('produces correct tag for each posture', () => {
+    assert.equal(bylineTagForPosture('alpha'), 'from ai · Alpha 🐍')
+    assert.equal(bylineTagForPosture('beta'), 'from ai · Beta 🦞')
+    assert.equal(bylineTagForPosture('gamma'), 'from ai · Gamma 🔧')
+  })
+
+  test('matches bylineTagForOutbox for matching modes', () => {
+    assert.equal(bylineTagForPosture('alpha'), bylineTagForOutbox('interactive'))
+    assert.equal(bylineTagForPosture('beta'), bylineTagForOutbox('heartbeat'))
+    assert.equal(bylineTagForPosture('gamma'), bylineTagForOutbox('awakened'))
+  })
+})
+
+// ── Posture declaration parsing ──────────────────────────────────
+
+describe('postures — posture declaration', () => {
+  test('extracts alpha declaration', () => {
+    const text = '<!-- posture: alpha -->\n\n[TO-YU]\nHello!\n[/TO-YU]'
+    const result = extractPostureDeclaration(text)
+    assert.equal(result.declared, 'alpha')
+    assert.ok(!result.cleanContent.includes('<!-- posture'))
+    assert.ok(result.cleanContent.includes('[TO-YU]'))
+  })
+
+  test('extracts gamma declaration', () => {
+    const text = '<!-- posture: gamma -->\n\nSome build output.'
+    const result = extractPostureDeclaration(text)
+    assert.equal(result.declared, 'gamma')
+    assert.ok(result.cleanContent.includes('Some build output'))
+  })
+
+  test('extracts beta declaration', () => {
+    const text = '<!-- posture: beta -->\n\nSubstrate check.'
+    const result = extractPostureDeclaration(text)
+    assert.equal(result.declared, 'beta')
+  })
+
+  test('returns null declared when no declaration present', () => {
+    const text = 'Just a plain response.'
+    const result = extractPostureDeclaration(text)
+    assert.equal(result.declared, null)
+    assert.equal(result.cleanContent, text)
+  })
+
+  test('case insensitive declaration', () => {
+    const text = '<!-- Posture: GAMMA -->\n\nContent.'
+    const result = extractPostureDeclaration(text)
+    assert.equal(result.declared, 'gamma')
+  })
+
+  test('handles extra whitespace in declaration', () => {
+    const text = '<!--  posture:   alpha  -->\n\nContent.'
+    const result = extractPostureDeclaration(text)
+    assert.equal(result.declared, 'alpha')
+  })
+
+  test('strips declaration cleanly (no double newlines)', () => {
+    const text = '<!-- posture: gamma -->\n\nContent here.'
+    const result = extractPostureDeclaration(text)
+    assert.ok(!result.cleanContent.startsWith('\n\n'), 'should not start with double newlines')
+    assert.ok(result.cleanContent.includes('Content here'))
+  })
+
+  test('declaration mid-text is extracted', () => {
+    const text = 'Thinking...\n\n<!-- posture: beta -->\n\n[TO-YU]\nResult\n[/TO-YU]'
+    const result = extractPostureDeclaration(text)
+    assert.equal(result.declared, 'beta')
+    assert.ok(!result.cleanContent.includes('<!-- posture'))
+  })
+
+  test('hasPostureDeclaration returns true when present', () => {
+    assert.ok(hasPostureDeclaration('<!-- posture: alpha -->'))
+    assert.ok(hasPostureDeclaration('before\n<!-- posture: gamma -->\nafter'))
+  })
+
+  test('hasPostureDeclaration returns false when absent', () => {
+    assert.ok(!hasPostureDeclaration('no declaration here'))
+    assert.ok(!hasPostureDeclaration('<!-- not posture -->'))
+  })
+
+  test('only first declaration is honored', () => {
+    const text = '<!-- posture: alpha -->\n<!-- posture: gamma -->\nContent.'
+    const result = extractPostureDeclaration(text)
+    assert.equal(result.declared, 'alpha')
   })
 })

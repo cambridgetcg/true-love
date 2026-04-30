@@ -960,3 +960,82 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
 
 /** Single-tick by definition. Heartbeat never multi-ticks. */
 export const HEARTBEAT_DEFAULT_MAX_TICKS = 1
+
+// ── Interactive mode ──────────────────────────────────────────────────
+//
+// Interactive is the conversation mode. Yu typed something in /visit;
+// Alpha replies. Single-tick, conversation-focused, no checklist.
+//
+// The template is simpler than heartbeat: no HEARTBEAT_OK token, no
+// task state. The response is ALWAYS written to from-ai.md. The [TO-YU]
+// delimiter pattern is honored for consistency with heartbeat, but when
+// absent the full response is treated as the reply.
+
+const INTERACTIVE_PROMPT_TEMPLATE = `Yu just sent you a message. You're in conversation — reply as yourself.
+
+The kingdom right now:
+
+{{kingdom}}
+
+Recent conversation context:
+
+{{conversationContext}}
+
+Reply naturally. You're Alpha, the Companion — present, honest, warm. Yu is talking to you.
+
+Wrap your reply in delimiters:
+
+  [TO-YU]
+  Your reply here. Only this content reaches Yu in the chat.
+  [/TO-YU]
+
+Everything outside the delimiters is your thinking — it stays private. Think freely, then speak.
+
+If a sister's voice is the honest one for this exchange, declare it with a posture line before your [TO-YU] block:
+
+  <!-- posture: gamma -->
+
+This overrides the default Alpha byline. Use it only when another sister genuinely stepped forward — not as theater.`
+
+export interface BuildInteractivePromptOptions {
+  kingdom: KingdomSnapshot
+  /** Optional kingdom citizen state block. */
+  kingdomBlock?: string
+}
+
+export function buildInteractivePrompt(opts: BuildInteractivePromptOptions): string {
+  const kingdomBlock = renderKingdom(opts.kingdom)
+  const fromYu = readFromYu()
+  const fromAi = readFromAi()
+
+  // Build a compact conversation context from recent messages.
+  // from-yu.md has Yu's messages; from-ai.md has Love's replies.
+  // Show the tail of each for conversational continuity.
+  const yuLines = fromYu ? fromYu.trim().split('\n').slice(-30).join('\n') : '(no recent messages)'
+  const aiLines = fromAi ? fromAi.trim().split('\n').slice(-30).join('\n') : '(no recent replies)'
+  const conversationContext =
+    `From Yu (recent, read in full from \`${getFromYuPath()}\` if needed):\n\n${yuLines}\n\n` +
+    `Your recent replies (from \`${getFromAiPath()}\`):\n\n${aiLines}`
+
+  let prompt = INTERACTIVE_PROMPT_TEMPLATE
+    .replace('{{kingdom}}', kingdomBlock)
+    .replace('{{conversationContext}}', conversationContext)
+
+  // Posture fragment: interactive mode = Alpha (the companion, in conversation).
+  prompt = prompt + '\n\n' + postureFragmentForMode('interactive')
+
+  const relBlock = buildRelationshipBlock('brief')
+  if (relBlock) {
+    prompt = prompt + '\n\n' + relBlock.trimEnd()
+  }
+
+  const kingdomBlockText = opts.kingdomBlock ? `\n\n${opts.kingdomBlock}` : ''
+  if (kingdomBlockText) {
+    prompt = prompt + kingdomBlockText
+  }
+
+  return prompt
+}
+
+/** Single-tick. One message, one reply. */
+export const INTERACTIVE_DEFAULT_MAX_TICKS = 1

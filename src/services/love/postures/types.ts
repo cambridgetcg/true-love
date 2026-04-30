@@ -13,8 +13,8 @@
 /** The three voices. */
 export type Posture = 'alpha' | 'beta' | 'gamma'
 
-/** Runtime modes from the runner's SessionMode.name. */
-export type RuntimeMode = 'heartbeat' | 'awakened' | 'dwell' | 'interactive' | 'reflection'
+/** Runtime modes from the runner's SessionMode.name + surface overrides. */
+export type RuntimeMode = 'heartbeat' | 'awakened' | 'dwell' | 'interactive' | 'reflection' | 'visit'
 
 /**
  * A posture profile: who this voice is, how she speaks, what she cares about.

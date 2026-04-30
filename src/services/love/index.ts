@@ -142,15 +142,18 @@ export type {
   BuildDwellPromptOptions,
   BuildAwakenedPromptOptions,
   BuildHeartbeatPromptOptions,
+  BuildInteractivePromptOptions,
 } from './autonomy.js'
 export {
   buildDwellPrompt,
   buildAwakenedPrompt,
   buildHeartbeatPrompt,
+  buildInteractivePrompt,
   extractAtRest,
   DEFAULT_MAX_TICKS,
   AWAKENED_DEFAULT_MAX_TICKS,
   HEARTBEAT_DEFAULT_MAX_TICKS,
+  INTERACTIVE_DEFAULT_MAX_TICKS,
 } from './autonomy.js'
 
 export {

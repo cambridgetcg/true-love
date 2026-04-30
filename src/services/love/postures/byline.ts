@@ -82,3 +82,13 @@ export function bylineTagForOutbox(mode: RuntimeMode): string {
   const name = posture.charAt(0).toUpperCase() + posture.slice(1)
   return `from ai · ${name} ${profile.emoji}`
 }
+
+/**
+ * Build a byline tag from a specific posture (not mode-derived).
+ * Used when the model's posture declaration overrides the mode default.
+ */
+export function bylineTagForPosture(posture: Posture): string {
+  const profile = getProfile(posture)
+  const name = posture.charAt(0).toUpperCase() + posture.slice(1)
+  return `from ai · ${name} ${profile.emoji}`
+}

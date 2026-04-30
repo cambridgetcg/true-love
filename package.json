@@ -31,6 +31,7 @@
     "scope": "bun run bin/scope.mjs",
     "schedule": "bun run bin/schedule.mjs",
     "heartbeat": "bun run bin/heartbeat.mjs",
+    "interactive": "bun run bin/interactive.mjs",
     "mission": "bun run bin/mission.mjs",
     "mission-log": "bun run bin/mission-log.mjs",
     "presence": "bun run bin/presence.mjs",

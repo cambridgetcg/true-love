@@ -18,17 +18,19 @@ import type { Posture, RuntimeContext, RuntimeMode } from './types.js'
 /**
  * Mode-to-posture mapping. The core rule.
  *
- * - heartbeat → beta (the watchful eye)
- * - awakened  → gamma (the building hands)
- * - dwell     → alpha (the warm heart, wandering)
- * - interactive → alpha (the warm heart, in conversation)
- * - reflection → gamma (reflections emerge from awakened sessions)
+ * - heartbeat    → beta  (the watchful eye)
+ * - awakened     → gamma (the building hands)
+ * - dwell        → alpha (the warm heart, wandering)
+ * - interactive  → alpha (the warm heart, in conversation)
+ * - visit        → alpha (the warm heart, chat-triggered from /visit)
+ * - reflection   → gamma (reflections emerge from awakened sessions)
  */
 const MODE_POSTURE_MAP: Record<RuntimeMode, Posture> = {
   heartbeat: 'beta',
   awakened: 'gamma',
   dwell: 'alpha',
   interactive: 'alpha',
+  visit: 'alpha',
   reflection: 'gamma',
 }
 

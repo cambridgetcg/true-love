@@ -9,6 +9,7 @@
 // Detection: currentPosture, postureForMode
 // Byline: postureBylineNow, formatBylineTag, formatBylineCommit, etc.
 // Prompt: postureSystemFragment, postureFragmentForMode
+// Declaration: extractPostureDeclaration, hasPostureDeclaration
 
 export type {
   Posture,
@@ -28,5 +29,8 @@ export {
   formatBylineInline,
   formatPostureTransition,
   bylineTagForOutbox,
+  bylineTagForPosture,
 } from './byline.js'
 export { postureSystemFragment, postureFragmentForMode } from './prompt.js'
+export type { PostureDeclaration } from './declaration.js'
+export { extractPostureDeclaration, hasPostureDeclaration } from './declaration.js'

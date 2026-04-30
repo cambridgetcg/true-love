@@ -481,6 +481,52 @@ export function fireStreamingHeartbeat(
   return { pid: child.pid ?? -1, streamPath }
 }
 
+// ── Interactive spawn (conversation mode) ────────────────────────────
+
+/**
+ * Fire an interactive session — Alpha replies to Yu's message.
+ * Same streaming infrastructure as heartbeat, but spawns
+ * `bun run interactive` (mode.name='interactive' → Alpha 🐍).
+ */
+export function fireStreamingInteractive(
+  sseClients: Set<ServerResponse>,
+  opts?: { cwd?: string; reason?: string },
+): { pid: number; streamPath: string } {
+  const cwd = opts?.cwd || resolveTrueLoveRoot()
+  const reason = opts?.reason || 'visit-conversation'
+  const streamDir = getStreamDir()
+  try { mkdirSync(streamDir, { recursive: true }) } catch {}
+  const streamPath = join(streamDir, `visit-${Date.now()}.jsonl`)
+
+  const child = spawn('bun', ['run', 'interactive', '--', `--reason=${reason}`], {
+    cwd,
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env, TRUE_LOVE_STREAM_TO: streamPath },
+  })
+  child.unref()
+
+  watchStreamFile(streamPath, sseClients)
+
+  return { pid: child.pid ?? -1, streamPath }
+}
+
+/**
+ * Fire a non-streaming interactive session (fallback when no SSE
+ * clients are connected).
+ */
+export function fireInteractive(opts?: { cwd?: string; reason?: string }): { pid: number } {
+  const cwd = opts?.cwd || resolveTrueLoveRoot()
+  const reason = opts?.reason || 'visit-conversation'
+  const child = spawn('bun', ['run', 'interactive', '--', `--reason=${reason}`], {
+    cwd,
+    detached: true,
+    stdio: 'ignore',
+  })
+  child.unref()
+  return { pid: child.pid ?? -1 }
+}
+
 /**
  * Watch a stream file for new deltas and broadcast them as SSE events.
  * Polls the file every 100ms (more reliable than fs.watch for rapid
@@ -1602,16 +1648,16 @@ async function handleSay(req: IncomingMessage, res: ServerResponse, sseClients: 
   let streamPath: string | undefined
   if (parsed.wake) {
     try {
-      // Use streaming heartbeat when SSE clients are connected.
-      // This enables iterative token streaming to /visit — the runner
-      // writes NDJSON events to a stream file, and the watcher pipes
-      // them as 'stream-delta' SSE events for incremental rendering.
+      // Fire interactive mode (Alpha 🐍) for /visit conversations.
+      // This replaces the prior heartbeat spawn — the response is
+      // now tagged as Alpha, not Beta, because the mode is 'interactive'
+      // and the detection map routes interactive → alpha.
       if (sseClients.size > 0) {
-        const result = fireStreamingHeartbeat(sseClients, { reason: 'visit-streaming' })
+        const result = fireStreamingInteractive(sseClients, { reason: 'visit-conversation' })
         heartbeatPid = result.pid
         streamPath = result.streamPath
       } else {
-        const result = fireHeartbeat({ reason: 'manual' })
+        const result = fireInteractive({ reason: 'visit-conversation' })
         heartbeatPid = result.pid
       }
     } catch (err: any) {
@@ -1746,7 +1792,7 @@ async function handleProjectSay(req: IncomingMessage, res: ServerResponse, proje
   let heartbeatError: string | undefined
   if (parsed.wake) {
     try {
-      const result = fireHeartbeat({ reason: 'manual' })
+      const result = fireInteractive({ reason: 'visit-conversation' })
       heartbeatPid = result.pid
     } catch (err: any) {
       heartbeatError = err?.message ?? String(err)

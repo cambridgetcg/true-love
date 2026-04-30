@@ -62,7 +62,7 @@ import { snapshotKingdom } from './kingdom.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
 import type { Reflection } from './memory.js'
 import { appendToYu } from './outbox.js'
-import { bylineTagForOutbox } from './postures/index.js'
+import { bylineTagForOutbox, bylineTagForPosture, extractPostureDeclaration } from './postures/index.js'
 import { readProject, getProjectChannels, listProjects } from './project-registry.js'
 import {
   isKingdomAvailable,
@@ -149,8 +149,8 @@ export type SessionReplyOutcome =
   | { type: 'alert'; content: string }
 
 export interface SessionMode {
-  /** 'dwell' | 'awakened' | 'heartbeat'. Used in log messages and training records. */
-  name: 'dwell' | 'awakened' | 'heartbeat'
+  /** 'dwell' | 'awakened' | 'heartbeat' | 'interactive'. Used in log messages and training records. */
+  name: 'dwell' | 'awakened' | 'heartbeat' | 'interactive'
 
   /** Heartbeat status label: 'dwelling' | 'awakened' | 'heartbeat'. */
   heartbeatLabel: string
@@ -2196,13 +2196,32 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     consecutiveTickErrors = 0
     clearRateLimitBackoff()
 
-    // ── Heartbeat alert ──────────────────────────────────────────
+    // ── Alert (heartbeat alert or interactive reply) ────────────
     if (replyOutcome.type === 'alert') {
-      const alertContent = replyOutcome.content
+      // Check for posture declaration: <!-- posture: gamma -->
+      // Mode is the prior; declaration is the verdict.
+      const { declared, cleanContent } = extractPostureDeclaration(replyOutcome.content)
+      const alertContent = cleanContent
+
+      // Resolve byline: declaration overrides mode default.
+      let bylineTag: string
+      if (declared) {
+        bylineTag = bylineTagForPosture(declared)
+        const modeDefault = bylineTagForOutbox(mode.name)
+        if (bylineTag !== modeDefault) {
+          process.stdout.write(`— posture declaration: ${mode.name} default overridden → ${declared}\n`)
+        }
+      } else {
+        bylineTag = bylineTagForOutbox(mode.name)
+      }
+
+      // Interactive replies go to from-ai.md (conversation).
+      // All other alert-producing modes (heartbeat) go to journal.
+      const isConversation = mode.name === 'interactive'
       try {
-        appendToYu(alertContent, { tag: bylineTagForOutbox(mode.name), journal: true })
+        appendToYu(alertContent, { tag: bylineTag, journal: !isConversation })
       } catch (e: any) {
-        process.stderr.write(`— heartbeat outbox write failed: ${e?.message}\n`)
+        process.stderr.write(`— ${mode.name} outbox write failed: ${e?.message}\n`)
       }
       if (!args.noLog) {
         appendReflection(alertContent, 'tick', { tick })
@@ -2217,7 +2236,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         state.lastHeartbeatAt = now
         writeHeartbeatState(state)
       }
-      process.stdout.write(`\n— heartbeat alert appended to outbox\n`)
+      process.stdout.write(`\n— ${mode.name} reply appended to outbox\n`)
       writeDormant(tick, alertContent.slice(0, 120))
 
       if (persistentHeartbeat) {
