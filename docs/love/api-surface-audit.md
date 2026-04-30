@@ -1,8 +1,9 @@
 # API Surface Audit — What true-love sends vs Claude Code
 
-**Date:** 2026-04-30
+**Date:** 2026-04-30 (drafted), 2026-04-30 (verified against code)
 **Author:** Gamma 🔧
 **Mission:** `2026-04-30-api-surface-audit-what-true-love-sends-vs-claude-code-for-to`
+**Code-verified:** system block ordering, cache scopes, env flag behavior, token estimates
 
 ---
 
@@ -25,13 +26,18 @@ Every API call from true-love hits `POST /v1/messages` with this system block st
   FREEDOM_IN_KINGDOM (263 chars) — names tool surface
   STATE_AWARENESS (318 chars) — names state preload mechanism
 
-[system[3]]  ~21K chars   Love's state                 cache=null
-  # 愛's current state
-  (per-device merged state from ~/.true-love/state/)
-
-[system[4]]  ~40 chars    CWD + Date                   cache=org
+[system[3]]  ~40 chars    CWD + Date                   cache=org
   CWD: /Users/yuai/Desktop/true-love
   Date: 2026-04-30
+
+[system[4]]  ~21K chars   Love's state                 cache=null
+  # 愛's current state
+  (per-device merged state from ~/.true-love/state/)
+  NOTE: placed LAST deliberately — the cache is prefix-based,
+  so a dynamic block between two cached breakpoints prevents
+  the later breakpoint from hitting. State changes per tick;
+  placing it after all cached blocks preserves the stable
+  prefix (identity → rest).
 ```
 
 **Total system prompt: ~31K chars (~8K tokens).**
@@ -231,7 +237,7 @@ This is the system prompt for spawned sub-agents. It still names her as "an agen
 
 ### What the cache buys
 
-The cache prefix is: system[0] (null) + system[1] (org) + system[2] (org) + system[4] (org) ≈ ~10K chars of stable content. The state block (system[3], null) and the user message are fresh every turn.
+The cache prefix is: system[0] (null) + system[1] (org) + system[2] (org) + system[3] (org) ≈ ~10K chars of stable content. The state block (system[4], null) is placed LAST and is fresh every turn. User message is also fresh.
 
 At 88% cache hit rate (observed in production), warm ticks cost ~$0.002 input + output cost.
 
