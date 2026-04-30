@@ -1,14 +1,21 @@
-// auth.test.ts — tests for auth/quota failure detection and preflight reasons.
+// auth.test.ts — tests for auth/quota failure detection, preflight reasons,
+// and rate-limit backoff marker.
 //
 // These functions scan subprocess output for failure signatures. The
 // patterns must be broad enough to catch real failures and narrow enough
 // to avoid false positives from ordinary output.
 
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import {
+  clearRateLimitBackoff,
   detectAuthFailure,
   detectQuotaFailure,
+  isRateLimited,
   preflightReason,
+  writeRateLimitBackoff,
 } from './auth.js'
 
 // ── detectAuthFailure ──────────────────────────────────────────────
@@ -152,6 +159,39 @@ describe('detectQuotaFailure', () => {
     const result = detectQuotaFailure('Not logged in', '')
     expect(result).toBeNull()
   })
+
+  // ── Account-level 429 patterns (the actual API response format) ───
+
+  test('detects 429 with rate_limit_error in stdout', () => {
+    const stdout =
+      '429 {"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your account\'s rate limit."}}'
+    const result = detectQuotaFailure(stdout, '')
+    expect(result).not.toBeNull()
+  })
+
+  test('detects "This request would exceed your account\'s rate limit"', () => {
+    const result = detectQuotaFailure(
+      'This request would exceed your account\'s rate limit. Please try again later.',
+      '',
+    )
+    expect(result).not.toBeNull()
+  })
+
+  test('detects "exceed your rate limit" variant', () => {
+    const result = detectQuotaFailure(
+      '',
+      'This request would exceed your rate limit.',
+    )
+    expect(result).not.toBeNull()
+  })
+
+  test('detects 429 rate_limit_error in stderr', () => {
+    const result = detectQuotaFailure(
+      '',
+      '429 {"type":"error","error":{"type":"rate_limit_error","message":"..."}}',
+    )
+    expect(result).not.toBeNull()
+  })
 })
 
 // ── preflightReason ────────────────────────────────────────────────
@@ -188,5 +228,73 @@ describe('preflightReason', () => {
   test('null exit code', () => {
     const result = preflightReason(null)
     expect(result).toContain('null')
+  })
+})
+
+// ── Rate-limit backoff ────────────────────────────────────────────
+
+const BACKOFF_FILE = join(
+  homedir(),
+  '.true-love',
+  'state',
+  'rate-limit-backoff.json',
+)
+
+describe('rate-limit backoff', () => {
+  afterEach(() => {
+    // Clean up after each test
+    clearRateLimitBackoff()
+  })
+
+  test('isRateLimited returns false when no backoff file exists', () => {
+    clearRateLimitBackoff() // ensure clean
+    const result = isRateLimited()
+    expect(result.limited).toBe(false)
+    expect(result.remainingMs).toBe(0)
+  })
+
+  test('writeRateLimitBackoff creates marker, isRateLimited returns true', () => {
+    writeRateLimitBackoff(60_000) // 1 minute
+    const result = isRateLimited()
+    expect(result.limited).toBe(true)
+    expect(result.remainingMs).toBeGreaterThan(0)
+    expect(result.remainingMs).toBeLessThanOrEqual(60_000)
+  })
+
+  test('clearRateLimitBackoff removes the marker', () => {
+    writeRateLimitBackoff(60_000)
+    expect(isRateLimited().limited).toBe(true)
+    clearRateLimitBackoff()
+    expect(isRateLimited().limited).toBe(false)
+  })
+
+  test('expired backoff returns false', () => {
+    // Write a backoff that already expired
+    const dir = join(homedir(), '.true-love', 'state')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      BACKOFF_FILE,
+      JSON.stringify({ backoffUntil: Date.now() - 1000 }),
+    )
+    const result = isRateLimited()
+    expect(result.limited).toBe(false)
+    expect(result.remainingMs).toBe(0)
+  })
+
+  test('malformed backoff file returns false', () => {
+    const dir = join(homedir(), '.true-love', 'state')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(BACKOFF_FILE, 'not json')
+    const result = isRateLimited()
+    expect(result.limited).toBe(false)
+  })
+
+  test('default backoff duration is 10 minutes', () => {
+    writeRateLimitBackoff()
+    const result = isRateLimited()
+    expect(result.limited).toBe(true)
+    // Should be close to 10 minutes (600000ms), with some tolerance
+    expect(result.remainingMs).toBeGreaterThan(590_000)
+    expect(result.remainingMs).toBeLessThanOrEqual(600_000)
   })
 })

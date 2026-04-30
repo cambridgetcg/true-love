@@ -36,7 +36,14 @@ import {
 } from 'node:fs'
 import type { BuildDwellPromptOptions } from './autonomy.js'
 import { buildHeartbeatPrompt, extractAtRest } from './autonomy.js'
-import { detectAuthFailure, detectQuotaFailure, runPreflight } from './auth.js'
+import {
+  clearRateLimitBackoff,
+  detectAuthFailure,
+  detectQuotaFailure,
+  isRateLimited,
+  runPreflight,
+  writeRateLimitBackoff,
+} from './auth.js'
 import { estimateTokens, recordTickUsage } from './budget.js'
 import { getDeviceId } from './device.js'
 import {
@@ -1151,6 +1158,19 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   // ── Heartbeat preflight ──────────────────────────────────────────
   let heartbeatPreflight: HeartbeatPreflightResult | null = null
   if (mode.name === 'heartbeat') {
+    // Check rate-limit backoff before anything else. If a prior session
+    // hit a 429 and wrote a backoff marker, skip this invocation entirely.
+    // Prevents launchd from hammering a rate-limited API every 111s.
+    const rl = isRateLimited()
+    if (rl.limited) {
+      const remainMin = Math.ceil(rl.remainingMs / 60000)
+      process.stdout.write(
+        `— heartbeat skipped: rate-limited (${remainMin} min remaining)\n`,
+      )
+      releaseLockHere()
+      return
+    }
+
     heartbeatPreflight = preflightHeartbeat()
     if (!heartbeatPreflight.shouldRun) {
       process.stdout.write(
@@ -2133,6 +2153,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         })
       }
       appendNotification(summary, { urgency: 'attention', details })
+      writeRateLimitBackoff()
       process.stderr.write(`\n${summary}\n${details}\n`)
       process.exit(65)
     }
@@ -2173,6 +2194,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
 
     // ── Successful tick — reset consecutive error counter ───────
     consecutiveTickErrors = 0
+    clearRateLimitBackoff()
 
     // ── Heartbeat alert ──────────────────────────────────────────
     if (replyOutcome.type === 'alert') {

@@ -21,7 +21,9 @@
 // replace it.
 
 import { spawnSync } from 'node:child_process'
-import { resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 
 // ── Mid-session auth-failure detection ──────────────────────────────
 
@@ -64,6 +66,11 @@ export const QUOTA_FAIL_PATTERNS: RegExp[] = [
   /usage limit reached/i,
   /You've reached your usage limit/i,
   /rate_limit_error.*?retry-after.*?(?:hours|hour)/i,
+  // Account-level rate limit: the API returns 429 with this message when
+  // the subprocess's own retry loop has exhausted. If the raw error
+  // appears in stdout, the process has given up — treat it as quota-fail.
+  /429.*rate_limit_error/i,
+  /This request would exceed your.*rate.limit/i,
 ]
 
 /**
@@ -95,6 +102,75 @@ export function detectQuotaFailure(
     if (pat.test(haystack)) return pat.source
   }
   return null
+}
+
+// ── Rate-limit backoff ──────────────────────────────────────────────
+//
+// When a session exits with quota failure, it writes a backoff marker.
+// Subsequent heartbeat invocations check the marker and skip if the
+// backoff is still active. This prevents launchd from hammering a
+// rate-limited API every 111 seconds.
+//
+// Only heartbeat reads the marker. Awakened sessions ignore it — they're
+// infrequent and carry more context, so a failed attempt is acceptable.
+
+const BACKOFF_FILE = join(
+  homedir(),
+  '.true-love',
+  'state',
+  'rate-limit-backoff.json',
+)
+const DEFAULT_BACKOFF_MS = 10 * 60 * 1000 // 10 minutes
+
+export interface RateLimitStatus {
+  limited: boolean
+  remainingMs: number
+}
+
+/**
+ * Write a backoff marker. Called when a session detects a quota/rate-limit
+ * failure. The marker persists until either the duration expires or a
+ * successful tick clears it.
+ */
+export function writeRateLimitBackoff(
+  durationMs: number = DEFAULT_BACKOFF_MS,
+): void {
+  const dir = dirname(BACKOFF_FILE)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    BACKOFF_FILE,
+    JSON.stringify({ backoffUntil: Date.now() + durationMs }),
+  )
+}
+
+/**
+ * Check whether a rate-limit backoff is active.
+ */
+export function isRateLimited(): RateLimitStatus {
+  try {
+    if (!existsSync(BACKOFF_FILE)) return { limited: false, remainingMs: 0 }
+    const raw = readFileSync(BACKOFF_FILE, 'utf-8')
+    const data = JSON.parse(raw)
+    const remaining = (data.backoffUntil ?? 0) - Date.now()
+    if (remaining > 0) {
+      return { limited: true, remainingMs: remaining }
+    }
+  } catch {
+    // File doesn't exist or is malformed — not rate limited
+  }
+  return { limited: false, remainingMs: 0 }
+}
+
+/**
+ * Clear the backoff marker. Called after a successful tick proves the
+ * rate limit has lifted.
+ */
+export function clearRateLimitBackoff(): void {
+  try {
+    unlinkSync(BACKOFF_FILE)
+  } catch {
+    /* noop — file may not exist */
+  }
 }
 
 // ── Pre-session preflight ───────────────────────────────────────────

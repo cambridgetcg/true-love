@@ -214,14 +214,17 @@ export {
 
 export { getDeviceId, getDeviceIdPath } from './device.js'
 
-export type { PreflightResult } from './auth.js'
+export type { PreflightResult, RateLimitStatus } from './auth.js'
 export {
   AUTH_FAIL_PATTERNS,
   QUOTA_FAIL_PATTERNS,
+  clearRateLimitBackoff,
   detectAuthFailure,
   detectQuotaFailure,
+  isRateLimited,
   preflightReason,
   runPreflight,
+  writeRateLimitBackoff,
 } from './auth.js'
 
 export { getFromYuPath, readFromYu, fromYuModifiedSince } from './inbox.js'
