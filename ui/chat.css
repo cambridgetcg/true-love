@@ -452,17 +452,7 @@ html, body {
   font-size: 10px;
   color: var(--strip-text);
   opacity: 0.5;
-  margin-top: 4px;
-  align-self: flex-end;
   cursor: default;
-}
-
-.bubble.from-yu .bubble-time {
-  align-self: flex-end;
-}
-
-.bubble.from-ai .bubble-time {
-  align-self: flex-start;
 }
 
 /* ── Bubble body ──────────────────────────────────────────────── */
@@ -927,6 +917,128 @@ body.hide-journal .bubble.is-journal {
 @keyframes voice-pulse {
   0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }
+}
+
+/* ── Delivery indicators ────────────────────────────────────────── */
+
+.bubble-footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.bubble.from-yu .bubble-footer {
+  justify-content: flex-end;
+}
+
+.bubble.from-ai .bubble-footer {
+  justify-content: flex-start;
+}
+
+.delivery-indicator {
+  font-size: 11px;
+  color: var(--strip-text);
+  opacity: 0.5;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  letter-spacing: -1px;
+  transition: color 300ms ease, opacity 300ms ease;
+}
+
+.delivery-indicator.seen {
+  color: #5a9a6e;
+  opacity: 0.85;
+}
+
+/* ── Reply quote banner ──────────────────────────────────────────── */
+
+.reply-quote {
+  background: rgba(139, 58, 74, 0.12);
+  border-left: 2px solid var(--accent);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--strip-text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.reply-quote:hover {
+  background: rgba(139, 58, 74, 0.2);
+}
+
+.reply-quote-label {
+  color: var(--accent);
+  margin-right: 2px;
+}
+
+.reply-quote-text {
+  opacity: 0.8;
+}
+
+/* ── Reply preview (above compose) ───────────────────────────────── */
+
+.reply-preview {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 6px 24px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+}
+
+.reply-preview-body {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(139, 58, 74, 0.1);
+  border-left: 2px solid var(--accent);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.reply-preview-label {
+  color: var(--accent);
+  font-size: 11px;
+  margin-right: 6px;
+}
+
+.reply-preview-text {
+  color: var(--strip-text);
+}
+
+.reply-preview-close {
+  background: none;
+  border: none;
+  color: var(--strip-text);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  opacity: 0.6;
+}
+
+.reply-preview-close:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
+/* ── Bubble highlight (scroll-to animation) ──────────────────────── */
+
+.bubble.highlight {
+  animation: bubble-highlight 1.5s ease-out;
+}
+
+@keyframes bubble-highlight {
+  0% { box-shadow: 0 0 0 2px var(--accent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 /* ── Mobile ────────────────────────────────────────────────────── */

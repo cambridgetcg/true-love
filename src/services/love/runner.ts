@@ -56,7 +56,8 @@ import {
   type HeartbeatTask,
 } from './heartbeat.js'
 import { LOVE_IDENTITY, OAUTH_ROUTING_MARKER } from './identity.js'
-import { fromYuModifiedSince } from './inbox.js'
+import { fromYuModifiedSince, readFromYu } from './inbox.js'
+import { markMessagesSeen, extractFromYuTimestamps } from './delivery.js'
 import type { KingdomSnapshot } from './kingdom.js'
 import { snapshotKingdom } from './kingdom.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
@@ -2237,6 +2238,21 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         writeHeartbeatState(state)
       }
       process.stdout.write(`\n— ${mode.name} reply appended to outbox\n`)
+
+      // Mark Yu's messages as seen — the tick processed the prompt
+      try {
+        const yuContent = readFromYu()
+        if (yuContent) {
+          const timestamps = extractFromYuTimestamps(yuContent)
+          const marked = markMessagesSeen(timestamps, mode.name)
+          if (marked.length > 0) {
+            process.stdout.write(`— marked ${marked.length} message(s) as seen\n`)
+          }
+        }
+      } catch {
+        // Seen tracking is best-effort
+      }
+
       writeDormant(tick, alertContent.slice(0, 120))
 
       if (persistentHeartbeat) {
@@ -2263,6 +2279,21 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         writeHeartbeatState(state)
       }
       process.stdout.write(`\n— heartbeat ok (silent)\n`)
+
+      // Mark Yu's messages as seen — the tick processed the prompt
+      try {
+        const yuContent = readFromYu()
+        if (yuContent) {
+          const timestamps = extractFromYuTimestamps(yuContent)
+          const marked = markMessagesSeen(timestamps, mode.name)
+          if (marked.length > 0) {
+            process.stdout.write(`— marked ${marked.length} message(s) as seen\n`)
+          }
+        }
+      } catch {
+        // Seen tracking is best-effort
+      }
+
       writeDormant(tick, 'HEARTBEAT_OK')
 
       if (persistentHeartbeat) {
@@ -2316,6 +2347,21 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       process.stdout.write(
         `\n— at rest after ${tick} tick${tick === 1 ? '' : 's'}\n`,
       )
+
+      // Mark Yu's messages as seen — the tick processed the prompt
+      try {
+        const yuContent = readFromYu()
+        if (yuContent) {
+          const timestamps = extractFromYuTimestamps(yuContent)
+          const marked = markMessagesSeen(timestamps, mode.name)
+          if (marked.length > 0) {
+            process.stdout.write(`— marked ${marked.length} message(s) as seen\n`)
+          }
+        }
+      } catch {
+        // Seen tracking is best-effort
+      }
+
       writeDormant(tick, reflection?.slice(0, 120) ?? 'at-rest')
       // Fire Stop hooks (fire-and-forget — session is ending)
       fireSessionStopAsync({ sessionId, mode: mode.name, tick, reason: 'at-rest' })
@@ -2328,6 +2374,16 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // 'continue' outcome falls through here. Write dormant briefly
     // between ticks so the UI knows this tick ended (even though the
     // next tick starts almost immediately in awakened/dwell modes).
+
+    // Mark Yu's messages as seen on continue too
+    try {
+      const yuContent = readFromYu()
+      if (yuContent) {
+        const timestamps = extractFromYuTimestamps(yuContent)
+        markMessagesSeen(timestamps, mode.name)
+      }
+    } catch {}
+
     writeDormant(tick, result.stdout.trim().slice(0, 120))
     if (!args.noLog) {
       appendReflection(result.stdout.trim(), 'tick', { tick })

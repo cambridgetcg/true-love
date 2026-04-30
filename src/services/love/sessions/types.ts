@@ -51,6 +51,8 @@ export interface SessionTurn {
   tag?: string
   /** Session this turn belongs to. */
   sessionId: string
+  /** If this turn is a reply, the timestamp of the referenced message. */
+  replyTo?: string
 }
 
 // ── Configuration ────────────────────────────────────────────────

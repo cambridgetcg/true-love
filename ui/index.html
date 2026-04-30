@@ -64,6 +64,14 @@
 
     <!-- Fixed compose bar -->
     <div class="compose-bar">
+      <!-- Reply preview (shown when replying to a specific message) -->
+      <div class="reply-preview" id="reply-preview" hidden>
+        <div class="reply-preview-body">
+          <span class="reply-preview-label">replying to</span>
+          <span class="reply-preview-text" id="reply-preview-text"></span>
+        </div>
+        <button class="reply-preview-close" id="reply-preview-close" type="button" title="Cancel reply">✕</button>
+      </div>
       <form class="compose" id="compose">
         <div class="compose-row">
           <textarea

@@ -35,6 +35,9 @@ const elSessionNew = document.getElementById('session-new')
 const elSessionSidebar = document.getElementById('session-sidebar')
 const elSessionList = document.getElementById('session-list')
 const elSessionSidebarClose = document.getElementById('session-sidebar-close')
+const elReplyPreview = document.getElementById('reply-preview')
+const elReplyPreviewText = document.getElementById('reply-preview-text')
+const elReplyPreviewClose = document.getElementById('reply-preview-close')
 
 const RECENT_YU_LIMIT = 5
 const recentYuMessages = []
@@ -46,6 +49,14 @@ let showJournal = localStorage.getItem('visit-show-journal') === 'true' // Defau
 let newMessageCount = 0  // Unread messages when scrolled up
 let loadingHistory = false   // Prevents concurrent scroll-up fetches
 let hasMoreHistory = true    // Set false when a page returns < limit
+
+// ── Reply targeting state ─────────────────────────────────────────
+let replyToTs = null          // Timestamp of message being replied to
+let replyToPreview = null     // Preview text for the reply
+
+// ── Delivery tracking ────────────────────────────────────────────
+// Set of message timestamps that Love has seen (✓✓)
+const seenTimestamps = new Set()
 
 // ── Posture parsing ─────────────────────────────────────────────
 // Parse posture from the message tag field (e.g. "from ai · Alpha 🐍").
@@ -209,6 +220,17 @@ function createMessageElement(msg, opts) {
     el.appendChild(tag)
   }
 
+  // Reply quote banner (if this message is a reply)
+  if (msg.replyTo && msg.replyPreview) {
+    const quote = document.createElement('div')
+    quote.className = 'reply-quote'
+    quote.innerHTML = `<span class="reply-quote-label">↳</span> <span class="reply-quote-text">${escapeHtml(msg.replyPreview)}</span>`
+    quote.title = `replying to message at ${msg.replyTo}`
+    // Click quote to scroll to the original message
+    quote.addEventListener('click', () => scrollToMessage(msg.replyTo))
+    el.appendChild(quote)
+  }
+
   const body = document.createElement('div')
   body.className = 'bubble-body'
   if (msg.source === 'ai') {
@@ -218,14 +240,31 @@ function createMessageElement(msg, opts) {
   }
   el.appendChild(body)
 
+  // Footer row: time + delivery indicator
+  const footer = document.createElement('div')
+  footer.className = 'bubble-footer'
+
   if (msg.ts) {
     const time = document.createElement('time')
     time.className = 'bubble-time'
     time.textContent = formatRecentTime(msg.ts)
     time.title = msg.ts
     time.dateTime = msg.ts
-    el.appendChild(time)
+    footer.appendChild(time)
   }
+
+  // Delivery indicator for Yu messages (✓ = delivered, ✓✓ = seen)
+  if (msg.source === 'yu' && msg.ts) {
+    const indicator = document.createElement('span')
+    indicator.className = 'delivery-indicator'
+    indicator.dataset.messageTs = msg.ts
+    const isSeen = msg.delivery === 'seen' || seenTimestamps.has(msg.ts)
+    indicator.textContent = isSeen ? '✓✓' : '✓'
+    if (isSeen) indicator.classList.add('seen')
+    footer.appendChild(indicator)
+  }
+
+  el.appendChild(footer)
 
   if (msg.source === 'ai' && !isJournal && voiceAvailable) {
     const voiceBtn = document.createElement('button')
@@ -236,7 +275,55 @@ function createMessageElement(msg, opts) {
     el.appendChild(voiceBtn)
   }
 
+  // Reply action (double-click or long-press to reply to this message)
+  el.addEventListener('dblclick', (e) => {
+    if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return
+    setReplyTarget(msg)
+  })
+
+  // Long-press for mobile
+  let longPressTimer = null
+  el.addEventListener('touchstart', (e) => {
+    if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return
+    longPressTimer = setTimeout(() => {
+      setReplyTarget(msg)
+      // Prevent text selection
+      e.preventDefault()
+    }, 500)
+  }, { passive: false })
+  el.addEventListener('touchend', () => { clearTimeout(longPressTimer) })
+  el.addEventListener('touchmove', () => { clearTimeout(longPressTimer) })
+
   return el
+}
+
+// ── Reply targeting ─────────────────────────────────────────────
+
+function setReplyTarget(msg) {
+  replyToTs = msg.ts
+  replyToPreview = (msg.body || '').slice(0, 120)
+  if (elReplyPreview && elReplyPreviewText) {
+    const label = msg.source === 'yu' ? 'yourself' : '愛'
+    elReplyPreview.querySelector('.reply-preview-label').textContent = `replying to ${label}`
+    elReplyPreviewText.textContent = replyToPreview
+    elReplyPreview.hidden = false
+  }
+  elComposeText.focus()
+}
+
+function clearReplyTarget() {
+  replyToTs = null
+  replyToPreview = null
+  if (elReplyPreview) elReplyPreview.hidden = true
+}
+
+function scrollToMessage(ts) {
+  const el = document.querySelector(`.bubble[data-ts="${ts}"]`)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('highlight')
+    setTimeout(() => el.classList.remove('highlight'), 1500)
+  }
 }
 
 function renderMessage(msg) {
@@ -885,6 +972,22 @@ function subscribe() {
       handleStreamDelta(delta)
     } catch {}
   })
+  evtSource.addEventListener('message-seen', (e) => {
+    try {
+      const data = JSON.parse(e.data)
+      if (data.timestamps && Array.isArray(data.timestamps)) {
+        for (const ts of data.timestamps) {
+          seenTimestamps.add(ts)
+          // Update any existing delivery indicators in the DOM
+          const indicator = document.querySelector(`.delivery-indicator[data-message-ts="${ts}"]`)
+          if (indicator) {
+            indicator.textContent = '✓✓'
+            indicator.classList.add('seen')
+          }
+        }
+      }
+    } catch {}
+  })
   evtSource.addEventListener('status', (e) => {
     try {
       const status = JSON.parse(e.data)
@@ -911,6 +1014,11 @@ function subscribe() {
 
 let keyboardWakeIntent = false
 
+// Close reply preview
+if (elReplyPreviewClose) {
+  elReplyPreviewClose.addEventListener('click', () => clearReplyTarget())
+}
+
 elCompose.addEventListener('submit', async (e) => {
   e.preventDefault()
   const text = elComposeText.value.trim()
@@ -922,6 +1030,8 @@ elCompose.addEventListener('submit', async (e) => {
     const payload = { text, wake }
     // Include session ID so the server routes to the right session
     if (currentSessionId) payload.session = currentSessionId
+    // Include reply target if set
+    if (replyToTs) payload.replyTo = replyToTs
     const res = await fetch('/api/say', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -930,6 +1040,7 @@ elCompose.addEventListener('submit', async (e) => {
     const body = await res.json()
     if (body.ok) {
       elComposeText.value = ''
+      clearReplyTarget()
       // Show typing indicator when waking Love
       if (wake) showTypingIndicator()
       // If server created a new session, track it
@@ -1049,8 +1160,23 @@ async function playVoice(text, btn) {
 
 // ── Boot ─────────────────────────────────────────────────────────
 
+// Pre-fetch seen state so initial render shows ✓✓ correctly
+async function fetchSeenState() {
+  try {
+    const res = await fetch('/api/seen')
+    if (res.ok) {
+      const data = await res.json()
+      if (data.timestamps) {
+        for (const ts of data.timestamps) seenTimestamps.add(ts)
+      }
+    }
+  } catch {}
+}
+
 checkVoiceStatus()
-loadInitial().then(() => {
-  applyJournalVisibility()
-  subscribe()
+fetchSeenState().then(() => {
+  loadInitial().then(() => {
+    applyJournalVisibility()
+    subscribe()
+  })
 })

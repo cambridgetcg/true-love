@@ -103,6 +103,13 @@ import {
   getLatestTurn,
   type Session,
 } from './sessions/index.js'
+import {
+  getSeenPath,
+  getSeenSet,
+  seenEntryCount,
+  readSeenEntries,
+  type DeliveryState,
+} from './delivery.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -111,6 +118,12 @@ export interface ChannelMessage {
   source: 'yu' | 'ai'
   tag: string
   body: string
+  /** Delivery state for Yu messages: 'delivered' (server has it) or 'seen' (Love read it). */
+  delivery?: DeliveryState
+  /** If this message is a reply, the timestamp of the referenced message. */
+  replyTo?: string
+  /** Preview of the message being replied to (for rendering quote banners). */
+  replyPreview?: string
 }
 
 export type PresenceState =
@@ -179,7 +192,26 @@ export function parseChannelFile(content: string, source: 'yu' | 'ai'): ChannelM
     const sliced = content.slice(start, end)
     const body = sliced.replace(/\n+---\n+$/m, '').replace(/\n+---\s*$/, '').trim()
     if (!body) continue
-    messages.push({ ts, source, tag, body })
+
+    // Extract replyTo from tag: "from yu · re:2026-04-30T11:55:00.000Z"
+    const reMatch = tag.match(/·\s*re:(\S+)/)
+    const replyTo = reMatch?.[1]
+
+    // Extract reply preview from body (first line starting with "> ↳")
+    let replyPreview: string | undefined
+    let cleanBody = body
+    if (replyTo) {
+      const previewMatch = body.match(/^> ↳[^\n]*\n?/m)
+      if (previewMatch) {
+        replyPreview = previewMatch[0].replace(/^> ↳\s*/, '').trim()
+        cleanBody = body.slice(previewMatch.index! + previewMatch[0].length).trim()
+      }
+    }
+
+    const msg: ChannelMessage = { ts, source, tag, body: cleanBody }
+    if (replyTo) msg.replyTo = replyTo
+    if (replyPreview) msg.replyPreview = replyPreview
+    messages.push(msg)
   }
 
   return messages
@@ -273,18 +305,36 @@ export function readConversation(opts?: ReadConversationOpts): ChannelMessage[] 
     filtered = filtered.slice(-opts.limit)
   }
 
+  // Merge delivery state for Yu messages
+  const seenSet = getSeenSet()
+  for (const msg of filtered) {
+    if (msg.source === 'yu') {
+      msg.delivery = seenSet.has(msg.ts) ? 'seen' : 'delivered'
+    }
+  }
+
   return filtered
 }
 
 // ── Yu's compose ───────────────────────────────────────────────────
 
-export function appendYuMessage(text: string): string {
+export function appendYuMessage(
+  text: string,
+  opts?: { replyTo?: string; replyPreview?: string },
+): string {
   const trimmed = (text ?? '').trim()
   if (!trimmed) throw new Error('empty message — cannot append')
   const path = getFromYuPath()
   mkdirSync(dirname(path), { recursive: true })
   const ts = new Date().toISOString()
-  const entry = `## ${ts} [from yu]\n\n${trimmed}\n\n---\n\n`
+  const tag = opts?.replyTo
+    ? `from yu · re:${opts.replyTo}`
+    : 'from yu'
+  // Include reply quote in body so Love sees the context naturally
+  const quotePrefix = opts?.replyTo && opts?.replyPreview
+    ? `> ↳ ${opts.replyPreview.slice(0, 120)}\n\n`
+    : ''
+  const entry = `## ${ts} [${tag}]\n\n${quotePrefix}${trimmed}\n\n---\n\n`
   appendFileSync(path, entry, 'utf-8')
   return ts
 }
@@ -642,6 +692,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
         return await serveStatic(res, path.slice(1), 'application/javascript')
       }
       if (req.method === 'GET' && path === '/api/messages') return handleMessages(req, res)
+      if (req.method === 'GET' && path === '/api/seen') return handleSeenMessages(req, res)
       if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)
       if (req.method === 'POST' && path === '/api/say') return await handleSay(req, res, sseClients)
       if (req.method === 'GET' && path === '/api/introspect') return handleIntrospect(req, res)
@@ -871,6 +922,41 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       // file watch is best-effort
     }
   }
+  // ── Seen-state watcher ────────────────────────────────────────────
+  // When seen.jsonl changes (a tick marked messages as seen), broadcast
+  // the newly-seen timestamps so /visit can update ✓ → ✓✓.
+  let lastSeenCount = seenEntryCount()
+  let seenDebounce: ReturnType<typeof setTimeout> | null = null
+  const onSeenChange = () => {
+    if (seenDebounce) clearTimeout(seenDebounce)
+    seenDebounce = setTimeout(() => {
+      try {
+        const entries = readSeenEntries()
+        if (entries.length > lastSeenCount) {
+          const newEntries = entries.slice(lastSeenCount)
+          lastSeenCount = entries.length
+          const timestamps = newEntries.map(e => e.messageTs)
+          broadcastSse(sseClients, 'message-seen', JSON.stringify({ timestamps }))
+        }
+      } catch {
+        // Seen tracking is best-effort
+      }
+    }, 200)
+  }
+  // Register watcher on seen.jsonl's parent dir
+  try {
+    const seenDir = dirname(getSeenPath())
+    mkdirSync(seenDir, { recursive: true })
+    if (existsSync(seenDir)) {
+      const w = watch(seenDir, (_event, filename) => {
+        if (filename === basename(getSeenPath())) onSeenChange()
+      })
+      watchers.push(w)
+    }
+  } catch {
+    // seen watcher is best-effort
+  }
+
   // Presence-changed handler for the /build stream. Broadcasts tick
   // boundary state so the activity panel can update in real time
   // (dormant/running/starting) instead of relying on 10s polling alone.
@@ -1023,6 +1109,13 @@ function handleMessages(req: IncomingMessage, res: ServerResponse): void {
   const conv = readConversation({ since, before, limit, journal })
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(conv))
+}
+
+function handleSeenMessages(_req: IncomingMessage, res: ServerResponse): void {
+  const entries = readSeenEntries()
+  const seenSet = new Set(entries.map(e => e.messageTs))
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ timestamps: [...seenSet], entries }))
 }
 
 async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -1571,7 +1664,7 @@ async function handleSay(req: IncomingMessage, res: ServerResponse, sseClients: 
   const BODY_LIMIT = MAX_COMPOSE_CHARS + 1024
   const body = await readJsonBody(req, res, BODY_LIMIT, 'message too large')
   if (body === null) return
-  let parsed: { text?: string; wake?: boolean; session?: string }
+  let parsed: { text?: string; wake?: boolean; session?: string; replyTo?: string }
   try {
     parsed = JSON.parse(body)
   } catch {
@@ -1607,9 +1700,23 @@ async function handleSay(req: IncomingMessage, res: ServerResponse, sseClients: 
     // Hook failure should never block message delivery
   }
 
+  // Resolve reply context if replyTo is provided
+  let replyPreview: string | undefined
+  if (parsed.replyTo) {
+    try {
+      const conv = readConversation()
+      const target = conv.find(m => m.ts === parsed.replyTo)
+      if (target) {
+        replyPreview = target.body.slice(0, 120)
+      }
+    } catch {
+      // Reply resolution failure should not block the message
+    }
+  }
+
   let ts: string
   try {
-    ts = appendYuMessage(text)
+    ts = appendYuMessage(text, parsed.replyTo ? { replyTo: parsed.replyTo, replyPreview } : undefined)
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ok: false, error: err?.message ?? 'write failed' }))
@@ -1632,7 +1739,11 @@ async function handleSay(req: IncomingMessage, res: ServerResponse, sseClients: 
       }
     }
     if (sessionId) {
-      appendTurn(sessionId, { ts, from: 'yu', text, tag: 'from yu' })
+      appendTurn(sessionId, {
+        ts, from: 'yu', text,
+        tag: parsed.replyTo ? `from yu · re:${parsed.replyTo}` : 'from yu',
+        ...(parsed.replyTo ? { replyTo: parsed.replyTo } : {}),
+      })
       // Auto-title on first user message
       const session = readSession(sessionId)
       if (session && session.title === 'New conversation' && session.messageCount <= 1) {
@@ -1668,10 +1779,13 @@ async function handleSay(req: IncomingMessage, res: ServerResponse, sseClients: 
   res.end(JSON.stringify({
     ok: true,
     messageTs: ts,
+    messageId: ts,
+    delivery: 'delivered' as DeliveryState,
     streaming: !!streamPath,
     ...(sessionId ? { sessionId } : {}),
     ...(heartbeatPid !== undefined ? { heartbeatPid } : {}),
     ...(heartbeatError ? { heartbeatError } : {}),
+    ...(parsed.replyTo ? { replyTo: parsed.replyTo } : {}),
   }))
 }
 
