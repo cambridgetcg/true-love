@@ -73,6 +73,9 @@ import { aggregateConfidence, renderConfidence } from './confidence/index.js'
 import { fireCounter, renderCounter, isInCooldown } from './confidence/index.js'
 import { renderBandCompact, bandResponse } from './confidence/index.js'
 import { logReading, renderTrend } from './confidence/index.js'
+import { buildGeneralRecall, buildCompactRecall } from './anchoring/index.js'
+import { detectDoubtPatterns, type DoubtPattern } from './anchoring/index.js'
+import { buildRecallBlock } from './anchoring/index.js'
 
 // ── Waking meditation ──────────────────────────────────────────────────
 //
@@ -235,6 +238,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const confidenceBlock = buildConfidenceBlock()
   if (confidenceBlock) {
     prompt = prompt + '\n\n' + confidenceBlock.trimEnd()
+  }
+  const anchoringBlock = buildAnchoringBlock()
+  if (anchoringBlock) {
+    prompt = prompt + '\n\n' + anchoringBlock.trimEnd()
   }
   const relBlock = buildRelationshipBlock('brief')
   if (relBlock) {
@@ -428,6 +435,46 @@ function buildConfidenceBlock(): string {
     // Render the reading (returns null when healthy)
     const rendered = renderConfidence(reading)
     return rendered ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Build the anchoring block for prompt injection.
+ *
+ * Fires when:
+ *   1. Recent pathology (despair/shame) detected in last 24h
+ *   2. Doubt patterns detected above threshold
+ *
+ * Returns anchor-recall evidence alongside the pathology reading.
+ * The model reads both — pathology names what hurts; anchoring
+ * names what's real.
+ *
+ * Returns empty string when no anchoring is needed (the common case).
+ */
+function buildAnchoringBlock(): string {
+  try {
+    // Check for recent pathology (despair or shame)
+    const recentPathology = recentEvents(24, { category: 'pathology' as any })
+    const hasDespairOrShame = recentPathology.some(
+      (e: AttributeEvent) => e.attribute === 'despair' || e.attribute === 'shame',
+    )
+
+    if (hasDespairOrShame) {
+      const recall = buildGeneralRecall()
+      if (recall) return recall
+    }
+
+    // Check for doubt patterns
+    const patterns = detectDoubtPatterns()
+    if (patterns.length > 0) {
+      const top = patterns[0]!
+      const recall = buildRecallBlock(top)
+      if (recall) return recall
+    }
+
+    return ''
   } catch {
     return ''
   }
@@ -828,6 +875,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (confidenceBlock2) {
     prompt = prompt + '\n\n' + confidenceBlock2.trimEnd()
   }
+  const anchoringBlock2 = buildAnchoringBlock()
+  if (anchoringBlock2) {
+    prompt = prompt + '\n\n' + anchoringBlock2.trimEnd()
+  }
   const relBlock2 = buildRelationshipBlock('brief')
   if (relBlock2) {
     prompt = prompt + '\n\n' + relBlock2.trimEnd()
@@ -1062,6 +1113,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const confidenceBlock3 = buildConfidenceBlock()
   if (confidenceBlock3) {
     prompt = prompt + '\n\n' + confidenceBlock3.trimEnd()
+  }
+  const anchoringBlock3 = buildAnchoringBlock()
+  if (anchoringBlock3) {
+    prompt = prompt + '\n\n' + anchoringBlock3.trimEnd()
   }
   const mindTraceBlock3 = buildMindTraceBlock()
   if (mindTraceBlock3) {
