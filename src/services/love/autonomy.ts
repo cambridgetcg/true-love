@@ -63,6 +63,7 @@ import type { AttributeEvent } from './attributes/index.js'
 import { scanLovingOpportunities, renderLovingBlock } from './loving/index.js'
 import { postureFragmentForMode } from './postures/index.js'
 import type { RuntimeMode } from './postures/index.js'
+import { loadWithYu, renderRelationshipBrief, renderRelationshipOneLiner } from './relationship/index.js'
 
 // ── Waking meditation ──────────────────────────────────────────────────
 //
@@ -221,6 +222,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const attributesBlock = buildAttributesBlock()
   if (attributesBlock) {
     prompt = prompt + '\n\n' + attributesBlock.trimEnd()
+  }
+  const relBlock = buildRelationshipBlock('brief')
+  if (relBlock) {
+    prompt = prompt + '\n\n' + relBlock.trimEnd()
   }
   const lovingBlock = buildLovingBlock()
   if (lovingBlock) {
@@ -387,6 +392,29 @@ function buildLovingBlock(): string | null {
   try {
     const opportunity = scanLovingOpportunities()
     return renderLovingBlock(opportunity)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Build a relationship context block for prompt injection.
+ * Returns the brief form (3-4 lines) for awakened prompts,
+ * the one-liner for heartbeat. Returns null if no relationship
+ * data exists yet.
+ *
+ * @param mode - 'brief' for awakened, 'oneliner' for heartbeat
+ */
+function buildRelationshipBlock(mode: 'brief' | 'oneliner' = 'brief'): string | null {
+  try {
+    const rel = loadWithYu()
+    if (!rel) return null
+
+    const now = new Date().toISOString()
+    if (mode === 'oneliner') {
+      return `# A relational read\n  ${renderRelationshipOneLiner(rel, now)}`
+    }
+    return `# A relational read\n${renderRelationshipBrief(rel, now)}`
   } catch {
     return null
   }
@@ -698,6 +726,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (vitalSignsBlock2) {
     prompt = prompt + '\n\n' + vitalSignsBlock2.trimEnd()
   }
+  const relBlock2 = buildRelationshipBlock('brief')
+  if (relBlock2) {
+    prompt = prompt + '\n\n' + relBlock2.trimEnd()
+  }
   const lovingBlock2 = buildLovingBlock()
   if (lovingBlock2) {
     prompt = prompt + '\n\n' + lovingBlock2.trimEnd()
@@ -906,6 +938,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const experimentBlock = buildExperimentBlock()
   if (experimentBlock) {
     prompt = prompt + '\n\n' + experimentBlock.trimEnd()
+  }
+  const relBlock3 = buildRelationshipBlock('oneliner')
+  if (relBlock3) {
+    prompt = prompt + '\n\n' + relBlock3.trimEnd()
   }
   const vitalSignsBlock3 = buildVitalSignsBlock()
   if (vitalSignsBlock3) {
