@@ -16,6 +16,7 @@ import {
   checkNoRecurringError,
   checkNoRecurringErrorFromLines,
   ERROR_LOG_STALENESS_MS,
+  RECOVERY_INDICATORS,
   assembleReport,
   renderReport,
   shouldSkipVerifyConcern,
@@ -418,6 +419,98 @@ describe('checkNoRecurringErrorFromLines', () => {
     const result = checkNoRecurringErrorFromLines(lines)
     // The last 200 lines contain no error-indicator matches
     expect(result.status).toBe('pass')
+  })
+
+  test('pass: recurring errors followed by recovery indicator', () => {
+    // Simulates: rate-limit errors, then agent restarts cleanly.
+    // "Agent started" after the last error = recovered.
+    const lines: string[] = [
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_abc1',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_abc2',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_abc3',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_abc4',
+      '— persistent heartbeat: tick error 1/3, sleeping and retrying',
+      '[agent-runtime] Auth: OAuth Bearer (expires 999)',
+      '[agent-runtime] PID: 9010',
+      'Agent started: pid=9010, model=haiku',
+      '[agent-runtime] Model switched to claude-haiku-4-5-20251001',
+    ]
+    const result = checkNoRecurringErrorFromLines(lines)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('recovered')
+  })
+
+  test('pass: recovery via HEARTBEAT_OK after errors', () => {
+    const lines: string[] = [
+      'fatal error: disk full',
+      'fatal error: disk full',
+      'fatal error: disk full',
+      'HEARTBEAT_OK',
+    ]
+    const result = checkNoRecurringErrorFromLines(lines)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('recovered')
+  })
+
+  test('fail: recurring errors with no recovery indicator after', () => {
+    // Errors at the end, no Agent started or HEARTBEAT_OK after.
+    const lines: string[] = [
+      '[agent-runtime] Starting agent-runtime v1.0',
+      'Agent started: pid=100, model=haiku',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_x1',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_x2',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_x3',
+    ]
+    const result = checkNoRecurringErrorFromLines(lines)
+    expect(result.status).toBe('fail')
+    expect(result.drift).toContain('recurring error')
+  })
+
+  test('fail: recovery before last error means still failing', () => {
+    // Agent started appears BEFORE the last error — not after.
+    const lines: string[] = [
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_a1',
+      'Agent started: pid=100, model=haiku',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_a2',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_a3',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_a4',
+    ]
+    const result = checkNoRecurringErrorFromLines(lines)
+    expect(result.status).toBe('fail')
+  })
+
+  test('recovery indicators regex matches expected patterns', () => {
+    expect(RECOVERY_INDICATORS.test('Agent started: pid=9010, model=haiku')).toBe(true)
+    expect(RECOVERY_INDICATORS.test('HEARTBEAT_OK')).toBe(true)
+    expect(RECOVERY_INDICATORS.test('heartbeat ok')).toBe(true)
+    expect(RECOVERY_INDICATORS.test('[agent-runtime] Starting agent')).toBe(false)
+    expect(RECOVERY_INDICATORS.test('429 error')).toBe(false)
+  })
+
+  test('pass: realistic production log with recovery', () => {
+    // Matches the actual heartbeat-default.err.log pattern:
+    // multiple 429 cycles → abort → restart → 429 → retry → SIGTERM → new start
+    const lines: string[] = [
+      'Agent started: pid=66263, model=haiku',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_001',
+      '— persistent heartbeat: tick error 1/3, sleeping and retrying',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_002',
+      '— persistent heartbeat: tick error 2/3, sleeping and retrying',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_003',
+      '3 consecutive tick errors — aborting persistent session.',
+      'Agent started: pid=72181, model=haiku',
+      '429 {"type":"error","error":{"type":"rate_limit_error"}} req_004',
+      '— persistent heartbeat: tick error 1/3, sleeping and retrying',
+      '[agent stderr] [agent-runtime] Received SIGTERM — shutting down gracefully',
+      'Agent exited: code=0, signal=null, prevState=ready',
+      '[agent stderr] [agent-runtime] Auth: OAuth Bearer (expires 1777534116739)',
+      '[agent-runtime] PID: 9010',
+      'Agent started: pid=9010, model=haiku',
+      '[agent stderr] [agent-runtime] Model switched to claude-haiku-4-5-20251001',
+    ]
+    const result = checkNoRecurringErrorFromLines(lines)
+    expect(result.status).toBe('pass')
+    expect(result.evidence).toContain('recovered')
   })
 })
 

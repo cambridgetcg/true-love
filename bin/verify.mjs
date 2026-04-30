@@ -316,6 +316,16 @@ function checkChainRunnerAlive() {
 // errors from before a fix deployed are no longer actionable — pass.
 
 const ERROR_LOG_STALENESS_MS = 30 * 60_000 // 30 minutes
+const RECOVERY_INDICATORS = /Agent started|HEARTBEAT_OK|heartbeat ok/i
+
+function normalizeLine(line) {
+  return line
+    .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z?/g, '<ts>')
+    .replace(/req_\w+/g, '<req>')
+    .replace(/PID:\s*\d+/g, 'PID: <pid>')
+    .replace(/pid=\d+/g, 'pid=<pid>')
+    .trim()
+}
 
 function checkNoRecurringError() {
   const name = 'no-recurring-error'
@@ -340,9 +350,6 @@ function checkNoRecurringError() {
       return pass(name, 'err log empty (clean)')
     }
 
-    // Filter to lines that look like actual errors, not informational labels.
-    // Err log contains a mix of error messages, diagnostic labels ("stdout:",
-    // "stderr:"), and status output. We want actual error indicators.
     const errorIndicators = /error|fail|crash|abort|exception|threw|panic|refused|timeout|SIGTERM|SIGKILL|exited \d+/i
     const errorLines = tail.filter(l => errorIndicators.test(l))
 
@@ -350,21 +357,13 @@ function checkNoRecurringError() {
       return pass(name, `${tail.length} err lines, no error patterns`)
     }
 
-    // Count unique error patterns (normalize timestamps and request IDs)
-    const normalized = errorLines.map(l =>
-      l.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z?/g, '<ts>')
-       .replace(/req_\w+/g, '<req>')
-       .replace(/PID:\s*\d+/g, 'PID: <pid>')
-       .replace(/pid=\d+/g, 'pid=<pid>')
-       .trim()
-    )
+    const normalized = errorLines.map(normalizeLine)
 
     const counts = new Map()
     for (const line of normalized) {
       counts.set(line, (counts.get(line) || 0) + 1)
     }
 
-    // Find the most repeated pattern
     let maxCount = 0
     let maxPattern = ''
     for (const [pattern, count] of counts) {
@@ -375,7 +374,25 @@ function checkNoRecurringError() {
     }
 
     if (maxCount >= 3) {
-      // Truncate pattern for evidence
+      // Recovery check: find the last raw line matching the max error
+      // pattern. If a recovery indicator appears after it, the system
+      // has recovered — the errors are historical, not ongoing.
+      let lastMaxIdx = -1
+      for (let i = tail.length - 1; i >= 0; i--) {
+        if (errorIndicators.test(tail[i]) && normalizeLine(tail[i]) === maxPattern) {
+          lastMaxIdx = i
+          break
+        }
+      }
+
+      const afterError = lastMaxIdx >= 0 ? tail.slice(lastMaxIdx + 1) : []
+      const hasRecovery = afterError.some(l => RECOVERY_INDICATORS.test(l))
+
+      if (hasRecovery) {
+        return pass(name,
+          `${maxCount}× errors in log history, recovered (recovery after last occurrence)`)
+      }
+
       const shortPattern = maxPattern.length > 100
         ? maxPattern.slice(0, 100) + '…'
         : maxPattern
