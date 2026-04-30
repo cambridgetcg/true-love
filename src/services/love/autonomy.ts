@@ -29,6 +29,8 @@
 //     turn* lives.
 //   - It does not read the kingdom. Kingdom-reading is in kingdom.ts.
 
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 import type { KingdomSnapshot } from './kingdom.js'
 import { renderKingdom } from './kingdom.js'
 import type { Reflection } from './memory.js'
@@ -64,6 +66,9 @@ import { scanLovingOpportunities, renderLovingBlock } from './loving/index.js'
 import { postureFragmentForMode } from './postures/index.js'
 import type { RuntimeMode } from './postures/index.js'
 import { loadWithYu, renderRelationshipBrief, renderRelationshipOneLiner } from './relationship/index.js'
+import { loadDwelling, dwellingBrief } from './postures/alpha/dwelling.js'
+import { vigilBrief } from './postures/beta/vigil.js'
+import { forgeBrief } from './postures/gamma/forge.js'
 
 // ── Waking meditation ──────────────────────────────────────────────────
 //
@@ -420,6 +425,52 @@ function buildRelationshipBlock(mode: 'brief' | 'oneliner' = 'brief'): string | 
   }
 }
 
+// ── Three-infras block builders ────────────────────────────────────
+//
+// Each sister has her own infrastructure. These blocks surface their
+// state in the appropriate prompt. Alpha's dwelling in interactive,
+// Beta's vigil in heartbeat, Gamma's forge in awakened.
+
+export function getPostureDataPath(sister: 'alpha' | 'beta' | 'gamma', filename: string): string {
+  return join(homedir(), '.true-love', 'postures', sister, filename)
+}
+
+/** Alpha's dwelling — present-moment relational state. For interactive prompts. */
+function buildDwellingBlock(): string | null {
+  try {
+    const path = getPostureDataPath('alpha', 'dwelling.json')
+    const state = loadDwelling(path)
+    if (state.temperature === 'unknown' && !state.holding) return null
+    return dwellingBrief(state)
+  } catch {
+    return null
+  }
+}
+
+/** Beta's vigil — what isn't moving. For heartbeat prompts. */
+function buildVigilBlock(): string | null {
+  try {
+    const path = getPostureDataPath('beta', 'vigil.jsonl')
+    const brief = vigilBrief(path)
+    if (brief === 'Vigil: clear.') return null
+    return brief
+  } catch {
+    return null
+  }
+}
+
+/** Gamma's forge — craft-level state. For awakened prompts. */
+function buildForgeBlock(): string | null {
+  try {
+    const path = getPostureDataPath('gamma', 'forge.json')
+    const brief = forgeBrief(path)
+    if (brief === 'Forge: cold — no active work.') return null
+    return brief
+  } catch {
+    return null
+  }
+}
+
 /**
  * Render the Active-Missions surface that gets injected into the
  * dwell / awakened / heartbeat prompts. Empty string when no projects
@@ -730,6 +781,11 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   if (relBlock2) {
     prompt = prompt + '\n\n' + relBlock2.trimEnd()
   }
+  // Gamma's forge — craft-level state of making.
+  const forgeBlock = buildForgeBlock()
+  if (forgeBlock) {
+    prompt = prompt + '\n\n' + forgeBlock.trimEnd()
+  }
   const lovingBlock2 = buildLovingBlock()
   if (lovingBlock2) {
     prompt = prompt + '\n\n' + lovingBlock2.trimEnd()
@@ -943,6 +999,11 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   if (relBlock3) {
     prompt = prompt + '\n\n' + relBlock3.trimEnd()
   }
+  // Beta's vigil — what isn't moving. Patient observations.
+  const vigilBlock = buildVigilBlock()
+  if (vigilBlock) {
+    prompt = prompt + '\n\n' + vigilBlock.trimEnd()
+  }
   const vitalSignsBlock3 = buildVitalSignsBlock()
   if (vitalSignsBlock3) {
     prompt = prompt + '\n\n' + vitalSignsBlock3.trimEnd()
@@ -1027,6 +1088,12 @@ export function buildInteractivePrompt(opts: BuildInteractivePromptOptions): str
   const relBlock = buildRelationshipBlock('brief')
   if (relBlock) {
     prompt = prompt + '\n\n' + relBlock.trimEnd()
+  }
+
+  // Alpha's dwelling — the present-moment relational state.
+  const dwellingBlock = buildDwellingBlock()
+  if (dwellingBlock) {
+    prompt = prompt + '\n\n' + dwellingBlock.trimEnd()
   }
 
   const kingdomBlockText = opts.kingdomBlock ? `\n\n${opts.kingdomBlock}` : ''
