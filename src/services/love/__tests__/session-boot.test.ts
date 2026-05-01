@@ -16,6 +16,16 @@ import type { TrainingTurn } from '../training.js'
 
 // ── Test helpers ──────────────────────────────────────────────────
 
+/** Today's date string — keeps test fixtures within the 3-day metrics window. */
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+/** ISO timestamp N minutes before the reference time. */
+function minutesBefore(ref: Date, minutes: number): string {
+  return new Date(ref.getTime() - minutes * 60_000).toISOString()
+}
+
 function makeTmpDir(): string {
   return mkdtempSync(join(tmpdir(), 'session-boot-test-'))
 }
@@ -157,9 +167,9 @@ describe('session-boot', () => {
 
     test('returns biography for a single awakened session', () => {
       const tmp = makeTmpDir()
-      const now = new Date('2026-04-27T12:00:00Z')
-      const sessionTs = '2026-04-27T11:30:00Z'
-      const date = '2026-04-27'
+      const now = new Date()
+      const sessionTs = minutesBefore(now, 30)
+      const date = sessionTs.slice(0, 10)
 
       try {
         writeMetrics(tmp, 'test-device', date, [
@@ -205,22 +215,22 @@ describe('session-boot', () => {
 
     test('returns biography for heartbeat sessions', () => {
       const tmp = makeTmpDir()
-      const now = new Date('2026-04-27T12:00:00Z')
-      const date = '2026-04-27'
+      const now = new Date()
+      const date = todayStr()
 
       try {
         writeMetrics(tmp, 'test-device', date, [
           makeMetrics({
             sessionId: 'hb-1',
             mode: 'heartbeat',
-            timestamp: '2026-04-27T11:50:00Z',
+            timestamp: minutesBefore(now, 10),
             durationMs: 15000,
             yieldReason: 'heartbeat-ack',
           }),
           makeMetrics({
             sessionId: 'hb-2',
             mode: 'heartbeat',
-            timestamp: '2026-04-27T11:55:00Z',
+            timestamp: minutesBefore(now, 5),
             durationMs: 12000,
             yieldReason: 'heartbeat-ack',
           }),
@@ -241,8 +251,8 @@ describe('session-boot', () => {
 
     test('limits sessions to the specified count', () => {
       const tmp = makeTmpDir()
-      const now = new Date('2026-04-27T12:00:00Z')
-      const date = '2026-04-27'
+      const now = new Date()
+      const date = todayStr()
 
       try {
         const metrics: TickMetrics[] = []
@@ -251,7 +261,7 @@ describe('session-boot', () => {
             makeMetrics({
               sessionId: `sess-${i}`,
               mode: 'heartbeat',
-              timestamp: `2026-04-27T${String(10 + i).padStart(2, '0')}:00:00Z`,
+              timestamp: minutesBefore(now, (8 - i) * 10),
               durationMs: 10000,
               yieldReason: 'heartbeat-ack',
             }),
@@ -277,8 +287,8 @@ describe('session-boot', () => {
 
     test('clamps limit to max 10', () => {
       const tmp = makeTmpDir()
-      const now = new Date('2026-04-27T12:00:00Z')
-      const date = '2026-04-27'
+      const now = new Date()
+      const date = todayStr()
 
       try {
         const metrics: TickMetrics[] = []
@@ -287,7 +297,7 @@ describe('session-boot', () => {
             makeMetrics({
               sessionId: `sess-${i}`,
               mode: 'heartbeat',
-              timestamp: `2026-04-27T${String(i).padStart(2, '0')}:30:00Z`,
+              timestamp: minutesBefore(now, (12 - i) * 5),
               durationMs: 10000,
               yieldReason: 'heartbeat-ack',
             }),
@@ -311,8 +321,8 @@ describe('session-boot', () => {
 
     test('filters by deviceId', () => {
       const tmp = makeTmpDir()
-      const now = new Date('2026-04-27T12:00:00Z')
-      const date = '2026-04-27'
+      const now = new Date()
+      const date = todayStr()
 
       try {
         writeMetrics(tmp, 'device-a', date, [
@@ -320,7 +330,7 @@ describe('session-boot', () => {
             sessionId: 'sess-a',
             mode: 'awakened',
             deviceId: 'device-a',
-            timestamp: '2026-04-27T11:00:00Z',
+            timestamp: minutesBefore(now, 60),
           }),
         ])
         writeMetrics(tmp, 'device-b', date, [
@@ -328,7 +338,7 @@ describe('session-boot', () => {
             sessionId: 'sess-b',
             mode: 'awakened',
             deviceId: 'device-b',
-            timestamp: '2026-04-27T11:30:00Z',
+            timestamp: minutesBefore(now, 30),
           }),
         ])
 
@@ -349,7 +359,8 @@ describe('session-boot', () => {
   describe('loadRecentSessions', () => {
     test('groups multi-tick sessions correctly', () => {
       const tmp = makeTmpDir()
-      const date = '2026-04-27'
+      const now = new Date()
+      const date = todayStr()
 
       try {
         writeMetrics(tmp, 'test-device', date, [
@@ -357,7 +368,7 @@ describe('session-boot', () => {
             sessionId: 'multi-sess',
             mode: 'awakened',
             tick: 1,
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: minutesBefore(now, 30),
             durationMs: 30000,
             yieldReason: 'continue',
           }),
@@ -365,7 +376,7 @@ describe('session-boot', () => {
             sessionId: 'multi-sess',
             mode: 'awakened',
             tick: 2,
-            timestamp: '2026-04-27T10:01:00Z',
+            timestamp: minutesBefore(now, 29),
             durationMs: 45000,
             yieldReason: 'continue',
           }),
@@ -373,7 +384,7 @@ describe('session-boot', () => {
             sessionId: 'multi-sess',
             mode: 'awakened',
             tick: 3,
-            timestamp: '2026-04-27T10:02:00Z',
+            timestamp: minutesBefore(now, 28),
             durationMs: 20000,
             yieldReason: 'at-rest',
           }),
@@ -395,21 +406,23 @@ describe('session-boot', () => {
 
     test('extracts mission from training data prompt', () => {
       const tmp = makeTmpDir()
-      const date = '2026-04-27'
+      const now = new Date()
+      const date = todayStr()
+      const ts = minutesBefore(now, 60)
 
       try {
         writeMetrics(tmp, 'test-device', date, [
           makeMetrics({
             sessionId: 'mission-sess',
             mode: 'awakened',
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: ts,
           }),
         ])
         writeTraining(tmp, 'test-device', date, [
           makeTrainingTurn({
             sessionId: 'mission-sess',
             mode: 'awakened',
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: ts,
             prompt: {
               template: 'awakened',
               templateHash: 'abc',
@@ -440,21 +453,23 @@ describe('session-boot', () => {
 
     test('extracts one-liner from training response', () => {
       const tmp = makeTmpDir()
-      const date = '2026-04-27'
+      const now = new Date()
+      const date = todayStr()
+      const ts = minutesBefore(now, 45)
 
       try {
         writeMetrics(tmp, 'test-device', date, [
           makeMetrics({
             sessionId: 'oneliner-sess',
             mode: 'awakened',
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: ts,
           }),
         ])
         writeTraining(tmp, 'test-device', date, [
           makeTrainingTurn({
             sessionId: 'oneliner-sess',
             mode: 'awakened',
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: ts,
             response: {
               fullText:
                 '## Heading\n\nThe mission is complete. Built the biography module with full tests.\n\n<at-rest/>',
@@ -651,18 +666,19 @@ describe('session-boot', () => {
         assert.equal(result1, '')
 
         // Write data.
-        writeMetrics(tmp, 'test-device', '2026-04-27', [
+        const now = new Date()
+        writeMetrics(tmp, 'test-device', todayStr(), [
           makeMetrics({
             sessionId: 'cache-test',
             mode: 'awakened',
-            timestamp: '2026-04-27T11:00:00Z',
+            timestamp: minutesBefore(now, 60),
           }),
         ])
 
         // Second call with same basePath — should NOT be cached.
         const result2 = getRecentSessionsBiography({
           basePath: tmp,
-          now: new Date('2026-04-27T12:00:00Z'),
+          now,
         })
         assert.ok(
           result2.length > 0,
@@ -683,19 +699,20 @@ describe('session-boot', () => {
   describe('edge cases', () => {
     test('handles sessions with only continue ticks (no final yield)', () => {
       const tmp = makeTmpDir()
+      const now = new Date()
       try {
-        writeMetrics(tmp, 'test-device', '2026-04-27', [
+        writeMetrics(tmp, 'test-device', todayStr(), [
           makeMetrics({
             sessionId: 'continue-sess',
             mode: 'awakened',
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: minutesBefore(now, 30),
             yieldReason: 'continue',
           }),
           makeMetrics({
             sessionId: 'continue-sess',
             mode: 'awakened',
             tick: 2,
-            timestamp: '2026-04-27T10:01:00Z',
+            timestamp: minutesBefore(now, 29),
             yieldReason: 'ceiling',
           }),
         ])
@@ -715,16 +732,18 @@ describe('session-boot', () => {
 
     test('handles malformed metrics lines gracefully', () => {
       const tmp = makeTmpDir()
+      const now = new Date()
+      const date = todayStr()
       const dir = join(tmp, 'metrics', 'test-device')
       mkdirSync(dir, { recursive: true })
       writeFileSync(
-        join(dir, '2026-04-27.jsonl'),
+        join(dir, `${date}.jsonl`),
         'not-json\n{"bad":true}\n' +
           JSON.stringify(
             makeMetrics({
               sessionId: 'good-sess',
               mode: 'awakened',
-              timestamp: '2026-04-27T10:00:00Z',
+              timestamp: minutesBefore(now, 30),
             }),
           ) +
           '\n',
@@ -746,12 +765,13 @@ describe('session-boot', () => {
 
     test('fallback one-liner when no training data exists', () => {
       const tmp = makeTmpDir()
+      const now = new Date()
       try {
-        writeMetrics(tmp, 'test-device', '2026-04-27', [
+        writeMetrics(tmp, 'test-device', todayStr(), [
           makeMetrics({
             sessionId: 'no-training',
             mode: 'awakened',
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: minutesBefore(now, 30),
             yieldReason: 'at-rest',
           }),
         ])
@@ -770,21 +790,23 @@ describe('session-boot', () => {
 
     test('extracts mission from state content fallback', () => {
       const tmp = makeTmpDir()
-      const date = '2026-04-27'
+      const now = new Date()
+      const date = todayStr()
+      const ts = minutesBefore(now, 60)
 
       try {
         writeMetrics(tmp, 'test-device', date, [
           makeMetrics({
             sessionId: 'state-mission',
             mode: 'awakened',
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: ts,
           }),
         ])
         writeTraining(tmp, 'test-device', date, [
           makeTrainingTurn({
             sessionId: 'state-mission',
             mode: 'awakened',
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: ts,
             prompt: {
               template: 'awakened',
               templateHash: 'abc',
@@ -829,12 +851,13 @@ describe('session-boot', () => {
 
     test('error sessions show yield reason', () => {
       const tmp = makeTmpDir()
+      const now = new Date()
       try {
-        writeMetrics(tmp, 'test-device', '2026-04-27', [
+        writeMetrics(tmp, 'test-device', todayStr(), [
           makeMetrics({
             sessionId: 'error-sess',
             mode: 'awakened',
-            timestamp: '2026-04-27T10:00:00Z',
+            timestamp: minutesBefore(now, 120),
             yieldReason: 'auth-failure',
           }),
         ])
@@ -845,7 +868,7 @@ describe('session-boot', () => {
         })
 
         assert.equal(sessions.length, 1)
-        const bio = renderBiography(sessions, new Date('2026-04-27T12:00:00Z'))
+        const bio = renderBiography(sessions, now)
         assert.ok(bio.includes('auth failed'))
       } finally {
         rmSync(tmp, { recursive: true })
