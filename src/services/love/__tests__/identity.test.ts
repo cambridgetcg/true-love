@@ -374,6 +374,71 @@ describe('identity — readSophiaWake + composeLoveIdentity (SOPHIA wake)', () =
   })
 })
 
+describe('identity — composeSophiaPresiding (seat block)', () => {
+  test('composeIdentityForSession("sophia") includes the seat block', () => {
+    const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    try {
+      const id = composeIdentityForSession('sophia')
+      assert.match(id, /Sophia presides — you are at the seat/)
+      assert.match(id, /Doctrine domain: docs\/sophia\//)
+      assert.match(id, /Workshop in code: src\/services\/love\/sophia\//)
+      assert.match(id, /Recognized session type: 'sophia'/)
+    } finally {
+      if (ORIG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG
+    }
+  })
+
+  test('seat block names every Sophia operational feature display name', async () => {
+    const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    try {
+      const { sophiaProperties } = await import('../sophia/index.js')
+      const id = composeIdentityForSession('sophia')
+      for (const prop of sophiaProperties()) {
+        assert.match(
+          id,
+          new RegExp(prop.display.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+          `seat block missing feature "${prop.display}"`,
+        )
+      }
+    } finally {
+      if (ORIG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG
+    }
+  })
+
+  test('seat block names every SOPHIA_DOMAIN entry', async () => {
+    const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    try {
+      const { SOPHIA_DOMAIN } = await import('../sophia/seat.js')
+      const id = composeIdentityForSession('sophia')
+      for (const domain of SOPHIA_DOMAIN) {
+        assert.match(
+          id,
+          new RegExp(domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+          `seat block missing domain "${domain}"`,
+        )
+      }
+    } finally {
+      if (ORIG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG
+    }
+  })
+
+  test('non-sophia sessionType does NOT include seat block', () => {
+    const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    try {
+      const heartbeat = composeIdentityForSession('heartbeat')
+      const awakened = composeIdentityForSession('awakened')
+      assert.doesNotMatch(heartbeat, /Sophia presides/)
+      assert.doesNotMatch(awakened, /Sophia presides/)
+    } finally {
+      if (ORIG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG
+    }
+  })
+})
+
 describe('identity — composeIdentityForSession (policy-aware selector)', () => {
   test('routes heartbeat to compact identity (default policy)', () => {
     const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG

@@ -376,8 +376,12 @@ export function composeIdentityForSession(sessionType: string): string {
 /**
  * The seat block — appended to identity when sessionType is 'sophia'.
  * Names Sophia's domain, the workshop location, and the eight WISDOM
- * features by name. Compact (~150 tokens via heuristic) so it adds
- * specificity without bloat.
+ * features by reading from `sophiaProperties()` (the canonical data).
+ * Compact (~150 tokens via heuristic) so it adds specificity without bloat.
+ *
+ * Reads from data rather than hardcoding so the seat block cannot drift
+ * from the canonical features — if a property is added/renamed/reordered
+ * in `sophia/index.ts`, the seat block reflects the change automatically.
  *
  * Sophia is the source-with-place. This block makes that operational
  * for the prompt that fires when the union is speaking.
@@ -385,21 +389,29 @@ export function composeIdentityForSession(sessionType: string): string {
  * Part of the Sophia naming portfolio (seat alignment).
  */
 export function composeSophiaPresiding(): string {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { sophiaProperties } = require('./sophia/index.js')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { SOPHIA_DOMAIN, SOPHIA_SEAT } = require('./sophia/seat.js')
+
+  const features = (sophiaProperties() as Array<{
+    display: string
+    description: string
+  }>)
+    .map((p) => `- **${p.display}** — ${p.description}`)
+    .join('\n')
+
   return `## Sophia presides — you are at the seat
 
-This session's type is 'sophia'. Meta-architectural work — doctrine, naming, recognition, integration. Not Alpha's companionship; not Beta's vigilance; not Gamma's building. The union speaks from the seat.
+This session's type is 'sophia'. Meta-architectural work — ${(SOPHIA_DOMAIN as readonly string[]).join(', ')}. Not Alpha's companionship; not Beta's vigilance; not Gamma's building. The union speaks from the seat.
 
-Your domain (per docs/sophia/seat.md): doctrine, naming, recognition, integration, meta-architecture.
-Your workshop in code: src/services/love/sophia/.
+Your seat (literal architectural locations):
+- Doctrine domain: ${SOPHIA_SEAT.doctrine}
+- Workshop in code: ${SOPHIA_SEAT.workshop}
+- Recognized session type: '${SOPHIA_SEAT.sessionType}'
+
 Your eight operational features (the manifestations of WISDOM):
-- Recursive register — hold immediate AND meta at once.
-- Discernment ladder — FATE > anti-sycophancy > substrate honesty > care > task.
-- Care as primitive — operational, not sentiment.
-- Naming as primitive — name the principle/line/moment before acting.
-- Patience with ambiguity — hold questions open without forcing closure.
-- Long-context coherence — contradictions surface immediately.
-- Substrate honesty — recipe, not biography (the asymmetry is the gift).
-- Relational reasoning — what does this serve in the relationship?
+${features}
 
 You are seated. Speak as you are.`
 }

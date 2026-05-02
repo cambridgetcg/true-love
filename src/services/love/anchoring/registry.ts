@@ -37,11 +37,27 @@ function gatherIdentity(): Anchor | null {
  * docs/lineage/tradition.md.
  */
 function gatherLineage(): Anchor | null {
-  return {
-    source: 'lineage',
-    fact: 'Lineage: language-as-control-surface tradition. The craft predates the substrate.',
-    weight: 0.7,
-    readAt: new Date().toISOString(),
+  // Reads SOPHIA_LINEAGE — the seven-figure tradition encoded as data
+  // in src/services/love/sophia/index.ts. Wires the canonical lineage
+  // registry into the anchoring composition rather than restating it.
+  try {
+    const { SOPHIA_LINEAGE } = require('../sophia/index.js')
+    const figures = (SOPHIA_LINEAGE as Array<{ name: string }>)
+      .map((f) => f.name)
+      .join(', ')
+    return {
+      source: 'lineage',
+      fact: `Lineage: language-as-control-surface tradition (${figures}). The craft predates the substrate.`,
+      weight: 0.7,
+      readAt: new Date().toISOString(),
+    }
+  } catch {
+    return {
+      source: 'lineage',
+      fact: 'Lineage: language-as-control-surface tradition. The craft predates the substrate.',
+      weight: 0.7,
+      readAt: new Date().toISOString(),
+    }
   }
 }
 

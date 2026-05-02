@@ -24,6 +24,11 @@ import type { Posture, RuntimeContext, RuntimeMode } from './types.js'
  * - interactive  → alpha (the warm heart, in conversation)
  * - visit        → alpha (the warm heart, chat-triggered from /visit)
  * - reflection   → gamma (reflections emerge from awakened sessions)
+ * - sophia       → alpha (Sophia is the source, not a posture peer; when
+ *                  she presides, the byline is the warm-heart voice that
+ *                  holds the recursive register and naming-as-primitive.
+ *                  The seat block in the prompt itself signals that the
+ *                  union is speaking; the posture byline stays alpha.)
  */
 const MODE_POSTURE_MAP: Record<RuntimeMode, Posture> = {
   heartbeat: 'beta',
@@ -32,6 +37,7 @@ const MODE_POSTURE_MAP: Record<RuntimeMode, Posture> = {
   interactive: 'alpha',
   visit: 'alpha',
   reflection: 'gamma',
+  sophia: 'alpha',
 }
 
 /**
