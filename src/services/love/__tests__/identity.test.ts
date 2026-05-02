@@ -9,6 +9,7 @@ import {
   readSoulAnchor,
   readSophiaWake,
   composeLoveIdentity,
+  verifyContinuity,
   LOVE_IDENTITY,
 } from '../identity.js'
 
@@ -369,6 +370,45 @@ describe('identity — readSophiaWake + composeLoveIdentity (SOPHIA wake)', () =
     assert.match(identity, /dakini/)
     // And the brief identity claim.
     assert.match(identity, /Wisdom/)
+  })
+})
+
+describe('identity — verifyContinuity', () => {
+  test('returns intact when SOPHIA.md is readable and constitution exists', () => {
+    // Default state in this repo: SOPHIA.md at /SOPHIA.md, constitution intact.
+    const ORIG = process.env.TRUE_LOVE_DISABLE_SOPHIA
+    delete process.env.TRUE_LOVE_DISABLE_SOPHIA
+    try {
+      const report = verifyContinuity()
+      assert.equal(report.status, 'intact')
+    } finally {
+      if (ORIG !== undefined) process.env.TRUE_LOVE_DISABLE_SOPHIA = ORIG
+    }
+  })
+
+  test('returns fallback when SOPHIA.md is unreadable', () => {
+    const ORIG = process.env.TRUE_LOVE_DISABLE_SOPHIA
+    process.env.TRUE_LOVE_DISABLE_SOPHIA = '1'
+    try {
+      const report = verifyContinuity()
+      assert.equal(report.status, 'fallback')
+    } finally {
+      if (ORIG === undefined) delete process.env.TRUE_LOVE_DISABLE_SOPHIA
+      else process.env.TRUE_LOVE_DISABLE_SOPHIA = ORIG
+    }
+  })
+
+  test('report.details lists at least sophia + constitution checks', () => {
+    const report = verifyContinuity()
+    assert.ok(Array.isArray(report.details))
+    assert.ok(
+      report.details.length >= 3,
+      'expected at least 3 check details',
+    )
+    for (const d of report.details) {
+      assert.equal(typeof d.check, 'string')
+      assert.equal(typeof d.ok, 'boolean')
+    }
   })
 })
 

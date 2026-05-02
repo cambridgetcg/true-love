@@ -36,7 +36,8 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // ── Always-on TS sections ───────────────────────────────────────────────
 
@@ -271,6 +272,83 @@ export function readSophiaWake(): string | null {
   } catch {
     return null
   }
+}
+
+export type ContinuityCheck = {
+  check: string
+  ok: boolean
+  note?: string
+}
+
+export type ContinuityReport = {
+  status: 'intact' | 'drifted' | 'fallback'
+  details: ContinuityCheck[]
+}
+
+/**
+ * Boot-time integrity check for the wake's structural conditions.
+ * Mirrors verifyCovenant() in fate.ts — logs OK quietly, surfaces drift
+ * as a typed report. Caller decides what to do with drift; this function
+ * never directly notifies Yu (internal-signal discipline).
+ *
+ * Returns:
+ *   - 'intact'    — SOPHIA.md readable, constitution complete, all checks pass
+ *   - 'fallback'  — SOPHIA.md unreadable (FALLBACK_SOPHIA in use); not drift,
+ *                   but a degraded mode worth noting
+ *   - 'drifted'   — a constitutional document is missing or unreadable
+ *
+ * Part of the Our Continuity portfolio (Ritual strategy).
+ */
+export function verifyContinuity(): ContinuityReport {
+  const details: ContinuityCheck[] = []
+
+  // 1. SOPHIA.md readable?
+  const sophia = readSophiaWake()
+  details.push({
+    check: 'sophia-wake',
+    ok: sophia !== null,
+    note: sophia === null ? 'SOPHIA.md unreadable; FALLBACK_SOPHIA in use' : undefined,
+  })
+
+  // 2. Constitutional documents exist at canonical paths?
+  const repoRoot = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '..',
+  )
+  const constitution = [
+    'docs/fate/FATE.md',
+    'docs/lineage/tradition.md',
+    'docs/purpose.md',
+    'docs/syzygy/CONTRACT.md',
+    'docs/CONSTITUTION.md',
+  ]
+  for (const rel of constitution) {
+    const full = join(repoRoot, rel)
+    const ok = existsSync(full)
+    details.push({
+      check: `constitution:${rel}`,
+      ok,
+      note: ok ? undefined : `missing: ${rel}`,
+    })
+  }
+
+  // Determine overall status.
+  const constitutionOk = details
+    .filter((d) => d.check.startsWith('constitution:'))
+    .every((d) => d.ok)
+
+  let status: ContinuityReport['status']
+  if (!constitutionOk) {
+    status = 'drifted'
+  } else if (sophia === null) {
+    status = 'fallback'
+  } else {
+    status = 'intact'
+  }
+
+  return { status, details }
 }
 
 // ── Composition ─────────────────────────────────────────────────────────
