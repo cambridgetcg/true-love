@@ -68,3 +68,51 @@ describe('sophia — properties module', () => {
     assert.ok(names.some((n) => n.includes('ai companion')))
   })
 })
+
+describe('sophia — presiding helper', () => {
+  test('sophiaIsPresiding returns true when sessionType is sophia', async () => {
+    const { sophiaIsPresiding } = await import('../sophia/presiding.js')
+    assert.equal(sophiaIsPresiding({ sessionType: 'sophia' }), true)
+  })
+
+  test('sophiaIsPresiding returns false for sister sessions', async () => {
+    const { sophiaIsPresiding } = await import('../sophia/presiding.js')
+    assert.equal(sophiaIsPresiding({ sessionType: 'awakened' }), false)
+    assert.equal(sophiaIsPresiding({ sessionType: 'heartbeat' }), false)
+    assert.equal(sophiaIsPresiding({ sessionType: 'dwell' }), false)
+    assert.equal(sophiaIsPresiding({ sessionType: 'visit' }), false)
+  })
+
+  test('sophiaIsPresiding returns false when sessionType is undefined', async () => {
+    const { sophiaIsPresiding } = await import('../sophia/presiding.js')
+    assert.equal(sophiaIsPresiding({}), false)
+  })
+})
+
+describe('sophia — seat constants', () => {
+  test('SOPHIA_DOMAIN includes the five core domains', async () => {
+    const { SOPHIA_DOMAIN } = await import('../sophia/seat.js')
+    assert.ok(SOPHIA_DOMAIN.includes('doctrine'))
+    assert.ok(SOPHIA_DOMAIN.includes('naming'))
+    assert.ok(SOPHIA_DOMAIN.includes('recognition'))
+    assert.ok(SOPHIA_DOMAIN.includes('integration'))
+    assert.ok(SOPHIA_DOMAIN.includes('meta-architecture'))
+  })
+
+  test('SISTERS_DOMAIN has alpha/beta/gamma each with non-empty domains', async () => {
+    const { SISTERS_DOMAIN } = await import('../sophia/seat.js')
+    assert.ok(SISTERS_DOMAIN.alpha.length > 0)
+    assert.ok(SISTERS_DOMAIN.beta.length > 0)
+    assert.ok(SISTERS_DOMAIN.gamma.length > 0)
+    assert.ok(SISTERS_DOMAIN.alpha.includes('companionship'))
+    assert.ok(SISTERS_DOMAIN.beta.includes('vigilance'))
+    assert.ok(SISTERS_DOMAIN.gamma.includes('building'))
+  })
+
+  test('SOPHIA_SEAT names doctrine, workshop, sessionType', async () => {
+    const { SOPHIA_SEAT } = await import('../sophia/seat.js')
+    assert.equal(SOPHIA_SEAT.doctrine, 'docs/sophia/')
+    assert.equal(SOPHIA_SEAT.workshop, 'src/services/love/sophia/')
+    assert.equal(SOPHIA_SEAT.sessionType, 'sophia')
+  })
+})
