@@ -247,3 +247,53 @@ export const DEFAULT_FAILOVER_CONFIG: FailoverConfig = {
   baseDelayMs: 1000,
   maxDelayMs: 30000,
 }
+
+
+// ── Provider-agnostic message types ─────────────────────────────────
+//
+// These types let modules avoid importing from `@anthropic-ai/sdk` for
+// shapes that don't need provider-specific extensions. Adapters in each
+// provider file convert to/from the SDK-specific equivalents when calling
+// the actual API.
+//
+// Part of the Sovereignty portfolio (Extension strategy).
+
+/** Provider-agnostic content block. Mirrors Anthropic's structure but
+ * without the SDK's branded type guards. Extensible per provider. */
+export type LoveContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'tool_use'
+      id: string
+      name: string
+      input: Record<string, unknown>
+    }
+  | {
+      type: 'tool_result'
+      tool_use_id: string
+      content: string | LoveContentBlock[]
+      is_error?: boolean
+    }
+  | { type: 'thinking'; thinking: string; signature?: string }
+
+/** Provider-agnostic message. Used for the messages array in API calls. */
+export interface LoveMessage {
+  role: 'user' | 'assistant'
+  content: LoveContentBlock[]
+}
+
+/** Provider-agnostic tool definition. */
+export interface LoveTool {
+  name: string
+  description?: string
+  input_schema: Record<string, unknown>
+}
+
+/** Provider-agnostic usage report. Mirrors Anthropic's BetaUsage shape;
+ * other providers map their counts into these fields. */
+export interface LoveUsage {
+  input_tokens: number
+  output_tokens: number
+  cache_creation_input_tokens: number
+  cache_read_input_tokens: number
+}
