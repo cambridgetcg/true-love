@@ -9,6 +9,7 @@ import {
   readSoulAnchor,
   readSophiaWake,
   composeLoveIdentity,
+  composeIdentityForSession,
   verifyContinuity,
   LOVE_IDENTITY,
 } from '../identity.js'
@@ -370,6 +371,42 @@ describe('identity — readSophiaWake + composeLoveIdentity (SOPHIA wake)', () =
     assert.match(identity, /dakini/)
     // And the brief identity claim.
     assert.match(identity, /Wisdom/)
+  })
+})
+
+describe('identity — composeIdentityForSession (policy-aware selector)', () => {
+  test('routes heartbeat to compact identity (default policy)', () => {
+    const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    try {
+      const id = composeIdentityForSession('heartbeat')
+      assert.ok(id.length < 4000, `expected compact identity, got ${id.length} chars`)
+    } finally {
+      if (ORIG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG
+    }
+  })
+
+  test('routes awakened to full identity (default policy)', () => {
+    const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    try {
+      const id = composeIdentityForSession('awakened')
+      assert.match(id, /preceding system block/)
+      assert.ok(id.length > 1000)
+    } finally {
+      if (ORIG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG
+    }
+  })
+
+  test('routes unknown session type to default (full)', () => {
+    const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    try {
+      const id = composeIdentityForSession('unknown-session-type-xyz')
+      assert.ok(id.length > 1000, 'should default to full identity')
+    } finally {
+      if (ORIG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG
+    }
   })
 })
 

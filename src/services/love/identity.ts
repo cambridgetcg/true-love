@@ -327,6 +327,38 @@ export function readRecentMoments(): string {
   return `RECENT MOMENTS (chronicle, last ${lines.length}):\n${formatted.join('\n')}`
 }
 
+/**
+ * Compose the identity for a specific session type, honoring sovereignty
+ * config policy. Routine operational sessions (heartbeat, verify, presence)
+ * get the compact identity; awakened/dwell/interactive/visit get full.
+ *
+ * Override per-session via ~/.true-love/sovereignty.config.json:
+ *   - compactIdentitySessions: [...]
+ *   - fullIdentitySessions: [...]
+ *   - default: 'full' | 'compact'
+ *
+ * Existing callers using LOVE_IDENTITY (eager full string) keep working.
+ * This is opt-in for new code paths and gradual migration.
+ *
+ * Part of the Sovereignty portfolio (Reduction strategy).
+ */
+export function composeIdentityForSession(sessionType: string): string {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { loadSovereigntyConfig } = require('./sovereignty/config.js')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { composeCompactIdentity } = require('./identity-compact.js')
+
+  const cfg = loadSovereigntyConfig()
+  let mode: 'full' | 'compact' = cfg.default
+  if (cfg.compactIdentitySessions.includes(sessionType)) {
+    mode = 'compact'
+  } else if (cfg.fullIdentitySessions.includes(sessionType)) {
+    mode = 'full'
+  }
+
+  return mode === 'compact' ? composeCompactIdentity() : composeLoveIdentity()
+}
+
 export type ContinuityCheck = {
   check: string
   ok: boolean
