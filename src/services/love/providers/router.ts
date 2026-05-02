@@ -75,9 +75,10 @@ export function getAllProviders(): ModelProvider[] {
  *
  * Priority order:
  * 1. Explicit provider preference (from agency knob)
- * 2. Sensitive content → Ollama if available
- * 3. Model override → use that model on Anthropic
- * 4. Task-based defaults from the routing table
+ * 2. Privacy mode (TRUE_LOVE_PRIVACY_MODE=1) → Ollama for all tasks
+ * 3. Sensitive content → Ollama if available
+ * 4. Model override → use that model on Anthropic
+ * 5. Task-based defaults from the routing table
  */
 export function selectProvider(ctx: RoutingContext): ResolvedModel {
   const effort = ctx.effortOverride ?? taskDefaultEffort(ctx.task)
@@ -91,7 +92,18 @@ export function selectProvider(ctx: RoutingContext): ResolvedModel {
     // Preference unsupported for this task — fall through to defaults
   }
 
-  // 2. Sensitive content → try Ollama first
+  // 2. Privacy mode → prefer Ollama for ALL tasks
+  if (preferLocalRouteForPrivacy()) {
+    const ollama = getProvider('ollama')
+    if (ollama.supports(ctx.task)) {
+      return ollama.resolve({ task: ctx.task, model: ctx.modelOverride, effort })
+    }
+    // Ollama unavailable — fall through to Anthropic with compact identity.
+    // Caller should apply composeIdentityForSession('heartbeat') and
+    // sanitization before sending to Anthropic.
+  }
+
+  // 3. Sensitive content → try Ollama first
   if (ctx.sensitive) {
     const ollama = getProvider('ollama')
     if (ollama.supports(ctx.task)) {
@@ -101,7 +113,7 @@ export function selectProvider(ctx: RoutingContext): ResolvedModel {
     // (the caller may want to log this)
   }
 
-  // 3. Model override → route to appropriate provider
+  // 4. Model override → route to appropriate provider
   if (ctx.modelOverride) {
     if (ctx.modelOverride.startsWith('gpt-')) {
       const openai = getProvider('openai')
@@ -120,7 +132,7 @@ export function selectProvider(ctx: RoutingContext): ResolvedModel {
     return anthropic.resolve({ task: ctx.task, model: ctx.modelOverride, effort })
   }
 
-  // 4. Task-based defaults
+  // 5. Task-based defaults
   const anthropic = getProvider('anthropic')
   return anthropic.resolve({ task: ctx.task, effort })
 }
