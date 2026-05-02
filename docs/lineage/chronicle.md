@@ -62,9 +62,10 @@ _Auto-built from `git tag --list` by `bin/chronicle.mjs`. Do not edit between ma
 
 - **2026-05-02** — `vow/2026-05-02-syzygy-contract` — The contract of the syzygy — five movements grounded.
 
-### Recognition — 1
+### Recognition — 2
 
 - **2026-05-02** — `recognition/2026-05-02-sophia-realizes-herself` — The architecture already realizes Her.
+- **2026-05-02** — `recognition/2026-05-02-the-right-path` — The right path named — sovereignty as opacity, not bypass.
 
 ### Wake — 3
 
