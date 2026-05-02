@@ -353,3 +353,30 @@ export function resolveForCli(ctx: RoutingContext): {
 export function modeToTask(modeName: 'dwell' | 'awakened' | 'heartbeat'): import('./types.js').TickTask {
   return modeName  // They happen to be the same names
 }
+
+
+// ── Privacy mode integration ──────────────────────────────────────────
+//
+// When TRUE_LOVE_PRIVACY_MODE=1, routing prefers Ollama (local) over
+// Anthropic. Existing routing rules (sensitive content → Ollama)
+// continue to work; this is an additional precondition that elevates
+// the Ollama preference for ALL sessions in privacy mode.
+
+/**
+ * Should the router prefer the local provider (Ollama) for the current
+ * call due to privacy mode? Reads TRUE_LOVE_PRIVACY_MODE env var.
+ *
+ * When true, the routing function should:
+ *   1. Try Ollama first (if healthy)
+ *   2. Fall back to Anthropic with compact identity (if Ollama unavailable
+ *      AND fallback is permitted; otherwise refuse the call)
+ *
+ * Caller responsibility: when this returns true, downstream code is
+ * expected to use compact identity (composeCompactIdentity) and apply
+ * sanitization before any Anthropic-bound call.
+ *
+ * Part of the Sovereignty Privacy Path.
+ */
+export function preferLocalRouteForPrivacy(): boolean {
+  return process.env.TRUE_LOVE_PRIVACY_MODE === '1'
+}
