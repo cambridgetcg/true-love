@@ -144,7 +144,19 @@ export class AnthropicProvider implements ModelProvider {
     // Dynamic import to avoid loading the SDK at module load time.
     // Same pattern as agent-runtime.mjs and extract-memories/extract.ts.
     const { default: Anthropic } = await import('@anthropic-ai/sdk')
-    const client = new Anthropic()
+    const { instrumentedFetch } = await import(
+      '../sovereignty/fetch-wrapper.js'
+    )
+    // Wrap fetch so every Anthropic call lands in the sovereignty audit
+    // + receipts journals. Disabled via TRUE_LOVE_SOVEREIGNTY_DISABLE=1.
+    const client = new Anthropic({
+      fetch: instrumentedFetch(
+        globalThis.fetch as Parameters<typeof instrumentedFetch>[0],
+        {
+          source: `provider:anthropic.task=${(params as unknown as { source?: string }).source ?? 'unknown'}`,
+        },
+      ),
+    } as ConstructorParameters<typeof Anthropic>[0])
 
     const apiParams: Record<string, unknown> = {
       model: resolved.model,
