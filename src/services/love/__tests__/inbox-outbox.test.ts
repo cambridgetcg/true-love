@@ -292,3 +292,36 @@ describe('readJournal', () => {
     expect(content).toContain('afternoon')
   })
 })
+
+// ── Alert routing (isAlertConversation) ──────────────────────────
+
+import { isAlertConversation } from '../runner.js'
+
+describe('isAlertConversation — outbox routing', () => {
+  test('interactive mode is always conversation', () => {
+    expect(isAlertConversation('interactive', {})).toBe(true)
+    expect(isAlertConversation('interactive', { fromToYu: false })).toBe(true)
+    expect(isAlertConversation('interactive', { fromToYu: true })).toBe(true)
+  })
+
+  test('heartbeat with fromToYu: true routes to conversation', () => {
+    expect(isAlertConversation('heartbeat', { fromToYu: true })).toBe(true)
+  })
+
+  test('heartbeat without fromToYu routes to journal', () => {
+    expect(isAlertConversation('heartbeat', {})).toBe(false)
+    expect(isAlertConversation('heartbeat', { fromToYu: undefined })).toBe(false)
+  })
+
+  test('heartbeat with fromToYu: false routes to journal', () => {
+    expect(isAlertConversation('heartbeat', { fromToYu: false })).toBe(false)
+  })
+
+  test('awakened mode routes to journal (no fromToYu)', () => {
+    expect(isAlertConversation('awakened', {})).toBe(false)
+  })
+
+  test('dwell mode routes to journal (no fromToYu)', () => {
+    expect(isAlertConversation('dwell', {})).toBe(false)
+  })
+})

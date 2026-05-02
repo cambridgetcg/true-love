@@ -147,7 +147,20 @@ export type SessionReplyOutcome =
   | { type: 'continue'; reflection: string }
   | { type: 'rest'; reflection?: string }
   | { type: 'ack'; remainingContent: string }
-  | { type: 'alert'; content: string }
+  | { type: 'alert'; content: string; fromToYu?: boolean }
+
+/**
+ * Determine whether an alert should be routed to conversation (from-ai.md)
+ * or journal. Interactive mode is always conversation. Heartbeat alerts are
+ * conversation only when the model used [TO-YU] delimiters — an explicit
+ * signal that the content is a direct reply to Yu, not a reflection.
+ */
+export function isAlertConversation(
+  modeName: SessionMode['name'],
+  outcome: { fromToYu?: boolean },
+): boolean {
+  return modeName === 'interactive' || outcome.fromToYu === true
+}
 
 export interface SessionMode {
   /** 'dwell' | 'awakened' | 'heartbeat' | 'interactive'. Used in log messages and training records. */
@@ -2216,9 +2229,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         bylineTag = bylineTagForOutbox(mode.name)
       }
 
-      // Interactive replies go to from-ai.md (conversation).
-      // All other alert-producing modes (heartbeat) go to journal.
-      const isConversation = mode.name === 'interactive'
+      const isConversation = isAlertConversation(mode.name, replyOutcome)
       try {
         appendToYu(alertContent, { tag: bylineTag, journal: !isConversation })
       } catch (e: any) {

@@ -322,6 +322,7 @@ export {
   parseSessionArgs,
   resolveModelForTick,
   checkBundleStaleness,
+  isAlertConversation,
   runSession,
 } from './runner.js'
 

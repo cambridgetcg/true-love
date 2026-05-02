@@ -63,7 +63,7 @@ export interface HeartbeatTask {
 
 export type AckResult =
   | { type: 'ack'; remainingContent: string }
-  | { type: 'alert'; content: string }
+  | { type: 'alert'; content: string; fromToYu?: boolean }
   | { type: 'empty' }
 
 export interface HeartbeatTaskState {
@@ -285,7 +285,7 @@ export function parseHeartbeatReply(
   if (toYuContent !== null) {
     const extracted = toYuContent.trim()
     if (!extracted) return { type: 'ack', remainingContent: '' }
-    return { type: 'alert', content: extracted }
+    return { type: 'alert', content: extracted, fromToYu: true }
   }
 
   // ── Legacy path (no delimiters) ─────────────────────────────────

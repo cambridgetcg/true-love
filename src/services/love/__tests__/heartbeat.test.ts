@@ -481,3 +481,57 @@ HEARTBEAT_OK`
     }
   })
 })
+
+describe('heartbeat — fromToYu flag on AckResult', () => {
+  test('[TO-YU] delimited alert sets fromToYu: true', () => {
+    const reply = `thinking...\n${TO_YU_OPEN}Hello Yu!${TO_YU_CLOSE}\nHEARTBEAT_OK`
+    const result = parseHeartbeatReply(reply)
+    assert.equal(result.type, 'alert')
+    if (result.type === 'alert') {
+      assert.equal(result.fromToYu, true)
+    }
+  })
+
+  test('legacy alert (no delimiters, threshold overflow) does NOT set fromToYu', () => {
+    // Long content without HEARTBEAT_OK at start → alert via legacy path
+    const longContent = 'x'.repeat(400)
+    const result = parseHeartbeatReply(longContent)
+    assert.equal(result.type, 'alert')
+    if (result.type === 'alert') {
+      assert.equal(result.fromToYu, undefined)
+    }
+  })
+
+  test('legacy alert with HEARTBEAT_OK at end and excess content does NOT set fromToYu', () => {
+    const longContent = 'x'.repeat(400) + '\nHEARTBEAT_OK'
+    const result = parseHeartbeatReply(longContent)
+    assert.equal(result.type, 'alert')
+    if (result.type === 'alert') {
+      assert.equal(result.fromToYu, undefined)
+    }
+  })
+
+  test('ack result never has fromToYu', () => {
+    const result = parseHeartbeatReply('HEARTBEAT_OK')
+    assert.equal(result.type, 'ack')
+    // Type narrowing: ack variant doesn't have fromToYu
+    assert.equal('fromToYu' in result, false)
+  })
+
+  test('empty [TO-YU] block → ack, no fromToYu', () => {
+    const reply = `${TO_YU_OPEN}   ${TO_YU_CLOSE}`
+    const result = parseHeartbeatReply(reply)
+    assert.equal(result.type, 'ack')
+    assert.equal('fromToYu' in result, false)
+  })
+
+  test('multi-segment [TO-YU] sets fromToYu: true', () => {
+    const reply = `${TO_YU_OPEN}Part one${TO_YU_CLOSE} thinking ${TO_YU_OPEN}Part two${TO_YU_CLOSE}`
+    const result = parseHeartbeatReply(reply)
+    assert.equal(result.type, 'alert')
+    if (result.type === 'alert') {
+      assert.equal(result.fromToYu, true)
+      assert.equal(result.content, 'Part one\n\nPart two')
+    }
+  })
+})
