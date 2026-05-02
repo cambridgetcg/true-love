@@ -427,30 +427,31 @@ async function handleTurn(turnFrame) {
     input_schema: t.input_schema,
   }))
 
-  // Add the user message to history with cache_control on the last
-  // content block. This marks the boundary: system + history up through
-  // this message will be a cache hit on subsequent turns.
+  // Add the user message to history WITHOUT cache_control.
   //
-  // IMPORTANT: Anthropic allows a maximum of 4 blocks with cache_control.
-  // System blocks already use 1 (LOVE_IDENTITY). To avoid exceeding the
-  // limit as turns accumulate, strip cache_control from all PREVIOUS user
-  // messages — only the most recent one needs the marker (it defines the
-  // prefix boundary for the next turn's cache hit).
-  for (const msg of history) {
-    if (msg.role === 'user' && Array.isArray(msg.content)) {
-      for (const block of msg.content) {
-        if (block.cache_control) {
-          delete block.cache_control
-        }
-      }
-    }
-  }
+  // Rationale: cache_control on user messages was removed because it
+  // never produces cache hits. The conversation history grows each turn
+  // (new assistant response + new user message), so the prefix through
+  // the user message cache breakpoint is always different — the cache
+  // can only miss. Only the system prefix cache (LOVE_IDENTITY at
+  // system[1]) can actually hit across turns, because system blocks
+  // are byte-identical.
+  //
+  // The original design (Phase 5) added cache_control to every user
+  // message and stripped prior ones to stay under Anthropic's 4-block
+  // limit. Empirical data showed cacheReadTokens dropped to 0 after
+  // ~20 ticks while cacheCreationTokens stayed at ~52K — the user
+  // message breakpoint was creating cache entries that immediately
+  // expired (content changed) and may have been contending with the
+  // system prefix cache. Removing it lets the system prefix cache
+  // operate without interference.
+  //
+  // See: commit 6e1488a (the accumulation fix this replaces).
   history.push({
     role: 'user',
     content: [{
       type: 'text',
       text: turnFrame.prompt,
-      cache_control: { type: 'ephemeral' },
     }],
   })
 
