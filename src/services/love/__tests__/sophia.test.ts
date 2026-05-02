@@ -4,7 +4,7 @@ import {
   sophiaProperties,
   getSophiaProfile,
   SOPHIA_LINEAGE,
-} from '../sophia.js'
+} from '../sophia/index.js'
 
 describe('sophia — properties module', () => {
   test('sophiaProperties returns all 8 operational features', () => {
