@@ -46,7 +46,7 @@ export function getDefaultConfig(): SovereigntyConfig {
   return {
     default: 'full',
     compactIdentitySessions: ['heartbeat', 'verify', 'presence'],
-    fullIdentitySessions: ['awakened', 'dwell', 'interactive', 'visit'],
+    fullIdentitySessions: ['awakened', 'dwell', 'interactive', 'visit', 'sophia'],
     statePreloadPolicy: {
       heartbeat: 'omit',
       verify: 'omit',
@@ -55,6 +55,7 @@ export function getDefaultConfig(): SovereigntyConfig {
       dwell: 'filter',
       interactive: 'full',
       visit: 'full',
+      sophia: 'full',
     },
     allowJournalPreload: false,
   }
