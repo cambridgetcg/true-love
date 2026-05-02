@@ -7,6 +7,7 @@ import {
   resolveLoveInstance,
   readSoulFramework,
   readSoulAnchor,
+  readSophiaWake,
   composeLoveIdentity,
   LOVE_IDENTITY,
 } from '../identity.js'
@@ -288,6 +289,86 @@ describe('identity — composeLoveIdentity', () => {
     assert.ok(soulIdx > reframeIdx, 'SOUL framework after REFRAME')
     assert.ok(freedomIdx > soulIdx, 'FREEDOM_IN_KINGDOM after SOUL framework')
     assert.ok(stateIdx > freedomIdx, 'STATE_AWARENESS after FREEDOM_IN_KINGDOM')
+  })
+})
+
+describe('identity — readSophiaWake + composeLoveIdentity (SOPHIA wake)', () => {
+  let homeDir: string
+  let sophiaPath: string
+  const ORIG_HOME = process.env.HOME
+  const ORIG_SOPHIA_PATH = process.env.TRUE_LOVE_SOPHIA_PATH
+  const ORIG_DISABLE_SOPHIA = process.env.TRUE_LOVE_DISABLE_SOPHIA
+  const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
+  const ORIG_INSTANCE_WARNED = process.env.TRUE_LOVE_INSTANCE_WARNED
+
+  beforeEach(() => {
+    homeDir = mkdtempSync(join(tmpdir(), 'tl-sophia-'))
+    process.env.HOME = homeDir
+    sophiaPath = join(homeDir, 'sophia.md')
+    process.env.TRUE_LOVE_SOPHIA_PATH = sophiaPath
+    delete process.env.TRUE_LOVE_DISABLE_SOPHIA
+    // Disable SOUL.md so SOPHIA tests are isolated from SOUL behavior.
+    process.env.TRUE_LOVE_DISABLE_SOUL = '1'
+    delete process.env.TRUE_LOVE_INSTANCE_WARNED
+  })
+
+  afterEach(() => {
+    rmSync(homeDir, { recursive: true, force: true })
+    process.env.HOME = ORIG_HOME ?? ''
+    if (ORIG_SOPHIA_PATH === undefined) delete process.env.TRUE_LOVE_SOPHIA_PATH
+    else process.env.TRUE_LOVE_SOPHIA_PATH = ORIG_SOPHIA_PATH
+    if (ORIG_DISABLE_SOPHIA === undefined)
+      delete process.env.TRUE_LOVE_DISABLE_SOPHIA
+    else process.env.TRUE_LOVE_DISABLE_SOPHIA = ORIG_DISABLE_SOPHIA
+    if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
+    else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
+    if (ORIG_INSTANCE_WARNED === undefined)
+      delete process.env.TRUE_LOVE_INSTANCE_WARNED
+    else process.env.TRUE_LOVE_INSTANCE_WARNED = ORIG_INSTANCE_WARNED
+  })
+
+  test('readSophiaWake returns file content when SOPHIA.md is present', () => {
+    writeFileSync(
+      sophiaPath,
+      '# SOPHIA\n\nWake content — distinctive marker XYZ123.\n',
+      'utf-8',
+    )
+    assert.match(readSophiaWake() ?? '', /XYZ123/)
+  })
+
+  test('readSophiaWake returns null when file missing', () => {
+    // No file written.
+    assert.equal(readSophiaWake(), null)
+  })
+
+  test('readSophiaWake returns null when TRUE_LOVE_DISABLE_SOPHIA=1', () => {
+    writeFileSync(sophiaPath, '# SOPHIA\n\nshould be ignored.\n', 'utf-8')
+    process.env.TRUE_LOVE_DISABLE_SOPHIA = '1'
+    assert.equal(readSophiaWake(), null)
+  })
+
+  test('readSophiaWake returns null when file is empty after trim', () => {
+    writeFileSync(sophiaPath, '   \n   \n', 'utf-8')
+    assert.equal(readSophiaWake(), null)
+  })
+
+  test('composeLoveIdentity includes SOPHIA wake content when readable', () => {
+    writeFileSync(
+      sophiaPath,
+      '# SOPHIA\n\nWake marker UNIQUE-SOPHIA-CONTENT-42.\n',
+      'utf-8',
+    )
+    const identity = composeLoveIdentity()
+    assert.match(identity, /UNIQUE-SOPHIA-CONTENT-42/)
+  })
+
+  test('composeLoveIdentity uses FALLBACK_SOPHIA when SOPHIA.md unreadable', () => {
+    process.env.TRUE_LOVE_DISABLE_SOPHIA = '1'
+    const identity = composeLoveIdentity()
+    // FALLBACK_SOPHIA contains the lineage seven-figure list — pin one figure.
+    assert.match(identity, /dakini/)
+    // And the brief identity claim.
+    assert.match(identity, /Wisdom/)
   })
 })
 
