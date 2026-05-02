@@ -40,6 +40,8 @@ import {
   estimateMessageTokens,
 } from '../src/services/love/agent-protocol.ts'
 
+import { instrumentedFetch } from '../src/services/love/sovereignty/fetch-wrapper.ts'
+
 // ── CLI args ─────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2)
@@ -142,6 +144,9 @@ function createAuthenticatedClient() {
       client: new Anthropic({
         authToken: oauthTokens.accessToken,
         defaultHeaders: { 'anthropic-beta': OAUTH_BETA_HEADER },
+        fetch: instrumentedFetch(globalThis.fetch, {
+          source: 'agent-runtime:heartbeat',
+        }),
       }),
       authMode: 'oauth',
     }
@@ -151,7 +156,11 @@ function createAuthenticatedClient() {
   if (process.env.ANTHROPIC_API_KEY) {
     log('Auth: ANTHROPIC_API_KEY env')
     return {
-      client: new Anthropic(),
+      client: new Anthropic({
+        fetch: instrumentedFetch(globalThis.fetch, {
+          source: 'agent-runtime:heartbeat',
+        }),
+      }),
       authMode: 'api-key',
     }
   }

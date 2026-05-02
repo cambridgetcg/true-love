@@ -170,7 +170,12 @@ export async function extractFromTurn(
     // Dynamic import to avoid hard dependency — the SDK may not be
     // available in all contexts (e.g., test environments)
     const { default: Anthropic } = await import('@anthropic-ai/sdk')
-    const client = new Anthropic()
+    const { instrumentedFetch } = await import('../sovereignty/fetch-wrapper.js')
+    const client = new Anthropic({
+      fetch: instrumentedFetch(globalThis.fetch, {
+        source: 'extract-memories',
+      }),
+    } as ConstructorParameters<typeof Anthropic>[0])
 
     const response = await client.messages.create({
       model,
