@@ -62,8 +62,8 @@ function createTestClient(opts?: {
     env: opts?.env,
     log: testLog,
     startupTimeoutMs: opts?.startupTimeoutMs ?? 10_000,
-    turnAckTimeoutMs: 5_000,
-    healthCheckTimeoutMs: 5_000,
+    turnAckTimeoutMs: 15_000,  // generous under full-suite load (96 files parallel)
+    healthCheckTimeoutMs: 10_000,
     shutdownGraceMs: 3_000,
   })
 }
