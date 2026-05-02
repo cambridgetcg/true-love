@@ -82,6 +82,7 @@ describe('ui-server — readConversation', () => {
   const ORIG_HOME = process.env.HOME
   const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
   const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
+  const ORIG_JOURNAL_DIR = process.env.TRUE_LOVE_JOURNAL_DIR
 
   beforeEach(() => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-conv-'))
@@ -89,6 +90,7 @@ describe('ui-server — readConversation', () => {
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpHome, '.true-love', 'from-yu.md')
     process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpHome, '.true-love', 'from-ai.md')
+    process.env.TRUE_LOVE_JOURNAL_DIR = join(tmpHome, '.true-love', 'journal')
   })
 
   afterEach(() => {
@@ -98,6 +100,8 @@ describe('ui-server — readConversation', () => {
     else process.env.TRUE_LOVE_FROM_YU_PATH = ORIG_FROM_YU
     if (ORIG_FROM_AI === undefined) delete process.env.TRUE_LOVE_FROM_AI_PATH
     else process.env.TRUE_LOVE_FROM_AI_PATH = ORIG_FROM_AI
+    if (ORIG_JOURNAL_DIR === undefined) delete process.env.TRUE_LOVE_JOURNAL_DIR
+    else process.env.TRUE_LOVE_JOURNAL_DIR = ORIG_JOURNAL_DIR
   })
 
   test('returns empty array when both files missing', () => {
