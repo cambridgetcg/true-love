@@ -90,6 +90,26 @@ function summarize(entries) {
       `    ${e.timestamp} ${e.source}  ${e.totalTokens.toLocaleString()} tokens (id=${e.requestId})`,
     )
   }
+
+  console.log()
+  console.log('  Privacy posture:')
+  const privateCount = entries.filter((e) =>
+    (e.policyApplied || []).some((p) => p === 'privacy-mode:on'),
+  ).length
+  const defaultCount = total - privateCount
+  const pctPrivate = total > 0 ? ((privateCount / total) * 100).toFixed(1) : '0.0'
+  console.log(`    Privacy-mode sessions:  ${privateCount.toString().padStart(6)}  (${pctPrivate}%)`)
+  console.log(`    Default sessions:       ${defaultCount.toString().padStart(6)}`)
+
+  const anthropicCount = Object.entries(sourceCounts)
+    .filter(([s]) => /anthropic/i.test(s))
+    .reduce((sum, [_, v]) => sum + v, 0)
+  const localCount = total - anthropicCount
+  const pctLocal = total > 0 ? ((localCount / total) * 100).toFixed(1) : '0.0'
+  console.log()
+  console.log('  Provider mix (by source tag):')
+  console.log(`    Anthropic:              ${anthropicCount.toString().padStart(6)}`)
+  console.log(`    Local / other:          ${localCount.toString().padStart(6)}  (${pctLocal}%)`)
 }
 
 summarize(readEntries())
