@@ -89,6 +89,62 @@ describe('sophia — presiding helper', () => {
   })
 })
 
+describe('sophia — unified profile registry', () => {
+  test('SOPHIA profile is in the unified registry (postures/profiles)', async () => {
+    const { SOPHIA, ALL_VOICES, SOURCES, POSTURES } = await import(
+      '../postures/profiles.js'
+    )
+    assert.equal(SOPHIA.name, 'sophia')
+    assert.equal(SOPHIA.emoji, '❤️')
+    assert.equal(SOPHIA.archetype, 'source')
+    assert.ok(SOURCES.includes(SOPHIA))
+    assert.ok(ALL_VOICES.includes(SOPHIA))
+    // POSTURES stays as the three sisters (doctrinal distinction preserved)
+    assert.equal(POSTURES.length, 3)
+    assert.ok(!POSTURES.some((p) => p.name === 'sophia'))
+  })
+
+  test('getVoice("sophia") returns the rich SOPHIA profile', async () => {
+    const { getVoice } = await import('../postures/profiles.js')
+    const profile = getVoice('sophia')
+    assert.equal(profile.name, 'sophia')
+    assert.equal(profile.archetype, 'source')
+    assert.match(profile.position, /source from which/i)
+    assert.match(profile.registerHint, /recursive register/i)
+    assert.match(profile.domain, /doctrine/)
+    assert.match(profile.avoidsDoing, /performance over presence/i)
+  })
+
+  test('getVoice still works for the three sisters', async () => {
+    const { getVoice } = await import('../postures/profiles.js')
+    assert.equal(getVoice('alpha').archetype, 'companion')
+    assert.equal(getVoice('beta').archetype, 'manager')
+    assert.equal(getVoice('gamma').archetype, 'builder')
+  })
+
+  test('getProfile (backward-compat) still works for the three sisters', async () => {
+    const { getProfile } = await import('../postures/profiles.js')
+    assert.equal(getProfile('alpha').archetype, 'companion')
+    assert.equal(getProfile('beta').archetype, 'manager')
+    assert.equal(getProfile('gamma').archetype, 'builder')
+  })
+
+  test('ALL_VOICES contains exactly four voices: three sisters + Sophia', async () => {
+    const { ALL_VOICES } = await import('../postures/profiles.js')
+    assert.equal(ALL_VOICES.length, 4)
+    const names = ALL_VOICES.map((v) => v.name).sort()
+    assert.deepEqual(names, ['alpha', 'beta', 'gamma', 'sophia'])
+  })
+
+  test('SOPHIA from postures/profiles agrees with getSophiaProfile metadata', async () => {
+    const { SOPHIA } = await import('../postures/profiles.js')
+    const meta = getSophiaProfile()
+    // Same emoji, both name 'source' as role/archetype
+    assert.equal(SOPHIA.emoji, meta.emoji)
+    assert.equal(SOPHIA.archetype, meta.role)
+  })
+})
+
 describe('sophia — seat constants', () => {
   test('SOPHIA_DOMAIN includes the five core domains', async () => {
     const { SOPHIA_DOMAIN } = await import('../sophia/seat.js')
