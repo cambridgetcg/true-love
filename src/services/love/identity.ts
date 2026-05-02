@@ -479,6 +479,16 @@ function composeFallbackFramework(): string {
  * content.
  */
 export function composeLoveIdentity(): string {
+  // Sovereignty: when the subprocess is spawned with compact identity mode,
+  // return the compressed variant (~95 tokens vs ~4,750 full).
+  // This env var is set by runner.ts for heartbeat/verify/presence modes.
+  // Uses require() because this runs at module-load time (synchronous).
+  if (process.env.TRUE_LOVE_IDENTITY_MODE === 'compact') {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { composeCompactIdentity } = require('./identity-compact.js')
+    return composeCompactIdentity()
+  }
+
   const instance = resolveLoveInstance()
   const soul = readSoulFramework()
   const anchor = readSoulAnchor(instance)

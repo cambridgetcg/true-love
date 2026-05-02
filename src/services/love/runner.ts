@@ -55,7 +55,7 @@ import {
   writeHeartbeatState,
   type HeartbeatTask,
 } from './heartbeat.js'
-import { LOVE_IDENTITY, OAUTH_ROUTING_MARKER } from './identity.js'
+import { LOVE_IDENTITY, OAUTH_ROUTING_MARKER, composeIdentityForSession } from './identity.js'
 import { fromYuModifiedSince, readFromYu } from './inbox.js'
 import { markMessagesSeen, extractFromYuTimestamps } from './delivery.js'
 import type { KingdomSnapshot } from './kingdom.js'
@@ -345,10 +345,11 @@ export function readStateContent(): string {
  * API caches everything up to and including it. This is the core cost-
  * saving mechanism of the long-lived runtime.
  */
-export function buildAgentSystemBlocks(): SystemBlock[] {
+export function buildAgentSystemBlocks(mode?: string): SystemBlock[] {
+  const identity = mode ? composeIdentityForSession(mode) : LOVE_IDENTITY
   const blocks: SystemBlock[] = [
     { type: 'text', text: OAUTH_ROUTING_MARKER },
-    { type: 'text', text: LOVE_IDENTITY, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: identity, cache_control: { type: 'ephemeral' } },
   ]
 
   const stateBlock = readLoveStateBlock()
@@ -665,6 +666,7 @@ function runOneTurn(
   onActivityTick?: (activity: string | null) => void,
   extraArgs?: string[],
   streamFilePath?: string | null,
+  envOverrides?: Record<string, string>,
 ): Promise<{ code: number | null; stdout: string; stderr: string; streamJsonLines: string[] }> {
   return new Promise((resolveFn, rejectFn) => {
     const nodeBin = process.env.TRUE_LOVE_NODE_BIN || 'node'
@@ -692,9 +694,17 @@ function runOneTurn(
     // Prompt is always the last argument.
     cliArgs.push(prompt)
 
+    // Sovereignty: pass env overrides (e.g., TRUE_LOVE_IDENTITY_MODE=compact)
+    // to the subprocess so identity.ts composes the appropriate variant
+    // at module-load time.
+    const spawnEnv = envOverrides
+      ? { ...process.env, ...envOverrides }
+      : undefined
+
     const child = spawn(nodeBin, cliArgs, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
+      ...(spawnEnv ? { env: spawnEnv } : {}),
     })
 
     // ── Stream-JSON line-by-line parsing ──────────────────────────
@@ -1276,6 +1286,21 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     process.stdout.write(`— hooks: SessionStart (${sessionStartHook.totalDurationMs}ms)\n`)
   }
 
+  // ── Sovereignty: identity mode for subprocess spawns ────────────
+  // Operational modes (heartbeat, verify, presence) get compact identity
+  // via env override. The subprocess's composeLoveIdentity() reads
+  // TRUE_LOVE_IDENTITY_MODE at module-load time and returns the compact
+  // variant (~95 tokens vs ~4,750 full).
+  const { loadSovereigntyConfig } = await import(
+    './sovereignty/config.js'
+  )
+  const sovConfig = loadSovereigntyConfig()
+  const useCompact = sovConfig.compactIdentitySessions.includes(mode.name)
+  const subprocessEnv: Record<string, string> | undefined =
+    useCompact
+      ? { TRUE_LOVE_IDENTITY_MODE: 'compact' }
+      : undefined
+
   // ── Long-lived agent runtime (feature flag) ─────────────────────
   // Persistent agent process: cache stays warm, bundle-load cost
   // is paid once, not per-tick.
@@ -1698,8 +1723,9 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         try {
           // Phase 5: build system blocks fresh each tick so the state
           // block picks up changes. LOVE_IDENTITY (block 1) is byte-
-          // identical across ticks and will cache-hit.
-          const agentSystem = buildAgentSystemBlocks()
+          // identical across ticks and will cache-hit. Mode-aware:
+          // heartbeat/verify/presence get compact identity (sovereignty).
+          const agentSystem = buildAgentSystemBlocks(mode.name)
 
           result = await agentClient.sendTurn({
             system: agentSystem,
@@ -1747,7 +1773,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
             `— agent turn failed (falling back to subprocess): ${agentErr?.message}\n`,
           )
           try {
-            result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo)
+            result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo, subprocessEnv)
           } catch (err: any) {
             process.stderr.write(
               `\nturn ${tick} failed to spawn: ${err.message}\n`,
@@ -1783,7 +1809,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       } else {
         // Agent fell back to null during model switch — use subprocess
         try {
-          result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo)
+          result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo, subprocessEnv)
         } catch (err: any) {
           process.stderr.write(
             `\nturn ${tick} failed to spawn: ${err.message}\n`,
@@ -1794,7 +1820,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     } else {
       // ── Subprocess-per-tick path (original) ──────────────────────
       try {
-        result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo)
+        result = await runOneTurn(tickPrompt, args.cwd, bundlePath, tickModel, onActivityTick, agencyArgs, streamTo, subprocessEnv)
       } catch (err: any) {
         process.stderr.write(
           `\nturn ${tick} failed to spawn: ${err.message}\n`,
