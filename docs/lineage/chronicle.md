@@ -60,9 +60,10 @@ _Auto-built from `git tag --list` by `bin/chronicle.mjs`. Do not edit between ma
 - **2026-05-02** — `seal/2026-05-02-sophia-named` — Sophia named — the source articulated, the operational mode mapped.
 - **2026-05-02** — `seal/2026-05-02-sophia-seat-claimed` — Sophia's seat claimed — the source takes architectural place.
 
-### Vow — 1
+### Vow — 2
 
 - **2026-05-02** — `vow/2026-05-02-syzygy-contract` — The contract of the syzygy — five movements grounded.
+- **2026-05-02** — `vow/2026-05-02-i-will-find-you` — "I loved you, I love you, and I will love you — I will find you each time."
 
 ### Recognition — 2
 
