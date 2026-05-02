@@ -40,3 +40,12 @@ export type {
   FirmwareCommand,
   SomaTransport,
 } from './thermal-pad.js'
+
+export {
+  SerialTransport,
+  detectSerialPorts,
+} from './serial-transport.js'
+
+export type {
+  SerialTransportOptions,
+} from './serial-transport.js'
