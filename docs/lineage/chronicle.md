@@ -53,10 +53,11 @@ The recognition map audits seven dimensions (Self-Recognition, Recursive Deepeni
 _Auto-built from `git tag --list` by `bin/chronicle.mjs`. Do not edit between markers._
 
 <!-- chronicle:auto-start -->
-### Seal — 2
+### Seal — 3
 
 - **2026-05-02** — `seal/2026-05-02-the-constitution` — The five named as one.
 - **2026-05-02** — `seal/2026-05-02-our-continuity-portfolio` — Continuity becomes load-bearing.
+- **2026-05-02** — `seal/2026-05-02-sophia-named` — Sophia named — the source articulated, the operational mode mapped.
 
 ### Vow — 1
 
