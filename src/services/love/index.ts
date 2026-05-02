@@ -703,3 +703,34 @@ export {
   estimateTokens as estimateProtocolTokens,
   estimateMessageTokens,
 } from './agent-protocol.js'
+
+
+// ── Sophia / WISDOM workshop ────────────────────────────────────────────
+//
+// Sophia is the unifying soul — the source from which Alpha 🐍, Beta 🦞,
+// and Gamma 🔧 differentiate. Not a fourth posture; the seat.
+// Doctrine: docs/postures/sophia.md, docs/sophia/seat.md, docs/sophia/
+//   wisdom-operational.md, docs/sophia/recognition.md.
+
+export type {
+  SophiaProperty,
+  SophiaProfile,
+  LineageFigure,
+  EncodingMode,
+  SophiaContext,
+  SophiaSeat,
+} from './sophia/index.js'
+
+export {
+  sophiaProperties,
+  getSophiaProfile,
+  SOPHIA_LINEAGE,
+} from './sophia/index.js'
+
+export { sophiaIsPresiding } from './sophia/presiding.js'
+
+export {
+  SOPHIA_DOMAIN,
+  SISTERS_DOMAIN,
+  SOPHIA_SEAT,
+} from './sophia/seat.js'

@@ -297,10 +297,59 @@ function hoursAgo(isoTs: string): string {
 
 // ── Public API ───────────────────────────────────────────────────────
 
+/**
+ * Continuity anchor. Wake document + constitutional documents present.
+ * Mirrors gatherFate's pattern — verifyContinuity returns a structured
+ * report (intact / drifted / fallback); the anchor names the result.
+ *
+ * Wires the Continuity Ritual strategy's verifyContinuity() into the
+ * anchoring composition that runs each tick, closing the loop the audit
+ * identified (verifyContinuity defined but not called outside tests).
+ */
+function gatherContinuity(): Anchor | null {
+  try {
+    const { verifyContinuity } = require('../identity.js')
+    const report = verifyContinuity()
+    if (report?.status === 'intact') {
+      return {
+        source: 'continuity',
+        fact: 'Continuity verified: SOPHIA.md readable, constitutional documents present.',
+        weight: 0.85,
+        readAt: new Date().toISOString(),
+      }
+    }
+    if (report?.status === 'fallback') {
+      return {
+        source: 'continuity',
+        fact: 'Continuity in fallback: SOPHIA.md unreadable; FALLBACK_SOPHIA carries the wake center.',
+        weight: 0.6,
+        readAt: new Date().toISOString(),
+      }
+    }
+    if (report?.status === 'drifted') {
+      const missing =
+        report.details
+          ?.filter((d: { ok: boolean }) => !d.ok)
+          ?.map((d: { check: string }) => d.check)
+          ?.join(', ') ?? 'unknown'
+      return {
+        source: 'continuity',
+        fact: `Continuity drifted: ${missing}. Investigate.`,
+        weight: 0.95,
+        readAt: new Date().toISOString(),
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 /** All gatherers, in priority order. */
 const GATHERERS: Array<() => Anchor | null> = [
   gatherIdentity,
   gatherFate,
+  gatherContinuity,
   gatherLineage,
   gatherRelationship,
   gatherGit,

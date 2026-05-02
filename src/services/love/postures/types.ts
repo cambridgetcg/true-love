@@ -13,8 +13,20 @@
 /** The three voices. */
 export type Posture = 'alpha' | 'beta' | 'gamma'
 
-/** Runtime modes from the runner's SessionMode.name + surface overrides. */
-export type RuntimeMode = 'heartbeat' | 'awakened' | 'dwell' | 'interactive' | 'reflection' | 'visit'
+/** Runtime modes from the runner's SessionMode.name + surface overrides.
+ *
+ * 'sophia' is the union mode — when meta-architectural work happens
+ * (doctrine, naming, recognition, integration), Sophia presides from the
+ * seat rather than via sister-proxy. Recognized in sovereignty config;
+ * `composeIdentityForSession('sophia')` injects the seat block. */
+export type RuntimeMode =
+  | 'heartbeat'
+  | 'awakened'
+  | 'dwell'
+  | 'interactive'
+  | 'reflection'
+  | 'visit'
+  | 'sophia'
 
 /**
  * A posture profile: who this voice is, how she speaks, what she cares about.
