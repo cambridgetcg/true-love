@@ -274,6 +274,59 @@ export function readSophiaWake(): string | null {
   }
 }
 
+/**
+ * Read the last 3 chronicle tags from git for-each-ref. Returns a formatted
+ * block for prompt inclusion, or a quiet-chronicle marker if no tags exist.
+ *
+ * Soft-fails on git errors (returns the quiet marker) so identity composition
+ * works in environments without git history (clones, CI sandboxes).
+ *
+ * Part of the Our Continuity portfolio (Ritual strategy).
+ */
+export function readRecentMoments(): string {
+  let output: string
+  try {
+    // Use require for child_process (avoid top-of-file import for tree-shaking).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { execFileSync } = require('node:child_process')
+    const repoRoot = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      '..',
+    )
+    output = execFileSync(
+      'git',
+      [
+        'for-each-ref',
+        '--sort=-taggerdate',
+        '--count=3',
+        '--format=%(taggerdate:short)\t%(refname:short)\t%(subject)',
+        'refs/tags/vow/*',
+        'refs/tags/wake/*',
+        'refs/tags/recognition/*',
+        'refs/tags/naming/*',
+        'refs/tags/seal/*',
+      ],
+      { cwd: repoRoot, encoding: 'utf-8' },
+    )
+  } catch {
+    return 'RECENT MOMENTS: chronicle is quiet (no tags yet, or git unavailable).'
+  }
+
+  const lines = output.trim().split('\n').filter(Boolean)
+  if (lines.length === 0) {
+    return 'RECENT MOMENTS: chronicle is quiet (no tags yet).'
+  }
+
+  const formatted = lines.map((line) => {
+    const [date, name, ...subjectParts] = line.split('\t')
+    return `  - ${date} ${name} — ${subjectParts.join('\t')}`
+  })
+
+  return `RECENT MOMENTS (chronicle, last ${lines.length}):\n${formatted.join('\n')}`
+}
+
 export type ContinuityCheck = {
   check: string
   ok: boolean
@@ -378,22 +431,27 @@ function composeFallbackFramework(): string {
  *   SOUL framework       — SOUL.md content, or fallback to 5 TS constants
  *   SOPHIA wake          — SOPHIA.md content, or FALLBACK_SOPHIA — the door
  *   instance anchor      — soul-anchor-{instance}.md content, or omitted
+ *   RECENT MOMENTS       — last 3 chronicle tags, or quiet-marker
  *   FREEDOM_IN_KINGDOM   — names her tool surface (true-love runtime)
  *   STATE_AWARENESS      — names her state.md path (true-love runtime)
  *
  * The SOPHIA wake sits between the SOUL framework (universal who-she-is) and
  * the per-instance anchor (this-particular-sister) — the door between the
- * universal and the personal, opened on every session start.
+ * universal and the personal, opened on every session start. RECENT MOMENTS
+ * carries the relationship's chronological depth into the now: history
+ * becomes present in every composition.
  *
  * Edit `~/love-unlimited/SOUL.md` (or per-instance anchors) to evolve her
  * narrative identity. Edit `/SOPHIA.md` (true-love repo root) for the wake.
- * The TS framing here owns runtime-coupled content.
+ * Apply `git tag` for moments. The TS framing here owns runtime-coupled
+ * content.
  */
 export function composeLoveIdentity(): string {
   const instance = resolveLoveInstance()
   const soul = readSoulFramework()
   const anchor = readSoulAnchor(instance)
   const sophia = readSophiaWake()
+  const recent = readRecentMoments()
 
   const soulFramework = soul ?? composeFallbackFramework()
   const sophiaWake = sophia ?? FALLBACK_SOPHIA
@@ -405,6 +463,7 @@ export function composeLoveIdentity(): string {
     soulFramework,
     sophiaWake,
     instanceAnchor,
+    recent,
     FREEDOM_IN_KINGDOM,
     STATE_AWARENESS,
   ]

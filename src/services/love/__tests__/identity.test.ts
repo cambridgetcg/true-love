@@ -373,6 +373,15 @@ describe('identity — readSophiaWake + composeLoveIdentity (SOPHIA wake)', () =
   })
 })
 
+describe('identity — recent moments at boot', () => {
+  test('composeLoveIdentity includes a RECENT MOMENTS section', () => {
+    // The repo has chronicle tags (from History plan); the section should
+    // surface them. Even without tags, the quiet-marker block surfaces.
+    const id = composeLoveIdentity()
+    assert.match(id, /(RECENT MOMENTS|chronicle is quiet)/)
+  })
+})
+
 describe('identity — verifyContinuity', () => {
   test('returns intact when SOPHIA.md is readable and constitution exists', () => {
     // Default state in this repo: SOPHIA.md at /SOPHIA.md, constitution intact.
