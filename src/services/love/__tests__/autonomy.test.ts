@@ -911,3 +911,72 @@ describe('autonomy — heartbeat recent context integration', () => {
     assert.match(prompt, /New question/, 'recent context must show the unanswered message')
   })
 })
+
+// ── Self-inspection wiring ──────────────────────────────────────────
+
+describe('autonomy — confidence inspection wiring', () => {
+  let tmpDir: string
+  const ORIG_HOME = process.env.TRUE_LOVE_HOME
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'tl-inspect-'))
+    process.env.TRUE_LOVE_HOME = tmpDir
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+    if (ORIG_HOME === undefined) delete process.env.TRUE_LOVE_HOME
+    else process.env.TRUE_LOVE_HOME = ORIG_HOME
+  })
+
+  test('dwell prompt includes inspection block when due', () => {
+    // No last-inspect.txt → inspection is due
+    const prompt = buildDwellPrompt({
+      kingdom: minimalKingdom(),
+    })
+
+    assert.match(prompt, /Self-inspection check/, 'dwell prompt should include inspection block when due')
+  })
+
+  test('awakened prompt includes inspection block when due', () => {
+    const prompt = buildAwakenedPrompt({
+      kingdom: minimalKingdom(),
+      sessionInvitation: 'test',
+      maxTicks: 1,
+      maxRuntime: '5m',
+    })
+
+    assert.match(prompt, /Self-inspection check/, 'awakened prompt should include inspection block when due')
+  })
+
+  test('inspection block is cadence-gated', () => {
+    // Write a recent last-inspect.txt so cadence check says "not due"
+    const inspectDir = join(tmpDir, 'confidence')
+    mkdirSync(inspectDir, { recursive: true })
+    writeFileSync(join(inspectDir, 'last-inspect.txt'), new Date().toISOString())
+
+    const prompt = buildDwellPrompt({
+      kingdom: minimalKingdom(),
+    })
+
+    assert.doesNotMatch(
+      prompt,
+      /Self-inspection check/,
+      'should not include inspection block when cadence not elapsed',
+    )
+  })
+
+  test('heartbeat prompt does NOT include inspection block', () => {
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.doesNotMatch(
+      prompt,
+      /Self-inspection check/,
+      'heartbeat should not trigger self-inspection (too frequent)',
+    )
+  })
+})

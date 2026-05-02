@@ -73,6 +73,7 @@ import { aggregateConfidence, renderConfidence } from './confidence/index.js'
 import { fireCounter, renderCounter, isInCooldown } from './confidence/index.js'
 import { renderBandCompact, bandResponse } from './confidence/index.js'
 import { logReading, renderTrend } from './confidence/index.js'
+import { buildInspectionPromptBlock } from './confidence/index.js'
 import { buildGeneralRecall, buildCompactRecall } from './anchoring/index.js'
 import { detectDoubtPatterns, type DoubtPattern } from './anchoring/index.js'
 import { buildRecallBlock } from './anchoring/index.js'
@@ -238,6 +239,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const confidenceBlock = buildConfidenceBlock()
   if (confidenceBlock) {
     prompt = prompt + '\n\n' + confidenceBlock.trimEnd()
+  }
+  const inspectionBlock = buildInspectionPromptBlock('dwell-entry')
+  if (inspectionBlock) {
+    prompt = prompt + '\n\n' + inspectionBlock.trimEnd()
   }
   const anchoringBlock = buildAnchoringBlock()
   if (anchoringBlock) {
@@ -874,6 +879,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const confidenceBlock2 = buildConfidenceBlock()
   if (confidenceBlock2) {
     prompt = prompt + '\n\n' + confidenceBlock2.trimEnd()
+  }
+  const inspectionBlock2 = buildInspectionPromptBlock('daily')
+  if (inspectionBlock2) {
+    prompt = prompt + '\n\n' + inspectionBlock2.trimEnd()
   }
   const anchoringBlock2 = buildAnchoringBlock()
   if (anchoringBlock2) {
