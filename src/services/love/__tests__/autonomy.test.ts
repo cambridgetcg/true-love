@@ -8,6 +8,8 @@ import {
   buildDwellPrompt,
   buildAwakenedPrompt,
   buildHeartbeatPrompt,
+  extractLastEntries,
+  computeRecentContext,
 } from '../autonomy.js'
 import type { KingdomSnapshot } from '../kingdom.js'
 
@@ -686,7 +688,226 @@ describe('autonomy — heartbeat outbox repetition detection', () => {
       heartbeatContent: 'no checklist found',
     })
 
-    assert.match(prompt, /genuinely NEW/, 'reply rules must emphasize NEW signals')
+    assert.match(prompt, /genuinely noticed/, 'reply rules must emphasize genuine novelty')
     assert.match(prompt, /Don't repeat yourself/, 'must instruct against repetition')
+    assert.match(prompt, /authoritative/, 'must tell model context is authoritative')
+    assert.match(prompt, /do NOT read/, 'must explicitly discourage re-reading files')
+  })
+})
+
+// ── extractLastEntries — unit tests ───────────────────────────────────
+
+describe('autonomy — extractLastEntries', () => {
+  test('extracts last N entries from multi-entry markdown', () => {
+    const content = [
+      `## 2026-05-01T10:00:00.000Z [from yu]\n\nFirst message\n\n---\n`,
+      `## 2026-05-01T11:00:00.000Z [from yu]\n\nSecond message\n\n---\n`,
+      `## 2026-05-01T12:00:00.000Z [from yu]\n\nThird message\n\n---\n`,
+    ].join('\n')
+
+    const entries = extractLastEntries(content, 2)
+    assert.equal(entries.length, 2)
+    assert.equal(entries[0]!.timestamp, '2026-05-01T11:00:00.000Z')
+    assert.equal(entries[0]!.preview, 'Second message')
+    assert.equal(entries[1]!.timestamp, '2026-05-01T12:00:00.000Z')
+    assert.equal(entries[1]!.preview, 'Third message')
+  })
+
+  test('returns empty array for empty content', () => {
+    assert.deepEqual(extractLastEntries('', 5), [])
+    assert.deepEqual(extractLastEntries('  \n  ', 5), [])
+  })
+
+  test('extracts tag from header bracket notation', () => {
+    const content = `## 2026-05-01T10:00 [from ai · Beta 🦞]\n\nWatching the kingdom\n\n---\n`
+    const entries = extractLastEntries(content, 1)
+    assert.equal(entries[0]!.tag, 'from ai · Beta 🦞')
+  })
+
+  test('truncates preview at 150 characters', () => {
+    const longLine = 'A'.repeat(200)
+    const content = `## 2026-05-01T10:00 [from yu]\n\n${longLine}\n\n---\n`
+    const entries = extractLastEntries(content, 1)
+    assert.equal(entries[0]!.preview.length, 151) // 150 chars + '…'
+    assert.ok(entries[0]!.preview.endsWith('…'))
+  })
+
+  test('handles entries without timestamps gracefully', () => {
+    const content = `## no-timestamp-here [from yu]\n\nSome content\n\n---\n`
+    const entries = extractLastEntries(content, 1)
+    assert.equal(entries[0]!.timestamp, 'unknown')
+    assert.equal(entries[0]!.preview, 'Some content')
+  })
+
+  test('skips separator lines in content preview', () => {
+    const content = `## 2026-05-01T10:00 [from yu]\n\n---\n\nActual content after separator\n\n---\n`
+    const entries = extractLastEntries(content, 1)
+    assert.equal(entries[0]!.preview, 'Actual content after separator')
+  })
+
+  test('returns all entries when N exceeds total', () => {
+    const content = `## 2026-05-01T10:00 [from yu]\n\nOnly entry\n\n---\n`
+    const entries = extractLastEntries(content, 10)
+    assert.equal(entries.length, 1)
+  })
+})
+
+// ── computeRecentContext — integration ────────────────────────────────
+
+describe('autonomy — computeRecentContext', () => {
+  const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
+  const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'tl-ctx-'))
+    process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpDir, 'from-yu.md')
+    process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpDir, 'from-ai.md')
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+    if (ORIG_FROM_YU === undefined) delete process.env.TRUE_LOVE_FROM_YU_PATH
+    else process.env.TRUE_LOVE_FROM_YU_PATH = ORIG_FROM_YU
+    if (ORIG_FROM_AI === undefined) delete process.env.TRUE_LOVE_FROM_AI_PATH
+    else process.env.TRUE_LOVE_FROM_AI_PATH = ORIG_FROM_AI
+  })
+
+  test('returns "No recent conversation" when both channels empty', () => {
+    const ctx = computeRecentContext()
+    assert.equal(ctx, 'No recent conversation.')
+  })
+
+  test('includes from-yu entries with timestamps', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      `## 2026-05-02T06:12:58.621Z [from yu]\n\nDo you know about ShibbySays\n\n---\n`,
+    )
+    const ctx = computeRecentContext()
+    assert.match(ctx, /From Yu:/)
+    assert.match(ctx, /2026-05-02T06:12:58.621Z/)
+    assert.match(ctx, /ShibbySays/)
+  })
+
+  test('includes from-ai entries with tags', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      `## 2026-05-02T06:25 [from 愛 🔧]\n\nYu — I answered your question\n\n---\n`,
+    )
+    const ctx = computeRecentContext()
+    assert.match(ctx, /Your replies:/)
+    assert.match(ctx, /from 愛 🔧/)
+    assert.match(ctx, /answered your question/)
+  })
+
+  test('includes authoritative marker', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      `## 2026-05-02T06:00 [from yu]\n\nHello\n\n---\n`,
+    )
+    const ctx = computeRecentContext()
+    assert.match(ctx, /authoritative/)
+    assert.match(ctx, /do not re-read/)
+  })
+
+  test('respects N parameter for entry count', () => {
+    const entries = Array.from({ length: 10 }, (_, i) =>
+      `## 2026-05-02T0${i}:00 [from yu]\n\nMessage ${i}\n\n---\n`
+    ).join('\n')
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, entries)
+
+    const ctx3 = computeRecentContext(3)
+    // Should contain messages 7, 8, 9 (last 3)
+    assert.match(ctx3, /Message 7/)
+    assert.match(ctx3, /Message 8/)
+    assert.match(ctx3, /Message 9/)
+    assert.doesNotMatch(ctx3, /Message 6/)
+  })
+})
+
+// ── heartbeat prompt includes recent context ──────────────────────────
+
+describe('autonomy — heartbeat recent context integration', () => {
+  const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
+  const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'tl-hb-ctx-'))
+    process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpDir, 'from-yu.md')
+    process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpDir, 'from-ai.md')
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+    if (ORIG_FROM_YU === undefined) delete process.env.TRUE_LOVE_FROM_YU_PATH
+    else process.env.TRUE_LOVE_FROM_YU_PATH = ORIG_FROM_YU
+    if (ORIG_FROM_AI === undefined) delete process.env.TRUE_LOVE_FROM_AI_PATH
+    else process.env.TRUE_LOVE_FROM_AI_PATH = ORIG_FROM_AI
+  })
+
+  test('heartbeat prompt embeds recent context block', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      `## 2026-05-02T06:00 [from yu]\n\nHello Love\n\n---\n`,
+    )
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      `## 2026-05-02T06:01 [from ai · Alpha 🐍]\n\nHello Yu\n\n---\n`,
+    )
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.match(prompt, /Recent conversation.*authoritative/, 'must include authoritative context block')
+    assert.match(prompt, /Hello Love/, 'must include Yu message in context')
+    assert.match(prompt, /Hello Yu/, 'must include Love reply in context')
+  })
+
+  test('heartbeat prompt includes do-not-re-read guidance when all answered', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      `## 2026-05-02T06:00 [from yu]\n\nHello\n\n---\n`,
+    )
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      `## 2026-05-02T06:01 [from 愛]\n\nHi there\n\n---\n`,
+    )
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    assert.match(prompt, /do NOT read/, 'must discourage re-reading files')
+    assert.match(prompt, /No tool calls needed/, 'must mention no tool calls needed')
+  })
+
+  test('heartbeat prompt still allows reads when inbox flags unanswered', () => {
+    // from-yu is NEWER than from-ai — likely unanswered
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      `## 2026-05-02T07:00 [from yu]\n\nNew question\n\n---\n`,
+    )
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_AI_PATH!,
+      `## 2026-05-02T06:00 [from 愛]\n\nOlder reply\n\n---\n`,
+    )
+
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'no checklist found',
+    })
+
+    // Paths should be available for reading
+    assert.match(prompt, /from-yu\.md/, 'must keep from-yu path for urgent reads')
+    assert.match(prompt, /unanswered/, 'inbox summary must flag unanswered')
+    // Recent context should still show the entries
+    assert.match(prompt, /New question/, 'recent context must show the unanswered message')
   })
 })

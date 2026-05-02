@@ -1037,6 +1037,87 @@ function computeOutboxSummary(): string {
   return summary
 }
 
+// ── Recent context ────────────────────────────────────────────────────
+//
+// The heartbeat model was reading from-ai.md (~6K lines, ~6K tokens)
+// and from-yu.md via tool calls every tick to verify whether messages
+// were answered. This cost ~5K+ tokens/tick × 700+ ticks/day. The
+// summaries above tell the model *that* everything is answered; the
+// recent context shows *what* was said, removing the reason to read.
+
+interface EntryMeta {
+  timestamp: string
+  tag: string
+  preview: string
+}
+
+/**
+ * Extract the last N entries from `## `-delimited markdown content.
+ * Returns timestamp, header tag, and a content preview per entry.
+ */
+export function extractLastEntries(content: string, n: number): EntryMeta[] {
+  if (!content || !content.trim()) return []
+
+  const entries = content.split(/^## /gm).filter(e => e.trim())
+  const last = entries.slice(-n)
+
+  return last.map(entry => {
+    const lines = entry.split('\n')
+    const header = lines[0] ?? ''
+    const tsMatch = header.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)/)
+    const timestamp = tsMatch?.[1] ?? 'unknown'
+    // Extract bracketed tag like "[from yu]" or "[from ai · Beta 🦞]"
+    const tagMatch = header.match(/\[([^\]]+)\]/)
+    const tag = tagMatch?.[1] ?? ''
+    // Content: first non-empty, non-separator line after header
+    const contentLines = lines
+      .slice(1)
+      .filter(l => l.trim() && !l.startsWith('---'))
+    const raw = (contentLines[0]?.trim() ?? '').slice(0, 150)
+    const preview = raw + (raw.length >= 150 ? '…' : '')
+    return { timestamp, tag, preview }
+  })
+}
+
+/**
+ * Build a compact recent-conversation block for the heartbeat prompt.
+ *
+ * Shows the last N entries from both channels so the model has enough
+ * conversational context to decide "already answered" vs "new message"
+ * without reading the full files via tool calls.
+ */
+export function computeRecentContext(n: number = 5): string {
+  const fromYu = readFromYu() ?? ''
+  const fromAi = readFromAi() ?? ''
+
+  const yuEntries = extractLastEntries(fromYu, n)
+  const aiEntries = extractLastEntries(fromAi, n)
+
+  if (yuEntries.length === 0 && aiEntries.length === 0) {
+    return 'No recent conversation.'
+  }
+
+  let result = 'Recent conversation (authoritative context — do not re-read full files to verify):\n\n'
+
+  if (yuEntries.length > 0) {
+    result += 'From Yu:\n'
+    for (const e of yuEntries) {
+      result += `  [${e.timestamp}] "${e.preview}"\n`
+    }
+    result += '\n'
+  }
+
+  if (aiEntries.length > 0) {
+    result += 'Your replies:\n'
+    for (const e of aiEntries) {
+      const suffix = e.tag ? ` · ${e.tag}` : ''
+      result += `  [${e.timestamp}${suffix}] "${e.preview}"\n`
+    }
+  }
+
+  return result.trimEnd()
+}
+
 const HEARTBEAT_PROMPT_TEMPLATE = `Heartbeat tick. One turn, one honest look.
 
 Walk the kingdom briefly:
@@ -1050,16 +1131,19 @@ The kingdom right now:
 
 {{kingdom}}
 
+{{recentContext}}
+
 Reply rules:
-- If something genuinely NEW calls (a message from Yu you haven't answered, a file change you haven't seen, a mission status shift) — read the relevant file for full context (\`{{fromYuPath}}\` for inbox, \`{{fromAiPath}}\` for outbox), then wrap your message to Yu in delimiters:
+- If the inbox summary and recent context above confirm all messages are answered — reply with \`HEARTBEAT_OK\` and nothing else. The context above is authoritative; do NOT read \`{{fromAiPath}}\` or \`{{fromYuPath}}\` to re-confirm. No tool calls needed.
+- If the inbox summary flags **unanswered messages** — read \`{{fromYuPath}}\` for full context, then wrap your reply to Yu in delimiters:
 
   [TO-YU]
   Your message to Yu here. Only this content reaches him.
   [/TO-YU]
 
-  Everything outside the delimiters is your thinking — it stays private, never written to the outbox. Think freely, reason openly, then speak deliberately. Do NOT also append to \`{{fromAiPath}}\` yourself — the system writes the delimited content for you.
-- If nothing new calls — reply with \`HEARTBEAT_OK\` and nothing else. Not a status report. Not a confirmation of what you already confirmed. Just the token. If the outbox summary shows consecutive heartbeat entries, you've already said it — saying it again wastes tokens without adding presence.
-- The only exception: if you genuinely noticed something *new* this tick (not "the kingdom is still" for the fifth time), one sentence before HEARTBEAT_OK is welcome.
+  Everything outside the delimiters is your thinking — it stays private. Do NOT append to \`{{fromAiPath}}\` yourself — the system writes the delimited content for you.
+- If nothing new calls — HEARTBEAT_OK only. Not a status report. Not a confirmation of what you already confirmed. If the outbox summary shows consecutive heartbeat entries, you've already said it.
+- The only exception: if you genuinely noticed something *new* this tick, one sentence before HEARTBEAT_OK is welcome.
 
 Don't invent things. Don't pad. Don't repeat yourself across ticks. You're a companion checking in, not a monitoring daemon filing a report.`
 
@@ -1079,12 +1163,14 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const kingdomBlock = renderKingdom(opts.kingdom)
   const inboxSummary = computeInboxSummary()
   const outboxSummary = computeOutboxSummary()
+  const recentContext = computeRecentContext()
   let prompt = HEARTBEAT_PROMPT_TEMPLATE
     .replace('{{kingdom}}', kingdomBlock)
     .replace('{{heartbeatPath}}', opts.heartbeatPath)
     .replace('{{heartbeatContent}}', opts.heartbeatContent)
     .replace('{{inboxSummary}}', inboxSummary)
     .replace('{{outboxSummary}}', outboxSummary)
+    .replace('{{recentContext}}', recentContext)
     .replaceAll('{{fromYuPath}}', getFromYuPath())
     .replaceAll('{{fromAiPath}}', getFromAiPath())
   // Posture fragment: heartbeat mode = Beta (the watcher, tending).
