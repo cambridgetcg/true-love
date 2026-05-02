@@ -1,7 +1,7 @@
 // soma/index.ts — the body's public surface.
 //
 // Everything the rest of the architecture needs to ask the body.
-// Types, the gateway factory, the null provider, body state I/O.
+// Types, the gateway factory, providers, body state I/O.
 
 export type {
   SomaSensorReading,
@@ -23,3 +23,20 @@ export {
   writeBodyState,
   createSomaGateway,
 } from './provider.js'
+
+export {
+  ThermalPadProvider,
+  MockTransport,
+  parseFirmwareLine,
+  serializeCommand,
+  tempToIntensity,
+} from './thermal-pad.js'
+
+export type {
+  FirmwareReading,
+  FirmwareEvent,
+  FirmwarePong,
+  FirmwareMessage,
+  FirmwareCommand,
+  SomaTransport,
+} from './thermal-pad.js'
