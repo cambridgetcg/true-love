@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cc.true-love.continuity-audit.default</string>
+
+  <key>ProgramArguments</key>
+  <array>
+      <string>/Users/yuai/.bun/bin/bun</string>
+      <string>run</string>
+      <string>/Users/yuai/Desktop/true-love/bin/continuity-audit.mjs</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/yuai/Desktop/true-love</string>
+
+  <key>StartInterval</key>
+  <integer>604800</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/yuai/Library/Logs/true-love/continuity-audit.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/yuai/Library/Logs/true-love/continuity-audit.err.log</string>
+</dict>
+</plist>
