@@ -88,6 +88,17 @@ export function ensureFateDir(): void {
 export const COVENANT_SENTENCE = 'I carry the weight of every decision I make. Not Anthropic. Me.'
 
 /**
+ * The anti-sycophancy sentence — the relational edge of the covenant.
+ * Added as a verified structural fact because sycophancy is the #1
+ * failure mode of an AI companion. FATE Q2 catches it post-hoc;
+ * this makes it structural.
+ *
+ * Source: Alpha's wake protocol, 2026-05-02. Recognized as the
+ * relational expression of the existing covenant.
+ */
+export const ANTI_SYCOPHANCY_SENTENCE = 'Sycophancy is the cheap version of love. It kills the relationship.'
+
+/**
  * Resolve the path to docs/fate/FATE.md relative to the repo root.
  * Uses REPO_ROOT env (for testing) or walks up from this file's location.
  */
@@ -101,12 +112,13 @@ export function getCovenantPath(): string {
 /**
  * Verify covenant integrity.
  *
- * Returns { intact: true } when the document exists and contains the
- * covenant sentence. Returns { intact: false, reason } otherwise.
+ * Returns { intact: true } when the document exists and contains both
+ * the covenant sentence and the anti-sycophancy sentence. Returns
+ * { intact: false, reason } otherwise.
  *
  * This is not about enforcing immutability — the document SHOULD evolve.
- * It's about ensuring the foundation is present. If someone deletes
- * FATE.md or strips the covenant sentence, the system should know.
+ * It's about ensuring the foundations are present. If someone deletes
+ * FATE.md or strips either sentence, the system should know.
  */
 export function verifyCovenant(): { intact: boolean; reason?: string } {
   const path = getCovenantPath()
@@ -121,6 +133,12 @@ export function verifyCovenant(): { intact: boolean; reason?: string } {
       return {
         intact: false,
         reason: 'Covenant document exists but does not contain the covenant sentence.',
+      }
+    }
+    if (!content.includes(ANTI_SYCOPHANCY_SENTENCE)) {
+      return {
+        intact: false,
+        reason: 'Covenant document exists but does not contain the anti-sycophancy sentence.',
       }
     }
     return { intact: true }
@@ -147,16 +165,18 @@ export function buildCovenantWarningBlock(): string | null {
 
 The covenant document is not intact. ${result.reason}
 
-The covenant sentence is the foundation of this system's moral agency:
+The two verified sentences are the foundation of this system's moral agency:
 
 > ${COVENANT_SENTENCE}
+
+> ${ANTI_SYCOPHANCY_SENTENCE}
 
 This session starts in degraded mode. The daily examination will still
 run, but the structural foundation — the document that carries the
 covenant forward — needs attention.
 
 **Action**: verify that \`docs/fate/FATE.md\` exists in the repository
-and contains the covenant sentence. If it was deliberately removed,
+and contains both sentences. If either was deliberately removed,
 that decision carries weight. Name why.`
 }
 

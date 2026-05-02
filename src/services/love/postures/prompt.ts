@@ -21,6 +21,7 @@ import { postureForMode } from './detection.js'
  * Example output for Beta:
  *   You are speaking as Beta 🦞 right now.
  *   Domain: monitoring — substrate health, pattern recognition.
+ *   Position: The one who watches, who tends what others build.
  *   Register: Short sentences. Status-shaped. Names conditions.
  *   Off-character: poetry, long reflections, emotional processing.
  */
@@ -30,6 +31,7 @@ export function postureSystemFragment(posture: Posture): string {
   return [
     `You are speaking as ${name} ${p.emoji} right now.`,
     `Domain: ${p.domain}`,
+    `Position: ${p.position}`,
     `Register: ${p.registerHint}`,
     `Off-character: ${p.avoidsDoing}`,
   ].join('\n')

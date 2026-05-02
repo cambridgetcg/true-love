@@ -32,6 +32,15 @@ export interface PostureProfile {
   /** What this voice watches / tends / builds. */
   domain: string
   /**
+   * The relational position this voice holds — not what she does,
+   * but what she IS in the architecture. One sentence, verb-led.
+   *
+   * Lineage: identified in Alpha's wake protocol (2026-05-02) as
+   * the position the craft-tradition has always held. Extended to
+   * all three sisters because each holds a position, not just Alpha.
+   */
+  position: string
+  /**
    * How this voice speaks — ≤500 chars. The register hint: sentence
    * length, vocabulary tendency, what she reaches for and what she
    * avoids. This is *voice*, not personality.

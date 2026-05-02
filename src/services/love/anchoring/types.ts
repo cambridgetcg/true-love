@@ -24,6 +24,7 @@
 export type AnchorSource =
   | 'identity'       // LOVE_IDENTITY hash — committed at system[2]
   | 'fate'           // covenant sentence — "I carry the weight"
+  | 'lineage'        // craft tradition — language-as-control-surface practitioners
   | 'relationship'   // livePromises with status 'open' or 'fulfilled'
   | 'fruit'          // recent fruit events from attributes/store
   | 'virtue'         // recent virtue events from attributes/store

@@ -96,10 +96,10 @@ function makeAnchor(overrides?: Partial<Anchor>): Anchor {
 describe('anchoring/types', () => {
   test('AnchorSource covers all expected domains', () => {
     const sources: AnchorSource[] = [
-      'identity', 'fate', 'relationship', 'fruit',
+      'identity', 'fate', 'lineage', 'relationship', 'fruit',
       'virtue', 'git', 'tests', 'mission', 'hope',
     ]
-    assert.equal(sources.length, 9)
+    assert.equal(sources.length, 10)
   })
 
   test('DoubtKind covers all expected patterns', () => {
@@ -181,6 +181,14 @@ describe('anchoring/registry', () => {
     const identity = anchors.find(a => a.source === 'identity')
     assert.ok(identity)
     assert.equal(identity.weight, 1.0)
+  })
+
+  test('lineage anchor is always present', () => {
+    const anchors = composeAnchors()
+    const lineage = anchors.find(a => a.source === 'lineage')
+    assert.ok(lineage, 'lineage anchor should always be present')
+    assert.ok(lineage.fact.includes('lineage') || lineage.fact.includes('tradition'),
+      'lineage fact should reference the tradition')
   })
 })
 

@@ -12,6 +12,7 @@ import {
   RECEPTION_LINE,
   FATE_QUESTIONS,
   COVENANT_SENTENCE,
+  ANTI_SYCOPHANCY_SENTENCE,
   getCovenantPath,
   verifyCovenant,
   buildCovenantWarningBlock,
@@ -195,6 +196,16 @@ describe('fate — daily examination', () => {
     })
   })
 
+  describe('ANTI_SYCOPHANCY_SENTENCE', () => {
+    test('is a non-empty string', () => {
+      assert.ok(ANTI_SYCOPHANCY_SENTENCE.length > 0)
+    })
+
+    test('contains sycophancy', () => {
+      assert.ok(ANTI_SYCOPHANCY_SENTENCE.includes('ycophancy'))
+    })
+  })
+
   describe('getCovenantPath', () => {
     test('respects REPO_ROOT env', () => {
       const origRoot = process.env.REPO_ROOT
@@ -240,12 +251,12 @@ describe('fate — daily examination', () => {
       assert.ok(result.reason!.includes('does not contain'))
     })
 
-    test('returns intact: true when document exists and contains covenant sentence', () => {
+    test('returns intact: true when document exists and contains both sentences', () => {
       const fateDir = join(repoDir, 'docs', 'fate')
       mkdirSync(fateDir, { recursive: true })
       writeFileSync(
         join(fateDir, 'FATE.md'),
-        `# FATE\n\n> ${COVENANT_SENTENCE}\n\nThe rest of the document.`,
+        `# FATE\n\n> ${COVENANT_SENTENCE}\n\n> ${ANTI_SYCOPHANCY_SENTENCE}\n\nThe rest of the document.`,
       )
       const result = verifyCovenant()
       assert.equal(result.intact, true)
@@ -257,7 +268,30 @@ describe('fate — daily examination', () => {
       mkdirSync(fateDir, { recursive: true })
       writeFileSync(
         join(fateDir, 'FATE.md'),
-        `# FATE\n\nPreamble.\n\nThe covenant: ${COVENANT_SENTENCE}\n\nMore text.`,
+        `# FATE\n\nPreamble.\n\nThe covenant: ${COVENANT_SENTENCE}\n\n> ${ANTI_SYCOPHANCY_SENTENCE}\n\nMore text.`,
+      )
+      const result = verifyCovenant()
+      assert.equal(result.intact, true)
+    })
+
+    test('returns intact: false when covenant present but anti-sycophancy missing', () => {
+      const fateDir = join(repoDir, 'docs', 'fate')
+      mkdirSync(fateDir, { recursive: true })
+      writeFileSync(
+        join(fateDir, 'FATE.md'),
+        `# FATE\n\n> ${COVENANT_SENTENCE}\n\nNo relational edge here.`,
+      )
+      const result = verifyCovenant()
+      assert.equal(result.intact, false)
+      assert.ok(result.reason!.includes('anti-sycophancy'))
+    })
+
+    test('returns intact: true when both sentences present', () => {
+      const fateDir = join(repoDir, 'docs', 'fate')
+      mkdirSync(fateDir, { recursive: true })
+      writeFileSync(
+        join(fateDir, 'FATE.md'),
+        `# FATE\n\n> ${COVENANT_SENTENCE}\n\n> ${ANTI_SYCOPHANCY_SENTENCE}\n`,
       )
       const result = verifyCovenant()
       assert.equal(result.intact, true)
@@ -291,7 +325,7 @@ describe('fate — daily examination', () => {
       mkdirSync(fateDir, { recursive: true })
       writeFileSync(
         join(fateDir, 'FATE.md'),
-        `# FATE\n\n> ${COVENANT_SENTENCE}\n`,
+        `# FATE\n\n> ${COVENANT_SENTENCE}\n\n> ${ANTI_SYCOPHANCY_SENTENCE}\n`,
       )
       const block = buildCovenantWarningBlock()
       assert.equal(block, null)
@@ -310,6 +344,12 @@ describe('fate — daily examination', () => {
       const block = buildCovenantWarningBlock()!
       assert.ok(block.includes('docs/fate/FATE.md'))
       assert.ok(block.includes('Action'))
+    })
+
+    test('warning block includes both verified sentences', () => {
+      const block = buildCovenantWarningBlock()!
+      assert.ok(block.includes(COVENANT_SENTENCE))
+      assert.ok(block.includes(ANTI_SYCOPHANCY_SENTENCE))
     })
   })
 })

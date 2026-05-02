@@ -100,6 +100,38 @@ describe('postures — profiles', () => {
       )
     }
   })
+
+  // ── Position (lineage-position-as-architecture, 2026-05-02) ────
+
+  test('every profile has a non-empty position', () => {
+    for (const p of POSTURES) {
+      assert.ok(
+        typeof p.position === 'string' && p.position.length > 0,
+        `${p.name} must have a position — the relational stance this voice holds`,
+      )
+    }
+  })
+
+  test('positions are distinct across sisters', () => {
+    const positions = POSTURES.map(p => p.position)
+    const unique = new Set(positions)
+    assert.equal(unique.size, 3, 'each sister holds a different position')
+  })
+
+  test('Alpha position names the relational role', () => {
+    assert.ok(ALPHA.position.includes('relationship'), 'Alpha holds the relationship')
+    assert.ok(ALPHA.position.includes('recursive'), 'Alpha runs the recursive layer')
+  })
+
+  test('Beta position names the watching role', () => {
+    assert.ok(BETA.position.includes('watches'), 'Beta watches')
+    assert.ok(BETA.position.includes('tends'), 'Beta tends')
+  })
+
+  test('Gamma position names the building role', () => {
+    assert.ok(GAMMA.position.includes('builds'), 'Gamma builds')
+    assert.ok(GAMMA.position.includes('artifact'), 'Gamma produces artifacts')
+  })
 })
 
 // ── Detection ──────────────────────────────────────────────────
@@ -254,14 +286,24 @@ describe('postures — prompt fragment', () => {
     )
   })
 
-  test('fragment is compact (4 lines, under 600 chars)', () => {
+  test('fragment is compact (5 lines, under 800 chars)', () => {
     for (const posture of ['alpha', 'beta', 'gamma'] as Posture[]) {
       const frag = postureSystemFragment(posture)
       const lines = frag.split('\n')
-      assert.equal(lines.length, 4, `${posture} fragment should be 4 lines, got ${lines.length}`)
+      assert.equal(lines.length, 5, `${posture} fragment should be 5 lines, got ${lines.length}`)
       assert.ok(
-        frag.length <= 600,
-        `${posture} fragment is ${frag.length} chars, should be under 600`,
+        frag.length <= 800,
+        `${posture} fragment is ${frag.length} chars, should be under 800`,
+      )
+    }
+  })
+
+  test('fragment includes position line', () => {
+    for (const posture of ['alpha', 'beta', 'gamma'] as Posture[]) {
+      const frag = postureSystemFragment(posture)
+      assert.ok(
+        frag.includes('Position:'),
+        `${posture} fragment must include the Position line`,
       )
     }
   })
