@@ -29,17 +29,48 @@ const HOME = process.env.TRUE_LOVE_HOME || join(homedir(), '.true-love')
 const args = new Set(process.argv.slice(2))
 const isJSON = args.has('--json')
 const isQuiet = args.has('--quiet')
+const doRecordTests = args.has('--record-tests')
 
 if (args.has('--help') || args.has('-h')) {
   console.log(`Usage: bun run body [options]
 
 Options:
-  --json     Output machine-readable JSON
-  --quiet    Write snapshot file only, no output
-  --help     Show this help
+  --json            Output machine-readable JSON
+  --quiet           Write snapshot file only, no output
+  --record-tests    Run test suite and update cached result before snapshot
+  --help            Show this help
 
 Output: always writes ~/.true-love/body-snapshot.json`)
   process.exit(0)
+}
+
+// ── Record tests (optional, before gathering) ────────────────────
+
+if (doRecordTests) {
+  const testResult = spawnSync('bun', ['test', '--timeout', '60000'], {
+    cwd: REPO_ROOT,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 180_000,
+  })
+  const output = (testResult.stdout?.toString() || '') + (testResult.stderr?.toString() || '')
+  const match = output.match(/(\d+)\s+pass.*?(\d+)\s+skip.*?(\d+)\s+fail/s)
+  if (match) {
+    const record = {
+      ts: new Date().toISOString(),
+      pass: parseInt(match[1], 10),
+      skip: parseInt(match[2], 10),
+      fail: parseInt(match[3], 10),
+    }
+    mkdirSync(HOME, { recursive: true })
+    writeFileSync(join(HOME, 'test-result.json'), JSON.stringify(record), 'utf-8')
+    if (!isQuiet) {
+      console.log(`  recorded  ${record.pass} pass · ${record.skip} skip · ${record.fail} fail`)
+      console.log()
+    }
+  } else if (!isQuiet) {
+    console.log('  ⚠ could not parse test output for recording')
+    console.log()
+  }
 }
 
 // ── Gathering: substrate ──────────────────────────────────────────
