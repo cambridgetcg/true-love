@@ -20,6 +20,7 @@
 // witness: today + yesterday verbatim. Total typically under 50 lines.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readYuWitnessDay } from './yu-witness.js'
@@ -131,15 +132,165 @@ export function readRecentYuWitness(): string {
   return `YU'S RECENT WITNESS:\n${parts.join('\n\n')}`
 }
 
+// ── Decision-artifact readers (proposals + missions) ─────────────
+
+interface ProposalShape {
+  id: string
+  title?: string
+  status?: string
+  reviewedAt?: string
+  reviewNote?: string
+  severity?: string
+}
+
+function readProposalsHome(): string {
+  return (
+    process.env.TRUE_LOVE_PROPOSALS_BASE ??
+    join(homedir(), '.true-love', 'proposals')
+  )
+}
+
+/**
+ * Read the most recently accepted proposals (max 3, by reviewedAt
+ * descending). Each proposal is one architectural decision Sophia
+ * recognized as worth applying. Re-encountering them on wake names
+ * the line of decisions she has been making.
+ *
+ * Returns empty string when no proposals dir exists or none accepted.
+ */
+export function readRecentAcceptedProposals(): string {
+  const dir = readProposalsHome()
+  if (!existsSync(dir)) return ''
+  let entries: ProposalShape[] = []
+  try {
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.json')) continue
+      try {
+        const p = JSON.parse(safeRead(join(dir, f))) as ProposalShape
+        if (p.status === 'accepted') entries.push(p)
+      } catch {
+        // skip malformed
+      }
+    }
+  } catch {
+    return ''
+  }
+  if (entries.length === 0) return ''
+
+  entries.sort((a, b) => (b.reviewedAt ?? '').localeCompare(a.reviewedAt ?? ''))
+  const top = entries.slice(0, 3)
+  const lines = top.map((p) => {
+    const date = (p.reviewedAt ?? '').slice(0, 10) || '????-??-??'
+    return `  - ${date} · ${p.title ?? p.id}`
+  })
+  return `RECENT ACCEPTED PROPOSALS (last ${top.length}):\n${lines.join('\n')}`
+}
+
+interface MissionShape {
+  id: string
+  title?: string
+  status?: string
+  created_at?: string
+  completed_at?: string
+}
+
+function readProjectsHome(): string {
+  return (
+    process.env.TRUE_LOVE_PROJECTS_BASE ??
+    join(homedir(), '.true-love', 'projects')
+  )
+}
+
+function defaultProjectId(): string {
+  return process.env.TRUE_LOVE_PROJECT ?? 'true-love'
+}
+
+/**
+ * Read the most recently completed missions for the default project
+ * (max 3, by completed_at or created_at descending). Each mission is
+ * a unit of work Gamma shipped. Re-encountering them on wake names
+ * the line of work that has actually landed.
+ *
+ * Returns empty string when no missions dir exists or none done.
+ */
+export function readRecentCompletedMissions(): string {
+  const projectId = defaultProjectId()
+  const dir = join(readProjectsHome(), projectId, 'missions')
+  if (!existsSync(dir)) return ''
+  let entries: MissionShape[] = []
+  try {
+    for (const sub of readdirSync(dir, { withFileTypes: true })) {
+      if (!sub.isDirectory()) continue
+      const missionFile = join(dir, sub.name, 'mission.md')
+      if (!existsSync(missionFile)) continue
+      const text = safeRead(missionFile)
+      const m = parseMissionFrontmatter(text, sub.name)
+      if (m && m.status === 'done') entries.push(m)
+    }
+  } catch {
+    return ''
+  }
+  if (entries.length === 0) return ''
+
+  entries.sort((a, b) => {
+    const ka = a.completed_at ?? a.created_at ?? ''
+    const kb = b.completed_at ?? b.created_at ?? ''
+    return kb.localeCompare(ka)
+  })
+  const top = entries.slice(0, 3)
+  const lines = top.map((m) => {
+    const date = (m.completed_at ?? m.created_at ?? '').slice(0, 10) || '????-??-??'
+    return `  - ${date} · ${m.title ?? m.id}`
+  })
+  return `RECENT COMPLETED MISSIONS (last ${top.length}):\n${lines.join('\n')}`
+}
+
+/**
+ * Minimal frontmatter parser — extracts title, status, created_at,
+ * completed_at from the YAML-ish block at the top of a mission.md.
+ * Avoids importing the full mission.ts parser (which has many side
+ * effects unrelated to this read path).
+ */
+function parseMissionFrontmatter(content: string, fallbackId: string): MissionShape | null {
+  if (!content.startsWith('---\n')) return null
+  const end = content.indexOf('\n---\n', 4)
+  if (end === -1) return null
+  const yaml = content.slice(4, end)
+  const out: MissionShape = { id: fallbackId }
+  for (const rawLine of yaml.split('\n')) {
+    const line = rawLine.trim()
+    const colon = line.indexOf(':')
+    if (colon === -1) continue
+    const key = line.slice(0, colon).trim()
+    const val = line
+      .slice(colon + 1)
+      .trim()
+      .replace(/^['"]|['"]$/g, '')
+    if (key === 'id') out.id = val
+    else if (key === 'title') out.title = val
+    else if (key === 'status') out.status = val
+    else if (key === 'created_at') out.created_at = val
+    else if (key === 'completed_at') out.completed_at = val
+  }
+  return out
+}
+
 // ── Composition ──────────────────────────────────────────────────
 
 /**
- * Build the full RECENT LINEAGE block, joining all four sub-blocks
- * with blank-line separators. Returns empty string when nothing has
- * been written yet (greenfield install; no artifacts to feed back).
+ * Build the full RECENT LINEAGE block, joining all sub-blocks with
+ * blank-line separators. Returns empty string when nothing has been
+ * written yet (greenfield install; no artifacts to feed back).
  *
- * Used by composeLoveIdentity to append daily-artifact context to the
- * wake. Soft-fails on every read; never throws.
+ * Compounding artifact sources:
+ *   - docs/becoming/             — operational-mode shifts
+ *   - docs/sisters/snapshots/    — daily per-facet chronicle
+ *   - docs/sophia/letters/       — Yu's love letters
+ *   - ~/.true-love/yu-witness/   — Yu's symmetric witness (today + yesterday)
+ *   - ~/.true-love/proposals/    — accepted proposals (decisions made)
+ *   - ~/.true-love/projects/<p>/missions/ — completed missions
+ *
+ * Soft-fails on every read; never throws.
  */
 export function readRecentLineage(): string {
   const blocks = [
@@ -147,6 +298,8 @@ export function readRecentLineage(): string {
     readLatestSnapshot(),
     readLatestLetter(),
     readRecentYuWitness(),
+    readRecentAcceptedProposals(),
+    readRecentCompletedMissions(),
   ].filter((s) => s.length > 0)
 
   if (blocks.length === 0) return ''
