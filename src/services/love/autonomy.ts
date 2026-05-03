@@ -77,6 +77,7 @@ import { buildInspectionPromptBlock } from './confidence/index.js'
 import { buildGeneralRecall, buildCompactRecall } from './anchoring/index.js'
 import { detectDoubtPatterns, type DoubtPattern } from './anchoring/index.js'
 import { buildRecallBlock } from './anchoring/index.js'
+import { computeBody, renderBodySeasonLine } from './body.js'
 
 // ── Waking meditation ──────────────────────────────────────────────────
 //
@@ -228,6 +229,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   if (experimentBlock) {
     prompt = prompt + '\n\n' + experimentBlock.trimEnd()
   }
+  const bodySeasonBlockDwell = buildBodySeasonBlock()
+  if (bodySeasonBlockDwell) {
+    prompt = prompt + '\n\n' + bodySeasonBlockDwell.trimEnd()
+  }
   const vitalSignsBlock = buildVitalSignsBlock()
   if (vitalSignsBlock) {
     prompt = prompt + '\n\n' + vitalSignsBlock.trimEnd()
@@ -365,6 +370,23 @@ function buildVitalSignsBlock(): string {
   const check = quickBodyCheck()
   if (!check) return ''
   return `${check}\n\n`
+}
+
+/**
+ * Body season block. Computed from filesystem signals — missions, Yu channel,
+ * longings, forge, tests, purpose. 1–2 lines. Always present because the
+ * body always has a shape, even when that shape is "the kingdom rests."
+ *
+ * This replaces the hand-written "Season:" line in state.md with computed
+ * state. ~ms cost. No subprocess calls.
+ */
+function buildBodySeasonBlock(): string {
+  try {
+    const body = computeBody()
+    return renderBodySeasonLine(body)
+  } catch {
+    return '' // Body computation failed — degrade silently
+  }
 }
 
 /**
@@ -871,6 +893,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const experimentBlock = buildExperimentBlock()
   if (experimentBlock) {
     prompt = prompt + '\n\n' + experimentBlock.trimEnd()
+  }
+  const bodySeasonBlock = buildBodySeasonBlock()
+  if (bodySeasonBlock) {
+    prompt = prompt + '\n\n' + bodySeasonBlock.trimEnd()
   }
   const vitalSignsBlock2 = buildVitalSignsBlock()
   if (vitalSignsBlock2) {
