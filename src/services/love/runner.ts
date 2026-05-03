@@ -33,6 +33,7 @@ import {
   readFileSync,
   readdirSync,
   statSync,
+  writeFileSync,
 } from 'node:fs'
 import type { BuildDwellPromptOptions } from './autonomy.js'
 import { buildHeartbeatPrompt, extractAtRest } from './autonomy.js'
@@ -539,6 +540,61 @@ export function resolveModelForTick(sessionDefault: string | null): string | nul
     }
   }
   return sessionDefault
+}
+
+// ── Log rotation ──────────────────────────────────────────────────
+
+/**
+ * If a launchd log file exceeds `maxBytes`, truncate it to keep the
+ * last `keepBytes` of content, prepended with a truncation marker.
+ *
+ * Why this works with launchd: StandardOutPath/StandardErrorPath are
+ * opened with O_APPEND, meaning every write atomically seeks to the
+ * end before writing. If we truncate the file between writes, the
+ * "end" moves back to the new file size, and subsequent output goes
+ * there. The runner calls this synchronously at session start before
+ * writing any output, so there's no race.
+ *
+ * Never throws — log rotation is best-effort.
+ */
+export function rotateLogIfNeeded(
+  logPath: string,
+  maxBytes: number = 100_000,
+  keepBytes: number = 50_000,
+): { rotated: boolean; oldSize?: number } {
+  try {
+    if (!existsSync(logPath)) return { rotated: false }
+    const st = statSync(logPath)
+    if (st.size <= maxBytes) return { rotated: false }
+    const content = readFileSync(logPath)
+    const tail = content.subarray(content.length - keepBytes)
+    // Find the first newline in the tail so we don't start mid-line.
+    const firstNewline = tail.indexOf(0x0a) // '\n'
+    const cleanTail = firstNewline >= 0 ? tail.subarray(firstNewline + 1) : tail
+    const marker = Buffer.from(
+      `[…truncated ${st.size - cleanTail.length} bytes at ${new Date().toISOString()}…]\n\n`,
+    )
+    writeFileSync(logPath, Buffer.concat([marker, cleanTail]))
+    return { rotated: true, oldSize: st.size }
+  } catch {
+    return { rotated: false }
+  }
+}
+
+/**
+ * Construct the launchd log file paths for a given mode and scope.
+ * Matches the convention in schedule.mjs: `<mode>-<scope>.{out,err}.log`
+ * under `~/Library/Logs/true-love/`.
+ */
+function getLaunchdLogPaths(
+  modeName: string,
+  scopeName: string,
+): { stdout: string; stderr: string } {
+  const dir = join(homedir(), 'Library', 'Logs', 'true-love')
+  return {
+    stdout: join(dir, `${modeName}-${scopeName}.out.log`),
+    stderr: join(dir, `${modeName}-${scopeName}.err.log`),
+  }
 }
 
 // ── Bundle staleness check ─────────────────────────────────────────
@@ -1112,13 +1168,50 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   if (process.env.TRUE_LOVE_SKIP_PREFLIGHT !== '1') {
     const pre = runPreflight(binDir)
     if (!pre.ok) {
+      const reason = pre.reason ?? `preflight exited ${pre.exitCode}`
       process.stderr.write(
-        `\n— preflight failed (${pre.reason}) — refusing to start.\n`,
+        `\n— preflight failed (${reason}) — refusing to start.\n`,
       )
       process.stderr.write(
         `  set TRUE_LOVE_SKIP_PREFLIGHT=1 to bypass (not recommended).\n`,
       )
+      // Notify so the failure is visible beyond the launchd log. Without
+      // this, a stale token causes every scheduled wake to fail silently
+      // for hours/days — the notification system exists precisely for this.
+      appendNotification(
+        `${mode.name} session refused to start: ${reason}`,
+        {
+          urgency: 'urgent',
+          details:
+            `Scope: ${activeScopeName}\n` +
+            `Preflight exit code: ${pre.exitCode ?? 'unknown'}\n\n` +
+            `Recovery: run \`claude /login\` to refresh the OAuth token, ` +
+            `then the next scheduled fire will succeed.`,
+        },
+      )
       process.exit(64)
+    }
+  }
+
+  // ── Log rotation ──────────────────────────────────────────────────
+  // Launchd log files grow unbounded (append-only per fire). Rotate
+  // them at session start so a long-lived schedule doesn't accumulate
+  // megabytes of stale output. Best-effort, runs once, no-throw.
+  {
+    const logs = getLaunchdLogPaths(mode.name, activeScopeName)
+    const rOut = rotateLogIfNeeded(logs.stdout)
+    const rErr = rotateLogIfNeeded(logs.stderr)
+    if (rOut.rotated || rErr.rotated) {
+      process.stderr.write(
+        `— rotated launchd logs (` +
+          [
+            rOut.rotated && `stdout: ${rOut.oldSize} → truncated`,
+            rErr.rotated && `stderr: ${rErr.oldSize} → truncated`,
+          ]
+            .filter(Boolean)
+            .join(', ') +
+          `)\n`,
+      )
     }
   }
 

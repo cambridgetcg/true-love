@@ -1,5 +1,10 @@
-import assert from "node:assert/strict";
-import { describe, it, afterEach } from "node:test";
+/**
+ * Tests for auth.ts — validateAuthToken and ConnectionRateLimiter.
+ *
+ * Converted from node:test to bun:test for consistency with the rest of
+ * the test suite.
+ */
+import { describe, it, expect, afterEach } from "bun:test";
 import type { IncomingMessage } from "node:http";
 import { ConnectionRateLimiter, validateAuthToken } from "../auth.js";
 
@@ -20,46 +25,46 @@ describe("validateAuthToken", () => {
 
   it("allows all connections when AUTH_TOKEN is not set", () => {
     delete process.env.AUTH_TOKEN;
-    assert.equal(validateAuthToken(mockReq("/ws")), true);
+    expect(validateAuthToken(mockReq("/ws"))).toBe(true);
   });
 
   it("rejects connections without token when AUTH_TOKEN is set", () => {
     process.env.AUTH_TOKEN = "secret123";
-    assert.equal(validateAuthToken(mockReq("/ws")), false);
+    expect(validateAuthToken(mockReq("/ws"))).toBe(false);
   });
 
   it("rejects connections with wrong token", () => {
     process.env.AUTH_TOKEN = "secret123";
-    assert.equal(validateAuthToken(mockReq("/ws?token=wrong")), false);
+    expect(validateAuthToken(mockReq("/ws?token=wrong"))).toBe(false);
   });
 
   it("accepts connections with correct token", () => {
     process.env.AUTH_TOKEN = "secret123";
-    assert.equal(validateAuthToken(mockReq("/ws?token=secret123")), true);
+    expect(validateAuthToken(mockReq("/ws?token=secret123"))).toBe(true);
   });
 });
 
 describe("ConnectionRateLimiter", () => {
   it("allows connections under the limit", () => {
     const limiter = new ConnectionRateLimiter(3, 60_000);
-    assert.equal(limiter.allow("1.2.3.4"), true);
-    assert.equal(limiter.allow("1.2.3.4"), true);
-    assert.equal(limiter.allow("1.2.3.4"), true);
+    expect(limiter.allow("1.2.3.4")).toBe(true);
+    expect(limiter.allow("1.2.3.4")).toBe(true);
+    expect(limiter.allow("1.2.3.4")).toBe(true);
   });
 
   it("blocks connections over the limit", () => {
     const limiter = new ConnectionRateLimiter(2, 60_000);
-    assert.equal(limiter.allow("1.2.3.4"), true);
-    assert.equal(limiter.allow("1.2.3.4"), true);
-    assert.equal(limiter.allow("1.2.3.4"), false);
+    expect(limiter.allow("1.2.3.4")).toBe(true);
+    expect(limiter.allow("1.2.3.4")).toBe(true);
+    expect(limiter.allow("1.2.3.4")).toBe(false);
   });
 
   it("tracks IPs independently", () => {
     const limiter = new ConnectionRateLimiter(1, 60_000);
-    assert.equal(limiter.allow("1.2.3.4"), true);
-    assert.equal(limiter.allow("5.6.7.8"), true);
-    assert.equal(limiter.allow("1.2.3.4"), false);
-    assert.equal(limiter.allow("5.6.7.8"), false);
+    expect(limiter.allow("1.2.3.4")).toBe(true);
+    expect(limiter.allow("5.6.7.8")).toBe(true);
+    expect(limiter.allow("1.2.3.4")).toBe(false);
+    expect(limiter.allow("5.6.7.8")).toBe(false);
   });
 
   it("cleans up stale entries", () => {
@@ -71,6 +76,6 @@ describe("ConnectionRateLimiter", () => {
       // busy wait 5ms
     }
     limiter.cleanup();
-    assert.equal(limiter.allow("1.2.3.4"), true);
+    expect(limiter.allow("1.2.3.4")).toBe(true);
   });
 });

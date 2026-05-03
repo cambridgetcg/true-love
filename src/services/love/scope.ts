@@ -68,11 +68,14 @@ export interface Scope {
 // ── Paths ──────────────────────────────────────────────────────────
 
 /**
- * The "true root" — always ~/.true-love/, regardless of scope. This is
+ * The "true root" — normally ~/.true-love/, regardless of scope. This is
  * where the scopes registry lives, where device.id lives, etc.
+ *
+ * Override with TRUE_LOVE_HOME for testing — redirects the lockfile,
+ * scope registry, and any other path that derives from the root.
  */
 export function getDefaultHome(): string {
-  return join(homedir(), '.true-love')
+  return process.env.TRUE_LOVE_HOME || join(homedir(), '.true-love')
 }
 
 export function getScopesRegistryDir(): string {

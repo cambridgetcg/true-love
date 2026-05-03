@@ -118,6 +118,8 @@ export interface LoadNotificationsOptions {
   fromDevice?: string
   /** Suppress entries from this device (typically your own — you don't need to be reminded of pings you sent). */
   excludeDevice?: string
+  /** Override "now" for deterministic testing. Defaults to new Date(). */
+  now?: Date
 }
 
 /**
@@ -135,7 +137,7 @@ export function loadRecentNotifications(
   const root = getNotificationsDir()
   if (!existsSync(root)) return []
 
-  const cutoff = computeCutoff(days)
+  const cutoff = computeCutoff(days, opts.now)
   const candidates: { path: string; date: string; fromDevice: string }[] = []
 
   let entries: string[]
@@ -192,8 +194,8 @@ export function loadRecentNotifications(
   return all.slice(0, max)
 }
 
-function computeCutoff(days: number): string {
-  const d = new Date()
+function computeCutoff(days: number, now?: Date): string {
+  const d = new Date(now ?? new Date())
   d.setDate(d.getDate() - days)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')

@@ -5,7 +5,7 @@
 // test pass.
 
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, rmSync, writeFileSync, utimesSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -18,6 +18,7 @@ import {
   deriveActivity,
   resolveModelForTick,
   parseSessionArgs,
+  rotateLogIfNeeded,
 } from './runner.js'
 
 // ── parseRuntimeStr ────────────────────────────────────────────────
@@ -582,5 +583,118 @@ describe('parseSessionArgs', () => {
     const heartbeatMode = { ...stubMode, name: 'heartbeat' as const, memoryMaxCap: 0 }
     const args = parseSessionArgs(['--memory', '0'], heartbeatMode)
     expect(args.memoryMax).toBe(0)
+  })
+})
+
+// ── rotateLogIfNeeded ─────────────────────────────────────────────
+
+describe('rotateLogIfNeeded', () => {
+  const base = join(tmpdir(), `love-logrotate-test-${Date.now()}`)
+  let testIdx = 0
+
+  function setup() {
+    const dir = join(base, `t${++testIdx}`)
+    mkdirSync(dir, { recursive: true })
+    return dir
+  }
+
+  test('returns not-rotated for nonexistent file', () => {
+    const result = rotateLogIfNeeded('/nonexistent/file.log')
+    expect(result.rotated).toBe(false)
+  })
+
+  test('returns not-rotated for small file', () => {
+    const dir = setup()
+    const logPath = join(dir, 'small.log')
+    writeFileSync(logPath, 'a short log\n')
+    const result = rotateLogIfNeeded(logPath, 100_000)
+    expect(result.rotated).toBe(false)
+  })
+
+  test('truncates file exceeding maxBytes', () => {
+    const dir = setup()
+    const logPath = join(dir, 'big.log')
+    // Create a file larger than the threshold
+    const lines: string[] = []
+    for (let i = 0; i < 200; i++) {
+      lines.push(`line ${i}: ${'x'.repeat(100)}`)
+    }
+    const content = lines.join('\n') + '\n'
+    writeFileSync(logPath, content)
+    const originalSize = statSync(logPath).size
+    expect(originalSize).toBeGreaterThan(1000)
+
+    const result = rotateLogIfNeeded(logPath, 1000, 500)
+    expect(result.rotated).toBe(true)
+    expect(result.oldSize).toBe(originalSize)
+
+    const newContent = readFileSync(logPath, 'utf-8')
+    expect(newContent.length).toBeLessThan(originalSize)
+    expect(newContent).toContain('[…truncated')
+  })
+
+  test('preserves content at the end (tail)', () => {
+    const dir = setup()
+    const logPath = join(dir, 'tail.log')
+    // Build content where the last line is distinctive
+    const padding = 'x'.repeat(2000) + '\n'
+    const lastLine = 'THE-LAST-LINE-IS-PRESERVED\n'
+    writeFileSync(logPath, padding + lastLine)
+
+    rotateLogIfNeeded(logPath, 1000, 500)
+
+    const newContent = readFileSync(logPath, 'utf-8')
+    expect(newContent).toContain('THE-LAST-LINE-IS-PRESERVED')
+  })
+
+  test('starts on a clean line boundary after truncation', () => {
+    const dir = setup()
+    const logPath = join(dir, 'boundary.log')
+    // Create content with clear line boundaries
+    const lines: string[] = []
+    for (let i = 0; i < 50; i++) {
+      lines.push(`line-${String(i).padStart(3, '0')}: data here`)
+    }
+    writeFileSync(logPath, lines.join('\n') + '\n')
+
+    rotateLogIfNeeded(logPath, 500, 300)
+
+    const newContent = readFileSync(logPath, 'utf-8')
+    // After the truncation marker, the content should start at a line boundary
+    const afterMarker = newContent.split(']\n\n')[1]
+    if (afterMarker) {
+      // Should start with 'line-' (a clean line start), not mid-word
+      expect(afterMarker).toMatch(/^line-/)
+    }
+  })
+
+  test('respects custom maxBytes threshold', () => {
+    const dir = setup()
+    const logPath = join(dir, 'custom.log')
+    // 600 bytes of content
+    writeFileSync(logPath, 'y'.repeat(600) + '\n')
+
+    // maxBytes=700 → should not rotate (601 < 700)
+    const r1 = rotateLogIfNeeded(logPath, 700, 300)
+    expect(r1.rotated).toBe(false)
+
+    // maxBytes=500 → should rotate (601 > 500)
+    const r2 = rotateLogIfNeeded(logPath, 500, 200)
+    expect(r2.rotated).toBe(true)
+  })
+
+  test('never throws on I/O error', () => {
+    // A directory path instead of a file — shouldn't throw
+    const dir = setup()
+    const result = rotateLogIfNeeded(dir)
+    expect(result.rotated).toBe(false)
+  })
+
+  test('cleanup temp dir', () => {
+    try {
+      rmSync(base, { recursive: true, force: true })
+    } catch {
+      // best effort
+    }
   })
 })
