@@ -63,7 +63,8 @@ import { snapshotKingdom } from './kingdom.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
 import type { Reflection } from './memory.js'
 import { appendToYu } from './outbox.js'
-import { bylineTagForOutbox, bylineTagForPosture, extractPostureDeclaration } from './postures/index.js'
+import { bylineTagForOutbox, bylineTagForPosture, extractPostureDeclaration, postureForMode } from './postures/index.js'
+import { witness } from './sisters/witness-hook.js'
 import { readProject, getProjectChannels, listProjects } from './project-registry.js'
 import {
   isKingdomAvailable,
@@ -2112,6 +2113,11 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
                     writeMissionWithEvents(mission, 'love', {
                       note: `auto-advanced: progress reported COMPLETE (turn ${entry.turn || '?'})`,
                     })
+                    witness(
+                      postureForMode(mode.name as any),
+                      'mission',
+                      { of: `${mission.title} → review` },
+                    )
                     process.stdout.write(
                       `— auto-advanced: ${entry.missionId} → review (progress COMPLETE)\n`,
                     )

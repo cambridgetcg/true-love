@@ -27,6 +27,7 @@ import {
 import { readProject, ensureScope } from '../src/services/love/project-registry.ts'
 import { appendThought } from '../src/services/love/thoughts-channel.ts'
 import { triggerReflectionOnCompletion } from '../src/services/love/self-initiation.ts'
+import { witness } from '../src/services/love/sisters/witness-hook.ts'
 
 function parseArgs(argv) {
   const args = { _: [] }
@@ -124,6 +125,7 @@ if (cmd === 'new') {
       writeMission({ ...m, status: 'active', updated_at: now })
       appendEvent(args.project, id, { ts: now, type: 'started', by: 'love', tick: 'awakened' })
       appendThought(args.project, `starting mission ${id} — ${args.title}`)
+      witness('gamma', 'mission', { of: args.title }, `auto-starting: ${args.title}`)
 
       const __dir = dirname(fileURLToPath(import.meta.url))
       const awakenBin = resolve(__dir, 'awaken.mjs')
@@ -216,6 +218,7 @@ if (cmd === 'start') {
   appendEvent(args.project, m.id, { ts: now, type: 'started', by: 'love', tick: 'awakened' })
   writeMission({ ...m, status: 'active', updated_at: now })
   appendThought(args.project, `starting mission ${m.id} — ${m.title}`)
+  witness('gamma', 'mission', { of: m.title }, `starting: ${m.title}`)
 
   // Mission context is passed via env vars (TRUE_LOVE_BUILDER_PROJECT,
   // TRUE_LOVE_BUILDER_MISSION). awaken.mjs / runner.ts don't parse a
@@ -250,6 +253,10 @@ if (cmd === 'transition') {
     const result = writeMissionWithEvents(updated, by, { note: args.note })
     if (result.eventAppended) {
       process.stdout.write(`${m.status} → ${args.status} (event: ${result.eventType})\n`)
+      // Witness the transition — the observer/observed discipline.
+      // Sister defaults to gamma (mission work is building territory).
+      const sister = by === 'love' ? 'gamma' : 'sophia'
+      witness(sister, 'mission', { of: `${m.title} → ${args.status}` })
       // Trigger self-initiation reflection when a love-origin mission
       // transitions to review or done. Phase 1: mark as pending.
       // Phase 2 (honest model assessment) happens in the next tick.

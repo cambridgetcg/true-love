@@ -87,6 +87,7 @@ import {
 } from './extract-memories/index.js'
 import { getStreamDir, readNewDeltas, type StreamDelta } from './stream.js'
 import { synthesize as voiceSynthesize, voiceStatus as getVoiceStatus, isVoiceAvailable } from './voice/index.js'
+import { witness } from './sisters/witness-hook.js'
 import {
   createSession,
   readSession,
@@ -1615,6 +1616,12 @@ function handleGenerateProposals(req: IncomingMessage, res: ServerResponse): voi
   try {
     const portrait = generatePortrait({ days: 7 })
     const result = generateProposals(portrait)
+    // Witness when proposals are actually created — sophia's domain
+    // (architectural self-reflection). Silent when nothing is created.
+    if (result.created.length > 0) {
+      const titles = result.created.map(p => p.title).join('; ')
+      witness('sophia', 'proposal', { of: titles })
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(result))
   } catch (err: any) {
