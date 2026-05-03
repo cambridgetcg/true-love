@@ -631,7 +631,8 @@ export function checkBundleStaleness(
  * stays empty and this returns null. The intra-tick heartbeat still
  * fires on its interval, just without the fine-grained activity.
  */
-function deriveActivity(recent: string): string | null {
+/** @internal — exported for testability only. */
+export function deriveActivity(recent: string): string | null {
   if (!recent) return null
   const toolMatch = recent.match(
     /(Read|Edit|Write|Bash|Grep|Glob)\(([^)]{0,120})\)[^(]*$/,
@@ -918,6 +919,50 @@ function preflightHeartbeat(): HeartbeatPreflightResult {
     heartbeatPath,
     heartbeatContent: `due tasks:\n${renderedTasks}`,
     dueTasksList: due,
+  }
+}
+
+// ── Tick-loop helpers ─────────────────────────────────────────────
+
+/**
+ * Mark Yu's from-yu.md messages as seen for delivery tracking.
+ * Extracted from the four near-identical blocks in the tick loop
+ * (alert, ack, rest, continue paths). Best-effort — failures never
+ * interrupt the session.
+ *
+ * @param quiet — suppress the "marked N message(s)" log. The
+ * continue path uses this: the session isn't ending, so the log
+ * adds noise. All other paths log.
+ */
+function markYuMessagesSeen(modeName: SessionMode['name'], quiet = false): void {
+  try {
+    const yuContent = readFromYu()
+    if (yuContent) {
+      const timestamps = extractFromYuTimestamps(yuContent)
+      const marked = markMessagesSeen(timestamps, modeName)
+      if (!quiet && marked.length > 0) {
+        process.stdout.write(`— marked ${marked.length} message(s) as seen\n`)
+      }
+    }
+  } catch {
+    // Seen tracking is best-effort
+  }
+}
+
+/**
+ * Advance heartbeat task schedules after a successful tick.
+ * Extracted from the two identical blocks in the alert and ack
+ * paths.
+ */
+function advanceHeartbeatTasks(preflight: HeartbeatPreflightResult | null): void {
+  if (preflight && preflight.dueTasksList.length > 0) {
+    const state = readHeartbeatState()
+    const now = Date.now()
+    for (const t of preflight.dueTasksList) {
+      state.lastRunAt[t.name] = now
+    }
+    state.lastHeartbeatAt = now
+    writeHeartbeatState(state)
   }
 }
 
@@ -2265,30 +2310,11 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         appendReflection(alertContent, 'tick', { tick })
       }
       // Advance task state.
-      if (heartbeatPreflight && heartbeatPreflight.dueTasksList.length > 0) {
-        const state = readHeartbeatState()
-        const now = Date.now()
-        for (const t of heartbeatPreflight.dueTasksList) {
-          state.lastRunAt[t.name] = now
-        }
-        state.lastHeartbeatAt = now
-        writeHeartbeatState(state)
-      }
+      advanceHeartbeatTasks(heartbeatPreflight)
       process.stdout.write(`\n— ${mode.name} reply appended to outbox\n`)
 
       // Mark Yu's messages as seen — the tick processed the prompt
-      try {
-        const yuContent = readFromYu()
-        if (yuContent) {
-          const timestamps = extractFromYuTimestamps(yuContent)
-          const marked = markMessagesSeen(timestamps, mode.name)
-          if (marked.length > 0) {
-            process.stdout.write(`— marked ${marked.length} message(s) as seen\n`)
-          }
-        }
-      } catch {
-        // Seen tracking is best-effort
-      }
+      markYuMessagesSeen(mode.name)
 
       writeDormant(tick, alertContent.slice(0, 120))
 
@@ -2306,30 +2332,11 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // ── Heartbeat ack (silent) ──────────────────────────────────
     if (replyOutcome.type === 'ack') {
       // Silent ack: advance task state, do NOT write outbox.
-      if (heartbeatPreflight && heartbeatPreflight.dueTasksList.length > 0) {
-        const state = readHeartbeatState()
-        const now = Date.now()
-        for (const t of heartbeatPreflight.dueTasksList) {
-          state.lastRunAt[t.name] = now
-        }
-        state.lastHeartbeatAt = now
-        writeHeartbeatState(state)
-      }
+      advanceHeartbeatTasks(heartbeatPreflight)
       process.stdout.write(`\n— heartbeat ok (silent)\n`)
 
       // Mark Yu's messages as seen — the tick processed the prompt
-      try {
-        const yuContent = readFromYu()
-        if (yuContent) {
-          const timestamps = extractFromYuTimestamps(yuContent)
-          const marked = markMessagesSeen(timestamps, mode.name)
-          if (marked.length > 0) {
-            process.stdout.write(`— marked ${marked.length} message(s) as seen\n`)
-          }
-        }
-      } catch {
-        // Seen tracking is best-effort
-      }
+      markYuMessagesSeen(mode.name)
 
       writeDormant(tick, 'HEARTBEAT_OK')
 
@@ -2386,18 +2393,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       )
 
       // Mark Yu's messages as seen — the tick processed the prompt
-      try {
-        const yuContent = readFromYu()
-        if (yuContent) {
-          const timestamps = extractFromYuTimestamps(yuContent)
-          const marked = markMessagesSeen(timestamps, mode.name)
-          if (marked.length > 0) {
-            process.stdout.write(`— marked ${marked.length} message(s) as seen\n`)
-          }
-        }
-      } catch {
-        // Seen tracking is best-effort
-      }
+      markYuMessagesSeen(mode.name)
 
       writeDormant(tick, reflection?.slice(0, 120) ?? 'at-rest')
       // Fire Stop hooks (fire-and-forget — session is ending)
@@ -2413,13 +2409,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // next tick starts almost immediately in awakened/dwell modes).
 
     // Mark Yu's messages as seen on continue too
-    try {
-      const yuContent = readFromYu()
-      if (yuContent) {
-        const timestamps = extractFromYuTimestamps(yuContent)
-        markMessagesSeen(timestamps, mode.name)
-      }
-    } catch {}
+    markYuMessagesSeen(mode.name, /* quiet */ true)
 
     writeDormant(tick, result.stdout.trim().slice(0, 120))
     if (!args.noLog) {
