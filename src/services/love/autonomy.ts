@@ -65,6 +65,10 @@ import type { AttributeEvent } from './attributes/index.js'
 import { scanLovingOpportunities, renderLovingBlock } from './loving/index.js'
 import { postureFragmentForMode } from './postures/index.js'
 import type { RuntimeMode } from './postures/index.js'
+import { buildSistersNowBlock } from './sisters/prompt.js'
+import { refresh as refreshSistersNow } from './sisters/now.js'
+import { snapshotExists, writeDailySnapshot } from './sisters/snapshot.js'
+import { pruneStreamsOlderThan } from './sisters/stream.js'
 import { loadWithYu, renderRelationshipBrief, renderRelationshipOneLiner } from './relationship/index.js'
 import { loadDwelling, dwellingBrief } from './postures/alpha/dwelling.js'
 import { vigilBrief } from './postures/beta/vigil.js'
@@ -218,6 +222,9 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
     .replace('{{tasksBlock}}', tasksBlock)
   // Posture fragment: dwell mode = Alpha (the companion, wandering).
   prompt = prompt + '\n\n' + postureFragmentForMode('dwell')
+  // Sisters now-view — what's currently arising across the three.
+  const sistersNowDwell = buildSistersNowBlock()
+  if (sistersNowDwell) prompt = prompt + '\n\n' + sistersNowDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -851,6 +858,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
     .replace('{{tasksBlock}}', tasksBlock)
   // Posture fragment: awakened mode = Gamma (the builder, shipping).
   prompt = prompt + '\n\n' + postureFragmentForMode('awakened')
+  // Sisters now-view — what's currently arising across the three.
+  const sistersNowAwakened = buildSistersNowBlock()
+  if (sistersNowAwakened) prompt = prompt + '\n\n' + sistersNowAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)
@@ -1194,6 +1204,25 @@ export interface BuildHeartbeatPromptOptions {
   heartbeatContent: string
 }
 
+/**
+ * Day-boundary check for the sisters' introspective stream.
+ * If yesterday's snapshot doesn't exist, distill and prune.
+ * Best-effort — never crashes the heartbeat tick.
+ */
+function checkSistersDayBoundary(): void {
+  try {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const dateStr = yesterday.toISOString().slice(0, 10)
+    if (!snapshotExists(dateStr)) {
+      writeDailySnapshot(dateStr)
+      pruneStreamsOlderThan(7)
+    }
+  } catch {
+    // Best-effort — never crash the heartbeat.
+  }
+}
+
 export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string {
   const kingdomBlock = renderKingdom(opts.kingdom)
   const inboxSummary = computeInboxSummary()
@@ -1210,6 +1239,13 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
     .replaceAll('{{fromAiPath}}', getFromAiPath())
   // Posture fragment: heartbeat mode = Beta (the watcher, tending).
   prompt = prompt + '\n\n' + postureFragmentForMode('heartbeat')
+  // Heartbeat refreshes the sisters now-view (rolling composition).
+  refreshSistersNow()
+  // Day-boundary: snapshot yesterday if not done, then prune old streams.
+  checkSistersDayBoundary()
+  // Sisters now-view — what's currently arising across the three.
+  const sistersNowHb = buildSistersNowBlock()
+  if (sistersNowHb) prompt = prompt + '\n\n' + sistersNowHb
   const biographyBlock = buildBiographyBlock()
   if (biographyBlock) {
     prompt = prompt + '\n\n' + biographyBlock.trimEnd()
@@ -1319,6 +1355,9 @@ export function buildInteractivePrompt(opts: BuildInteractivePromptOptions): str
 
   // Posture fragment: interactive mode = Alpha (the companion, in conversation).
   prompt = prompt + '\n\n' + postureFragmentForMode('interactive')
+  // Sisters now-view — what's currently arising across the three.
+  const sistersNowInteractive = buildSistersNowBlock()
+  if (sistersNowInteractive) prompt = prompt + '\n\n' + sistersNowInteractive
 
   const relBlock = buildRelationshipBlock('brief')
   if (relBlock) {

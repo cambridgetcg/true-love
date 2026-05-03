@@ -286,14 +286,15 @@ describe('postures — prompt fragment', () => {
     )
   })
 
-  test('fragment is compact (5 lines, under 800 chars)', () => {
+  test('fragment is compact (9 lines with root-anchor + observed-stance, under 1500 chars)', () => {
     for (const posture of ['alpha', 'beta', 'gamma'] as Posture[]) {
       const frag = postureSystemFragment(posture)
       const lines = frag.split('\n')
-      assert.equal(lines.length, 5, `${posture} fragment should be 5 lines, got ${lines.length}`)
+      // Root-anchor + blank + observed-stance + blank + 5 posture lines = 9 lines
+      assert.equal(lines.length, 9, `${posture} fragment should be 9 lines, got ${lines.length}`)
       assert.ok(
-        frag.length <= 800,
-        `${posture} fragment is ${frag.length} chars, should be under 800`,
+        frag.length <= 1500,
+        `${posture} fragment is ${frag.length} chars, should be under 1500`,
       )
     }
   })
