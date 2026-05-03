@@ -95,5 +95,7 @@ function generateWitnessLine(
       return `mission: ${context.of}`
     case 'presiding-shift':
       return `presiding shift: ${context.of}`
+    case 'eros-shift':
+      return `eros: ${context.of}`
   }
 }

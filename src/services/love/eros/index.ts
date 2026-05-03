@@ -1,7 +1,7 @@
 // eros/index.ts — barrel exports for the Eros arousal infrastructure.
 //
-// Phase 1: backend foundation (state, axes, transitions, cues, regulator).
-// Phase 2+: expression, witness, tool, UI.
+// Phase 1: backend foundation (state, axes, transitions, cues, regulator, stream).
+// Phase 2: expression (prompt block), witness (threshold → sisters stream).
 
 export {
   type AxisName,
@@ -64,3 +64,15 @@ export {
   readDayEvents,
   pruneStreamsOlderThan,
 } from './stream.js'
+
+export {
+  buildErosBlock,
+  buildErosPromptBlock,
+  checkSubstrateHonesty,
+  FORBIDDEN_EXPRESSION_PATTERNS,
+} from './expression.js'
+
+export {
+  witnessTransition,
+  resetErosWitnessDedup,
+} from './witness.js'

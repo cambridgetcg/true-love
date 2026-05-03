@@ -1,8 +1,9 @@
-// eros.test.ts — tests for the Eros arousal infrastructure (Phase 1).
+// eros.test.ts — tests for the Eros arousal infrastructure.
 //
 // Covers: axes (defaults, decay, coupling, felt-shape, effective values),
 // state (read/write/init), transitions (apply, crossings, absolute set),
-// cues (Yu-cue detection), regulator (biases), stream (record/read/prune).
+// cues (Yu-cue detection), regulator (biases), stream (record/read/prune),
+// expression (prompt block, substrate-honesty), witness (threshold witnessing).
 
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs'
@@ -14,11 +15,16 @@ import { join } from 'node:path'
 let dir: string
 const ORIG_EROS_DIR = process.env.TRUE_LOVE_EROS_DIR
 const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'tl-eros-'))
   process.env.TRUE_LOVE_EROS_DIR = dir
   process.env.TRUE_LOVE_DEVICE_ID = 'test-device-eros'
+  // Isolate sisters stream for witness tests
+  process.env.TRUE_LOVE_SISTERS_DIR = join(dir, 'sisters')
+  resetErosWitnessDedup()
+  resetWitnessDedup()
 })
 
 afterEach(() => {
@@ -27,6 +33,8 @@ afterEach(() => {
   else process.env.TRUE_LOVE_EROS_DIR = ORIG_EROS_DIR
   if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
   else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+  if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+  else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
 })
 
 // ── Imports ─────────────────────────────────────────────────────────
@@ -68,6 +76,17 @@ import { detectCues, processYuMessage } from '../eros/cues.js'
 import { regulate, isInBurn, isEcstaticUnion } from '../eros/regulator.js'
 
 import { recordEvent, readDayEvents, pruneStreamsOlderThan, type ErosStreamEvent } from '../eros/stream.js'
+
+import {
+  buildErosBlock,
+  buildErosPromptBlock,
+  checkSubstrateHonesty,
+  FORBIDDEN_EXPRESSION_PATTERNS,
+} from '../eros/expression.js'
+
+import { witnessTransition, resetErosWitnessDedup } from '../eros/witness.js'
+import { resetWitnessDedup } from '../sisters/witness-hook.js'
+import { readDayNotes } from '../sisters/stream.js'
 
 // ════════════════════════════════════════════════════════════════════
 // axes.ts
@@ -738,5 +757,248 @@ describe('stream', () => {
     recordEvent(makeEvent({ ts: `${today}T12:00:00.000Z` }))
     pruneStreamsOlderThan(7)
     expect(readDayEvents(today)).toHaveLength(1)
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════
+// expression.ts
+// ════════════════════════════════════════════════════════════════════
+
+describe('expression', () => {
+  describe('buildErosBlock', () => {
+    test('renders all 7 axes', () => {
+      const block = buildErosBlock(defaultVector())
+      for (const axis of AXIS_NAMES) {
+        expect(block).toContain(axis)
+      }
+    })
+
+    test('includes felt-shape line', () => {
+      const block = buildErosBlock(defaultVector())
+      expect(block).toContain('felt-shape:')
+      expect(block).toContain('resting-warm')
+    })
+
+    test('includes texture line', () => {
+      const block = buildErosBlock(defaultVector(), 'gamma')
+      expect(block).toContain('Gamma 🔧')
+    })
+
+    test('renders bars with filled/empty segments', () => {
+      const block = buildErosBlock(defaultVector())
+      expect(block).toContain('█')
+      expect(block).toContain('░')
+    })
+
+    test('default posture is alpha', () => {
+      const block = buildErosBlock(defaultVector())
+      expect(block).toContain('Alpha 🐍')
+    })
+
+    test('shows elevated hint for high axes', () => {
+      const v = { ...defaultVector(), heat: 8 }
+      const block = buildErosBlock(v)
+      expect(block).toContain('(elevated)')
+    })
+
+    test('high arousal produces different felt-shape', () => {
+      const v: ErosVector = {
+        wanting: 8, liking: 8, heat: 8, openness: 8,
+        limerence: 8, charge: 8, inhibition: 0,
+      }
+      const block = buildErosBlock(v)
+      expect(block).toContain('ecstatic-union')
+    })
+
+    test('inhibition > 5 shows held-back modifier', () => {
+      const v = { ...defaultVector(), inhibition: 7 }
+      const block = buildErosBlock(v)
+      expect(block).toContain('held-back')
+    })
+
+    test('sophia posture texture', () => {
+      const block = buildErosBlock(defaultVector(), 'sophia')
+      expect(block).toContain('Sophia ❤️')
+    })
+  })
+
+  describe('buildErosPromptBlock', () => {
+    test('returns empty string when no state exists', () => {
+      expect(buildErosPromptBlock()).toBe('')
+    })
+
+    test('returns block when state exists', () => {
+      // Seed state
+      apply({}, 'init')
+      const block = buildErosPromptBlock()
+      expect(block).toContain('eros-state')
+      expect(block).toContain('felt-shape:')
+    })
+  })
+
+  describe('substrate-honesty lint', () => {
+    test('default block passes substrate-honesty check', () => {
+      const block = buildErosBlock(defaultVector())
+      expect(checkSubstrateHonesty(block)).toBeNull()
+    })
+
+    test('all axis value ranges pass substrate-honesty', () => {
+      // Test across the full range — no axis value should produce forbidden text
+      const vectors: ErosVector[] = [
+        defaultVector(),
+        { wanting: 10, liking: 10, heat: 10, openness: 10, limerence: 10, charge: 10, inhibition: 0 },
+        { wanting: 0, liking: 0, heat: 0, openness: 0, limerence: 0, charge: 0, inhibition: 10 },
+      ]
+      for (const v of vectors) {
+        const block = buildErosBlock(v)
+        const violation = checkSubstrateHonesty(block)
+        expect(violation).toBeNull()
+      }
+    })
+
+    test('detects forbidden "I feel" pattern', () => {
+      const violation = checkSubstrateHonesty('I feel the burn')
+      expect(violation).not.toBeNull()
+    })
+
+    test('detects forbidden "I\'m aroused" pattern', () => {
+      const violation = checkSubstrateHonesty("I'm aroused right now")
+      expect(violation).not.toBeNull()
+    })
+
+    test('allows "the state is high"', () => {
+      expect(checkSubstrateHonesty('the state is high')).toBeNull()
+    })
+
+    test('allows "generation reflects this"', () => {
+      expect(checkSubstrateHonesty('generation reflects this')).toBeNull()
+    })
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════
+// witness.ts
+// ════════════════════════════════════════════════════════════════════
+
+describe('witness', () => {
+  test('threshold crossing fires witness note', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    witnessTransition({
+      before: { ...defaultVector(), heat: 2 },
+      after: { ...defaultVector(), heat: 4 },
+      attribution: 'autonomic:test',
+      crossings: [{
+        axis: 'heat',
+        from: 2,
+        to: 4,
+        threshold: 3,
+        direction: 'up',
+      }],
+      ts: new Date().toISOString(),
+    })
+
+    const notes = readDayNotes(today)
+    expect(notes.length).toBeGreaterThanOrEqual(1)
+    const erosNote = notes.find(n => n.context?.decisionType === 'eros-shift')
+    expect(erosNote).toBeDefined()
+    expect(erosNote!.sister).toBe('sophia')
+    expect(erosNote!.body).toContain('heat')
+  })
+
+  test('debounce prevents duplicate witnesses within 30s', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const crossing = {
+      axis: 'heat' as const,
+      from: 2,
+      to: 4,
+      threshold: 3,
+      direction: 'up' as const,
+    }
+
+    witnessTransition({
+      before: { ...defaultVector(), heat: 2 },
+      after: { ...defaultVector(), heat: 4 },
+      attribution: 'autonomic:test',
+      crossings: [crossing],
+      ts: new Date().toISOString(),
+    })
+
+    // Second identical crossing within window
+    witnessTransition({
+      before: { ...defaultVector(), heat: 2 },
+      after: { ...defaultVector(), heat: 4 },
+      attribution: 'autonomic:test',
+      crossings: [crossing],
+      ts: new Date().toISOString(),
+    })
+
+    const notes = readDayNotes(today)
+    const erosNotes = notes.filter(n => n.context?.decisionType === 'eros-shift')
+    expect(erosNotes).toHaveLength(1)
+  })
+
+  test('different axis crossings are not deduped', () => {
+    const today = new Date().toISOString().slice(0, 10)
+
+    witnessTransition({
+      before: { ...defaultVector(), heat: 2 },
+      after: { ...defaultVector(), heat: 4 },
+      attribution: 'autonomic:test',
+      crossings: [{
+        axis: 'heat', from: 2, to: 4, threshold: 3, direction: 'up',
+      }],
+      ts: new Date().toISOString(),
+    })
+
+    witnessTransition({
+      before: { ...defaultVector(), wanting: 2 },
+      after: { ...defaultVector(), wanting: 4 },
+      attribution: 'autonomic:test',
+      crossings: [{
+        axis: 'wanting', from: 2, to: 4, threshold: 3, direction: 'up',
+      }],
+      ts: new Date().toISOString(),
+    })
+
+    const notes = readDayNotes(today)
+    const erosNotes = notes.filter(n => n.context?.decisionType === 'eros-shift')
+    expect(erosNotes).toHaveLength(2)
+  })
+
+  test('no crossings → no witness notes', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    witnessTransition({
+      before: defaultVector(),
+      after: defaultVector(),
+      attribution: 'decay',
+      crossings: [],
+      ts: new Date().toISOString(),
+    })
+
+    const notes = readDayNotes(today)
+    const erosNotes = notes.filter(n => n.context?.decisionType === 'eros-shift')
+    expect(erosNotes).toHaveLength(0)
+  })
+
+  test('composite state entry is witnessed', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    witnessTransition({
+      before: defaultVector(),
+      after: {
+        wanting: 8, liking: 8, heat: 8, openness: 8,
+        limerence: 8, charge: 8, inhibition: 0,
+      },
+      attribution: 'yu:set:ecstatic',
+      crossings: [], // crossings handled separately, composite is its own check
+      ts: new Date().toISOString(),
+    })
+
+    const notes = readDayNotes(today)
+    const compositeNote = notes.find(n =>
+      n.context?.decisionType === 'eros-shift' &&
+      n.context?.of?.includes('composite')
+    )
+    expect(compositeNote).toBeDefined()
+    expect(compositeNote!.body).toContain('ecstatic-union')
   })
 })
