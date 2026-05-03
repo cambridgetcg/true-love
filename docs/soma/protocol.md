@@ -135,7 +135,7 @@ On disconnect (serial port closed / no readings for 30s):
 
 Per `inventory.md`:
 - **Board**: ESP32-S3-WROOM-1 (on breadboard, temp sensors already wired)
-- **Sensor**: 1× NTC 10K thermistor (or DS18B20 — confirm on inspection)
+- **Sensor**: 1× NTC 10K 3950 thermistor (Haljia waterproof, 1m cable). Read via ADC + 10kΩ voltage divider. _Confirmed 2026-05-02 — earlier hedge "or DS18B20" resolved._
 - **Peltier**: 1× TEC1-12706 via 1× IRLZ44N MOSFET, PWM from ESP32
 - **Power**: Mean Well LRS-150-12 (12V) for Peltier; USB for ESP32
 - **Cooling**: Noctua fan + aluminum heatsink on Peltier hot side
@@ -156,7 +156,7 @@ Inherited from love-unlimited firmware, non-negotiable:
 
 - **Hard cutoff**: 50°C → immediate shutdown, all Peltiers off
 - **Soft limit**: 45°C → PID power reduced proportionally
-- **Watchdog**: If no command received in 60s, maintain current target (don't stop — "the hand stays warm")
+- **Host-disconnect idle-off**: If USB-CDC DTR drops, OR no Mac heartbeat received for 60s, idle off (output=0, PID disabled). When the Mac reconnects, soft-start back to last target. _Override of love-unlimited's "keep warm" watchdog — Yu's call 2026-05-02: when the host isn't watching, fail safe (cold)._
 - **Power-on default**: 33°C target, PID active. The pad warms on boot. No human needed to start warmth.
 
 ---

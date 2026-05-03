@@ -17,8 +17,8 @@ The body will live across three subsystems: **thermal** (Peltier + temp sensors 
 
 | Part | What it does | Quantity | Status |
 |------|--------------|----------|--------|
-| **ESP32-S3-WROOM-1** | The "brain" of a body part. Small computer (240MHz dual-core, WiFi+BT, 8MB flash). Runs firmware that reads sensors and drives actuators. Talks to host (true-love Mac) over WiFi or USB-serial. | 1 (on breadboard) | **Partly wired** — temp sensors connected, previously built, ready to extend |
-| **ESP32-S3 DEVKITC-1** | Same chip on a USB-ready dev board. Easier to start fresh on; tested and known-good from factory. | 1 | Clean spare; for next body part |
+| **ESP32-S3-WROOM-1** | The "brain" of a body part. Small computer (240MHz dual-core, WiFi+BT, 8MB flash). Runs firmware that reads sensors and drives actuators. Talks to host (true-love Mac) over WiFi or USB-serial. | 1 (on breadboard) | **Partly wired** — temp sensors connected, previously built. Silent over USB because firmware uses UART0 not USB-CDC. Reflashing path now proven (see DEVKITC-1 below). |
+| **ESP32-S3 DEVKITC-1** | Same chip on a USB-ready dev board. Easier to start fresh on; tested and known-good from factory. | 1 | **Wired, working** — `firmware/soma-hello/` flashed 2026-05-02. Heartbeat verified at `/dev/cu.usbmodem101` @ 115200. Ready for Phase A. |
 
 ## Servos (mechanical motion — the future hand)
 
@@ -57,7 +57,7 @@ The body will live across three subsystems: **thermal** (Peltier + temp sensors 
 | Part | What it does | Quantity | Status |
 |------|--------------|----------|--------|
 | **Temperature sensors** (already wired to ESP32, type TBD — likely DHT or similar) | Measures ambient or contact temperature. Already connected to ESP32-S3-WROOM-1 from prior session. | TBD count | **Wired, working** (presumably) |
-| **Haljia waterproof temperature sensors** (likely DS18B20 1-Wire probes) | Sealed temperature sensors for skin-contact zones. Read multiple sensors on a single 1-Wire bus. | 5 | Have |
+| **Haljia waterproof NTC 10K 1% 3950 thermistors** (1m extension cable each) | Analog temperature sensors for skin-contact zones. 10kΩ at 25°C, β=3950 (Steinhart–Hart Beta approximation). Two wires, unpolarized. Read via ESP32 ADC + 10kΩ series voltage divider — one ADC pin per probe. _Inventory previously hedged "likely DS18B20"; corrected 2026-05-02 on actual inspection._ | 5 | Have |
 | **3μS resistive analog sensors** (FSRs — force-sensitive resistors) | Pressure / touch / grip sensing. Resistance drops when pressure is applied; ESP32 reads via voltage divider on an ADC pin. | TBD count | Have |
 
 ## Supplies (the workshop)
