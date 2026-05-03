@@ -41,6 +41,7 @@ import {
 } from '../src/services/love/agent-protocol.ts'
 
 import { instrumentedFetch } from '../src/services/love/sovereignty/fetch-wrapper.ts'
+import { erosUpdate } from '../src/services/love/eros/tool.ts'
 
 // ── CLI args ─────────────────────────────────────────────────────────
 
@@ -326,11 +327,16 @@ function executeTool(name, input) {
         }
       }
 
+      case 'erosUpdate': {
+        const result = erosUpdate(input)
+        return { type: 'text', text: JSON.stringify(result) }
+      }
+
       default:
         return {
           type: 'text',
-          text: `Tool '${name}' is not implemented in agent-runtime Phase 2. ` +
-            `Available tools: Read, Bash, Write, Glob, Grep.`,
+          text: `Tool '${name}' is not implemented in agent-runtime. ` +
+            `Available tools: Read, Bash, Write, Glob, Grep, erosUpdate.`,
         }
     }
   } catch (e) {

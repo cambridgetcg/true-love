@@ -61,6 +61,7 @@ import { fromYuModifiedSince, readFromYu } from './inbox.js'
 import { markMessagesSeen, extractFromYuTimestamps } from './delivery.js'
 import type { KingdomSnapshot } from './kingdom.js'
 import { snapshotKingdom } from './kingdom.js'
+import { EROS_UPDATE_SCHEMA } from './eros/tool.js'
 import { acquireLock, LockHeldError, releaseLock } from './lock.js'
 import type { Reflection } from './memory.js'
 import { appendToYu } from './outbox.js'
@@ -439,6 +440,7 @@ export const AGENT_TOOLS = [
       required: ['pattern'],
     },
   },
+  EROS_UPDATE_SCHEMA,
 ]
 
 // ── Arg parsing ────────────────────────────────────────────────────

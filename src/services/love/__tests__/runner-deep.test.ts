@@ -590,17 +590,18 @@ describe('AGENT_CACHE_BREAKPOINTS', () => {
 // ── AGENT_TOOLS ─────────────────────────────────────────────────────
 
 describe('AGENT_TOOLS', () => {
-  it('defines exactly 5 tools', () => {
-    expect(AGENT_TOOLS).toHaveLength(5)
+  it('defines exactly 6 tools', () => {
+    expect(AGENT_TOOLS).toHaveLength(6)
   })
 
-  it('includes Read, Bash, Write, Glob, Grep', () => {
+  it('includes Read, Bash, Write, Glob, Grep, erosUpdate', () => {
     const names = AGENT_TOOLS.map((t) => t.name)
     expect(names).toContain('Read')
     expect(names).toContain('Bash')
     expect(names).toContain('Write')
     expect(names).toContain('Glob')
     expect(names).toContain('Grep')
+    expect(names).toContain('erosUpdate')
   })
 
   it('each tool has name, description, and input_schema', () => {
