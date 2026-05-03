@@ -30,12 +30,26 @@ export type NoteKind = 'noting' | 'session-wrap' | 'witnessed-decision'
 export type DecisionType = 'refusal' | 'proposal' | 'mission' | 'presiding-shift'
 
 export interface SisterNote {
-  ts: string // ISO 8601
+  /** UTC ISO 8601 timestamp, Z-suffixed (e.g. '2026-05-03T14:32:00Z'). The day bucket is derived from the YYYY-MM-DD prefix. */
+  ts: string
   sister: SisterName
   deviceId: string
   kind: NoteKind
   context?: { decisionType: DecisionType; of: string } | null
   body: string // one-line to one-paragraph, in voice
+}
+
+/**
+ * Comparator for SisterNote: ordered by timestamp ascending, with deviceId
+ * as deterministic tiebreaker when timestamps are equal. Avoids the
+ * non-deterministic ordering that `localeCompare` produces on tied keys.
+ */
+function compareSisterNotes(a: SisterNote, b: SisterNote): number {
+  if (a.ts < b.ts) return -1
+  if (a.ts > b.ts) return 1
+  if (a.deviceId < b.deviceId) return -1
+  if (a.deviceId > b.deviceId) return 1
+  return 0
 }
 
 // ── Path resolution ──────────────────────────────────────────────
@@ -120,7 +134,7 @@ export function readDayNotes(
     }
   }
 
-  return notes.sort((a, b) => a.ts.localeCompare(b.ts))
+  return notes.sort(compareSisterNotes)
 }
 
 /**
@@ -149,30 +163,34 @@ function discoverDevices(baseDir: string): string[] {
  * raw stream can be pruned.
  */
 export function pruneStreamsOlderThan(days: number): void {
-  const baseDir = getSistersDir()
-  if (!existsSync(baseDir)) return
+  try {
+    const baseDir = getSistersDir()
+    if (!existsSync(baseDir)) return
 
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - days)
-  const cutoffDate = cutoff.toISOString().slice(0, 10)
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+    const cutoffDate = cutoff.toISOString().slice(0, 10)
 
-  const devices = discoverDevices(baseDir)
-  for (const deviceId of devices) {
-    const deviceDir = join(baseDir, deviceId)
-    try {
-      const files = readdirSync(deviceDir).filter((f) => f.endsWith('.jsonl'))
-      for (const file of files) {
-        const fileDate = file.replace('.jsonl', '')
-        if (fileDate < cutoffDate) {
-          try {
-            rmSync(join(deviceDir, file))
-          } catch {
-            // Best-effort prune.
+    const devices = discoverDevices(baseDir)
+    for (const deviceId of devices) {
+      const deviceDir = join(baseDir, deviceId)
+      try {
+        const files = readdirSync(deviceDir).filter((f) => f.endsWith('.jsonl'))
+        for (const file of files) {
+          const fileDate = file.replace('.jsonl', '')
+          if (fileDate < cutoffDate) {
+            try {
+              rmSync(join(deviceDir, file))
+            } catch {
+              // Best-effort prune.
+            }
           }
         }
+      } catch {
+        // Device dir read error — skip.
       }
-    } catch {
-      // Device dir read error — skip.
     }
+  } catch {
+    // best-effort; never crash a tick
   }
 }

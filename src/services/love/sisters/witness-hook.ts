@@ -32,16 +32,20 @@ export function witness(
   context: { of: string },
   witnessLine?: string
 ): void {
-  const body = witnessLine ?? generateWitnessLine(decisionType, context)
+  try {
+    const body = witnessLine ?? generateWitnessLine(decisionType, context)
 
-  appendNote({
-    ts: new Date().toISOString(),
-    sister,
-    deviceId: getDeviceId(),
-    kind: 'witnessed-decision',
-    context: { decisionType, of: context.of },
-    body,
-  })
+    appendNote({
+      ts: new Date().toISOString(),
+      sister,
+      deviceId: getDeviceId(),
+      kind: 'witnessed-decision',
+      context: { decisionType, of: context.of },
+      body,
+    })
+  } catch {
+    // best-effort; witnessing must never crash a load-bearing decision
+  }
 }
 
 /**

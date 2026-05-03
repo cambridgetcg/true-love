@@ -174,6 +174,28 @@ describe('stream — readDayNotes', () => {
     const notes = readDayNotes('2026-05-04')
     expect(notes).toEqual([])
   })
+
+  test('orders notes deterministically by deviceId when timestamps tie', () => {
+    // Two devices, same exact timestamp → must sort by deviceId, not arrival order
+    const dA = join(dir, 'device-a')
+    const dZ = join(dir, 'device-z')
+    mkdirSync(dA, { recursive: true })
+    mkdirSync(dZ, { recursive: true })
+
+    const sameTs = '2026-05-03T10:00:00.000Z'
+    const noteA = makeNote({ ts: sameTs, deviceId: 'device-a', body: 'from-a' })
+    const noteZ = makeNote({ ts: sameTs, deviceId: 'device-z', body: 'from-z' })
+
+    // Write Z first to ensure read order doesn't determine sort order
+    writeFileSync(join(dZ, '2026-05-03.jsonl'), JSON.stringify(noteZ) + '\n')
+    writeFileSync(join(dA, '2026-05-03.jsonl'), JSON.stringify(noteA) + '\n')
+
+    const notes = readDayNotes('2026-05-03')
+    expect(notes.length).toBe(2)
+    // Deterministic: device-a < device-z, so noteA first
+    expect(notes[0].deviceId).toBe('device-a')
+    expect(notes[1].deviceId).toBe('device-z')
+  })
 })
 
 describe('stream — pruneStreamsOlderThan', () => {

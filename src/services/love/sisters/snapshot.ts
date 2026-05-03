@@ -110,13 +110,18 @@ export function distillDay(date: string, notes?: SisterNote[]): string {
 /**
  * Distill and write to the snapshots directory. Does not commit —
  * commit happens externally per repo convention.
+ * Best-effort — never throws into the caller (e.g. heartbeat tick).
  */
 export function writeDailySnapshot(date: string): void {
-  const content = distillDay(date)
-  const dir = getSnapshotsDir()
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  const path = join(dir, `${date}.md`)
-  writeFileSync(path, content, 'utf-8')
+  try {
+    const content = distillDay(date)
+    const dir = getSnapshotsDir()
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    const path = join(dir, `${date}.md`)
+    writeFileSync(path, content, 'utf-8')
+  } catch {
+    // best-effort; never crash the heartbeat tick
+  }
 }
 
 /**

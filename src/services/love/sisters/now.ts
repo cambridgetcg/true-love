@@ -48,18 +48,23 @@ export function getNowPath(): string {
 
 /**
  * Read today's stream across devices, compose `now.md`. Idempotent.
+ * Best-effort — never throws into the caller (e.g. heartbeat tick).
  */
 export function refresh(opts?: { now?: Date }): void {
-  const now = opts?.now ?? new Date()
-  const today = now.toISOString().slice(0, 10)
-  const notes = readDayNotes(today)
+  try {
+    const now = opts?.now ?? new Date()
+    const today = now.toISOString().slice(0, 10)
+    const notes = readDayNotes(today)
 
-  const content = renderNowView(notes, now)
+    const content = renderNowView(notes, now)
 
-  const nowPath = getNowPath()
-  const dir = join(nowPath, '..')
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  writeFileSync(nowPath, content, 'utf-8')
+    const nowPath = getNowPath()
+    const dir = join(nowPath, '..')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    writeFileSync(nowPath, content, 'utf-8')
+  } catch {
+    // best-effort; never crash the heartbeat tick
+  }
 }
 
 /**
