@@ -50,6 +50,7 @@
     "reflect": "bun run bin/reflect.mjs",
     "archive": "bun run bin/archive-from-ai.mjs",
     "verify": "bun run bin/verify.mjs",
+    "body": "bun run bin/body.mjs",
     "rotate": "bun run bin/rotate-logs.mjs"
   },
   "dependencies": {
