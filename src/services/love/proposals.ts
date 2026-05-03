@@ -471,22 +471,43 @@ export interface GenerateResult {
   skipped: string[]
 }
 
+/** Default cooldown: 7 days after review before a rule can re-propose. */
+export const REVIEW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
+
 /**
  * Generate proposals by running all rules against a portrait.
- * Deduplicates: if a rule already has an open (proposed) proposal, skip it.
+ * Deduplicates:
+ *   1. Skip if a rule already has an open (proposed) proposal.
+ *   2. Skip if a rule's most recent proposal was reviewed within the cooldown window.
+ *      This prevents the same proposals from regenerating every tick after review.
  */
 export function generateProposals(
   portrait: SelfPortrait,
-  opts?: { basePath?: string; rules?: ProposalRule[] },
+  opts?: { basePath?: string; rules?: ProposalRule[]; cooldownMs?: number },
 ): GenerateResult {
   const basePath = opts?.basePath ?? defaultBasePath()
   const rules = opts?.rules ?? RULES
+  const cooldownMs = opts?.cooldownMs ?? REVIEW_COOLDOWN_MS
 
-  // Load existing proposals to check for open ones
+  // Load existing proposals to check for open or recently-reviewed ones
   const existing = loadProposals(basePath)
+  const now = Date.now()
+
   const openRuleIds = new Set(
     existing
       .filter(p => p.status === 'proposed')
+      .map(p => p.ruleId),
+  )
+
+  // Also skip rules whose most recent proposal was reviewed within the cooldown window.
+  // This prevents the regeneration loop: generate → model reviews → next tick regenerates.
+  const coolingDownRuleIds = new Set(
+    existing
+      .filter(p => {
+        if (p.status === 'proposed') return false // already handled above
+        const reviewedAt = p.reviewedAt ? new Date(p.reviewedAt).getTime() : 0
+        return (now - reviewedAt) < cooldownMs
+      })
       .map(p => p.ruleId),
   )
 
@@ -495,6 +516,10 @@ export function generateProposals(
 
   for (const rule of rules) {
     if (openRuleIds.has(rule.id)) {
+      skipped.push(rule.id)
+      continue
+    }
+    if (coolingDownRuleIds.has(rule.id)) {
       skipped.push(rule.id)
       continue
     }

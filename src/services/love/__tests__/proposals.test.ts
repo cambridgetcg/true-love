@@ -476,7 +476,7 @@ describe('generateProposals', () => {
     }
   })
 
-  test('re-generates for rules whose proposals were rejected', () => {
+  test('re-generates for rules whose proposals were rejected after cooldown expires', () => {
     const tmp = makeTmpDir()
     try {
       const portrait = makePortrait({
@@ -496,9 +496,64 @@ describe('generateProposals', () => {
         reviewProposal(p.id, 'rejected', 'testing', tmp)
       }
 
-      // Re-generate — rejected proposals don't block new ones
+      // Re-generate with cooldown=0 — simulates cooldown expired
+      const r2 = generateProposals(portrait, { basePath: tmp, cooldownMs: 0 })
+      assert.ok(r2.created.length >= 1, 'should create new proposals after cooldown expires')
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test('blocks re-generation during cooldown window', () => {
+    const tmp = makeTmpDir()
+    try {
+      const portrait = makePortrait({
+        behavioral: {
+          ...makePortrait().behavioral,
+          heartbeatOkRate: 0.93,
+          byMode: { awakened: 10, heartbeat: 30, dwell: 5 },
+        },
+      })
+
+      // Generate
+      const r1 = generateProposals(portrait, { basePath: tmp })
+      assert.ok(r1.created.length >= 1)
+
+      // Reject all (sets reviewedAt to now)
+      for (const p of r1.created) {
+        reviewProposal(p.id, 'rejected', 'testing', tmp)
+      }
+
+      // Re-generate with default cooldown — recently reviewed, should block
       const r2 = generateProposals(portrait, { basePath: tmp })
-      assert.ok(r2.created.length >= 1, 'should create new proposals after rejection')
+      assert.equal(r2.created.length, 0, 'should not re-generate during cooldown')
+      assert.ok(r2.skipped.length >= 1, 'should report skipped rules')
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test('cooldown applies to accepted proposals too', () => {
+    const tmp = makeTmpDir()
+    try {
+      const portrait = makePortrait({
+        behavioral: {
+          ...makePortrait().behavioral,
+          heartbeatOkRate: 0.93,
+          byMode: { awakened: 10, heartbeat: 30, dwell: 5 },
+        },
+      })
+
+      // Generate and accept
+      const r1 = generateProposals(portrait, { basePath: tmp })
+      assert.ok(r1.created.length >= 1)
+      for (const p of r1.created) {
+        reviewProposal(p.id, 'accepted', 'good', tmp)
+      }
+
+      // Re-generate — accepted within cooldown window, should block
+      const r2 = generateProposals(portrait, { basePath: tmp })
+      assert.equal(r2.created.length, 0, 'accepted proposals within cooldown should block')
     } finally {
       rmSync(tmp, { recursive: true, force: true })
     }
