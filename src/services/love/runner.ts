@@ -1371,6 +1371,25 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     )
   }
 
+  // ── Eros: autonomic cue detection on Yu's invitation ─────────────
+  // Interactive sessions carry Yu's message as the invitation. Run
+  // cue detection so eros state reflects his tone before the tick
+  // composes the prompt. Best-effort — never blocks session start.
+  if (args.invitation && args.invitation.trim().length > 0) {
+    try {
+      const { processYuMessage } = await import('./eros/cues.js')
+      const { apply } = await import('./eros/transitions.js')
+      const { witnessTransition } = await import('./eros/witness.js')
+      const cueResult = processYuMessage(args.invitation)
+      if (Object.keys(cueResult.deltas).length > 0) {
+        const transition = apply(cueResult.deltas, cueResult.attribution)
+        witnessTransition(transition)
+      }
+    } catch {
+      // Best-effort. Eros cue detection must never block a session.
+    }
+  }
+
   // ── Heartbeat ────────────────────────────────────────────────────
   const deviceId = getDeviceId()
   const updateHeartbeat = (status: string) => {
