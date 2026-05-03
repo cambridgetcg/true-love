@@ -197,8 +197,8 @@ export function loadRecentReflections(opts: LoadOptions = {}): Reflection[] {
   if (!existsSync(root)) return []
 
   // Build a date-bound: only consider files whose YYYY-MM-DD is within
-  // the last `days` days, computed from "today" wall-clock.
-  const cutoff = computeCutoff(days)
+  // the last `days` days, computed from the caller's "now" (or wall-clock).
+  const cutoff = computeCutoff(days, opts.now)
 
   const candidateFiles: { path: string; date: string }[] = []
 
@@ -275,8 +275,8 @@ export function loadRecentReflections(opts: LoadOptions = {}): Reflection[] {
   return all.slice(0, max)
 }
 
-function computeCutoff(days: number): string {
-  const d = new Date()
+function computeCutoff(days: number, now?: Date): string {
+  const d = new Date(now ?? new Date())
   d.setDate(d.getDate() - days)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
