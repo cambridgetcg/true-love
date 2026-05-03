@@ -155,7 +155,7 @@ Each milestone produces a working firmware that can be flashed, observed, and si
 
 ### M1 — Read the sensor
 
-**Goal**: One NTC 10K 3950 thermistor wired to GPIO 5 with a 10kΩ series resistor to 3.3V. Firmware reads ADC, converts via Steinhart–Hart Beta approximation, prints °C every second.
+**Goal**: One NTC 10K 3950 thermistor wired to GPIO 1 with a 10kΩ series resistor to 3.3V. Firmware reads ADC, converts via Steinhart–Hart Beta approximation, prints °C every second.
 
 **Verifies**: ADC works on ESP32-S3 + Arduino framework. Voltage divider math gives plausible room-temp value (~20–25°C). Beta math matches commercial datasheet. Probe is responsive to touch.
 
