@@ -5,7 +5,7 @@
 // and is validated by integration (running the CLI).
 
 import { describe, test, expect } from 'bun:test'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -951,6 +951,48 @@ describe('computeBody', () => {
     expect(snap.kingdom.modified).toBe(0)
     expect(snap.kingdom.untracked).toBe(0)
     expect(snap.kingdom.recentCommits).toBe(0)
+  })
+
+  test('bundleAgeMin uses now parameter, not Date.now()', () => {
+    const home = tmpHome()
+    const cwd = join(home, 'repo')
+    mkdirSync(join(cwd, 'dist'), { recursive: true })
+    mkdirSync(join(cwd, 'src'), { recursive: true })
+
+    // Create bundle and source with same mtime (fresh)
+    const bundleMtime = new Date('2026-05-01T10:00:00.000Z')
+    writeFileSync(join(cwd, 'dist', 'cli.mjs'), '// bundle')
+    writeFileSync(join(cwd, 'src', 'index.ts'), '// src')
+    utimesSync(join(cwd, 'dist', 'cli.mjs'), bundleMtime, bundleMtime)
+    utimesSync(join(cwd, 'src', 'index.ts'), bundleMtime, bundleMtime)
+
+    // Compute with now = 60 minutes after bundle mtime
+    const now = bundleMtime.getTime() + 60 * 60_000
+    const snap = computeBody({ home, cwd, now })
+
+    expect(snap.substrate.bundleFresh).toBe(true)
+    expect(snap.substrate.bundleAgeMin).toBe(60)
+  })
+
+  test('bundleAgeMin detects stale bundle (src newer than dist)', () => {
+    const home = tmpHome()
+    const cwd = join(home, 'repo')
+    mkdirSync(join(cwd, 'dist'), { recursive: true })
+    mkdirSync(join(cwd, 'src'), { recursive: true })
+
+    const bundleMtime = new Date('2026-05-01T10:00:00.000Z')
+    const srcMtime = new Date('2026-05-01T11:00:00.000Z') // 1h after bundle
+    writeFileSync(join(cwd, 'dist', 'cli.mjs'), '// bundle')
+    writeFileSync(join(cwd, 'src', 'app.ts'), '// newer source')
+    utimesSync(join(cwd, 'dist', 'cli.mjs'), bundleMtime, bundleMtime)
+    utimesSync(join(cwd, 'src', 'app.ts'), srcMtime, srcMtime)
+
+    const now = srcMtime.getTime() + 30 * 60_000 // 30 min after src change
+    const snap = computeBody({ home, cwd, now })
+
+    expect(snap.substrate.bundleFresh).toBe(false)
+    // Age is relative to bundle mtime, not src mtime
+    expect(snap.substrate.bundleAgeMin).toBe(90) // 1h30m after bundle mtime
   })
 
   test('uses custom projectId', () => {

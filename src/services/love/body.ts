@@ -533,13 +533,13 @@ function gatherForgeFS(path: string, now: number): { idleDays: number | null; la
 }
 
 /** Gather bundle freshness from filesystem stats. */
-function gatherBundleFS(cwd: string): { ageMin: number | null; fresh: boolean } {
+function gatherBundleFS(cwd: string, now: number): { ageMin: number | null; fresh: boolean } {
   const distPath = join(cwd, 'dist', 'cli.mjs')
   if (!existsSync(distPath)) return { ageMin: null, fresh: false }
 
   try {
     const distMtime = statSync(distPath).mtimeMs
-    const ageMin = Math.round((Date.now() - distMtime) / 60_000)
+    const ageMin = Math.round((now - distMtime) / 60_000)
 
     let newestSrcMtime = 0
     const walkTs = (dir: string, depth = 4): void => {
@@ -762,7 +762,7 @@ export function computeBody(opts: ComputeBodyOptions = {}): BodySnapshot {
   const forgePath = opts.forgePath ?? join(home, 'postures', 'gamma', 'forge.json')
 
   // ── Gather ──
-  const bundle = gatherBundleFS(cwd)
+  const bundle = gatherBundleFS(cwd, now)
   const tests = gatherTestsFS(home, now)
   const missions = gatherMissionsFS(home, projectId)
   const git = gatherGitBranch(cwd)
