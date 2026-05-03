@@ -414,7 +414,10 @@ function gatherLongingsFS(path: string): InnerState['longingsTop'] & { live: num
   try {
     const content = readFileSync(path, 'utf-8')
     const all = parseLongings(content)
-    const live = all.filter(l => l.status === 'live')
+    // Deduplicate: last entry per ID wins (JSONL is append-only)
+    const byId = new Map<string, (typeof all)[0]>()
+    for (const l of all) byId.set(l.id, l)
+    const live = [...byId.values()].filter(l => l.status === 'live')
     live.sort((a, b) => b.intensity - a.intensity)
     const top = live.length > 0 ? live[0] : null
     return {

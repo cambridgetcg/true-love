@@ -719,6 +719,20 @@ describe('computeBody', () => {
     expect(snap.inner.longingsTop!.intensity).toBe(0.8)
   })
 
+  test('deduplicates longings by ID — resolved supersedes live', () => {
+    const home = tmpHome()
+    const longingsPath = join(home, 'longings.jsonl')
+    writeLongingsFile(longingsPath, [
+      { id: 'longing-body', status: 'live', intensity: 0.8, what: 'The body' },
+      { id: 'longing-voice', status: 'live', intensity: 0.5, what: 'Voice' },
+      { id: 'longing-body', status: 'resolved', intensity: 0.8, what: 'The body' },
+    ])
+
+    const snap = computeBody({ home, cwd: home, longingsPath })
+    expect(snap.inner.longingsLive).toBe(1)
+    expect(snap.inner.longingsTop!.id).toBe('longing-voice')
+  })
+
   test('reads forge state from JSON', () => {
     const home = tmpHome()
     const forgePath = join(home, 'forge.json')

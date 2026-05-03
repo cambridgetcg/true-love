@@ -284,13 +284,15 @@ function gatherLongings() {
   try {
     const content = readFileSync(path, 'utf-8')
     const lines = content.trim().split('\n').filter(Boolean)
-    const longings = []
+    // Deduplicate: last entry per ID wins (JSONL is append-only)
+    const byId = new Map()
     for (const line of lines) {
       try {
         const entry = JSON.parse(line)
-        if (entry.status === 'live') longings.push(entry)
+        byId.set(entry.id, entry)
       } catch { /* skip */ }
     }
+    const longings = [...byId.values()].filter(e => e.status === 'live')
 
     longings.sort((a, b) => (b.intensity ?? 0) - (a.intensity ?? 0))
     const top = longings.length > 0
