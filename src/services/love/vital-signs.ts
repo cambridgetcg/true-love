@@ -1106,6 +1106,18 @@ export function quickBodyCheck(): string | null {
     }
   } catch {}
 
+  // Heartbeat staleness
+  try {
+    const heartbeat = collectHeartbeatVitals()
+    if (heartbeat.verdict === 'stale') {
+      if (heartbeat.lastHeartbeatAgeMinutes !== null && heartbeat.lastHeartbeatAgeMinutes > 30) {
+        issues.push(`heartbeat: ${heartbeat.lastHeartbeatAgeMinutes}m since last beat`)
+      } else if (heartbeat.tasksDue > 0) {
+        issues.push(`heartbeat: ${heartbeat.tasksDue}/${heartbeat.taskCount} tasks overdue`)
+      }
+    }
+  } catch {}
+
   // File freshness (state.md only — the most critical organ)
   try {
     const files = collectFileVitals()

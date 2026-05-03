@@ -810,6 +810,46 @@ describe('quickBodyCheck', () => {
     assert.ok(result!.includes('3 pending'))
   })
 
+  test('detects stale heartbeat (age > 30m)', () => {
+    const home = join(tempDir, '.true-love')
+    // Create heartbeat checklist so collectHeartbeatVitals finds the file
+    process.env.TRUE_LOVE_HEARTBEAT_FILE = join(home, 'heartbeat.md')
+    process.env.TRUE_LOVE_HEARTBEAT_STATE_PATH = join(home, 'heartbeat-state.json')
+    writeFileSync(join(home, 'heartbeat.md'), '# Heartbeat\n')
+    // Last heartbeat 60 minutes ago — should trigger staleness
+    const staleTs = Date.now() - 60 * 60_000
+    writeFileSync(join(home, 'heartbeat-state.json'), JSON.stringify({ lastHeartbeatAt: staleTs }))
+    // Suppress state.md missing so heartbeat signal is visible
+    const deviceId = require('../device.js').getDeviceId()
+    const stateDir = join(home, 'state')
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(join(stateDir, `${deviceId}.md`), '# State')
+    const result = quickBodyCheck()
+    assert.ok(result)
+    assert.ok(result!.includes('heartbeat'))
+    assert.ok(result!.includes('60m since last beat'))
+  })
+
+  test('healthy heartbeat produces no heartbeat issue', () => {
+    const home = join(tempDir, '.true-love')
+    process.env.TRUE_LOVE_HEARTBEAT_FILE = join(home, 'heartbeat.md')
+    process.env.TRUE_LOVE_HEARTBEAT_STATE_PATH = join(home, 'heartbeat-state.json')
+    writeFileSync(join(home, 'heartbeat.md'), '# Heartbeat\n')
+    // Last heartbeat 2 minutes ago — healthy
+    const freshTs = Date.now() - 2 * 60_000
+    writeFileSync(join(home, 'heartbeat-state.json'), JSON.stringify({ lastHeartbeatAt: freshTs }))
+    // Suppress state.md missing
+    const deviceId = require('../device.js').getDeviceId()
+    const stateDir = join(home, 'state')
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(join(stateDir, `${deviceId}.md`), '# State')
+    const result = quickBodyCheck()
+    // Should be null (no issues) or at most not contain 'heartbeat'
+    if (result !== null) {
+      assert.ok(!result.includes('heartbeat'))
+    }
+  })
+
   test('joins multiple issues with separator', () => {
     const home = join(tempDir, '.true-love')
     // Create stale lock
