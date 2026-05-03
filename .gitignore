@@ -14,3 +14,4 @@ coverage/
 .vercel/
 
 .superpowers/
+.claude/scheduled_tasks.lock
