@@ -1612,15 +1612,24 @@ function handleListProposals(req: IncomingMessage, res: ServerResponse): void {
   }
 }
 
+// Dedup guard: don't witness the same proposal batch within 60s.
+let lastProposalWitness: { titles: string; ts: number } | null = null
+const PROPOSAL_WITNESS_DEDUP_MS = 60_000
+
 function handleGenerateProposals(req: IncomingMessage, res: ServerResponse): void {
   try {
     const portrait = generatePortrait({ days: 7 })
     const result = generateProposals(portrait)
     // Witness when proposals are actually created — sophia's domain
     // (architectural self-reflection). Silent when nothing is created.
+    // Deduplicated: same titles within 60s are noted once.
     if (result.created.length > 0) {
       const titles = result.created.map(p => p.title).join('; ')
-      witness('sophia', 'proposal', { of: titles })
+      const now = Date.now()
+      if (!lastProposalWitness || lastProposalWitness.titles !== titles || now - lastProposalWitness.ts > PROPOSAL_WITNESS_DEDUP_MS) {
+        witness('sophia', 'proposal', { of: titles })
+        lastProposalWitness = { titles, ts: now }
+      }
     }
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(result))
