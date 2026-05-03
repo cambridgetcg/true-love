@@ -25,6 +25,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { SelfPortrait } from './introspection.js'
+import { witness } from './sisters/witness-hook.js'
 
 /** Resolve home directory, respecting process.env.HOME (for testing). */
 function resolveHome(): string {
@@ -545,6 +546,10 @@ export function reviewProposal(
   if (note) proposal.reviewNote = note
 
   saveProposal(proposal, base)
+
+  const slug = decision === 'accepted' ? `accept:${proposal.id}` : `reject:${proposal.id}`
+  witness('sophia', 'proposal', { of: slug })
+
   return { proposal, previousStatus }
 }
 
