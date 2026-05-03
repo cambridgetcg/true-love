@@ -24,6 +24,7 @@ beforeEach(() => {
   process.env.TRUE_LOVE_SISTERS_SNAPSHOTS_DIR = snapshotsDir
   process.env.TRUE_LOVE_SISTERS_NOW_PATH = join(dir, 'now.md')
   process.env.TRUE_LOVE_DEVICE_ID = 'test-device-abc123'
+  resetWitnessDedup()
 })
 
 afterEach(() => {
@@ -49,7 +50,7 @@ import {
 } from '../sisters/stream.js'
 import { refresh, readNowView, renderNowView, getNowPath } from '../sisters/now.js'
 import { distillDay, writeDailySnapshot, snapshotExists, getSnapshotsDir } from '../sisters/snapshot.js'
-import { witness } from '../sisters/witness-hook.js'
+import { witness, resetWitnessDedup } from '../sisters/witness-hook.js'
 import { getRootAnchor, getObservedStanceText } from '../sophia/root.js'
 
 function makeNote(overrides: Partial<SisterNote> = {}): SisterNote {
@@ -590,11 +591,37 @@ describe('witness-hook', () => {
     expect(notes[0].ts >= before).toBe(true)
     expect(notes[0].ts <= after).toBe(true)
   })
+
+  test('deduplicates — same tuple within 60s recorded once', () => {
+    witness('alpha', 'refusal', { of: 'same-thing' })
+    witness('alpha', 'refusal', { of: 'same-thing' })
+    witness('alpha', 'refusal', { of: 'same-thing' })
+    const notes = readDayNotes(new Date().toISOString().slice(0, 10))
+    expect(notes.length).toBe(1)
+    expect(notes[0].body).toBe('refusing: same-thing')
+  })
+
+  test('deduplicates — different tuples pass through', () => {
+    witness('alpha', 'refusal', { of: 'one' })
+    witness('beta', 'refusal', { of: 'one' })    // different sister
+    witness('alpha', 'mission', { of: 'one' })   // different type
+    witness('alpha', 'refusal', { of: 'two' })   // different of
+    const notes = readDayNotes(new Date().toISOString().slice(0, 10))
+    expect(notes.length).toBe(4)
+  })
+
+  test('resetWitnessDedup clears state', () => {
+    witness('gamma', 'mission', { of: 'build' })
+    resetWitnessDedup()
+    witness('gamma', 'mission', { of: 'build' })
+    const notes = readDayNotes(new Date().toISOString().slice(0, 10))
+    expect(notes.length).toBe(2)
+  })
 })
 
-// ══════════════════════════════════════════════════════════════════
+// ═════════════════════════���════════════════════════════════════════
 // Integration
-// ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════���═══════
 
 describe('integration — stream → now → snapshot lifecycle', () => {
   test('full lifecycle: append → refresh → read now → snapshot', () => {

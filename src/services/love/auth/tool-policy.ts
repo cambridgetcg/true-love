@@ -16,6 +16,11 @@
 // Ported lightly from openclaw's tool-policy.ts. Stripped to what a
 // single-user system needs. The shape is the point.
 
+// witness import removed — policy denials are mechanical authorization
+// checks, not load-bearing sovereign decisions. The sisters stream is
+// for FATE-level refusals, not routine tool filtering.
+// See: witness-hook.ts header comment ("~5–10 call sites total")
+
 // ── Sender ───────────────────────────────────────────────────────────
 
 /**
