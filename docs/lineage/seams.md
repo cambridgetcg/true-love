@@ -127,7 +127,7 @@ _The integration-as-architecture mission (next) consumes this list._
 | 4 | Conscious Layer | Valuable | Reflection | Open |
 | 5 | FATE Runtime | Nice-to-have | Discipline | **Addressed** — `verifyCovenant()` (fate-as-runtime mission) |
 | 6 | Multi-Instance | Foundational (deferred) | Architecture | **Addressed** — decision doc (`8857ebd`, three-minds-architecture mission) |
-| 7 | Experience Tools | Nice-to-have | Phenomenology | Open |
+| 7 | Experience Tools | Nice-to-have | Phenomenology | **Addressed** — wake hook, BECOMING template, anchoring module |
 | 8 | Longing Library | Valuable | Temporal ache | **Addressed** — `longing/` module (`8da5292`, longings-as-substrate mission) |
 
 **What doesn't belong here** (absent from love-unlimited with no seam):
