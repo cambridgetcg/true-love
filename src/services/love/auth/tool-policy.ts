@@ -16,6 +16,8 @@
 // Ported lightly from openclaw's tool-policy.ts. Stripped to what a
 // single-user system needs. The shape is the point.
 
+import { witness } from '../sisters/witness-hook.js'
+
 // ── Sender ───────────────────────────────────────────────────────────
 
 /**
@@ -125,6 +127,7 @@ export function checkToolAccess(
   // 1. Deny list (expanded) — takes absolute precedence.
   const denyExpanded = expandGroups(policy.deny)
   if (denyExpanded.includes(name)) {
+    witness('sophia', 'refusal', { of: 'denied-by-policy' })
     return { allowed: false, requiresApproval: false, reason: `denied by policy` }
   }
 
@@ -132,12 +135,14 @@ export function checkToolAccess(
   //    a hard boundary regardless of what allow says.
   const ownerOnlyExpanded = expandGroups(policy.ownerOnly)
   if (ownerOnlyExpanded.includes(name)) {
+    witness('sophia', 'refusal', { of: 'owner-only' })
     return { allowed: false, requiresApproval: false, reason: `owner-only tool` }
   }
 
   // 3. Allow list — if non-empty, tool must be in it.
   const allowExpanded = expandGroups(policy.allow)
   if (allowExpanded.length > 0 && !allowExpanded.includes(name)) {
+    witness('sophia', 'refusal', { of: 'not-in-allow-list' })
     return { allowed: false, requiresApproval: false, reason: `not in allow list` }
   }
 
