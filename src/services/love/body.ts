@@ -55,12 +55,37 @@ export interface InnerState {
   forgeLast: string | null
 }
 
+export interface TrajectoryState {
+  /** Total budget ticks recorded today. */
+  ticksToday: number
+  /** Ticks grouped by mode (heartbeat, awakened, interactive, etc). */
+  ticksByMode: Record<string, number>
+  /** Non-heartbeat ticks today. */
+  awakenedToday: number
+  /** Most recent non-heartbeat tick. */
+  lastAwakened: { ts: string; mode: string; durationMs: number } | null
+  /** Quota failures (429s) today. */
+  quotaFails: number
+  /** Trend vs yesterday at same hour: active/steady/quiet. */
+  trend: 'active' | 'steady' | 'quiet'
+}
+
+export const EMPTY_TRAJECTORY: TrajectoryState = {
+  ticksToday: 0,
+  ticksByMode: {},
+  awakenedToday: 0,
+  lastAwakened: null,
+  quotaFails: 0,
+  trend: 'steady',
+}
+
 export interface BodySnapshot {
   ts: string
   substrate: SubstrateState
   kingdom: KingdomState
   relational: RelationalState
   inner: InnerState
+  trajectory: TrajectoryState
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -74,7 +99,16 @@ function statusDot(ok: boolean): string {
   return ok ? '■' : '□'
 }
 
-// ── Rendering ──────────────────────────────────────────────────────
+function fmtRelative(fromTs: string, toTs: string): string {
+  const ms = Date.parse(fromTs) - Date.parse(toTs)
+  if (ms < 0) return 'future'
+  if (ms < 60_000) return 'just now'
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`
+  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h ago`
+  return `${Math.round(ms / 86_400_000)}d ago`
+}
+
+// ── Rendering ──────────────────────────���───────────────────────────
 
 export function renderBody(snapshot: BodySnapshot, tty = false): string {
   const c = (code: string, text: string) =>
@@ -194,6 +228,34 @@ export function renderBody(snapshot: BodySnapshot, tty = false): string {
     lines.push(`    □ forge        ${dim('no forge data')}`)
   }
 
+  // ── trajectory ──
+  const t = snapshot.trajectory
+  if (t.ticksToday > 0) {
+    lines.push('')
+    lines.push(dim('  trajectory'))
+
+    const modeParts = Object.entries(t.ticksByMode)
+      .sort(([, a], [, b]) => (b as number) - (a as number))
+      .map(([m, c]) => `${c} ${m}`)
+    lines.push(`    ■ ticks        ${t.ticksToday} today${modeParts.length > 0 ? dim(` (${modeParts.join(' · ')})`) : ''}`)
+
+    if (t.lastAwakened) {
+      const ago = fmtRelative(snapshot.ts, t.lastAwakened.ts)
+      const dur = t.lastAwakened.durationMs >= 60_000
+        ? `${Math.round(t.lastAwakened.durationMs / 60_000)}m`
+        : `${Math.round(t.lastAwakened.durationMs / 1_000)}s`
+      lines.push(`    ■ last work    ${t.lastAwakened.mode} ${ago} ${dim(`(${dur})`)}`)
+    } else {
+      lines.push(`    □ last work    ${dim('heartbeat only')}`)
+    }
+
+    if (t.quotaFails > 0) {
+      lines.push(`    □ quota        ${yellow(`${t.quotaFails} failures`)}`)
+    }
+
+    lines.push(`    ■ trend        ${t.trend}`)
+  }
+
   lines.push('')
   return lines.join('\n')
 }
@@ -211,10 +273,12 @@ export function assembleSnapshot(parts: {
   kingdom: KingdomState
   relational: RelationalState
   inner: InnerState
+  trajectory?: TrajectoryState
 }): BodySnapshot {
   return {
     ts: new Date().toISOString(),
     ...parts,
+    trajectory: parts.trajectory ?? EMPTY_TRAJECTORY,
   }
 }
 
@@ -307,6 +371,24 @@ export function parseTestResult(content: string): { pass: number; skip: number; 
   return null
 }
 
+/** Parse budget JSONL content into structured entries. */
+export function parseBudgetEntries(content: string): { timestamp: string; mode: string; durationMs: number; quotaFailed: boolean }[] {
+  const lines = content.trim().split('\n').filter(Boolean)
+  const entries: { timestamp: string; mode: string; durationMs: number; quotaFailed: boolean }[] = []
+  for (const line of lines) {
+    try {
+      const e = JSON.parse(line)
+      entries.push({
+        timestamp: e.timestamp || '',
+        mode: e.mode || 'unknown',
+        durationMs: e.durationMs ?? 0,
+        quotaFailed: !!e.quotaFailed,
+      })
+    } catch { /* skip malformed */ }
+  }
+  return entries
+}
+
 // ── Computed Body (library-level gathering) ──────────────────────────
 //
 // computeBody() reads the filesystem via typed modules and returns a
@@ -342,6 +424,8 @@ export interface ComputeBodyOptions {
   forgePath?: string
   /** Current time for relative calculations. Default: Date.now(). */
   now?: number
+  /** Budget device directory. Default: auto-detected from <home>/budget/. */
+  budgetDir?: string
 }
 
 // ── Filesystem-only gathering ─────────────────────────────────────
@@ -528,6 +612,78 @@ function gatherModelFS(home: string): string | null {
   }
 }
 
+// ── Trajectory gathering ─────────────────────────────────────────
+
+/** Auto-detect the first budget device directory under <home>/budget/. */
+function autoDetectBudgetDir(home: string): string | null {
+  const budgetRoot = join(home, 'budget')
+  if (!existsSync(budgetRoot)) return null
+  try {
+    const entries = readdirSync(budgetRoot, { withFileTypes: true })
+    const dirs = entries.filter(e => e.isDirectory())
+    return dirs.length > 0 ? join(budgetRoot, dirs[0].name) : null
+  } catch {
+    return null
+  }
+}
+
+/** Safe file read — returns null on any error. */
+function safeRead(path: string): string | null {
+  if (!existsSync(path)) return null
+  try { return readFileSync(path, 'utf-8') } catch { return null }
+}
+
+/**
+ * Gather trajectory from budget JSONL files.
+ * Reads today's file (and yesterday's for trend comparison).
+ * Pure filesystem — no subprocesses.
+ */
+function gatherTrajectoryFS(home: string, now: number, budgetDirOverride?: string): TrajectoryState {
+  const dir = budgetDirOverride ?? autoDetectBudgetDir(home)
+  if (!dir) return EMPTY_TRAJECTORY
+
+  // Read today's entries
+  const todayStr = new Date(now).toISOString().slice(0, 10)
+  const todayContent = safeRead(join(dir, `${todayStr}.jsonl`))
+  if (!todayContent) return EMPTY_TRAJECTORY
+  const todayEntries = parseBudgetEntries(todayContent)
+  if (todayEntries.length === 0) return EMPTY_TRAJECTORY
+
+  // Aggregate by mode
+  const ticksByMode: Record<string, number> = {}
+  let quotaFails = 0
+  let lastAwakened: TrajectoryState['lastAwakened'] = null
+
+  for (const e of todayEntries) {
+    ticksByMode[e.mode] = (ticksByMode[e.mode] || 0) + 1
+    if (e.quotaFailed) quotaFails++
+    if (e.mode !== 'heartbeat' && (!lastAwakened || e.timestamp > lastAwakened.ts)) {
+      lastAwakened = { ts: e.timestamp, mode: e.mode, durationMs: e.durationMs }
+    }
+  }
+
+  const awakenedToday = todayEntries.filter(e => e.mode !== 'heartbeat').length
+
+  // Trend: compare non-heartbeat ticks to yesterday at same hour
+  const yesterdayStr = new Date(now - 86_400_000).toISOString().slice(0, 10)
+  const yesterdayContent = safeRead(join(dir, `${yesterdayStr}.jsonl`))
+  let trend: TrajectoryState['trend'] = 'steady'
+
+  if (yesterdayContent) {
+    const yesterdayEntries = parseBudgetEntries(yesterdayContent)
+    const currentHour = new Date(now).getUTCHours()
+    const yesterdayUpToNow = yesterdayEntries.filter(e => {
+      try { return new Date(e.timestamp).getUTCHours() <= currentHour } catch { return false }
+    })
+    const yesterdayAwakened = yesterdayUpToNow.filter(e => e.mode !== 'heartbeat').length
+
+    if (awakenedToday > yesterdayAwakened * 1.5 && awakenedToday > 2) trend = 'active'
+    else if (yesterdayAwakened > 2 && awakenedToday < yesterdayAwakened * 0.5) trend = 'quiet'
+  }
+
+  return { ticksToday: todayEntries.length, ticksByMode, awakenedToday, lastAwakened, quotaFails, trend }
+}
+
 // ── Season derivation ─────────────────────────────────────────────
 
 /**
@@ -615,6 +771,7 @@ export function computeBody(opts: ComputeBodyOptions = {}): BodySnapshot {
   const longings = gatherLongingsFS(longingsPath)
   const forge = gatherForgeFS(forgePath, now)
   const agentModel = gatherModelFS(home)
+  const trajectory = gatherTrajectoryFS(home, now, opts.budgetDir)
 
   // ── Assemble ──
   const snapshot: BodySnapshot = {
@@ -650,6 +807,7 @@ export function computeBody(opts: ComputeBodyOptions = {}): BodySnapshot {
       forgeIdleDays: forge.idleDays,
       forgeLast: forge.last,
     },
+    trajectory,
   }
 
   return snapshot

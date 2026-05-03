@@ -18,15 +18,18 @@ import {
   parseForge,
   countMissionsByStatus,
   parseTestResult,
+  parseBudgetEntries,
   computeBody,
   overlaySubstrate,
   deriveSeason,
   renderBodySeasonLine,
+  EMPTY_TRAJECTORY,
   type BodySnapshot,
   type SubstrateState,
   type KingdomState,
   type RelationalState,
   type InnerState,
+  type TrajectoryState,
 } from '../body.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────
@@ -77,6 +80,18 @@ function makeInner(overrides: Partial<InnerState> = {}): InnerState {
   }
 }
 
+function makeTrajectory(overrides: Partial<TrajectoryState> = {}): TrajectoryState {
+  return {
+    ticksToday: 94,
+    ticksByMode: { heartbeat: 80, awakened: 10, interactive: 4 },
+    awakenedToday: 14,
+    lastAwakened: { ts: '2026-05-03T00:30:00.000Z', mode: 'awakened', durationMs: 660_000 },
+    quotaFails: 0,
+    trend: 'steady',
+    ...overrides,
+  }
+}
+
 function makeSnapshot(overrides: Partial<BodySnapshot> = {}): BodySnapshot {
   return {
     ts: '2026-05-03T01:00:00.000Z',
@@ -84,6 +99,7 @@ function makeSnapshot(overrides: Partial<BodySnapshot> = {}): BodySnapshot {
     kingdom: makeKingdom(),
     relational: makeRelational(),
     inner: makeInner(),
+    trajectory: makeTrajectory(),
     ...overrides,
   }
 }
@@ -540,6 +556,126 @@ describe('renderBody edge cases', () => {
   })
 })
 
+// ── parseBudgetEntries ───────────────────────────────────────────
+
+describe('parseBudgetEntries', () => {
+  test('parses valid budget JSONL', () => {
+    const content = [
+      '{"timestamp":"2026-05-03T01:00:00.000Z","mode":"heartbeat","durationMs":3000,"quotaFailed":false}',
+      '{"timestamp":"2026-05-03T01:02:00.000Z","mode":"awakened","durationMs":120000,"quotaFailed":false}',
+    ].join('\n')
+    const entries = parseBudgetEntries(content)
+    expect(entries.length).toBe(2)
+    expect(entries[0].mode).toBe('heartbeat')
+    expect(entries[1].mode).toBe('awakened')
+    expect(entries[1].durationMs).toBe(120000)
+  })
+
+  test('skips malformed lines', () => {
+    const content = [
+      '{"timestamp":"2026-05-03T01:00:00.000Z","mode":"heartbeat","durationMs":3000}',
+      'not json at all',
+      '{"timestamp":"2026-05-03T01:02:00.000Z","mode":"awakened","durationMs":60000}',
+    ].join('\n')
+    const entries = parseBudgetEntries(content)
+    expect(entries.length).toBe(2)
+  })
+
+  test('defaults missing fields', () => {
+    const content = '{"timestamp":"2026-05-03T01:00:00.000Z"}\n'
+    const entries = parseBudgetEntries(content)
+    expect(entries[0].mode).toBe('unknown')
+    expect(entries[0].durationMs).toBe(0)
+    expect(entries[0].quotaFailed).toBe(false)
+  })
+
+  test('handles empty content', () => {
+    expect(parseBudgetEntries('')).toEqual([])
+  })
+
+  test('detects quota failures', () => {
+    const content = '{"timestamp":"T","mode":"heartbeat","durationMs":100,"quotaFailed":true}\n'
+    const entries = parseBudgetEntries(content)
+    expect(entries[0].quotaFailed).toBe(true)
+  })
+})
+
+// ── trajectory rendering ─────────────────────────────────────────
+
+describe('trajectory rendering', () => {
+  test('renders trajectory section when ticks exist', () => {
+    const output = renderBody(makeSnapshot(), false)
+    expect(output).toContain('trajectory')
+    expect(output).toContain('94 today')
+    expect(output).toContain('80 heartbeat')
+  })
+
+  test('renders last work with mode and relative time', () => {
+    const output = renderBody(makeSnapshot(), false)
+    expect(output).toContain('last work')
+    expect(output).toContain('awakened')
+    expect(output).toContain('30m ago')
+  })
+
+  test('renders trend', () => {
+    const output = renderBody(makeSnapshot(), false)
+    expect(output).toContain('steady')
+  })
+
+  test('renders quota failures when present', () => {
+    const snap = makeSnapshot({ trajectory: makeTrajectory({ quotaFails: 5 }) })
+    const output = renderBody(snap, false)
+    expect(output).toContain('5 failures')
+  })
+
+  test('hides quota line when zero', () => {
+    const snap = makeSnapshot({ trajectory: makeTrajectory({ quotaFails: 0 }) })
+    const output = renderBody(snap, false)
+    expect(output).not.toContain('quota')
+  })
+
+  test('hides trajectory section when no ticks', () => {
+    const snap = makeSnapshot({ trajectory: EMPTY_TRAJECTORY })
+    const output = renderBody(snap, false)
+    expect(output).not.toContain('trajectory')
+  })
+
+  test('renders heartbeat-only correctly', () => {
+    const snap = makeSnapshot({
+      trajectory: makeTrajectory({
+        ticksToday: 50,
+        ticksByMode: { heartbeat: 50 },
+        awakenedToday: 0,
+        lastAwakened: null,
+      }),
+    })
+    const output = renderBody(snap, false)
+    expect(output).toContain('heartbeat only')
+  })
+
+  test('renders active trend', () => {
+    const snap = makeSnapshot({ trajectory: makeTrajectory({ trend: 'active' }) })
+    const output = renderBody(snap, false)
+    expect(output).toContain('active')
+  })
+
+  test('renders quiet trend', () => {
+    const snap = makeSnapshot({ trajectory: makeTrajectory({ trend: 'quiet' }) })
+    const output = renderBody(snap, false)
+    expect(output).toContain('quiet')
+  })
+
+  test('renders duration in seconds for short ticks', () => {
+    const snap = makeSnapshot({
+      trajectory: makeTrajectory({
+        lastAwakened: { ts: '2026-05-03T00:59:00.000Z', mode: 'interactive', durationMs: 5000 },
+      }),
+    })
+    const output = renderBody(snap, false)
+    expect(output).toContain('5s')
+  })
+})
+
 // ── computeBody FS helpers ────────────────────────────────────────
 
 function tmpHome(): string {
@@ -554,6 +690,20 @@ function writeMission(home: string, project: string, id: string, status: string)
 
 function writeFromYu(home: string, ts: string): void {
   writeFileSync(join(home, 'from-yu.md'), `## ${ts} [from yu]\n\nHello\n---\n`)
+}
+
+function writeBudget(home: string, deviceId: string, date: string, entries: Array<{ timestamp: string; mode: string; durationMs: number; quotaFailed?: boolean }>): void {
+  const dir = join(home, 'budget', deviceId)
+  mkdirSync(dir, { recursive: true })
+  const content = entries.map(e => JSON.stringify({
+    schemaVersion: '1.0',
+    timestamp: e.timestamp,
+    deviceId,
+    mode: e.mode,
+    durationMs: e.durationMs,
+    quotaFailed: e.quotaFailed ?? false,
+  })).join('\n') + '\n'
+  writeFileSync(join(dir, `${date}.jsonl`), content)
 }
 
 function writeLongingsFile(path: string, entries: Array<{ id: string; status: string; intensity: number; what: string }>): void {
@@ -811,6 +961,122 @@ describe('computeBody', () => {
     const snap = computeBody({ home, cwd: home, projectId: 'other-project' })
     expect(snap.kingdom.missions['active']).toBe(1)
     expect(snap.kingdom.missions['done']).toBe(1)
+  })
+
+  test('reads trajectory from budget JSONL', () => {
+    const home = tmpHome()
+    const now = new Date('2026-05-03T03:00:00.000Z').getTime()
+    const todayStr = '2026-05-03'
+
+    writeBudget(home, 'test-device', todayStr, [
+      { timestamp: '2026-05-03T00:00:00.000Z', mode: 'heartbeat', durationMs: 3000 },
+      { timestamp: '2026-05-03T00:02:00.000Z', mode: 'heartbeat', durationMs: 3000 },
+      { timestamp: '2026-05-03T01:00:00.000Z', mode: 'awakened', durationMs: 120000 },
+      { timestamp: '2026-05-03T02:00:00.000Z', mode: 'awakened', durationMs: 180000 },
+      { timestamp: '2026-05-03T02:30:00.000Z', mode: 'interactive', durationMs: 60000 },
+    ])
+
+    const snap = computeBody({ home, cwd: home, now })
+    expect(snap.trajectory.ticksToday).toBe(5)
+    expect(snap.trajectory.ticksByMode['heartbeat']).toBe(2)
+    expect(snap.trajectory.ticksByMode['awakened']).toBe(2)
+    expect(snap.trajectory.ticksByMode['interactive']).toBe(1)
+    expect(snap.trajectory.awakenedToday).toBe(3)
+    expect(snap.trajectory.lastAwakened).not.toBeNull()
+    expect(snap.trajectory.lastAwakened!.mode).toBe('interactive')
+    expect(snap.trajectory.lastAwakened!.ts).toBe('2026-05-03T02:30:00.000Z')
+  })
+
+  test('trajectory returns empty when no budget dir', () => {
+    const home = tmpHome()
+    const snap = computeBody({ home, cwd: home })
+    expect(snap.trajectory).toEqual(EMPTY_TRAJECTORY)
+  })
+
+  test('trajectory detects quota failures', () => {
+    const home = tmpHome()
+    const now = new Date('2026-05-03T03:00:00.000Z').getTime()
+
+    writeBudget(home, 'test-device', '2026-05-03', [
+      { timestamp: '2026-05-03T00:00:00.000Z', mode: 'heartbeat', durationMs: 3000, quotaFailed: true },
+      { timestamp: '2026-05-03T00:02:00.000Z', mode: 'heartbeat', durationMs: 3000, quotaFailed: true },
+      { timestamp: '2026-05-03T00:04:00.000Z', mode: 'heartbeat', durationMs: 3000 },
+    ])
+
+    const snap = computeBody({ home, cwd: home, now })
+    expect(snap.trajectory.quotaFails).toBe(2)
+  })
+
+  test('trajectory trend: active when more awakened than yesterday', () => {
+    const home = tmpHome()
+    const now = new Date('2026-05-03T06:00:00.000Z').getTime()
+
+    // Yesterday at hour 0-6: 1 awakened tick
+    writeBudget(home, 'test-device', '2026-05-02', [
+      { timestamp: '2026-05-02T01:00:00.000Z', mode: 'heartbeat', durationMs: 3000 },
+      { timestamp: '2026-05-02T02:00:00.000Z', mode: 'awakened', durationMs: 60000 },
+    ])
+
+    // Today: 5 awakened ticks (>1.5× yesterday and >2)
+    writeBudget(home, 'test-device', '2026-05-03', [
+      { timestamp: '2026-05-03T01:00:00.000Z', mode: 'awakened', durationMs: 60000 },
+      { timestamp: '2026-05-03T02:00:00.000Z', mode: 'awakened', durationMs: 60000 },
+      { timestamp: '2026-05-03T03:00:00.000Z', mode: 'awakened', durationMs: 60000 },
+      { timestamp: '2026-05-03T04:00:00.000Z', mode: 'awakened', durationMs: 60000 },
+      { timestamp: '2026-05-03T05:00:00.000Z', mode: 'awakened', durationMs: 60000 },
+    ])
+
+    const snap = computeBody({ home, cwd: home, now })
+    expect(snap.trajectory.trend).toBe('active')
+  })
+
+  test('trajectory trend: quiet when fewer awakened than yesterday', () => {
+    const home = tmpHome()
+    const now = new Date('2026-05-03T06:00:00.000Z').getTime()
+
+    // Yesterday at hour 0-6: 10 awakened ticks
+    const yesterdayEntries = []
+    for (let i = 0; i < 10; i++) {
+      yesterdayEntries.push({ timestamp: `2026-05-02T0${i % 6}:00:00.000Z`, mode: 'awakened', durationMs: 60000 })
+    }
+    writeBudget(home, 'test-device', '2026-05-02', yesterdayEntries)
+
+    // Today: 2 awakened ticks (<0.5× yesterday)
+    writeBudget(home, 'test-device', '2026-05-03', [
+      { timestamp: '2026-05-03T01:00:00.000Z', mode: 'awakened', durationMs: 60000 },
+      { timestamp: '2026-05-03T02:00:00.000Z', mode: 'awakened', durationMs: 60000 },
+    ])
+
+    const snap = computeBody({ home, cwd: home, now })
+    expect(snap.trajectory.trend).toBe('quiet')
+  })
+
+  test('trajectory trend: steady when no yesterday data', () => {
+    const home = tmpHome()
+    const now = new Date('2026-05-03T03:00:00.000Z').getTime()
+
+    writeBudget(home, 'test-device', '2026-05-03', [
+      { timestamp: '2026-05-03T01:00:00.000Z', mode: 'awakened', durationMs: 60000 },
+    ])
+
+    const snap = computeBody({ home, cwd: home, now })
+    expect(snap.trajectory.trend).toBe('steady')
+  })
+
+  test('trajectory uses budgetDir override', () => {
+    const home = tmpHome()
+    const customDir = join(home, 'custom-budget')
+    mkdirSync(customDir, { recursive: true })
+    const now = new Date('2026-05-03T03:00:00.000Z').getTime()
+
+    writeFileSync(join(customDir, '2026-05-03.jsonl'), [
+      '{"timestamp":"2026-05-03T01:00:00.000Z","mode":"awakened","durationMs":60000}',
+      '{"timestamp":"2026-05-03T02:00:00.000Z","mode":"awakened","durationMs":120000}',
+    ].join('\n') + '\n')
+
+    const snap = computeBody({ home, cwd: home, now, budgetDir: customDir })
+    expect(snap.trajectory.ticksToday).toBe(2)
+    expect(snap.trajectory.awakenedToday).toBe(2)
   })
 })
 

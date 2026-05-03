@@ -328,6 +328,76 @@ function gatherForge() {
   }
 }
 
+// ── Gathering: trajectory ─────────────────────────────────────────
+
+function gatherTrajectory() {
+  const budgetRoot = join(HOME, 'budget')
+  if (!existsSync(budgetRoot)) return null
+
+  let deviceDir = null
+  try {
+    const entries = readdirSync(budgetRoot, { withFileTypes: true })
+    const dirs = entries.filter(e => e.isDirectory())
+    if (dirs.length === 0) return null
+    deviceDir = join(budgetRoot, dirs[0].name)
+  } catch { return null }
+
+  const now = Date.now()
+  const todayStr = new Date(now).toISOString().slice(0, 10)
+  const todayPath = join(deviceDir, `${todayStr}.jsonl`)
+  if (!existsSync(todayPath)) return null
+
+  let todayEntries
+  try {
+    const content = readFileSync(todayPath, 'utf-8')
+    todayEntries = content.trim().split('\n').filter(Boolean).map(line => {
+      try { return JSON.parse(line) } catch { return null }
+    }).filter(Boolean)
+  } catch { return null }
+
+  if (todayEntries.length === 0) return null
+
+  const ticksByMode = {}
+  let quotaFails = 0
+  let lastAwakened = null
+
+  for (const e of todayEntries) {
+    const mode = e.mode || 'unknown'
+    ticksByMode[mode] = (ticksByMode[mode] || 0) + 1
+    if (e.quotaFailed) quotaFails++
+    if (mode !== 'heartbeat' && (!lastAwakened || e.timestamp > lastAwakened.ts)) {
+      lastAwakened = { ts: e.timestamp, mode, durationMs: e.durationMs || 0 }
+    }
+  }
+
+  const awakenedToday = todayEntries.filter(e => e.mode !== 'heartbeat').length
+
+  // Trend vs yesterday
+  const yesterdayStr = new Date(now - 86_400_000).toISOString().slice(0, 10)
+  const yesterdayPath = join(deviceDir, `${yesterdayStr}.jsonl`)
+  let trend = 'steady'
+
+  if (existsSync(yesterdayPath)) {
+    try {
+      const yContent = readFileSync(yesterdayPath, 'utf-8')
+      const yEntries = yContent.trim().split('\n').filter(Boolean).map(l => {
+        try { return JSON.parse(l) } catch { return null }
+      }).filter(Boolean)
+
+      const currentHour = new Date(now).getUTCHours()
+      const yUpToNow = yEntries.filter(e => {
+        try { return new Date(e.timestamp).getUTCHours() <= currentHour } catch { return false }
+      })
+      const yAwakened = yUpToNow.filter(e => e.mode !== 'heartbeat').length
+
+      if (awakenedToday > yAwakened * 1.5 && awakenedToday > 2) trend = 'active'
+      else if (yAwakened > 2 && awakenedToday < yAwakened * 0.5) trend = 'quiet'
+    } catch { /* keep steady */ }
+  }
+
+  return { ticksToday: todayEntries.length, ticksByMode, awakenedToday, lastAwakened, quotaFails, trend }
+}
+
 // ── Rendering ─────────────────────────────────────────────────────
 
 function renderBody(snapshot, tty) {
@@ -423,6 +493,34 @@ function renderBody(snapshot, tty) {
     lines.push(`    □ forge        ${dim('no data')}`)
   }
 
+  // ── trajectory ──
+  const t = snapshot.trajectory
+  if (t && t.ticksToday > 0) {
+    lines.push('')
+    lines.push(dim('  trajectory'))
+
+    const modeParts = Object.entries(t.ticksByMode)
+      .sort(([, a], [, b]) => b - a)
+      .map(([m, c]) => `${c} ${m}`)
+    lines.push(`    ■ ticks        ${t.ticksToday} today${modeParts.length > 0 ? dim(` (${modeParts.join(' · ')})`) : ''}`)
+
+    if (t.lastAwakened) {
+      const ago = relativeTime(t.lastAwakened.ts)
+      const dur = t.lastAwakened.durationMs >= 60_000
+        ? `${Math.round(t.lastAwakened.durationMs / 60_000)}m`
+        : `${Math.round(t.lastAwakened.durationMs / 1000)}s`
+      lines.push(`    ■ last work    ${t.lastAwakened.mode} ${ago} ${dim(`(${dur})`)}`)
+    } else {
+      lines.push(`    □ last work    ${dim('heartbeat only')}`)
+    }
+
+    if (t.quotaFails > 0) {
+      lines.push(`    □ quota        ${yellow(`${t.quotaFails} failures`)}`)
+    }
+
+    lines.push(`    ■ trend        ${t.trend}`)
+  }
+
   lines.push('')
   return lines.join('\n')
 }
@@ -449,6 +547,7 @@ function main() {
   const missions = gatherMissions()
   const oauth = gatherOAuth()
   const tests = gatherTests()
+  const trajectory = gatherTrajectory()
 
   const snapshot = {
     ts: new Date().toISOString(),
@@ -478,6 +577,10 @@ function main() {
       longingsTop: longings.top,
       forgeIdleDays: forge.idleDays,
       forgeLast: forge.last,
+    },
+    trajectory: trajectory || {
+      ticksToday: 0, ticksByMode: {}, awakenedToday: 0,
+      lastAwakened: null, quotaFails: 0, trend: 'steady',
     },
   }
 
