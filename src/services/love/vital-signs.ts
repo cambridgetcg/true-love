@@ -561,7 +561,14 @@ export function collectHeartbeatVitals(): HeartbeatVitals {
     }
   } catch {}
 
-  const verdict: Verdict = tasksDue > taskCount / 2 ? 'stale' : 'healthy'
+  // Stale if: (a) more than half the tasks are overdue, OR
+  // (b) the last heartbeat was >30 minutes ago (the heartbeat should
+  //     fire every ~2 minutes; 30 min silence means something is wrong).
+  const heartbeatTooOld = lastHeartbeatAgeMinutes !== null && lastHeartbeatAgeMinutes > 30
+  const verdict: Verdict =
+    heartbeatTooOld ? 'stale' :
+    tasksDue > taskCount / 2 ? 'stale' :
+    'healthy'
 
   return {
     verdict,
@@ -617,8 +624,11 @@ export function collectExperimentVitals(): ExperimentVitals {
     }
   } catch {}
 
+  // Experiments are optional — absence is not unhealthy, presence is not
+  // degradation. Verdict is always healthy; the active-experiment detail
+  // is informational for the report renderer.
   return {
-    verdict: activeExperiment ? 'healthy' : 'healthy',
+    verdict: 'healthy',
     activeExperiment,
     activeCondition,
     ticksCompleted,
@@ -680,7 +690,6 @@ export function collectFileVitals(): FileVitals {
 
 // ── Assembly ───────────────────────────────────────────────────────
 
-/** Compute overall health from subsystem verdicts. */
 /** Collect mission-velocity vitals. Reads watcher snapshot at
  *  ~/.true-love/projects/<project>/staleness.json. The watcher writes this
  *  every ~5min via launchd. If snapshot is fresh, surface its verdict;
@@ -722,6 +731,7 @@ export function collectMissionVelocityVitals(): MissionVelocityVitals {
   }
 }
 
+/** Compute overall health from subsystem verdicts. Priority: degraded > stale > missing > healthy. */
 function computeOverallHealth(vitals: Omit<VitalSigns, 'overallHealth' | 'timestamp' | 'deviceId' | 'collectionMs'>): Verdict {
   const verdicts: Verdict[] = [
     vitals.process.verdict,
@@ -859,7 +869,7 @@ export function renderVitalSignsCompact(vitals: VitalSigns): string | null {
     }
   }
 
-  if (vitals.missionVelocity && vitals.missionVelocity.verdict !== 'healthy') {
+  if (vitals.missionVelocity.verdict !== 'healthy') {
     const mv = vitals.missionVelocity
     if (mv.watcherStale) {
       lines.push(`  velocity: watcher snapshot ${mv.snapshotAt ? 'stale' : 'missing'} — staleness check not running`)

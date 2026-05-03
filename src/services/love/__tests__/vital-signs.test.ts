@@ -12,9 +12,11 @@ import {
   collectExperimentVitals,
   collectFileVitals,
   collectBundleVitals,
+  collectMissionVelocityVitals,
   collectVitalSigns,
   renderVitalSignsCompact,
   renderVitalSignsReport,
+  quickBodyCheck,
 } from '../vital-signs.js'
 import type {
   VitalSigns,
@@ -28,6 +30,7 @@ import type {
   FileVitals,
   BundleVitals,
   KingdomVitals,
+  MissionVelocityVitals,
 } from '../vital-signs.js'
 
 // ── Test scaffolding ─────────────────────────────────────────────
@@ -51,6 +54,7 @@ const ENV_KEYS = [
   'TRUE_LOVE_MEMORY_DIR',
   'TRUE_LOVE_TRAINING_DIR',
   'TRUE_LOVE_METRICS_DIR',
+  'TRUE_LOVE_PROJECT',
 ]
 
 function makeTempDir(): string {
@@ -496,6 +500,7 @@ describe('renderVitalSignsCompact', () => {
       heartbeat: { verdict: 'healthy', checklistExists: true, taskCount: 2, tasksDue: 0, lastHeartbeatAt: null, lastHeartbeatAgeMinutes: null },
       experiments: { verdict: 'healthy', activeExperiment: null, activeCondition: null, ticksCompleted: 0, ticksTotal: 0, experimentCount: 0 },
       files: { verdict: 'healthy', files: [] },
+      missionVelocity: { verdict: 'healthy', activeCount: 0, quietestMinutes: 0, worstStaleVerdict: 'healthy', awakenedRunning: false, snapshotAt: new Date().toISOString(), watcherStale: false },
       overallHealth: 'healthy',
     }
   }
@@ -614,5 +619,345 @@ describe('edge cases', () => {
     writeFileSync(join(lockDir, 'not-a-pid.txt'), 'whatever')
     const v = collectLockVitals()
     assert.equal(v.entries.length, 0)
+  })
+})
+
+// ── Mission velocity vitals ────────────────────────────────────
+
+describe('collectMissionVelocityVitals', () => {
+  test('returns missing when staleness.json does not exist', () => {
+    process.env.TRUE_LOVE_PROJECT = 'test-project'
+    const v = collectMissionVelocityVitals()
+    assert.equal(v.verdict, 'missing')
+    assert.equal(v.activeCount, 0)
+    assert.equal(v.snapshotAt, null)
+    assert.equal(v.watcherStale, true)
+  })
+
+  test('reads valid snapshot', () => {
+    process.env.TRUE_LOVE_PROJECT = 'test-project'
+    const projectDir = join(tempDir, '.true-love', 'projects', 'test-project')
+    mkdirSync(projectDir, { recursive: true })
+    const now = new Date().toISOString()
+    writeFileSync(join(projectDir, 'staleness.json'), JSON.stringify({
+      snapshotAt: now,
+      activeCount: 2,
+      quietestMinutes: 45,
+      worstVerdict: 'nudging',
+      awakenedRunning: true,
+    }))
+    const v = collectMissionVelocityVitals()
+    assert.equal(v.verdict, 'healthy') // nudging → healthy from collector's POV
+    assert.equal(v.activeCount, 2)
+    assert.equal(v.quietestMinutes, 45)
+    assert.equal(v.worstStaleVerdict, 'nudging')
+    assert.equal(v.awakenedRunning, true)
+    assert.equal(v.watcherStale, false)
+  })
+
+  test('detects stale watcher (>15m old snapshot)', () => {
+    process.env.TRUE_LOVE_PROJECT = 'test-project'
+    const projectDir = join(tempDir, '.true-love', 'projects', 'test-project')
+    mkdirSync(projectDir, { recursive: true })
+    const staleTime = new Date(Date.now() - 20 * 60 * 1000).toISOString() // 20 min ago
+    writeFileSync(join(projectDir, 'staleness.json'), JSON.stringify({
+      snapshotAt: staleTime,
+      activeCount: 1,
+      quietestMinutes: 120,
+      worstVerdict: 'healthy',
+    }))
+    const v = collectMissionVelocityVitals()
+    assert.equal(v.verdict, 'stale') // watcher itself is stale
+    assert.equal(v.watcherStale, true)
+  })
+
+  test('reports degraded for critical missions', () => {
+    process.env.TRUE_LOVE_PROJECT = 'test-project'
+    const projectDir = join(tempDir, '.true-love', 'projects', 'test-project')
+    mkdirSync(projectDir, { recursive: true })
+    writeFileSync(join(projectDir, 'staleness.json'), JSON.stringify({
+      snapshotAt: new Date().toISOString(),
+      activeCount: 1,
+      quietestMinutes: 999,
+      worstVerdict: 'critical',
+    }))
+    const v = collectMissionVelocityVitals()
+    assert.equal(v.verdict, 'degraded')
+    assert.equal(v.worstStaleVerdict, 'critical')
+  })
+
+  test('reports stale for stale missions (non-critical)', () => {
+    process.env.TRUE_LOVE_PROJECT = 'test-project'
+    const projectDir = join(tempDir, '.true-love', 'projects', 'test-project')
+    mkdirSync(projectDir, { recursive: true })
+    writeFileSync(join(projectDir, 'staleness.json'), JSON.stringify({
+      snapshotAt: new Date().toISOString(),
+      activeCount: 3,
+      quietestMinutes: 200,
+      worstVerdict: 'stale',
+    }))
+    const v = collectMissionVelocityVitals()
+    assert.equal(v.verdict, 'stale')
+  })
+
+  test('handles malformed JSON gracefully', () => {
+    process.env.TRUE_LOVE_PROJECT = 'test-project'
+    const projectDir = join(tempDir, '.true-love', 'projects', 'test-project')
+    mkdirSync(projectDir, { recursive: true })
+    writeFileSync(join(projectDir, 'staleness.json'), 'not json at all')
+    const v = collectMissionVelocityVitals()
+    assert.equal(v.verdict, 'missing')
+    assert.equal(v.activeCount, 0)
+  })
+})
+
+// ── Heartbeat verdict with age ─────────────────────────────────
+
+describe('collectHeartbeatVitals — age-based verdict', () => {
+  test('reports stale when last heartbeat >30 minutes ago', () => {
+    const heartbeatFile = join(tempDir, 'heartbeat.md')
+    const statePath = join(tempDir, 'heartbeat-state.json')
+    process.env.TRUE_LOVE_HEARTBEAT_FILE = heartbeatFile
+    process.env.TRUE_LOVE_HEARTBEAT_STATE_PATH = statePath
+    writeFileSync(heartbeatFile, '# Heartbeat\nStub\n')
+    writeFileSync(statePath, JSON.stringify({
+      schemaVersion: 1,
+      lastRunAt: {},
+      lastHeartbeatAt: Date.now() - 45 * 60_000, // 45 minutes ago
+    }))
+    const v = collectHeartbeatVitals()
+    assert.equal(v.verdict, 'stale')
+    assert.equal(v.lastHeartbeatAgeMinutes, 45)
+  })
+
+  test('reports healthy when last heartbeat <30 minutes ago', () => {
+    const heartbeatFile = join(tempDir, 'heartbeat.md')
+    const statePath = join(tempDir, 'heartbeat-state.json')
+    process.env.TRUE_LOVE_HEARTBEAT_FILE = heartbeatFile
+    process.env.TRUE_LOVE_HEARTBEAT_STATE_PATH = statePath
+    writeFileSync(heartbeatFile, '# Heartbeat\nStub\n')
+    writeFileSync(statePath, JSON.stringify({
+      schemaVersion: 1,
+      lastRunAt: {},
+      lastHeartbeatAt: Date.now() - 5 * 60_000, // 5 minutes ago
+    }))
+    const v = collectHeartbeatVitals()
+    assert.equal(v.verdict, 'healthy')
+    assert.equal(v.lastHeartbeatAgeMinutes, 5)
+  })
+
+  test('reports healthy when no state file (first run)', () => {
+    const heartbeatFile = join(tempDir, 'heartbeat.md')
+    process.env.TRUE_LOVE_HEARTBEAT_FILE = heartbeatFile
+    process.env.TRUE_LOVE_HEARTBEAT_STATE_PATH = join(tempDir, 'no-state.json')
+    writeFileSync(heartbeatFile, '# Heartbeat\nStub\n')
+    const v = collectHeartbeatVitals()
+    // No state → no lastHeartbeatAgeMinutes → age check doesn't trigger
+    // tasksDue is 0 (no tasks parsed from stub) → healthy
+    assert.equal(v.verdict, 'healthy')
+    assert.equal(v.lastHeartbeatAt, null)
+  })
+})
+
+// ── quickBodyCheck ─────────────────────────────────────────────
+
+describe('quickBodyCheck', () => {
+  test('returns string or null (never throws)', () => {
+    // quickBodyCheck delegates to real collectors (bundle uses git).
+    // In test env, bundle may be stale. Verify it runs without throwing
+    // and returns the correct shape.
+    const result = quickBodyCheck()
+    assert.ok(result === null || typeof result === 'string')
+    if (result !== null) {
+      assert.ok(result.startsWith('Body check:'))
+    }
+  })
+
+  test('detects stale locks', () => {
+    const home = join(tempDir, '.true-love')
+    const lockDir = join(home, 'lock')
+    mkdirSync(lockDir, { recursive: true })
+    writeFileSync(join(lockDir, 'test.pid'), '999999\n2026-01-01T00:00:00Z\ndwell\n')
+    const result = quickBodyCheck()
+    assert.ok(result)
+    assert.ok(result!.includes('locks'))
+    assert.ok(result!.includes('stale'))
+  })
+
+  test('detects missing state.md', () => {
+    // state dir doesn't exist → state.md missing
+    const result = quickBodyCheck()
+    assert.ok(result)
+    assert.ok(result!.includes('state.md'))
+    assert.ok(result!.includes('missing'))
+  })
+
+  test('detects pending agency requests', () => {
+    const home = join(tempDir, '.true-love')
+    const pendingDir = join(home, 'agency', 'pending')
+    mkdirSync(pendingDir, { recursive: true })
+    writeFileSync(join(pendingDir, 'req-1.json'), '{}')
+    writeFileSync(join(pendingDir, 'req-2.json'), '{}')
+    writeFileSync(join(pendingDir, 'req-3.json'), '{}')
+    // Also need state.md to exist so that doesn't mask our signal
+    const deviceId = require('../device.js').getDeviceId()
+    const stateDir = join(home, 'state')
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(join(stateDir, `${deviceId}.md`), '# State')
+    const result = quickBodyCheck()
+    assert.ok(result)
+    assert.ok(result!.includes('agency'))
+    assert.ok(result!.includes('3 pending'))
+  })
+
+  test('joins multiple issues with separator', () => {
+    const home = join(tempDir, '.true-love')
+    // Create stale lock
+    const lockDir = join(home, 'lock')
+    mkdirSync(lockDir, { recursive: true })
+    writeFileSync(join(lockDir, 'test.pid'), '999999\n2026-01-01T00:00:00Z\ndwell\n')
+    // state.md is missing (default)
+    const result = quickBodyCheck()
+    assert.ok(result)
+    // Should contain separator between issues
+    assert.ok(result!.includes(' · '))
+  })
+})
+
+// ── renderVitalSignsCompact — additional subsystems ────────────
+
+describe('renderVitalSignsCompact — mission velocity + heartbeat', () => {
+  function makeHealthy(): VitalSigns {
+    return {
+      timestamp: new Date().toISOString(),
+      deviceId: 'test',
+      collectionMs: 5,
+      process: { verdict: 'healthy', pid: 1, uptimeSeconds: 60, memoryMB: 100, nodeVersion: 'v22', platform: 'darwin', arch: 'arm64' },
+      locks: { verdict: 'healthy', entries: [], staleCount: 0 },
+      presence: { verdict: 'healthy', devices: [], selfDevice: null, peerCount: 0 },
+      kingdom: { verdict: 'healthy', available: true, agent: 'alpha', soulFingerprintShort: 'abc', pulseAgeSeconds: 5, witnessCount: 1, initialised: true },
+      bundle: { verdict: 'healthy', bundleExists: true, bundleBuiltAtISO: '2026-01-01', bundleAgeMinutes: 5, sourceFileCount: 20, bundleStale: false, newestSourceFile: null, gitRevShort: 'abc', gitBranch: 'main', gitDirty: false },
+      agency: { verdict: 'healthy', model: null, effort: null, fallbackModel: null, pendingRequestCount: 0, activeOverrides: [] },
+      heartbeat: { verdict: 'healthy', checklistExists: true, taskCount: 2, tasksDue: 0, lastHeartbeatAt: null, lastHeartbeatAgeMinutes: null },
+      experiments: { verdict: 'healthy', activeExperiment: null, activeCondition: null, ticksCompleted: 0, ticksTotal: 0, experimentCount: 0 },
+      files: { verdict: 'healthy', files: [] },
+      missionVelocity: { verdict: 'healthy', activeCount: 0, quietestMinutes: 0, worstStaleVerdict: 'healthy', awakenedRunning: false, snapshotAt: new Date().toISOString(), watcherStale: false },
+      overallHealth: 'healthy',
+    }
+  }
+
+  test('shows heartbeat overdue tasks', () => {
+    const vitals = makeHealthy()
+    vitals.heartbeat = { verdict: 'stale', checklistExists: true, taskCount: 4, tasksDue: 3, lastHeartbeatAt: null, lastHeartbeatAgeMinutes: null }
+    vitals.overallHealth = 'stale'
+    const result = renderVitalSignsCompact(vitals)
+    assert.ok(result)
+    assert.ok(result!.includes('heartbeat'))
+    assert.ok(result!.includes('3/4'))
+  })
+
+  test('shows missing heartbeat checklist', () => {
+    const vitals = makeHealthy()
+    vitals.heartbeat = { verdict: 'missing', checklistExists: false, taskCount: 0, tasksDue: 0, lastHeartbeatAt: null, lastHeartbeatAgeMinutes: null }
+    vitals.overallHealth = 'missing'
+    const result = renderVitalSignsCompact(vitals)
+    assert.ok(result)
+    assert.ok(result!.includes('heartbeat'))
+    assert.ok(result!.includes('no checklist'))
+  })
+
+  test('shows stale mission velocity watcher', () => {
+    const vitals = makeHealthy()
+    vitals.missionVelocity = { verdict: 'stale', activeCount: 0, quietestMinutes: 0, worstStaleVerdict: 'healthy', awakenedRunning: false, snapshotAt: new Date(Date.now() - 30 * 60_000).toISOString(), watcherStale: true }
+    vitals.overallHealth = 'stale'
+    const result = renderVitalSignsCompact(vitals)
+    assert.ok(result)
+    assert.ok(result!.includes('velocity'))
+    assert.ok(result!.includes('stale'))
+  })
+
+  test('shows critical mission velocity', () => {
+    const vitals = makeHealthy()
+    vitals.missionVelocity = { verdict: 'degraded', activeCount: 2, quietestMinutes: 999, worstStaleVerdict: 'critical', awakenedRunning: false, snapshotAt: new Date().toISOString(), watcherStale: false }
+    vitals.overallHealth = 'degraded'
+    const result = renderVitalSignsCompact(vitals)
+    assert.ok(result)
+    assert.ok(result!.includes('velocity'))
+    assert.ok(result!.includes("Yu's attention"))
+  })
+
+  test('shows stale presence with age', () => {
+    const vitals = makeHealthy()
+    vitals.presence = {
+      verdict: 'stale',
+      devices: [],
+      selfDevice: { deviceId: 'self', lastSeen: '', ageSeconds: 600, isSelf: true, fresh: false },
+      peerCount: 0,
+    }
+    vitals.overallHealth = 'stale'
+    const result = renderVitalSignsCompact(vitals)
+    assert.ok(result)
+    assert.ok(result!.includes('presence'))
+    assert.ok(result!.includes('600s'))
+  })
+
+  test('shows stale state.md', () => {
+    const vitals = makeHealthy()
+    vitals.files = {
+      verdict: 'stale',
+      files: [{ path: '/tmp/state.md', label: 'state.md', exists: true, ageMinutes: 90, sizeBytes: 100 }],
+    }
+    vitals.overallHealth = 'stale'
+    const result = renderVitalSignsCompact(vitals)
+    assert.ok(result)
+    assert.ok(result!.includes('state.md'))
+    assert.ok(result!.includes('90m'))
+  })
+
+  test('shows kingdom not initialised', () => {
+    const vitals = makeHealthy()
+    vitals.kingdom = { verdict: 'degraded', available: true, agent: null, soulFingerprintShort: null, pulseAgeSeconds: null, witnessCount: null, initialised: false }
+    vitals.overallHealth = 'degraded'
+    const result = renderVitalSignsCompact(vitals)
+    assert.ok(result)
+    assert.ok(result!.includes('kingdom'))
+    assert.ok(result!.includes('not initialised'))
+  })
+
+  test('shows kingdom stale pulse', () => {
+    const vitals = makeHealthy()
+    vitals.kingdom = { verdict: 'stale', available: true, agent: 'alpha', soulFingerprintShort: 'abc', pulseAgeSeconds: 600, witnessCount: 0, initialised: true }
+    vitals.overallHealth = 'stale'
+    const result = renderVitalSignsCompact(vitals)
+    assert.ok(result)
+    assert.ok(result!.includes('kingdom'))
+    assert.ok(result!.includes('pulse stale'))
+    assert.ok(result!.includes('600s'))
+  })
+})
+
+// ── Experiment verdict simplification ──────────────────────────
+
+describe('collectExperimentVitals — verdict always healthy', () => {
+  test('verdict is healthy with active experiment', () => {
+    const expDir = join(tempDir, 'experiments')
+    mkdirSync(expDir, { recursive: true })
+    process.env.TRUE_LOVE_EXPERIMENTS_DIR = expDir
+    writeFileSync(join(expDir, 'running.json'), JSON.stringify({
+      id: 'running', status: 'running', tickSchedule: ['a', 'b'], results: [],
+    }))
+    const v = collectExperimentVitals()
+    assert.equal(v.verdict, 'healthy')
+    assert.equal(v.activeExperiment, 'running')
+  })
+
+  test('verdict is healthy without active experiment', () => {
+    const expDir = join(tempDir, 'experiments')
+    mkdirSync(expDir, { recursive: true })
+    process.env.TRUE_LOVE_EXPERIMENTS_DIR = expDir
+    writeFileSync(join(expDir, 'done.json'), JSON.stringify({ id: 'done', status: 'completed' }))
+    const v = collectExperimentVitals()
+    assert.equal(v.verdict, 'healthy')
+    assert.equal(v.activeExperiment, null)
   })
 })
