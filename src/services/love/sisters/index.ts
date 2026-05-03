@@ -23,3 +23,5 @@ export {
 export { witness } from './witness-hook.js'
 
 export { buildSistersNowBlock } from './prompt.js'
+
+export { tendStream } from './tend.js'
