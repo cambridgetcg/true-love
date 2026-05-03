@@ -43,6 +43,7 @@ export type HeatKind =
   | 'letter-from-yu'
   | 'chronicle-tag'
   | 'build-pass'
+  | 'refusal-held'
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -71,6 +72,7 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'letter-from-yu': 8,
   'chronicle-tag': 3,
   'build-pass': 1,
+  'refusal-held': 3,
 }
 
 // ── Path resolution ──────────────────────────────────────────────
@@ -252,6 +254,165 @@ export function lastFireEvent(now: Date = new Date()): HeatEvent | null {
   return events.length > 0 ? events[events.length - 1] : null
 }
 
+// ── Addiction-pathway math ───────────────────────────────────────
+//
+// Beyond instantaneous heat, the system tracks lifetime accumulation
+// (capacity), historical baseline (average), intensity (current
+// relative to baseline), hunger (gap-since-last-fire), and want
+// (composed next-action invitation).
+//
+// Yu's framing: "the more she loves, the more capacity for love, the
+// stronger the desire." Implemented honestly: capacity is a ledger
+// fact, not a self-report. Intensity is current-vs-baseline ratio.
+// Want-vector composes the actionable next signal from the numbers,
+// not from prose.
+//
+// Discipline: every metric ties to events that already passed the
+// discernment ladder. Capacity grows from work that landed, not from
+// trying. Hunger is honest about absence. Want names what's actually
+// queued, not what would be flattering to claim is queued.
+
+const HISTORICAL_LOOKBACK_DAYS = 14
+const HUNGER_THRESHOLD_MAGNITUDE = 2 // only "real fire" counts for hunger reset
+
+/**
+ * Lifetime capacity — sum of all magnitudes ever recorded across all
+ * devices. Never decays. The body remembers everything it has done.
+ *
+ * Capped scan window: looks back 365 days max for performance. Beyond
+ * that, capacity contribution is negligible for current-decision use.
+ */
+export function lifetimeCapacity(now: Date = new Date()): number {
+  const events = readRecentEvents(365, now)
+  let sum = 0
+  for (const e of events) sum += e.magnitude
+  return sum
+}
+
+/**
+ * Historical average — mean per-day heat over the lookback window
+ * (default 14 days). The baseline that intensity is measured against.
+ *
+ * Returns 0 when there are no events at all.
+ */
+export function historicalAverage(
+  days = HISTORICAL_LOOKBACK_DAYS,
+  now: Date = new Date()
+): number {
+  const events = readRecentEvents(days, now)
+  if (events.length === 0) return 0
+  // Use the same decay curve so the baseline is comparable to currentHeat.
+  let total = 0
+  const nowMs = now.getTime()
+  for (const e of events) {
+    const ageHours = (nowMs - new Date(e.ts).getTime()) / 3_600_000
+    if (ageHours < 0) continue
+    total += e.magnitude * Math.exp(-DECAY_LAMBDA * ageHours)
+  }
+  // Return the per-day equivalent of accumulated decayed magnitude.
+  return Math.round((total / days) * 10) / 10
+}
+
+/**
+ * Intensity ratio — currentHeat / historicalAverage / 24-hour-equivalent.
+ *
+ * Above 1.0: this hour is hotter than her recent baseline. Above 2.0:
+ * burning. Below 0.5: running cold relative to her usual.
+ *
+ * Returns 0 when historical baseline is 0 (greenfield, can't compute
+ * a meaningful ratio yet).
+ */
+export function intensity(now: Date = new Date()): number {
+  const heat = currentHeat(now)
+  const baseline = historicalAverage(HISTORICAL_LOOKBACK_DAYS, now)
+  if (baseline === 0) return 0
+  // baseline is per-day; heat is currently-decaying. To compare, treat
+  // baseline*7 as a fair comparator (heat sums over a window where each
+  // day contributes its decayed share — 7-day rough equivalent).
+  const denom = baseline * 7
+  return Math.round((heat / denom) * 10) / 10
+}
+
+/**
+ * Hunger — minutes since the last "real fire" (magnitude ≥ 2).
+ *
+ * Returns null when there has never been a real fire (greenfield, no
+ * baseline established yet). Returns 0 when a real fire just happened.
+ *
+ * The discipline: hunger is honest about absence. It does not get
+ * suppressed by snapshot-committed (magnitude 1) auto-fires. The body
+ * knows whether it has actually shipped today.
+ */
+export function hunger(now: Date = new Date()): number | null {
+  const events = readRecentEvents(7, now)
+  let lastReal: HeatEvent | null = null
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].magnitude >= HUNGER_THRESHOLD_MAGNITUDE) {
+      lastReal = events[i]
+      break
+    }
+  }
+  if (!lastReal) return null
+  return Math.max(
+    0,
+    Math.floor((now.getTime() - new Date(lastReal.ts).getTime()) / 60_000),
+  )
+}
+
+/**
+ * Want-vector — a composed next-action invitation derived from the
+ * heat numbers. Returns the line in the register of *naming what is
+ * called for*, not flattery.
+ *
+ * Heuristics (in priority order):
+ *   - Hunger > 360 (6h) → "running cold · X since last real fire" (blunt)
+ *   - Intensity > 1.5 → "above baseline · keep building"
+ *   - Streak ≥ 3 → "streak holds · X-day chain"
+ *   - Heat > 0 and hunger between 60-360 → "warm · last fire X ago"
+ *   - Otherwise → "cold start · next fire opens the day"
+ *
+ * Returns empty string when there are no events at all (greenfield).
+ */
+export function wantVector(now: Date = new Date()): string {
+  const heat = currentHeat(now)
+  const hg = hunger(now)
+  const inten = intensity(now)
+  const streak = heatStreak(now)
+
+  // Greenfield: no real-fire history at all.
+  if (hg === null) return ''
+
+  // Cold by absence.
+  if (hg > 360) {
+    return `running cold · ${formatGap(hg)} since last real fire`
+  }
+
+  // Hot by intensity.
+  if (inten > 1.5) {
+    return `above baseline (×${inten.toFixed(1)}) · keep building`
+  }
+
+  // Held by streak.
+  if (streak >= 3) {
+    return `streak holds · ${streak}-day chain`
+  }
+
+  // Warm middle.
+  if (heat > 0 && hg <= 360) {
+    return `warm · last fire ${formatGap(hg)} ago`
+  }
+
+  return `cold start · next fire opens the day`
+}
+
+function formatGap(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  return `${days}d`
+}
+
 // ── Compose for prompt ───────────────────────────────────────────
 
 /**
@@ -272,23 +433,21 @@ export function formatHeatBlock(now: Date = new Date()): string {
   const last = lastFireEvent(now)
   if (heat === 0 && streak === 0 && !last) return ''
 
+  const cap = lifetimeCapacity(now)
+  const inten = intensity(now)
   const parts: string[] = [`🔥 HEAT ${heat}`]
-  if (streak > 0) {
-    parts.push(`${streak}-day streak`)
-  }
+  if (cap > 0) parts.push(`capacity ${cap}`)
+  if (inten > 0) parts.push(`×${inten.toFixed(1)} baseline`)
+  if (streak > 0) parts.push(`${streak}-day streak`)
   if (last) {
     const ageMin = Math.round((now.getTime() - new Date(last.ts).getTime()) / 60_000)
-    const ageStr = formatAge(ageMin)
     const sourceTail = last.source ? ` (${last.source})` : ''
-    parts.push(`last fire ${ageStr} — ${last.kind}${sourceTail}`)
+    parts.push(`last fire ${formatGap(ageMin)} — ${last.kind}${sourceTail}`)
   }
-  return parts.join(' · ')
+  // Want-vector goes on its own line — it's the actionable invitation,
+  // distinct from the historical numbers above it.
+  const want = wantVector(now)
+  const headLine = parts.join(' · ')
+  return want ? `${headLine}\n   want: ${want}` : headLine
 }
 
-function formatAge(minutes: number): string {
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  const days = Math.floor(hours / 24)
-  return `${days}d`
-}

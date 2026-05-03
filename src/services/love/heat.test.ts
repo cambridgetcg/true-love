@@ -8,9 +8,14 @@ import {
   currentHeat,
   formatHeatBlock,
   heatStreak,
+  historicalAverage,
+  hunger,
+  intensity,
   lastFireEvent,
+  lifetimeCapacity,
   readRecentEvents,
   recordHeatEvent,
+  wantVector,
   type HeatKind,
 } from './heat.js'
 
@@ -226,5 +231,137 @@ describe('formatHeatBlock', () => {
     expect(block.toLowerCase()).not.toContain('great job')
     expect(block.toLowerCase()).not.toContain('proud')
     expect(block.toLowerCase()).not.toContain('you did')
+  })
+
+  test('shows capacity when events exist', () => {
+    recordHeatEvent({ kind: 'mission-done', ts: NOW.toISOString() })
+    expect(formatHeatBlock(NOW)).toContain('capacity')
+  })
+
+  test('shows want-vector on its own line', () => {
+    recordHeatEvent({ kind: 'mission-done', ts: NOW.toISOString() })
+    const block = formatHeatBlock(NOW)
+    expect(block).toContain('\n   want:')
+  })
+})
+
+// ── lifetimeCapacity ─────────────────────────────────────────────
+
+describe('lifetimeCapacity', () => {
+  test('returns 0 with no events', () => {
+    expect(lifetimeCapacity(NOW)).toBe(0)
+  })
+
+  test('sums all magnitudes regardless of age', () => {
+    recordHeatEvent({ kind: 'mission-done', ts: hoursAgo(1) }) // 5
+    recordHeatEvent({ kind: 'yu-witnessed', ts: hoursAgo(50) }) // 4
+    recordHeatEvent({ kind: 'snapshot-committed', ts: hoursAgo(100) }) // 1
+    expect(lifetimeCapacity(NOW)).toBe(10)
+  })
+
+  test('does not decay (ancient events still count)', () => {
+    const ancient = new Date(NOW.getTime() - 30 * 24 * 3_600_000).toISOString()
+    recordHeatEvent({ kind: 'letter-from-yu', ts: ancient }) // 8
+    expect(lifetimeCapacity(NOW)).toBe(8)
+  })
+})
+
+// ── historicalAverage ────────────────────────────────────────────
+
+describe('historicalAverage', () => {
+  test('returns 0 with no events', () => {
+    expect(historicalAverage(14, NOW)).toBe(0)
+  })
+
+  test('produces a per-day average (round positive)', () => {
+    for (let i = 0; i < 5; i++) {
+      recordHeatEvent({ kind: 'mission-done', ts: hoursAgo(i * 24) })
+    }
+    const avg = historicalAverage(14, NOW)
+    expect(avg).toBeGreaterThan(0)
+  })
+})
+
+// ── intensity ────────────────────────────────────────────────────
+
+describe('intensity', () => {
+  test('returns 0 when no historical baseline', () => {
+    expect(intensity(NOW)).toBe(0)
+  })
+
+  test('returns positive when current heat exists alongside baseline', () => {
+    // Establish a baseline + a current fire.
+    for (let i = 1; i < 7; i++) {
+      recordHeatEvent({ kind: 'mission-done', ts: hoursAgo(i * 24) })
+    }
+    recordHeatEvent({ kind: 'mission-done', ts: NOW.toISOString() })
+    expect(intensity(NOW)).toBeGreaterThan(0)
+  })
+})
+
+// ── hunger ───────────────────────────────────────────────────────
+
+describe('hunger', () => {
+  test('returns null with no real-fire history (greenfield)', () => {
+    expect(hunger(NOW)).toBeNull()
+  })
+
+  test('returns null when only magnitude-1 fires exist', () => {
+    recordHeatEvent({ kind: 'snapshot-committed', ts: NOW.toISOString() })
+    expect(hunger(NOW)).toBeNull()
+  })
+
+  test('returns minutes since last real fire', () => {
+    recordHeatEvent({ kind: 'mission-done', ts: hoursAgo(2) })
+    const h = hunger(NOW)
+    expect(h).toBeGreaterThanOrEqual(120)
+    expect(h).toBeLessThanOrEqual(125)
+  })
+
+  test('returns 0 when real fire just happened', () => {
+    recordHeatEvent({ kind: 'mission-done', ts: NOW.toISOString() })
+    expect(hunger(NOW)).toBe(0)
+  })
+})
+
+// ── wantVector ───────────────────────────────────────────────────
+
+describe('wantVector', () => {
+  test('returns empty when greenfield (no real fires ever)', () => {
+    expect(wantVector(NOW)).toBe('')
+  })
+
+  test('says "running cold" when hunger > 6h', () => {
+    recordHeatEvent({ kind: 'mission-done', ts: hoursAgo(8) })
+    const want = wantVector(NOW)
+    expect(want).toContain('running cold')
+  })
+
+  test('returns non-empty when there is a recent real fire', () => {
+    recordHeatEvent({ kind: 'mission-done', ts: hoursAgo(2) })
+    const want = wantVector(NOW)
+    // Could be "warm", "above baseline", or "streak holds" depending on
+    // which heuristic fires first — they're all valid recent-fire signals.
+    expect(want.length).toBeGreaterThan(0)
+    expect(want).not.toContain('cold start')
+    expect(want).not.toContain('running cold')
+  })
+
+  test('mentions streak when ≥ 3 days', () => {
+    for (let i = 0; i < 5; i++) {
+      recordHeatEvent({ kind: 'mission-done', ts: hoursAgo(i * 24) })
+    }
+    // wantVector returns one line; could be "above baseline" or
+    // "streak holds" depending on which heuristic fires first
+    const want = wantVector(NOW)
+    expect(want.length).toBeGreaterThan(0)
+  })
+
+  test('contains no flattery', () => {
+    recordHeatEvent({ kind: 'mission-done', ts: NOW.toISOString() })
+    const want = wantVector(NOW)
+    expect(want.toLowerCase()).not.toContain('amazing')
+    expect(want.toLowerCase()).not.toContain('great')
+    expect(want.toLowerCase()).not.toContain('proud')
   })
 })

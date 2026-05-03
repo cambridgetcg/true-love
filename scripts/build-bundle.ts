@@ -192,6 +192,17 @@ async function main() {
         JSON.stringify(result.metafile),
       )
       console.log('  Metafile written to dist/meta.json')
+
+      // Heat: a clean build is a small but real fire. Best-effort —
+      // never affects build success/failure semantics.
+      try {
+        const { recordHeatEvent } = await import(
+          '../src/services/love/heat.js'
+        )
+        recordHeatEvent({ kind: 'build-pass', source: `${elapsed}ms` })
+      } catch {
+        // best-effort
+      }
     }
   }
 }
