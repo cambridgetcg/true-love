@@ -99,6 +99,8 @@ import {
   getErosSnapshotsDir,
 } from '../eros/snapshot.js'
 
+import { erosUpdate, EROS_UPDATE_SCHEMA } from '../eros/tool.js'
+
 // ════════════════════════════════════════════════════════════════════
 // axes.ts
 // ════════════════════════════════════════════════════════════════════
@@ -1111,5 +1113,87 @@ describe('snapshot', () => {
     test('uses env override', () => {
       expect(getErosSnapshotsDir()).toBe(join(dir, 'snapshots'))
     })
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════
+// tool.ts
+// ════════════════════════════════════════════════════════════════════
+
+describe('tool', () => {
+  test('valid update applies deltas and persists', () => {
+    const result = erosUpdate({ deltas: { heat: 2, limerence: 1 }, because: 'his-name-sharpened' })
+    expect(result.ok).toBe(true)
+    expect(result.transition).toBeDefined()
+    expect(result.transition!.attribution).toBe('voluntary:his-name-sharpened')
+    const state = readErosState()
+    expect(state).not.toBeNull()
+    expect(state!.lastAttribution).toBe('voluntary:his-name-sharpened')
+  })
+
+  test('returned transition has before and after vectors', () => {
+    const result = erosUpdate({ deltas: { wanting: 3 }, because: 'test-vectors' })
+    expect(result.ok).toBe(true)
+    expect(result.transition!.before).toBeDefined()
+    expect(result.transition!.after).toBeDefined()
+    expect(result.transition!.after.wanting).toBeGreaterThan(result.transition!.before.wanting)
+  })
+
+  test('rejects empty deltas', () => {
+    const result = erosUpdate({ deltas: {}, because: 'testing' })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('no deltas')
+  })
+
+  test('rejects unknown axis', () => {
+    const result = erosUpdate({ deltas: { bogus: 5 } as any, because: 'testing' })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('unknown')
+  })
+
+  test('rejects empty because', () => {
+    const result = erosUpdate({ deltas: { heat: 1 }, because: '' })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('because')
+  })
+
+  test('rejects whitespace-only because', () => {
+    const result = erosUpdate({ deltas: { heat: 1 }, because: '   ' })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('because')
+  })
+
+  test('filters non-numeric delta values silently', () => {
+    const result = erosUpdate({ deltas: { heat: 2, openness: 'nope' as any }, because: 'filtering' })
+    expect(result.ok).toBe(true)
+    // Only heat should have been applied
+    expect(result.transition!.after.heat).toBeGreaterThan(result.transition!.before.heat)
+  })
+
+  test('rejects NaN delta', () => {
+    const result = erosUpdate({ deltas: { heat: NaN }, because: 'nan-test' })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('no deltas')
+  })
+
+  test('rejects Infinity delta', () => {
+    const result = erosUpdate({ deltas: { heat: Infinity }, because: 'inf-test' })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('no deltas')
+  })
+
+  test('EROS_UPDATE_SCHEMA has correct name and required fields', () => {
+    expect(EROS_UPDATE_SCHEMA.name).toBe('erosUpdate')
+    expect(EROS_UPDATE_SCHEMA.input_schema.properties).toHaveProperty('deltas')
+    expect(EROS_UPDATE_SCHEMA.input_schema.properties).toHaveProperty('because')
+    expect(EROS_UPDATE_SCHEMA.input_schema.required).toContain('deltas')
+    expect(EROS_UPDATE_SCHEMA.input_schema.required).toContain('because')
+  })
+
+  test('EROS_UPDATE_SCHEMA lists all 7 axes in deltas properties', () => {
+    const axisProps = EROS_UPDATE_SCHEMA.input_schema.properties.deltas.properties
+    for (const axis of AXIS_NAMES) {
+      expect(axisProps).toHaveProperty(axis)
+    }
   })
 })

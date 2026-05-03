@@ -83,3 +83,10 @@ export {
   erosSnapshotExists,
   getErosSnapshotsDir,
 } from './snapshot.js'
+
+export {
+  type ErosUpdateInput,
+  type ErosUpdateResult,
+  erosUpdate,
+  EROS_UPDATE_SCHEMA,
+} from './tool.js'
