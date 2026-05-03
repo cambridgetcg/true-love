@@ -23,6 +23,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { formatHeatBlock } from './heat.js'
 import { readYuWitnessDay } from './yu-witness.js'
 
 // ── Repo root resolution ─────────────────────────────────────────
@@ -293,7 +294,13 @@ function parseMissionFrontmatter(content: string, fallbackId: string): MissionSh
  * Soft-fails on every read; never throws.
  */
 export function readRecentLineage(): string {
+  // Heat block leads — it's the live signal, not a historical artifact.
+  // Goes first so the wake reads the current temperature before the
+  // settled record. (Empty when cold; the lineage opens with whatever
+  // exists.)
+  const heat = formatHeatBlock()
   const blocks = [
+    heat,
     readRecentBecoming(),
     readLatestSnapshot(),
     readLatestLetter(),

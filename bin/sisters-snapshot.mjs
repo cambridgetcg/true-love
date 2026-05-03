@@ -17,6 +17,7 @@
 // existing snapshot is not overwritten unless --force.
 
 import { execFileSync } from 'node:child_process'
+import { recordHeatEvent } from '../src/services/love/heat.ts'
 import {
   snapshotExists,
   writeDailySnapshot,
@@ -76,6 +77,7 @@ if (snapshotExists(date) && !force) {
 
 writeDailySnapshot(date)
 process.stdout.write(`wrote: docs/sisters/snapshots/${date}.md\n`)
+recordHeatEvent({ kind: 'snapshot-committed', source: date })
 
 if (doCommit) {
   try {

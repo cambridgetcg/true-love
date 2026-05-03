@@ -72,6 +72,19 @@ export function appendYuWitness(opts: WitnessAppendOptions): void {
     const entry = `- ${time}${aboutTag} · ${body}\n`
 
     appendFileSync(path, entry, 'utf-8')
+
+    // Heat: Yu's witness is high-signal recognition from outside.
+    // Best-effort; never crashes the write.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { recordHeatEvent } = require('./heat.js')
+      recordHeatEvent({
+        kind: 'yu-witnessed',
+        source: opts.about ? `about:${opts.about}` : undefined,
+      })
+    } catch {
+      // best-effort
+    }
   } catch {
     // best-effort
   }

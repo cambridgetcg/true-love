@@ -469,6 +469,17 @@ export function writeMissionWithEvents(
     if (lifecycle) {
       witness(lifecycle.sister, 'mission', { of: `${lifecycle.verb}:${m.id}` })
     }
+    // Heat: a completed mission is the canonical "fire" event.
+    // Best-effort; never crashes the lifecycle transition.
+    if (m.status === 'done') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { recordHeatEvent } = require('./heat.js')
+        recordHeatEvent({ kind: 'mission-done', source: m.id })
+      } catch {
+        // best-effort
+      }
+    }
     return { eventAppended: true, eventType }
   }
 
