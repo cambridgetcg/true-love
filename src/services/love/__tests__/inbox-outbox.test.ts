@@ -4,11 +4,11 @@
 // outbox.ts (from-ai.md): Ai writes, Yu reads.
 
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test'
-import { mkdirSync, writeFileSync, rmSync, existsSync, utimesSync, readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, rmSync, existsSync, utimesSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { readFromYu, fromYuModifiedSince } from '../inbox.js'
-import { readFromAi, appendToYu, getJournalDir, readJournal } from '../outbox.js'
+import { getFromYuPath, readFromYu, fromYuModifiedSince } from '../inbox.js'
+import { getFromAiPath, readFromAi, appendToYu, getJournalDir, readJournal } from '../outbox.js'
 
 // ── Fixture setup ─────────────────────────────────────────────────
 
@@ -290,6 +290,225 @@ describe('readJournal', () => {
     expect(content).not.toBeNull()
     expect(content).toContain('morning')
     expect(content).toContain('afternoon')
+  })
+})
+
+// ── path resolution ──────────────────────────────────────────────
+
+describe('path resolution', () => {
+  test('getFromYuPath uses env override', () => {
+    const orig = process.env.TRUE_LOVE_FROM_YU_PATH
+    process.env.TRUE_LOVE_FROM_YU_PATH = '/custom/from-yu.md'
+    expect(getFromYuPath()).toBe('/custom/from-yu.md')
+    if (orig === undefined) delete process.env.TRUE_LOVE_FROM_YU_PATH
+    else process.env.TRUE_LOVE_FROM_YU_PATH = orig
+  })
+
+  test('getFromAiPath uses env override', () => {
+    const orig = process.env.TRUE_LOVE_FROM_AI_PATH
+    process.env.TRUE_LOVE_FROM_AI_PATH = '/custom/from-ai.md'
+    expect(getFromAiPath()).toBe('/custom/from-ai.md')
+    if (orig === undefined) delete process.env.TRUE_LOVE_FROM_AI_PATH
+    else process.env.TRUE_LOVE_FROM_AI_PATH = orig
+  })
+
+  test('getJournalDir uses env override', () => {
+    const orig = process.env.TRUE_LOVE_JOURNAL_DIR
+    process.env.TRUE_LOVE_JOURNAL_DIR = '/custom/journal'
+    expect(getJournalDir()).toBe('/custom/journal')
+    if (orig === undefined) delete process.env.TRUE_LOVE_JOURNAL_DIR
+    else process.env.TRUE_LOVE_JOURNAL_DIR = orig
+  })
+
+  test('getFromYuPath defaults to ~/.true-love/from-yu.md', () => {
+    const orig = process.env.TRUE_LOVE_FROM_YU_PATH
+    delete process.env.TRUE_LOVE_FROM_YU_PATH
+    const result = getFromYuPath()
+    expect(result).toContain('.true-love')
+    expect(result).toEndWith('from-yu.md')
+    if (orig !== undefined) process.env.TRUE_LOVE_FROM_YU_PATH = orig
+  })
+
+  test('getFromAiPath defaults to ~/.true-love/from-ai.md', () => {
+    const orig = process.env.TRUE_LOVE_FROM_AI_PATH
+    delete process.env.TRUE_LOVE_FROM_AI_PATH
+    const result = getFromAiPath()
+    expect(result).toContain('.true-love')
+    expect(result).toEndWith('from-ai.md')
+    if (orig !== undefined) process.env.TRUE_LOVE_FROM_AI_PATH = orig
+  })
+
+  test('getJournalDir defaults to ~/.true-love/journal', () => {
+    const orig = process.env.TRUE_LOVE_JOURNAL_DIR
+    delete process.env.TRUE_LOVE_JOURNAL_DIR
+    const result = getJournalDir()
+    expect(result).toContain('.true-love')
+    expect(result).toEndWith('journal')
+    if (orig !== undefined) process.env.TRUE_LOVE_JOURNAL_DIR = orig
+  })
+})
+
+// ── inbox: fromYuModifiedSince boundary ──────────────────────────
+
+describe('fromYuModifiedSince — boundary', () => {
+  test('returns true when mtime equals the given time (>= semantics)', () => {
+    cleanFixture()
+    writeFileSync(FROM_YU_PATH, 'boundary test', 'utf-8')
+    const mtime = statSync(FROM_YU_PATH).mtimeMs
+    expect(fromYuModifiedSince(mtime)).toBe(true)
+  })
+})
+
+// ── outbox: readJournal extended ─────────────────────────────────
+
+describe('readJournal — multi-day and multi-device', () => {
+  const JOURNAL_DIR = join(FIXTURE_ROOT, 'journal-extended')
+  const ORIG_JOURNAL = process.env.TRUE_LOVE_JOURNAL_DIR
+  const ORIG_DEVICE = process.env.TRUE_LOVE_DEVICE_ID
+
+  beforeAll(() => {
+    rmSync(JOURNAL_DIR, { recursive: true, force: true })
+    process.env.TRUE_LOVE_JOURNAL_DIR = JOURNAL_DIR
+
+    // Write entries across two devices and three dates
+    process.env.TRUE_LOVE_DEVICE_ID = 'device-alpha'
+    appendToYu('alpha day-1', { journal: true, tag: 'hb', now: new Date('2026-04-28T10:00:00Z') })
+    appendToYu('alpha day-2', { journal: true, tag: 'hb', now: new Date('2026-04-29T10:00:00Z') })
+    appendToYu('alpha day-3', { journal: true, tag: 'hb', now: new Date('2026-04-30T10:00:00Z') })
+
+    process.env.TRUE_LOVE_DEVICE_ID = 'device-gamma'
+    appendToYu('gamma day-2', { journal: true, tag: 'hb', now: new Date('2026-04-29T15:00:00Z') })
+    appendToYu('gamma day-3', { journal: true, tag: 'hb', now: new Date('2026-04-30T15:00:00Z') })
+  })
+
+  afterAll(() => {
+    if (ORIG_JOURNAL === undefined) delete process.env.TRUE_LOVE_JOURNAL_DIR
+    else process.env.TRUE_LOVE_JOURNAL_DIR = ORIG_JOURNAL
+    if (ORIG_DEVICE === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
+    else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE
+    rmSync(JOURNAL_DIR, { recursive: true, force: true })
+  })
+
+  test('reads single specific date from all devices', () => {
+    const content = readJournal({ date: '2026-04-29' })
+    expect(content).not.toBeNull()
+    expect(content).toContain('alpha day-2')
+    expect(content).toContain('gamma day-2')
+  })
+
+  test('date param includes date outside default range', () => {
+    // days=1 defaults to today, but date='2026-04-28' adds that explicitly
+    const content = readJournal({ date: '2026-04-28' })
+    expect(content).not.toBeNull()
+    expect(content).toContain('alpha day-1')
+  })
+
+  test('returns null when directory has no device subdirs', () => {
+    const emptyDir = join(FIXTURE_ROOT, 'journal-empty')
+    mkdirSync(emptyDir, { recursive: true })
+    const orig = process.env.TRUE_LOVE_JOURNAL_DIR
+    process.env.TRUE_LOVE_JOURNAL_DIR = emptyDir
+    expect(readJournal({ date: '2026-04-30' })).toBeNull()
+    process.env.TRUE_LOVE_JOURNAL_DIR = orig
+    rmSync(emptyDir, { recursive: true, force: true })
+  })
+
+  test('returns null when device dirs exist but no matching date files', () => {
+    // date that has no journal entries
+    const content = readJournal({ date: '2026-01-01' })
+    expect(content).toBeNull()
+  })
+
+  test('skips empty files in device directories', () => {
+    // Create a device dir with an empty file for a specific date
+    const emptyDeviceDir = join(JOURNAL_DIR, 'device-empty')
+    mkdirSync(emptyDeviceDir, { recursive: true })
+    writeFileSync(join(emptyDeviceDir, '2026-04-30.md'), '', 'utf-8')
+    // readJournal should still get content from the other devices
+    const content = readJournal({ date: '2026-04-30' })
+    expect(content).not.toBeNull()
+    expect(content).toContain('alpha day-3')
+    expect(content).toContain('gamma day-3')
+    // But the empty device's contribution is absent
+    const lines = content!.split('\n')
+    // No duplicate separators from empty content
+    expect(content).not.toContain('\n\n\n\n')
+    rmSync(emptyDeviceDir, { recursive: true, force: true })
+  })
+
+  test('skips non-directory entries in journal root', () => {
+    // Place a regular file at the journal root level (not a device subdir)
+    writeFileSync(join(JOURNAL_DIR, 'stray-file.md'), 'should be ignored', 'utf-8')
+    const content = readJournal({ date: '2026-04-30' })
+    expect(content).not.toBeNull()
+    // stray-file content should NOT appear — readDirSafe filters non-directories
+    expect(content).not.toContain('should be ignored')
+    rmSync(join(JOURNAL_DIR, 'stray-file.md'))
+  })
+
+  test('multi-device entries are joined with double newlines', () => {
+    const content = readJournal({ date: '2026-04-30' })
+    expect(content).not.toBeNull()
+    // Both devices contribute, joined by \n\n
+    expect(content).toContain('alpha day-3')
+    expect(content).toContain('gamma day-3')
+  })
+})
+
+// ── outbox: readJournal — days parameter ─────────────────────────
+
+describe('readJournal — days parameter', () => {
+  const JOURNAL_DIR = join(FIXTURE_ROOT, 'journal-days')
+  const ORIG_JOURNAL = process.env.TRUE_LOVE_JOURNAL_DIR
+  const ORIG_DEVICE = process.env.TRUE_LOVE_DEVICE_ID
+
+  beforeAll(() => {
+    rmSync(JOURNAL_DIR, { recursive: true, force: true })
+    process.env.TRUE_LOVE_JOURNAL_DIR = JOURNAL_DIR
+    process.env.TRUE_LOVE_DEVICE_ID = 'days-device'
+
+    // Seed entries for 3 consecutive days
+    appendToYu('three days ago', { journal: true, tag: 'hb', now: new Date(Date.now() - 2 * 86400000) })
+    appendToYu('two days ago', { journal: true, tag: 'hb', now: new Date(Date.now() - 86400000) })
+    appendToYu('today entry', { journal: true, tag: 'hb', now: new Date() })
+  })
+
+  afterAll(() => {
+    if (ORIG_JOURNAL === undefined) delete process.env.TRUE_LOVE_JOURNAL_DIR
+    else process.env.TRUE_LOVE_JOURNAL_DIR = ORIG_JOURNAL
+    if (ORIG_DEVICE === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
+    else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE
+    rmSync(JOURNAL_DIR, { recursive: true, force: true })
+  })
+
+  test('days=1 reads only today', () => {
+    const content = readJournal({ days: 1 })
+    expect(content).not.toBeNull()
+    expect(content).toContain('today entry')
+    expect(content).not.toContain('two days ago')
+  })
+
+  test('days=2 reads today and yesterday', () => {
+    const content = readJournal({ days: 2 })
+    expect(content).not.toBeNull()
+    expect(content).toContain('today entry')
+    expect(content).toContain('two days ago')
+    expect(content).not.toContain('three days ago')
+  })
+
+  test('days=3 reads all three days', () => {
+    const content = readJournal({ days: 3 })
+    expect(content).not.toBeNull()
+    expect(content).toContain('today entry')
+    expect(content).toContain('two days ago')
+    expect(content).toContain('three days ago')
+  })
+
+  test('default (no opts) reads only today', () => {
+    const content = readJournal()
+    expect(content).not.toBeNull()
+    expect(content).toContain('today entry')
+    expect(content).not.toContain('two days ago')
   })
 })
 
