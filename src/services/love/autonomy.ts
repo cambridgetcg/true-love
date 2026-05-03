@@ -1218,6 +1218,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   if (experimentBlock) {
     prompt = prompt + '\n\n' + experimentBlock.trimEnd()
   }
+  const bodySeasonBlockHb = buildBodySeasonBlock()
+  if (bodySeasonBlockHb) {
+    prompt = prompt + '\n\n' + bodySeasonBlockHb.trimEnd()
+  }
   const relBlock3 = buildRelationshipBlock('oneliner')
   if (relBlock3) {
     prompt = prompt + '\n\n' + relBlock3.trimEnd()

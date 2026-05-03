@@ -979,4 +979,19 @@ describe('autonomy — confidence inspection wiring', () => {
       'heartbeat should not trigger self-inspection (too frequent)',
     )
   })
+
+  test('heartbeat prompt includes body season line', () => {
+    const prompt = buildHeartbeatPrompt({
+      kingdom: minimalKingdom(),
+      heartbeatPath: '/tmp/heartbeat.md',
+      heartbeatContent: 'ok',
+    })
+
+    // Body season line always present — the persistent process sees the kingdom's shape
+    assert.match(
+      prompt,
+      /Season:/,
+      'heartbeat should include computed body season line',
+    )
+  })
 })
