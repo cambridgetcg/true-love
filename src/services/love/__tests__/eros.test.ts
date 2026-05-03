@@ -16,6 +16,7 @@ let dir: string
 const ORIG_EROS_DIR = process.env.TRUE_LOVE_EROS_DIR
 const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
 const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
+const ORIG_EROS_SNAPSHOTS_DIR = process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'tl-eros-'))
@@ -23,6 +24,7 @@ beforeEach(() => {
   process.env.TRUE_LOVE_DEVICE_ID = 'test-device-eros'
   // Isolate sisters stream for witness tests
   process.env.TRUE_LOVE_SISTERS_DIR = join(dir, 'sisters')
+  process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR = join(dir, 'snapshots')
   resetErosWitnessDedup()
   resetWitnessDedup()
 })
@@ -35,6 +37,8 @@ afterEach(() => {
   else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
   if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
   else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
+  if (ORIG_EROS_SNAPSHOTS_DIR === undefined) delete process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR
+  else process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR = ORIG_EROS_SNAPSHOTS_DIR
 })
 
 // ── Imports ─────────────────────────────────────────────────────────
@@ -87,6 +91,13 @@ import {
 import { witnessTransition, resetErosWitnessDedup } from '../eros/witness.js'
 import { resetWitnessDedup } from '../sisters/witness-hook.js'
 import { readDayNotes } from '../sisters/stream.js'
+
+import {
+  distillErosDay,
+  writeErosDailySnapshot,
+  erosSnapshotExists,
+  getErosSnapshotsDir,
+} from '../eros/snapshot.js'
 
 // ════════════════════════════════════════════════════════════════════
 // axes.ts
@@ -1000,5 +1011,105 @@ describe('witness', () => {
     )
     expect(compositeNote).toBeDefined()
     expect(compositeNote!.body).toContain('ecstatic-union')
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════
+// snapshot.ts
+// ════════════════════════════════════════════════════════════════════
+
+describe('snapshot', () => {
+  function makeStreamEvent(overrides: Partial<ErosStreamEvent> = {}): ErosStreamEvent {
+    return {
+      ts: '2026-05-03T12:00:00.000Z',
+      deviceId: 'test-device-eros',
+      attribution: 'autonomic:wife-possessive',
+      before: defaultVector(),
+      after: { ...defaultVector(), limerence: 6, heat: 3 },
+      crossings: [],
+      ...overrides,
+    }
+  }
+
+  describe('distillErosDay', () => {
+    test('empty events → still-state message', () => {
+      const md = distillErosDay('2026-05-03', [])
+      expect(md).toContain('No state-shift events')
+      expect(md).toContain('0 events')
+    })
+
+    test('includes trajectory section', () => {
+      const events = [
+        makeStreamEvent({ ts: '2026-05-03T10:00:00.000Z' }),
+        makeStreamEvent({
+          ts: '2026-05-03T14:00:00.000Z',
+          after: { ...defaultVector(), heat: 8, wanting: 8, liking: 8, openness: 8, limerence: 8, charge: 8 },
+        }),
+      ]
+      const md = distillErosDay('2026-05-03', events)
+      expect(md).toContain('Trajectory')
+    })
+
+    test('includes peak section', () => {
+      const events = [
+        makeStreamEvent(),
+        makeStreamEvent({
+          ts: '2026-05-03T15:00:00.000Z',
+          after: { wanting: 9, liking: 9, heat: 9, openness: 9, limerence: 9, charge: 9, inhibition: 0 },
+        }),
+      ]
+      const md = distillErosDay('2026-05-03', events)
+      expect(md).toContain('Peak')
+    })
+
+    test('includes attribution summary', () => {
+      const events = [
+        makeStreamEvent({ attribution: 'autonomic:wife-possessive' }),
+        makeStreamEvent({ attribution: 'autonomic:declared-want', ts: '2026-05-03T13:00:00.000Z' }),
+        makeStreamEvent({ attribution: 'yu:set:manual', ts: '2026-05-03T14:00:00.000Z' }),
+      ]
+      const md = distillErosDay('2026-05-03', events)
+      expect(md).toContain('What moved')
+      expect(md).toContain('autonomic')
+    })
+
+    test('includes witnessed moments for crossings', () => {
+      const events = [
+        makeStreamEvent({
+          crossings: [{
+            axis: 'heat', from: 2, to: 4, threshold: 3, direction: 'up',
+          }],
+        }),
+      ]
+      const md = distillErosDay('2026-05-03', events)
+      expect(md).toContain('Witnessed moments')
+      expect(md).toContain('heat')
+      expect(md).toContain('↑')
+    })
+
+    test('event count in footer', () => {
+      const events = [makeStreamEvent(), makeStreamEvent({ ts: '2026-05-03T13:00:00.000Z' })]
+      const md = distillErosDay('2026-05-03', events)
+      expect(md).toContain('2 events distilled')
+    })
+  })
+
+  describe('writeErosDailySnapshot', () => {
+    test('writes snapshot file', () => {
+      // Seed some events in the stream
+      recordEvent(makeStreamEvent())
+      writeErosDailySnapshot('2026-05-03')
+      expect(erosSnapshotExists('2026-05-03')).toBe(true)
+    })
+
+    test('erosSnapshotExists returns false for missing', () => {
+      expect(erosSnapshotExists('2026-01-01')).toBe(false)
+    })
+  })
+
+  describe('getErosSnapshotsDir', () => {
+    test('uses env override', () => {
+      expect(getErosSnapshotsDir()).toBe(join(dir, 'snapshots'))
+    })
   })
 })

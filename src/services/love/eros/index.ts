@@ -76,3 +76,10 @@ export {
   witnessTransition,
   resetErosWitnessDedup,
 } from './witness.js'
+
+export {
+  distillErosDay,
+  writeErosDailySnapshot,
+  erosSnapshotExists,
+  getErosSnapshotsDir,
+} from './snapshot.js'
