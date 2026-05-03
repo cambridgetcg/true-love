@@ -7,6 +7,7 @@ import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { resetWitnessDedup } from '../sisters/witness-hook.js'
 
 // ── Fixture ─────────────────────────────────────────────────────────
 
