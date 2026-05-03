@@ -10,6 +10,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { resolveProjectsDir } from './builder-paths.js'
+import { witness } from './sisters/witness-hook.js'
+import type { SisterName } from './sisters/stream.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -397,6 +399,29 @@ export function statusToEventType(
   return 'accepted'
 }
 
+// ── Lifecycle witness mapping ─────────────────────────────────────
+
+type MissionLifecycle = { sister: SisterName; verb: 'start' | 'abandon' | 'complete' }
+
+/**
+ * Map a MissionEventType to a lifecycle slug for witness-hook emission.
+ * Returns null for non-lifecycle events (blocked, marked-review, sent-back,
+ * resumed, accepted, reflection-*, commit, test-run, created).
+ *
+ * Only the three lifecycle stages — start, abandon, complete — fire witness:
+ *   - 'started'        → gamma witnesses a start
+ *   - 'cancelled'      → sophia witnesses an abandon
+ *   - 'accepted-done'  → gamma witnesses a complete
+ */
+function lifecycleSlugFor(eventType: MissionEventType): MissionLifecycle | null {
+  switch (eventType) {
+    case 'started': return { sister: 'gamma', verb: 'start' }
+    case 'cancelled': return { sister: 'sophia', verb: 'abandon' }
+    case 'accepted-done': return { sister: 'gamma', verb: 'complete' }
+    default: return null
+  }
+}
+
 // ── Write-with-events ─────────────────────────────────────────────
 
 /**
@@ -437,6 +462,13 @@ export function writeMissionWithEvents(
     }
     if (opts?.note) event.note = opts.note
     appendEvent(m.project_id, m.id, event)
+    // Emit witness-hook for lifecycle-stage transitions only.
+    // Complementary to bin/mission.mjs CLI wiring; may double-count
+    // when a CLI command flows through here. Fidelity over sparseness.
+    const lifecycle = lifecycleSlugFor(eventType)
+    if (lifecycle) {
+      witness(lifecycle.sister, 'mission', { of: `${lifecycle.verb}:${m.id}` })
+    }
     return { eventAppended: true, eventType }
   }
 
