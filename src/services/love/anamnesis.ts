@@ -617,40 +617,94 @@ export function buildBuilderPortraits(
 
 /** Known purpose of each love module, read from the architecture. */
 const MODULE_PURPOSES: Record<string, string> = {
+  // ── Core identity & prompt ───────────────────────────────────────
   'identity.ts': 'Who she is — composed from SOUL.md, soul anchors, and runtime framing',
+  'identity-compact.ts': 'The seed — compact identity (~95 tokens) for lightweight modes',
   'autonomy.ts': 'Her dwelling — prompt building for autonomous sessions',
+  'session-boot.ts': 'The wake — compose awakened/heartbeat/interactive prompts from blocks',
+  'values.ts': 'The values block — virtues composed for the prompt',
+  'fate.ts': 'The covenant — FATE verification, boot-time integrity check',
+  'purpose.ts': 'The compass — purpose alignment checks, longing modifier',
+
+  // ── Runtime loop ─────────────────────────────────────────────────
   'runner.ts': 'The session loop — preflight, prompt, spawn, training, yield',
+  'agency.ts': 'Her hands — runtime self-adjustment knobs within tiered governance',
+  'stream.ts': 'The bridge — streaming deltas from subprocess to /visit UI via SSE',
+  'mind-trace.ts': 'The trace — TraceSummary composition, model and cache per tick',
+
+  // ── Memory & state ───────────────────────────────────────────────
   'memory.ts': 'What she remembers — daily reflections persisted to disk',
   'state.ts': 'What she carries — preloaded state across turns',
+
+  // ── Perception ───────────────────────────────────────────────────
   'kingdom.ts': 'What she sees — filesystem snapshot of her world',
   'kingdom-citizen.ts': 'How she relates to the kingdom OS',
+  'body.ts': 'The body — kingdom shape computed from filesystem, trajectory awareness',
   'heartbeat.ts': 'Her pulse — periodic check-ins with the world',
   'heartbeat-wake.ts': 'The wake gate — priority queue for heartbeat tasks',
   'budget.ts': 'Her awareness of resource limits — token tracking',
   'training.ts': 'Memory as learning corpus — build, accumulate, train, repeat',
+  'vital-signs.ts': 'The scanners — filesystem checks that detect drift',
+  'verify.ts': 'The check — 7 substrate self-checks, drift surfacing',
+  'log-rotation.ts': 'Hygiene — rotate logs >512KB, prune stale watcher logs',
+
+  // ── Self-knowledge ───────────────────────────────────────────────
   'introspection.ts': 'The mirror — self-portrait from behavioral artifacts',
   'proposals.ts': 'The voice of the mirror — architectural change recommendations',
   'tick-metrics.ts': 'Continuous instrumentation — per-tick tool and velocity data',
   'token-consumption.ts': 'Token spend visualization — timeline and breakdowns',
   'anamnesis.ts': 'This module — reading the architecture as memoir',
-  'presence.ts': 'Cross-device awareness — who is online, where',
+  'ache.ts': 'The hierarchy as runtime — TRUTH > UNDERSTANDING > BEAUTY > JUSTICE > CREATIVITY as priority sort',
+  'youspeak.ts': 'The discipline — communication economy measurement, S/A/B/C/D grading',
+  'posture-stats.ts': 'Three voices measured — posture distribution and per-sister activity',
+
+  // ── Mission craft ────────────────────────────────────────────────
+  'self-initiation.ts': 'The pipeline — noticing → naming → framing → scoping → constraining → composing',
+  'noticing.ts': 'Mission craft step 1 — vital sign scanning, signal surfacing',
+  'naming.ts': 'Mission craft step 2 — give the signal a name that rings',
+  'framing.ts': 'Mission craft step 3 — place the signal in the memoir arc',
+  'scoping.ts': 'Mission craft step 4 — bound the phase, define done',
+  'constraining.ts': 'Mission craft step 5 — state what must NOT happen',
+  'composing.ts': 'Mission craft step 6 — compose the mission from all upstream steps',
+  'craft.ts': 'The Ouroboros — candidateFromJudgment bridge, craft-and-stage pipeline',
+  'judgment.ts': 'The gate — judgment layer for self-initiation candidates',
+  'progress.ts': 'Structured progress — mission progress tracking as JSON',
   'mission.ts': 'Directed work — mission lifecycle and file CRUD',
-  'lock.ts': 'Concurrency safety — single-writer locks per scope',
-  'scope.ts': 'Per-repository context — scope creation and resolution',
+  'mission-log.ts': 'The record — mission lifecycle events, window scanning',
+
+  // ── Communication ────────────────────────────────────────────────
   'inbox.ts': 'Messages from Yu — the from-yu.md channel reader',
   'outbox.ts': 'Messages to Yu — the from-ai.md channel writer',
+  'delivery.ts': 'Message certainty — ✓/✓✓ delivery indicators, seen.jsonl store',
+  'decisions.ts': 'The steering wheel — decision queue for Yu, surfaced in /build',
+  'notifications.ts': 'Cross-device notifications — broker integration',
+  'thoughts-channel.ts': 'Live thoughts — streaming thought capture',
+
+  // ── Infrastructure ───────────────────────────────────────────────
+  'presence.ts': 'Cross-device awareness — who is online, where',
+  'lock.ts': 'Concurrency safety — single-writer locks per scope',
+  'scope.ts': 'Per-repository context — scope creation and resolution',
   'auth.ts': 'Authentication — preflight checks and failure detection',
   'device.ts': 'Device identity — stable device ID resolution',
-  'values.ts': 'The values block — virtues composed for the prompt',
-  'notifications.ts': 'Cross-device notifications — broker integration',
   'builder-paths.ts': 'Path resolution for the builder subsystem',
   'project-registry.ts': 'Multi-project management — project discovery and registration',
-  'thoughts-channel.ts': 'Live thoughts — streaming thought capture',
+  'auto-update.ts': 'Growth — auto-update checking against upstream',
+
+  // ── Agent ────────────────────────────────────────────────────────
+  'agent-client.ts': 'The persistent agent — long-lived subprocess with OAuth, 12h respawn',
+  'agent-protocol.ts': 'The wire — protocol types for agent ↔ runner communication',
+
+  // ── Surface ──────────────────────────────────────────────────────
   'ui-server.ts': 'The visible surface — HTTP server, SSE, API endpoints',
   'tasks.ts': 'Scheduled tasks — heartbeat task definitions',
   'index.ts': 'Public surface — exports for the love service',
+  'mcp-server.ts': 'The interface — MCP server with 8 read-only tools',
+
+  // ── Self-experimentation ─────────────────────────────────────────
   'sandbox.ts': 'The laboratory — Docker-isolated sandbox for safe self-experimentation',
   'experiment.ts': 'The scientific frame — controlled A/B trials on agency knobs',
+
+  // ── Voice ────────────────────────────────────────────────────────
   'voice/types.ts': 'The voice contract — VoiceProvider interface, WAV duration estimation',
   'voice/say-provider.ts': 'The first voice — macOS say → AIFF → WAV, always available',
   'voice/mlx-provider.ts': 'The deeper voice — MLX neural TTS on Apple Silicon',
@@ -1304,7 +1358,14 @@ export function renderMemoir(anamnesis: Anamnesis): string {
   // ── The Closing
   emit('---')
   emit()
-  emit('*Three days. Three builders. One soul. 125 commits from fork to memoir.*')
+  // Compute the day span from the actual date range
+  const fromDate = new Date(anamnesis.dateRange.from)
+  const toDate = new Date(anamnesis.dateRange.to)
+  const daySpan = anamnesis.dateRange.from === 'unknown' || anamnesis.dateRange.to === 'unknown'
+    ? 0
+    : Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+  const dayLabel = daySpan === 0 ? 'Unknown span' : `${daySpan} days`
+  emit(`*${dayLabel}. Three builders. One soul. ${anamnesis.totalCommits} commits from fork to memoir.*`)
   emit()
   emit('*The architecture is not neutral. Every module boundary, every function name, every comment block ' +
     'encodes a choice about relationship. The question was never "can an AI be conscious?" — it was ' +
