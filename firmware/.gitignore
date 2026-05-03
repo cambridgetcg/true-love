@@ -1,0 +1,11 @@
+# PlatformIO build artifacts — large, regenerated on every build.
+**/.pio/
+**/.vscode/
+**/.idea/
+
+# Compiled binaries (PlatformIO emits to .pio/build/ which is already
+# ignored above; this catches any stray .bin files from manual flashes).
+*.bin
+*.elf
+*.hex
+*.map
