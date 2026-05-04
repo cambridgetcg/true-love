@@ -5,7 +5,7 @@
 // Task 2) wraps them with route handlers and SSE.
 
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, appendFileSync, openSync, closeSync, watch, type FSWatcher } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, appendFileSync, openSync, closeSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
@@ -1612,9 +1612,40 @@ function handleListProposals(req: IncomingMessage, res: ServerResponse): void {
   }
 }
 
-// Dedup guard: don't witness the same proposal batch within 60s.
-let lastProposalWitness: { titles: string; ts: number } | null = null
-const PROPOSAL_WITNESS_DEDUP_MS = 60_000
+// File-based dedup guard: don't witness the same proposal batch within 30 minutes.
+// In-memory dedup resets on process restart, which caused the sisters stream to
+// accumulate duplicate proposal entries on every heartbeat tick (see commit history).
+export const PROPOSAL_WITNESS_DEDUP_MS = 30 * 60 * 1000
+
+export function proposalWitnessMarkerPath(basePath?: string): string {
+  const base = basePath ?? join(process.env.HOME || homedir(), '.true-love')
+  return join(base, 'proposals', '.last-witness')
+}
+
+export function readProposalWitnessMarker(markerPath?: string): { titles: string; ts: number } | null {
+  const path = markerPath ?? proposalWitnessMarkerPath()
+  try {
+    const raw = readFileSync(path, 'utf-8')
+    const parsed = JSON.parse(raw) as { titles?: string; ts?: number }
+    if (typeof parsed.titles === 'string' && typeof parsed.ts === 'number') {
+      return { titles: parsed.titles, ts: parsed.ts }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function writeProposalWitnessMarker(titles: string, ts: number, markerPath?: string): void {
+  const path = markerPath ?? proposalWitnessMarkerPath()
+  try {
+    const dir = dirname(path)
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    writeFileSync(path, JSON.stringify({ titles, ts }), 'utf-8')
+  } catch {
+    // Best-effort — don't break the endpoint over a dedup marker.
+  }
+}
 
 function handleGenerateProposals(req: IncomingMessage, res: ServerResponse): void {
   try {
@@ -1622,13 +1653,15 @@ function handleGenerateProposals(req: IncomingMessage, res: ServerResponse): voi
     const result = generateProposals(portrait)
     // Witness when proposals are actually created — sophia's domain
     // (architectural self-reflection). Silent when nothing is created.
-    // Deduplicated: same titles within 60s are noted once.
+    // Deduplicated via file marker: same titles within 30 min are noted once.
+    // File-based so the dedup survives process restarts between heartbeat ticks.
     if (result.created.length > 0) {
       const titles = result.created.map(p => p.title).join('; ')
       const now = Date.now()
-      if (!lastProposalWitness || lastProposalWitness.titles !== titles || now - lastProposalWitness.ts > PROPOSAL_WITNESS_DEDUP_MS) {
+      const marker = readProposalWitnessMarker()
+      if (!marker || marker.titles !== titles || now - marker.ts > PROPOSAL_WITNESS_DEDUP_MS) {
         witness('sophia', 'proposal', { of: titles })
-        lastProposalWitness = { titles, ts: now }
+        writeProposalWitnessMarker(titles, now)
       }
     }
     res.writeHead(200, { 'Content-Type': 'application/json' })
