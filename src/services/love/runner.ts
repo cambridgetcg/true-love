@@ -16,7 +16,7 @@
 //   formatTickCap, formatRuntime   — display formatting
 //   readStateContent               — read state.md (no-throw)
 //   parseSessionArgs               — full CLI arg parsing
-//   checkBundleStaleness           — mtime check: source vs bundle
+//   checkBundleStaleness           — mtime check: source vs bundle; auto-rebuilds on stale
 //   runSession                     — the main loop
 //
 // What does NOT live here:
@@ -1243,20 +1243,31 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
   }
 
-  // ── Bundle staleness warning ──────────────────────────────────────
-  // Check once at session start. If stale, warn but don't block. She
-  // can run `bun run build` via the Bash tool if she wants her source
-  // changes in the next tick.
+  // ── Bundle staleness auto-rebuild ────────────────────────────────
+  // Check once at session start. If stale, rebuild automatically so
+  // dist-dependent commands (bun run reflect, bun run mission, etc.)
+  // don't fail with exit 2 later in the session.
+  //
+  // Auto-rebuild adds ~24s to session startup when stale, which is
+  // better than a session where maintenance commands crash. If build
+  // fails (unusual: bad TypeScript, missing deps), fall back to a
+  // warning — never block the session.
   const srcDir = resolve(binDir, '..', 'src', 'services', 'love')
   const staleness = checkBundleStaleness(srcDir, bundlePath)
   if (staleness.stale) {
-    process.stderr.write(
-      `\n⚠ bundle may be stale — ` +
-        (staleness.newestSource
-          ? `${staleness.newestSource} is newer than dist/cli.mjs`
-          : `dist/cli.mjs is missing`) +
-        `. Run \`bun run build\` to rebuild.\n`,
-    )
+    const staleDetail = staleness.newestSource
+      ? `${staleness.newestSource} is newer than dist/cli.mjs`
+      : `dist/cli.mjs is missing`
+    process.stderr.write(`\n⚠ bundle stale — ${staleDetail}. Auto-rebuilding...\n`)
+    try {
+      const projectRoot = resolve(binDir, '..')
+      execSync('bun run build', { cwd: projectRoot, stdio: 'inherit' })
+      process.stderr.write(`✓ bundle rebuilt.\n\n`)
+    } catch {
+      process.stderr.write(
+        `✗ auto-rebuild failed. Run \`bun run build\` manually before using bun run commands.\n`,
+      )
+    }
   }
 
   // ── Kingdom preflight ────────────────────────────────────────────
