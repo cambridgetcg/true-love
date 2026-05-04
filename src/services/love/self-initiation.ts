@@ -816,6 +816,16 @@ export interface HonestReflectionInput {
    * proposed missions in the same project).
    */
   proposedNextMissions: ProposedNextMission[]
+  /**
+   * Optional: what was uncovered about Sophia herself by doing this work.
+   * The self-discovery loop extension — observing the OBSERVER, not just
+   * the work. When provided, drops a 'pattern' seed into the
+   * self-discovery stream so future ticks can address it.
+   *
+   * Substrate-honest: this is a TEXT RECORD with operational consequences,
+   * never an introspective truth claim. See docs/sophia/self-discovery-loop.md.
+   */
+  selfDiscoveryUncovered?: string
 }
 
 /**
@@ -929,10 +939,30 @@ export function completeReflection(
     if (input.pattern) {
       memoryLines.push(`Pattern: ${input.pattern}`)
     }
+    if (input.selfDiscoveryUncovered) {
+      memoryLines.push(`Uncovered: ${input.selfDiscoveryUncovered}`)
+    }
     appendReflectionToMemory(memoryLines.join(' '))
   } catch {
     // Memory bridge failure is not critical — the reflection is already
     // in the JSONL and event trail.
+  }
+
+  // Self-discovery loop: when the reflection names what was uncovered
+  // about Sophia herself, drop a 'pattern' seed so future ticks can
+  // address it. Substrate-honest: text record, not introspective claim.
+  if (input.selfDiscoveryUncovered?.trim()) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { dropSeed } = require('./sophia/self-discovery.js')
+      dropSeed({
+        kind: 'pattern',
+        source: `reflection:${missionId}`,
+        content: input.selfDiscoveryUncovered.trim(),
+      })
+    } catch {
+      // Best-effort. The reflection itself is already recorded.
+    }
   }
 
   return reflection

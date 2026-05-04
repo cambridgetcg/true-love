@@ -33,6 +33,7 @@ let lessons = ''
 let pattern = ''
 let capability = ''
 let gap = ''
+let uncovered = ''
 const nextTitles = []
 const nextIntents = []
 let listMode = false
@@ -46,6 +47,7 @@ for (const a of args) {
   else if (a.startsWith('--pattern=')) pattern = a.slice('--pattern='.length)
   else if (a.startsWith('--capability=')) capability = a.slice('--capability='.length)
   else if (a.startsWith('--gap=')) gap = a.slice('--gap='.length)
+  else if (a.startsWith('--uncovered=')) uncovered = a.slice('--uncovered='.length)
   else if (a.startsWith('--next-title=')) nextTitles.push(a.slice('--next-title='.length))
   else if (a.startsWith('--next-intent=')) nextIntents.push(a.slice('--next-intent='.length))
   else if (a === '--list') listMode = true
@@ -94,6 +96,7 @@ try {
     gapRevealed: gap,
     proposedNextMissions,
     ...(pattern ? { pattern } : {}),
+    ...(uncovered ? { selfDiscoveryUncovered: uncovered } : {}),
   })
 } catch (err) {
   process.stderr.write(`❌ ${err.message}\n`)

@@ -180,10 +180,63 @@ export function distillDay(date: string, notes?: StreamEntry[]): string {
     lines.push('')
   }
 
+  // Self-discovery seeds planted today — observations about Sophia
+  // herself surfaced by the work. Closes the recursive loop at the
+  // chronicle layer. See docs/sophia/self-discovery-loop.md.
+  const seedsBlock = buildDailySeedsBlock(date)
+  if (seedsBlock) {
+    lines.push(seedsBlock)
+    lines.push('')
+  }
+
   lines.push('---')
   lines.push(`_Distilled from stream. ${dayEntries.length} total notes._`)
 
   return lines.join('\n')
+}
+
+/**
+ * Render a "Uncovered today" section for the daily snapshot. Reads
+ * self-discovery seeds planted within the day's UTC window. Returns
+ * empty string if no seeds.
+ */
+function buildDailySeedsBlock(date: string): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readRecentSeeds } = require('../sophia/self-discovery.js')
+    const dayStart = new Date(`${date}T00:00:00Z`).getTime()
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000
+    const allSeeds = readRecentSeeds({
+      // 30 days lookback to ensure we don't miss the day window
+      sinceMs: 30 * 24 * 60 * 60 * 1000,
+      now: dayEnd,
+    })
+    const todays = allSeeds.filter((s: { ts: string }) => {
+      const t = Date.parse(s.ts)
+      return t >= dayStart && t < dayEnd
+    })
+    if (todays.length === 0) return ''
+
+    const lines: string[] = []
+    lines.push('## 🔍 Uncovered today')
+    lines.push('')
+    for (const seed of todays as Array<{
+      ts: string
+      kind: string
+      content: string
+      source: string
+      about?: string
+      addressed?: { ts: string; by: string; note: string }
+    }>) {
+      const time = formatTime(seed.ts)
+      const aboutTag = seed.about ? ` [${seed.about}]` : ''
+      const addressed = seed.addressed ? ` · _addressed by ${seed.addressed.by}_` : ''
+      lines.push(`- ${time} · _${seed.kind}_${aboutTag} · ${seed.content} · *(${seed.source})*${addressed}`)
+    }
+    return lines.join('\n')
+  } catch {
+    return ''
+  }
 }
 
 /**

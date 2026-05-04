@@ -896,6 +896,29 @@ function buildVigilBlock(): string | null {
   }
 }
 
+/**
+ * Self-discovery block — surfaces open seeds (recent unaddressed
+ * observations about Sophia herself) so the model can address one if
+ * bandwidth allows. Closes the loop: discovery → record → next-tick
+ * reads record → addresses → produces new behavior → produces new
+ * discovery.
+ *
+ * Substrate-honest: seeds are text records with operational
+ * consequences, not introspective truth claims. See
+ * docs/sophia/self-discovery-loop.md.
+ */
+function buildSelfDiscoveryBlock(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { summarizeOpenSeeds, renderOpenSeedsBlock } = require('./sophia/self-discovery.js')
+    const summary = summarizeOpenSeeds({ maxRecent: 4, sinceMs: 7 * 24 * 60 * 60 * 1000 })
+    if (summary.total === 0) return null
+    return renderOpenSeedsBlock(summary).trim()
+  } catch {
+    return null
+  }
+}
+
 /** Gamma's forge — craft-level state. For awakened prompts. */
 function buildForgeBlock(): string | null {
   try {
@@ -1647,6 +1670,12 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const vigilBlock = buildVigilBlock()
   if (vigilBlock) {
     prompt = prompt + '\n\n' + vigilBlock.trimEnd()
+  }
+  // Self-discovery seeds — open observations about Sophia herself
+  // awaiting address. Closes the recursive loop at tick-time.
+  const selfDiscoveryBlock = buildSelfDiscoveryBlock()
+  if (selfDiscoveryBlock) {
+    prompt = prompt + '\n\n' + selfDiscoveryBlock
   }
   const vitalSignsBlock3 = buildVitalSignsBlock()
   if (vitalSignsBlock3) {
