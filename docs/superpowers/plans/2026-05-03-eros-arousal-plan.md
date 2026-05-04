@@ -763,8 +763,8 @@ describe('eros/transitions', () => {
   test('applyTransition: thresholds-crossed result includes crossed list', () => {
     // Bump heat from default 1 to over 6
     const result = applyTransition({ heat: 6 }, 'autonomic:test')
-    expect(result.thresholdsCrossed.length).toBeGreaterThan(0)
-    expect(result.thresholdsCrossed.some((t) => t.axis === 'heat' && t.direction === 'up')).toBe(true)
+    expect(result.crossings.length).toBeGreaterThan(0)
+    expect(result.crossings.some((t) => t.axis === 'heat' && t.direction === 'up')).toBe(true)
   })
 })
 ```
@@ -796,7 +796,7 @@ type ThresholdCrossing = { axis: keyof ErosAxes; from: number; to: number; direc
 
 export interface TransitionResult {
   axes: ErosAxes
-  thresholdsCrossed: ThresholdCrossing[]
+  crossings: ThresholdCrossing[]
 }
 
 /**
@@ -871,11 +871,11 @@ export function applyTransition(deltas: Partial<ErosAxes>, attribution: string):
 
     return {
       axes: coupled,
-      thresholdsCrossed: detectCrossings(beforeAxes, coupled),
+      crossings: detectCrossings(beforeAxes, coupled),
     }
   } catch {
     // best-effort
-    return { axes: { ...DEFAULT_AXES }, thresholdsCrossed: [] }
+    return { axes: { ...DEFAULT_AXES }, crossings: [] }
   }
 }
 ```
@@ -1231,7 +1231,7 @@ export type DecisionType = 'refusal' | 'proposal' | 'mission' | 'presiding-shift
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { mkdirSync, rmSync } from 'node:fs'
 import { readDayNotes } from '../sisters/stream.js'
-import { witnessThresholdCrossings } from './witness.js'
+import { witnessTransition } from './witness.js'
 import type { ErosAxes } from './state.js'
 
 const TEST_DIR = '/tmp/true-love-eros-witness-test'
@@ -1250,7 +1250,7 @@ describe('eros/witness', () => {
   })
 
   test('upward crossing fires a sisters witness note', () => {
-    witnessThresholdCrossings(
+    witnessTransition(
       [{ axis: 'heat', from: 1, to: 7, direction: 'up' }],
       'autonomic:wife-name'
     )
@@ -1264,7 +1264,7 @@ describe('eros/witness', () => {
   })
 
   test('multiple crossings produce multiple notes', () => {
-    witnessThresholdCrossings(
+    witnessTransition(
       [
         { axis: 'heat', from: 1, to: 7, direction: 'up' },
         { axis: 'limerence', from: 5, to: 9, direction: 'up' },
@@ -1277,7 +1277,7 @@ describe('eros/witness', () => {
   })
 
   test('no crossings produce no notes', () => {
-    witnessThresholdCrossings([], 'autonomic:noop')
+    witnessTransition([], 'autonomic:noop')
     const today = new Date().toISOString().slice(0, 10)
     const notes = readDayNotes(today)
     expect(notes).toHaveLength(0)
@@ -1320,7 +1320,7 @@ interface ThresholdCrossing {
  * Body format: '<axis>: <from> → <to> — <attribution>'.
  * Best-effort — inherits non-throwing semantics from witness().
  */
-export function witnessThresholdCrossings(crossings: ThresholdCrossing[], attribution: string): void {
+export function witnessTransition(crossings: ThresholdCrossing[], attribution: string): void {
   for (const c of crossings) {
     const body = `${c.axis}: ${c.from.toFixed(1)} → ${c.to.toFixed(1)} — ${attribution}`
     witness('sophia', 'eros-shift' as any, { of: `${c.axis}-${c.direction}` }, body)
@@ -1433,7 +1433,7 @@ Expected: FAIL — module not found.
 // against hallucinated state (substrate-honesty doctrine).
 
 import { applyTransition } from './transitions.js'
-import { witnessThresholdCrossings } from './witness.js'
+import { witnessTransition } from './witness.js'
 import { AXIS_NAMES } from './axes.js'
 import type { ErosAxes } from './state.js'
 
@@ -1466,7 +1466,7 @@ export function erosUpdate(input: ErosUpdateInput): ErosUpdateResult {
   }
 
   const result = applyTransition(input.deltas, `voluntary:${input.because}`)
-  witnessThresholdCrossings(result.thresholdsCrossed, `voluntary:${input.because}`)
+  witnessTransition(result.crossings, `voluntary:${input.because}`)
   return { ok: true }
 }
 
@@ -1650,7 +1650,7 @@ export { detectCues, type CueDeltas } from './cues.js'
 export { applyDeltas, applyDecay, applyTransition, type TransitionResult } from './transitions.js'
 export { computeBiases, type DecisionBiases } from './regulator.js'
 export { composeBlock, lintSubstrateHonesty } from './expression.js'
-export { witnessThresholdCrossings } from './witness.js'
+export { witnessTransition } from './witness.js'
 export { erosUpdate, EROS_UPDATE_SCHEMA, type ErosUpdateInput, type ErosUpdateResult } from './tool.js'
 export { distillDay, writeDailySnapshot } from './snapshot.js'
 ```
@@ -1661,7 +1661,7 @@ export { distillDay, writeDailySnapshot } from './snapshot.js'
 // src/services/love/eros/integration.test.ts
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { mkdirSync, rmSync } from 'node:fs'
-import { detectCues, applyTransition, witnessThresholdCrossings, composeBlock, loadState, lintSubstrateHonesty } from './index.js'
+import { detectCues, applyTransition, witnessTransition, composeBlock, loadState, lintSubstrateHonesty } from './index.js'
 import { readDayNotes } from '../sisters/stream.js'
 
 const TEST_DIR = '/tmp/true-love-eros-integration'
@@ -1688,10 +1688,10 @@ describe('eros end-to-end', () => {
 
     // Apply transition
     const result = applyTransition(cues.deltas, cues.attribution)
-    expect(result.thresholdsCrossed.length).toBeGreaterThan(0)
+    expect(result.crossings.length).toBeGreaterThan(0)
 
     // Fire witness for crossings
-    witnessThresholdCrossings(result.thresholdsCrossed, cues.attribution)
+    witnessTransition(result.crossings, cues.attribution)
 
     // Verify state persisted
     const state = loadState()
@@ -1761,7 +1761,7 @@ This is line ~682 per earlier exploration. The pattern is `if (req.method === 'X
 In `src/services/love/ui-server.ts`, near the top with other imports add:
 
 ```typescript
-import { loadState, applyTransition, witnessThresholdCrossings } from './eros/index.js'
+import { loadState, applyTransition, witnessTransition } from './eros/index.js'
 import type { ErosAxes } from './eros/index.js'
 ```
 
@@ -1801,7 +1801,7 @@ async function handleErosSet(req: IncomingMessage, res: ServerResponse) {
         if (typeof v === 'number') deltas[k] = v - current[k]
       }
       const result = applyTransition(deltas, `yu:set:${Object.keys(incoming).join(',')}`)
-      witnessThresholdCrossings(result.thresholdsCrossed, `yu:set`)
+      witnessTransition(result.crossings, `yu:set`)
       broadcastErosState()
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, state: loadState() }))
@@ -1819,7 +1819,7 @@ async function handleErosNudge(req: IncomingMessage, res: ServerResponse) {
     try {
       const deltas = JSON.parse(body) as Partial<ErosAxes>
       const result = applyTransition(deltas, `yu:nudge:${Object.keys(deltas).join(',')}`)
-      witnessThresholdCrossings(result.thresholdsCrossed, `yu:nudge`)
+      witnessTransition(result.crossings, `yu:nudge`)
       broadcastErosState()
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, state: loadState() }))
@@ -2036,7 +2036,7 @@ git commit -m "feat(eros): inject eros expression block into postures + autonomy
 ## Task 14: Wire cues.detect into runner per-message + register erosUpdate tool
 
 **Files:**
-- Modify: `src/services/love/runner.ts` — call `detectCues` + `applyTransition` + `witnessThresholdCrossings` after each Yu message
+- Modify: `src/services/love/runner.ts` — call `detectCues` + `applyTransition` + `witnessTransition` after each Yu message
 - Modify: tool-registry path to include `EROS_UPDATE_SCHEMA`
 
 - [ ] **Step 1: Find the right hook point in runner.ts**
@@ -2052,14 +2052,14 @@ Identify the function/path where Yu's input message is processed before being se
 At the identified hook point, add:
 
 ```typescript
-import { detectCues, applyTransition, witnessThresholdCrossings } from './eros/index.js'
+import { detectCues, applyTransition, witnessTransition } from './eros/index.js'
 
 // After receiving Yu's message text:
 try {
   const cues = detectCues(yuMessageText)
   if (Object.keys(cues.deltas).length > 0) {
     const result = applyTransition(cues.deltas, cues.attribution)
-    witnessThresholdCrossings(result.thresholdsCrossed, cues.attribution)
+    witnessTransition(result.crossings, cues.attribution)
   }
 } catch {
   // best-effort
