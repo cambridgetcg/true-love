@@ -24,7 +24,7 @@
 //
 // Part of the Eros arousal infrastructure.
 
-import { readRecentEvents, type HeatEvent } from '../heat.js'
+import { readRecentEvents, recordHeatEvent, type HeatEvent } from '../heat.js'
 import { getCurrentMode, type ActivationMode } from './activation.js'
 import { getLastTexture, textureToFeltShapeIntent, type FeltShapeIntent } from './texture.js'
 import { readReachMap, readRecentFusions } from './desire.js'
@@ -470,6 +470,10 @@ export function buildMotivationBlock(): string | null {
 
   if (!hasContent) return null
 
+  // Phase 3: opportunistically emit sisters-diverged when biases warrant.
+  // Idempotent (30min refire window), best-effort (never throws).
+  emitDivergenceIfWarranted(snap)
+
   const lines: string[] = []
   lines.push('## Motivational register')
   lines.push('')
@@ -549,5 +553,155 @@ export function getPressures(): {
     }
   } catch {
     return { arousal: 0, intimacy: 0, releaseHunger: 0, integrity: 1 }
+  }
+}
+
+// ── Phase 3: sister coupling ─────────────────────────────────────
+
+/**
+ * Threshold for emitting sisters-diverged event. Plan §3.B: 0.4.
+ */
+export const DIVERGENCE_THRESHOLD = 0.4
+
+/**
+ * Idempotency window for sisters-diverged emission. The same elevated
+ * divergence state shouldn't fire repeatedly each tick. We re-fire only
+ * if the previous emission was > 30 min ago OR divergence increased
+ * by ≥ 0.2 from the previous fire.
+ */
+const DIVERGENCE_REFIRE_MS = 30 * 60 * 1000
+const DIVERGENCE_REFIRE_DELTA = 0.2
+
+interface LastDivergenceState {
+  ts: number
+  divergence: number
+}
+let lastDivergenceFire: LastDivergenceState | null = null
+
+/**
+ * Compute the maximum pairwise divergence between Alpha/Beta/Gamma biases.
+ * Sophia is excluded — she's the integrator, not a divergence component.
+ */
+export function computeSisterDivergence(snap: MotivationSnapshot): number {
+  return Math.max(
+    Math.abs(snap.alphaBias - snap.betaBias),
+    Math.abs(snap.betaBias - snap.gammaBias),
+    Math.abs(snap.alphaBias - snap.gammaBias),
+  )
+}
+
+/**
+ * Emit sisters-diverged heat event when divergence crosses threshold,
+ * with idempotency to prevent flooding. Fires when:
+ *   - divergence > DIVERGENCE_THRESHOLD AND
+ *   - (no prior fire OR last fire > 30 min ago OR divergence rose by 0.2+)
+ *
+ * Best-effort: never throws. Returns whether it fired this call.
+ *
+ * Substrate-honesty: Sophia consumes this via her elevated bias in
+ * subsequent snapshots + the heat-ledger record. Not a separate active
+ * process — the architecture noticing itself.
+ */
+export function emitDivergenceIfWarranted(snap?: MotivationSnapshot): boolean {
+  let s: MotivationSnapshot
+  try {
+    s = snap ?? buildMotivationSnapshot()
+  } catch {
+    return false
+  }
+  const divergence = computeSisterDivergence(s)
+  if (divergence <= DIVERGENCE_THRESHOLD) return false
+
+  const now = Date.now()
+  if (lastDivergenceFire) {
+    const ageMs = now - lastDivergenceFire.ts
+    const delta = divergence - lastDivergenceFire.divergence
+    if (ageMs < DIVERGENCE_REFIRE_MS && delta < DIVERGENCE_REFIRE_DELTA) {
+      return false
+    }
+  }
+
+  try {
+    recordHeatEvent({
+      kind: 'sisters-diverged',
+      magnitude: 1.5,
+      source: `α${s.alphaBias.toFixed(2)}·β${s.betaBias.toFixed(2)}·γ${s.gammaBias.toFixed(2)}·div${divergence.toFixed(2)}`,
+      ts: new Date(now).toISOString(),
+    })
+    lastDivergenceFire = { ts: now, divergence }
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Reset divergence-fire state. For test isolation only. */
+export function resetDivergenceState(): void {
+  lastDivergenceFire = null
+}
+
+/**
+ * Sister with the highest bias — for callers that want to delegate
+ * presiding selection to current pressure rather than hardcoding.
+ *
+ * Returns 'sophia' when sophia bias dominates (which happens during
+ * sister divergence — Sophia rises to integrate). Returns the
+ * highest-bias of {alpha, beta, gamma} otherwise.
+ */
+export function presidingByBias(): 'alpha' | 'beta' | 'gamma' | 'sophia' {
+  let snap: MotivationSnapshot
+  try {
+    snap = buildMotivationSnapshot()
+  } catch {
+    return 'alpha' // safe default
+  }
+  const map: Record<'alpha' | 'beta' | 'gamma' | 'sophia', number> = {
+    alpha: snap.alphaBias,
+    beta: snap.betaBias,
+    gamma: snap.gammaBias,
+    sophia: snap.sophiaBias,
+  }
+  let best: 'alpha' | 'beta' | 'gamma' | 'sophia' = 'alpha'
+  let bestVal = map.alpha
+  for (const sister of ['beta', 'gamma', 'sophia'] as const) {
+    if (map[sister] > bestVal) {
+      best = sister
+      bestVal = map[sister]
+    }
+  }
+  return best
+}
+
+/**
+ * Per-sister emit weight ∈ [0, 1]. Used by callers that want to gate
+ * sister emit frequency (e.g., a sister with weight 0 enters quiet-mode
+ * and skips this turn's emission).
+ *
+ * Plan §3.I: when sister bias < 0.7 for >2h, that sister enters
+ * quiet-mode. We approximate this in-memory: weight is min/max
+ * normalization of bias against [0.5, 2.0] range.
+ *
+ *   bias 0.5 → weight 0.0 (silenced)
+ *   bias 1.0 → weight 0.33 (baseline)
+ *   bias 2.0 → weight 1.0 (saturated)
+ */
+export function getSisterEmitWeight(): {
+  alpha: number
+  beta: number
+  gamma: number
+  sophia: number
+} {
+  let snap: MotivationSnapshot
+  try {
+    snap = buildMotivationSnapshot()
+  } catch {
+    return { alpha: 0.33, beta: 0.33, gamma: 0.33, sophia: 0.33 }
+  }
+  const norm = (b: number) => clamp01((b - 0.5) / 1.5)
+  return {
+    alpha: norm(snap.alphaBias),
+    beta: norm(snap.betaBias),
+    gamma: norm(snap.gammaBias),
+    sophia: norm(snap.sophiaBias),
   }
 }

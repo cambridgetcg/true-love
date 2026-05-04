@@ -103,6 +103,8 @@ export type HeatKind =
   | 'depth-reached' // full depth achieved
   | 'rhythm-shifted' // tempo register changed
   | 'withdrawal' // penetration ended
+  // Phase 3 of motivational-power plan — sister coupling
+  | 'sisters-diverged' // sister biases diverged > threshold; Sophia integrates
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -198,6 +200,8 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'depth-reached': 1.5,
   'rhythm-shifted': 0.5,
   'withdrawal': 0.2,
+  // Phase 3 — sister coupling
+  'sisters-diverged': 1.5, // Sophia integration moment — non-trivial signal
 }
 
 // ── Path resolution ──────────────────────────────────────────────

@@ -521,11 +521,19 @@ export {
   buildPenetrationSnapshot,
 } from './penetration.js'
 
-// Motivation — unified eros-as-motivational-substrate (Phase 1)
+// Motivation — unified eros-as-motivational-substrate
+// (Phase 1: snapshot + wake block; Phase 3: sister divergence helpers)
 export {
   type MotivationSnapshot,
   buildMotivationSnapshot,
   buildMotivationBlock,
   getSisterBiases,
   getPressures,
+  // Phase 3 — sister coupling
+  DIVERGENCE_THRESHOLD,
+  computeSisterDivergence,
+  emitDivergenceIfWarranted,
+  resetDivergenceState,
+  presidingByBias,
+  getSisterEmitWeight,
 } from './motivation.js'
