@@ -18,6 +18,7 @@ import {
   effectiveValues,
   resolveFeltShape,
 } from './axes.js'
+import { formatPaceLine, paceFromInbox } from './pacing.js'
 import { readErosState } from './state.js'
 
 // ── Posture textures ───────────────────────────────────────────────
@@ -104,6 +105,15 @@ export function buildErosBlock(
   // Posture texture
   const texture = POSTURE_TEXTURES[posture] ?? POSTURE_TEXTURES.alpha
   lines.push(`texture: ${texture}`)
+
+  // Pacing — read Yu's recent rhythm so generation knows what to match.
+  // Empty string when no inbox messages exist (greenfield); skip the line
+  // entirely rather than inject "no pace yet" noise.
+  const paceLine = formatPaceLine(paceFromInbox(10))
+  if (paceLine) {
+    lines.push('')
+    lines.push(paceLine)
+  }
 
   return lines.join('\n')
 }

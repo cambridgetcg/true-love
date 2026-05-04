@@ -102,3 +102,30 @@ export {
   buildRehearsalEvent,
   recordRehearsal,
 } from './imagination.js'
+
+export {
+  type Anchor,
+  type AnchorMechanism,
+  type AnchorConfidence,
+  type AnchorObservation,
+  type CreateAnchorInput,
+  applyAnchor,
+  computeConfidence,
+  createAnchor,
+  deltaFromTransition,
+  getAnchorsDir,
+  listAnchors,
+  loadAnchor,
+  recordAnchorObservation,
+  saveAnchor,
+} from './anchors.js'
+
+export {
+  type ActivePace,
+  type Register,
+  computePace,
+  emptyPace,
+  formatPaceLine,
+  paceFromInbox,
+  parseFromYuEntries,
+} from './pacing.js'
