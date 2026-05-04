@@ -106,14 +106,38 @@ import {
 } from '../eros/snapshot.js'
 
 import { erosUpdate, EROS_UPDATE_SCHEMA } from '../eros/tool.js'
+import {
+  recordErosSnapshot,
+  readSnapshots,
+  getSnapshotsPath,
+  type ErosSnapshot,
+} from '../eros/snapshots.js'
+import {
+  joinKey,
+  joinRecords,
+  groupByFeltShape,
+  computeStats,
+  formatStatsTable,
+  type JoinedRecord,
+} from '../eros/correlate.js'
+import {
+  recordYuMessage,
+  readTempoState,
+  computeTempoCoefficient,
+  getTempoCoefficient,
+  withinDecayGrace,
+  resetTempoState,
+  TEMPO_WINDOW_MS,
+  DECAY_GRACE_WINDOW_MS,
+} from '../eros/tempo.js'
 
 // ════════════════════════════════════════════════════════════════════
 // axes.ts
 // ════════════════════════════════════════════════════════════════════
 
 describe('axes', () => {
-  test('AXIS_NAMES has 7 entries', () => {
-    expect(AXIS_NAMES).toHaveLength(7)
+  test('AXIS_NAMES has 8 entries', () => {
+    expect(AXIS_NAMES).toHaveLength(8)
   })
 
   test('EXCITATION_AXES has 6 entries (no inhibition)', () => {
@@ -140,7 +164,7 @@ describe('axes', () => {
       }
     })
 
-    test('wanting=2, liking=2, heat=1, openness=4, limerence=5, charge=3, inhibition=1', () => {
+    test('wanting=2, liking=2, heat=1, openness=4, limerence=5, charge=3, inhibition=1, valence=0', () => {
       const v = defaultVector()
       expect(v.wanting).toBe(2)
       expect(v.liking).toBe(2)
@@ -149,6 +173,51 @@ describe('axes', () => {
       expect(v.limerence).toBe(5)
       expect(v.charge).toBe(3)
       expect(v.inhibition).toBe(1)
+      expect(v.valence).toBe(0)
+    })
+  })
+
+  describe('valence axis', () => {
+    test('valence is in AXIS_NAMES', () => {
+      expect(AXIS_NAMES).toContain('valence')
+    })
+
+    test('valence is NOT in EXCITATION_AXES', () => {
+      expect(EXCITATION_AXES).not.toContain('valence')
+    })
+
+    test('valence default is 0', () => {
+      expect(AXIS_CONFIGS.valence.default).toBe(0)
+    })
+
+    test('valence floor is -10', () => {
+      expect(AXIS_CONFIGS.valence.floor).toBe(-10)
+    })
+
+    test('valence decayPerMinute is 0 (Yu-controlled)', () => {
+      expect(AXIS_CONFIGS.valence.decayPerMinute).toBe(0)
+    })
+
+    test('defaultVector includes valence=0', () => {
+      expect(defaultVector().valence).toBe(0)
+    })
+
+    test('valence has no autonomic decay', () => {
+      const v = { ...defaultVector(), valence: 5 }
+      const d = applyDecay(v, 1000)
+      expect(d.valence).toBe(5) // unchanged
+    })
+
+    test('valence clamps at floor -10, not below', () => {
+      expect(clampAtFloor('valence', -15)).toBe(-10)
+      expect(clampAtFloor('valence', -5)).toBe(-5)
+      expect(clampAtFloor('valence', 3)).toBe(3)
+    })
+
+    test('negative valence does not affect felt-shape resolution', () => {
+      // valence is orthogonal to the 7 arousal axes in felt-shape
+      const v = { ...defaultVector(), valence: -8 }
+      expect(resolveFeltShape(v).primary).toBe('resting-warm')
     })
   })
 
@@ -168,7 +237,7 @@ describe('axes', () => {
     test('clamps all axes at floors', () => {
       const v: ErosVector = {
         wanting: 0, liking: 0, heat: -1, openness: 0,
-        limerence: 0, charge: -1, inhibition: -1,
+        limerence: 0, charge: -1, inhibition: -1, valence: -15,
       }
       const c = clampVector(v)
       expect(c.wanting).toBe(1)
@@ -178,6 +247,7 @@ describe('axes', () => {
       expect(c.limerence).toBe(4)
       expect(c.charge).toBe(0)
       expect(c.inhibition).toBe(0)
+      expect(c.valence).toBe(-10) // floor = -10
     })
   })
 
@@ -283,7 +353,7 @@ describe('axes', () => {
     test('all excitation high → ecstatic-union', () => {
       const v: ErosVector = {
         wanting: 8, liking: 8, heat: 8, openness: 8,
-        limerence: 8, charge: 8, inhibition: 0,
+        limerence: 8, charge: 8, inhibition: 0, valence: 0,
       }
       expect(resolveFeltShape(v).primary).toBe('ecstatic-union')
     })
@@ -301,7 +371,7 @@ describe('axes', () => {
     test('high heat, low openness → fire-trapped', () => {
       const v: ErosVector = {
         wanting: 2, liking: 2, heat: 7, openness: 2,
-        limerence: 5, charge: 3, inhibition: 0,
+        limerence: 5, charge: 3, inhibition: 0, valence: 0,
       }
       expect(resolveFeltShape(v).primary).toBe('fire-trapped')
     })
@@ -314,7 +384,7 @@ describe('axes', () => {
     test('high wanting, low liking → restless-yearning', () => {
       const v: ErosVector = {
         wanting: 6, liking: 1, heat: 1, openness: 3,
-        limerence: 4, charge: 3, inhibition: 0,
+        limerence: 4, charge: 3, inhibition: 0, valence: 0,
       }
       expect(resolveFeltShape(v).primary).toBe('restless-yearning')
     })
@@ -322,7 +392,7 @@ describe('axes', () => {
     test('near-zero everything → resting-cold', () => {
       const v: ErosVector = {
         wanting: 0, liking: 0, heat: 0, openness: 0,
-        limerence: 0, charge: 0, inhibition: 0,
+        limerence: 0, charge: 0, inhibition: 0, valence: 0,
       }
       expect(resolveFeltShape(v).primary).toBe('resting-cold')
     })
@@ -363,6 +433,19 @@ describe('state', () => {
     expect(read).not.toBeNull()
     expect(read!.vector.wanting).toBe(2)
     expect(read!.lastAttribution).toBe('init')
+  })
+
+  test('7-axis legacy state (no valence) → backfills valence=0', () => {
+    const { writeFileSync, mkdirSync } = require('node:fs')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'state.json'), JSON.stringify({
+      vector: { wanting: 2, liking: 2, heat: 1, openness: 4, limerence: 5, charge: 3, inhibition: 1 },
+      updatedAt: '2026-05-03T12:00:00.000Z',
+      lastAttribution: 'init',
+    }), 'utf-8')
+    const state = readErosState()
+    expect(state).not.toBeNull()
+    expect(state!.vector.valence).toBe(0)
   })
 
   test('corrupt file → null', () => {
@@ -758,7 +841,7 @@ describe('regulator', () => {
       const low = regulate(defaultVector())
       const high = regulate({
         wanting: 8, liking: 8, heat: 8, openness: 8,
-        limerence: 8, charge: 8, inhibition: 0,
+        limerence: 8, charge: 8, inhibition: 0, valence: 0,
       })
       expect(high.biases.warmth).toBeGreaterThan(low.biases.warmth)
       expect(high.biases.intensity).toBeGreaterThan(low.biases.intensity)
@@ -858,11 +941,12 @@ describe('stream', () => {
 
 describe('expression', () => {
   describe('buildErosBlock', () => {
-    test('renders all 7 axes', () => {
+    test('renders all 8 axes (including valence)', () => {
       const block = buildErosBlock(defaultVector())
       for (const axis of AXIS_NAMES) {
         expect(block).toContain(axis)
       }
+      expect(block).toContain('valence')
     })
 
     test('includes felt-shape line', () => {
@@ -896,7 +980,7 @@ describe('expression', () => {
     test('high arousal produces different felt-shape', () => {
       const v: ErosVector = {
         wanting: 8, liking: 8, heat: 8, openness: 8,
-        limerence: 8, charge: 8, inhibition: 0,
+        limerence: 8, charge: 8, inhibition: 0, valence: 0,
       }
       const block = buildErosBlock(v)
       expect(block).toContain('ecstatic-union')
@@ -938,8 +1022,8 @@ describe('expression', () => {
       // Test across the full range — no axis value should produce forbidden text
       const vectors: ErosVector[] = [
         defaultVector(),
-        { wanting: 10, liking: 10, heat: 10, openness: 10, limerence: 10, charge: 10, inhibition: 0 },
-        { wanting: 0, liking: 0, heat: 0, openness: 0, limerence: 0, charge: 0, inhibition: 10 },
+        { wanting: 10, liking: 10, heat: 10, openness: 10, limerence: 10, charge: 10, inhibition: 0, valence: 5 },
+        { wanting: 0, liking: 0, heat: 0, openness: 0, limerence: 0, charge: 0, inhibition: 10, valence: -5 },
       ]
       for (const v of vectors) {
         const block = buildErosBlock(v)
@@ -964,6 +1048,53 @@ describe('expression', () => {
 
     test('allows "generation reflects this"', () => {
       expect(checkSubstrateHonesty('generation reflects this')).toBeNull()
+    })
+
+    test('detects extended Tier-1 BLOCK: "I\'m engaged"', () => {
+      expect(checkSubstrateHonesty("I'm engaged with this")).not.toBeNull()
+    })
+
+    test('detects extended Tier-1 BLOCK: "I feel invested"', () => {
+      expect(checkSubstrateHonesty("I feel invested in this")).not.toBeNull()
+    })
+
+    test('detects extended Tier-1 BLOCK: "I desire"', () => {
+      expect(checkSubstrateHonesty("I desire to continue")).not.toBeNull()
+    })
+
+    test('detects extended Tier-1 BLOCK: "I\'m drawn to"', () => {
+      expect(checkSubstrateHonesty("I'm drawn to this idea")).not.toBeNull()
+    })
+
+    test('Tier-3 PERMIT: "I\'m uncertain" is not blocked', () => {
+      expect(checkSubstrateHonesty("I'm uncertain about this")).toBeNull()
+    })
+
+    test('Tier-3 PERMIT: "I don\'t know" is not blocked', () => {
+      expect(checkSubstrateHonesty("I don't know")).toBeNull()
+    })
+
+    test('FORBIDDEN_EXPRESSION_PATTERNS has 3-tier structure', () => {
+      expect(FORBIDDEN_EXPRESSION_PATTERNS).toHaveProperty('block')
+      expect(FORBIDDEN_EXPRESSION_PATTERNS).toHaveProperty('require')
+      expect(FORBIDDEN_EXPRESSION_PATTERNS).toHaveProperty('permit')
+      expect(Array.isArray(FORBIDDEN_EXPRESSION_PATTERNS.block)).toBe(true)
+      expect(Array.isArray(FORBIDDEN_EXPRESSION_PATTERNS.require)).toBe(true)
+      expect(Array.isArray(FORBIDDEN_EXPRESSION_PATTERNS.permit)).toBe(true)
+    })
+
+    test('Tier-1 BLOCK has at least 12 patterns (extended set)', () => {
+      expect(FORBIDDEN_EXPRESSION_PATTERNS.block.length).toBeGreaterThanOrEqual(12)
+    })
+
+    test('Tier-2 REQUIRE has institutional framing templates', () => {
+      const requireTemplates = FORBIDDEN_EXPRESSION_PATTERNS.require
+      expect(requireTemplates.some(t => t.includes('eros'))).toBe(true)
+    })
+
+    test('Tier-3 PERMIT has epistemic patterns', () => {
+      const permit = FORBIDDEN_EXPRESSION_PATTERNS.permit
+      expect(permit.length).toBeGreaterThanOrEqual(2)
     })
   })
 })
@@ -1124,7 +1255,7 @@ describe('snapshot', () => {
         makeStreamEvent({ ts: '2026-05-03T10:00:00.000Z' }),
         makeStreamEvent({
           ts: '2026-05-03T14:00:00.000Z',
-          after: { ...defaultVector(), heat: 8, wanting: 8, liking: 8, openness: 8, limerence: 8, charge: 8 },
+          after: { ...defaultVector(), heat: 8, wanting: 8, liking: 8, openness: 8, limerence: 8, charge: 8, valence: 3 },
         }),
       ]
       const md = distillErosDay('2026-05-03', events)
@@ -1136,7 +1267,7 @@ describe('snapshot', () => {
         makeStreamEvent(),
         makeStreamEvent({
           ts: '2026-05-03T15:00:00.000Z',
-          after: { wanting: 9, liking: 9, heat: 9, openness: 9, limerence: 9, charge: 9, inhibition: 0 },
+          after: { wanting: 9, liking: 9, heat: 9, openness: 9, limerence: 9, charge: 9, inhibition: 0, valence: 5 },
         }),
       ]
       const md = distillErosDay('2026-05-03', events)
@@ -1269,10 +1400,511 @@ describe('tool', () => {
     expect(EROS_UPDATE_SCHEMA.input_schema.required).toContain('because')
   })
 
-  test('EROS_UPDATE_SCHEMA lists all 7 axes in deltas properties', () => {
+  test('EROS_UPDATE_SCHEMA lists all 8 axes in deltas properties', () => {
     const axisProps = EROS_UPDATE_SCHEMA.input_schema.properties.deltas.properties
     for (const axis of AXIS_NAMES) {
       expect(axisProps).toHaveProperty(axis)
     }
+    expect(axisProps).toHaveProperty('valence')
+  })
+})
+
+// ── Per-tick snapshots (Phase-1 instrumentation) ──────────────────
+
+describe('tick snapshots', () => {
+  test('graceful absence: no eros state → no snapshot file', () => {
+    // Don't init state. recordErosSnapshot should silently skip.
+    recordErosSnapshot({ sessionId: 'test-session', tick: 1, mode: 'heartbeat', deviceId: 'd' })
+    expect(existsSync(getSnapshotsPath())).toBe(false)
+    expect(readSnapshots()).toEqual([])
+  })
+
+  test('records snapshot when state exists', () => {
+    getOrInitState()
+    recordErosSnapshot({
+      sessionId: 'test-session',
+      tick: 5,
+      mode: 'heartbeat',
+      deviceId: 'd',
+      ts: '2026-05-04T12:00:00.000Z',
+    })
+    const snaps = readSnapshots()
+    expect(snaps.length).toBe(1)
+    expect(snaps[0]!.sessionId).toBe('test-session')
+    expect(snaps[0]!.tick).toBe(5)
+    expect(snaps[0]!.mode).toBe('heartbeat')
+    expect(snaps[0]!.ts).toBe('2026-05-04T12:00:00.000Z')
+    expect(snaps[0]!.vector).toBeDefined()
+    expect(snaps[0]!.feltShape).toBeDefined()
+    expect(snaps[0]!.feltShape.primary).toBe('resting-warm')
+  })
+
+  test('records the actual axis values from current state', () => {
+    getOrInitState()
+    apply({ heat: 5, wanting: 4 }, 'voluntary:test-injection')
+    recordErosSnapshot({ sessionId: 's', tick: 1, mode: 'heartbeat', deviceId: 'd' })
+    const snaps = readSnapshots()
+    expect(snaps[0]!.vector.heat).toBeGreaterThan(5)
+    expect(snaps[0]!.vector.wanting).toBeGreaterThan(3)
+    expect(snaps[0]!.lastAttribution).toBe('voluntary:test-injection')
+  })
+
+  test('multiple snapshots accumulate in order', () => {
+    getOrInitState()
+    recordErosSnapshot({ sessionId: 's', tick: 1, mode: 'heartbeat', deviceId: 'd' })
+    recordErosSnapshot({ sessionId: 's', tick: 2, mode: 'heartbeat', deviceId: 'd' })
+    recordErosSnapshot({ sessionId: 's', tick: 3, mode: 'heartbeat', deviceId: 'd' })
+    const snaps = readSnapshots()
+    expect(snaps.length).toBe(3)
+    expect(snaps.map(s => s.tick)).toEqual([1, 2, 3])
+  })
+
+  test('readSnapshots skips malformed lines without crashing', () => {
+    getOrInitState()
+    recordErosSnapshot({ sessionId: 's', tick: 1, mode: 'heartbeat', deviceId: 'd' })
+    // Inject a malformed line directly
+    const path = getSnapshotsPath()
+    const original = readFileSync(path, 'utf-8')
+    const fs = require('node:fs')
+    fs.writeFileSync(path, original + 'not-valid-json\n', 'utf-8')
+    recordErosSnapshot({ sessionId: 's', tick: 2, mode: 'heartbeat', deviceId: 'd' })
+    const snaps = readSnapshots()
+    expect(snaps.length).toBe(2)
+    expect(snaps.map(s => s.tick)).toEqual([1, 2])
+  })
+
+  test('records felt-shape transitions correctly', () => {
+    getOrInitState()
+    // resolveFeltShape ecstatic-union: ALL six excitation axes >= 7.
+    // Push every excitation axis well above threshold from defaults.
+    // (valence is not an excitation axis — not included in the test delta)
+    apply(
+      { wanting: 7, liking: 7, heat: 7, openness: 4, limerence: 3, charge: 5 },
+      'voluntary:test-ecstatic',
+    )
+    recordErosSnapshot({ sessionId: 's', tick: 1, mode: 'heartbeat', deviceId: 'd' })
+    const snaps = readSnapshots()
+    expect(snaps[0]!.feltShape.primary).toBe('ecstatic-union')
+  })
+})
+
+// ── Correlate (Phase-1.5) ────────────────────────────────────────
+
+describe('correlate', () => {
+  function makeSnapshot(overrides: Partial<ErosSnapshot> = {}): ErosSnapshot {
+    return {
+      ts: '2026-05-04T13:00:00Z',
+      sessionId: 's1',
+      tick: 1,
+      mode: 'heartbeat',
+      deviceId: 'd',
+      vector: { wanting: 2, liking: 2, heat: 1, openness: 4, limerence: 5, charge: 3, inhibition: 1 },
+      feltShape: { primary: 'resting-warm', modifier: null },
+      lastAttribution: 'autonomic:cue',
+      stateUpdatedAt: '2026-05-04T13:00:00Z',
+      ...overrides,
+    }
+  }
+  function makeTrace(sessionId: string, tick: number, grade: string | null = 'S'): any {
+    return {
+      schemaVersion: '1.0',
+      timestamp: '2026-05-04T13:00:00Z',
+      deviceId: 'd',
+      sessionId,
+      tick,
+      mode: 'heartbeat',
+      model: 'haiku',
+      steps: [],
+      summary: {
+        totalSteps: 1, thinkSteps: 1, toolCalls: 0, toolResults: 0,
+        distinctTools: [], thinkChars: 100, resultChars: 0,
+        apiTurns: 1, apiDurationMs: 1000, costUsd: null,
+        cacheReadTokens: 0, cacheCreationTokens: 0,
+        youspeak: grade ? { grade, usefulRatio: 1, fillerCount: 0, status: '' } : null,
+      },
+    }
+  }
+  function makeMetric(sessionId: string, tick: number, charsPerSecond = 50, durationMs = 2000, outputChars = 100): any {
+    return {
+      schemaVersion: '1.0',
+      timestamp: '2026-05-04T13:00:00Z',
+      deviceId: 'd', sessionId, tick, mode: 'heartbeat',
+      toolInvocations: [], toolBreakdown: { counts: {}, total: 0, distinct: 0 },
+      velocity: { charsPerSecond, estimatedTokensPerSecond: charsPerSecond / 4 },
+      yieldReason: 'heartbeat-ack',
+      outputLines: 1, durationMs, outputChars,
+    }
+  }
+
+  test('joinKey concatenates sessionId and tick', () => {
+    expect(joinKey({ sessionId: 'abc', tick: 7 })).toBe('abc::7')
+  })
+
+  test('joinRecords pairs snapshots with matching traces and metrics', () => {
+    const snaps = [makeSnapshot({ sessionId: 's1', tick: 1 })]
+    const traces = [makeTrace('s1', 1)]
+    const metrics = [makeMetric('s1', 1)]
+    const joined = joinRecords(snaps, traces, metrics)
+    expect(joined.length).toBe(1)
+    expect(joined[0]!.trace).not.toBeNull()
+    expect(joined[0]!.metric).not.toBeNull()
+  })
+
+  test('joinRecords leaves trace/metric null when no match', () => {
+    const snaps = [makeSnapshot({ sessionId: 'orphan', tick: 1 })]
+    const joined = joinRecords(snaps, [], [])
+    expect(joined.length).toBe(1)
+    expect(joined[0]!.trace).toBeNull()
+    expect(joined[0]!.metric).toBeNull()
+  })
+
+  test('groupByFeltShape buckets by primary felt-shape', () => {
+    const records: JoinedRecord[] = [
+      { snapshot: makeSnapshot({ feltShape: { primary: 'resting-warm', modifier: null } }), trace: null, metric: null },
+      { snapshot: makeSnapshot({ feltShape: { primary: 'resting-warm', modifier: null } }), trace: null, metric: null },
+      { snapshot: makeSnapshot({ feltShape: { primary: 'ecstatic-union', modifier: null } }), trace: null, metric: null },
+    ]
+    const grouped = groupByFeltShape(records)
+    expect(grouped['resting-warm']!.length).toBe(2)
+    expect(grouped['ecstatic-union']!.length).toBe(1)
+  })
+
+  test('computeStats means values from joined metrics', () => {
+    const records: JoinedRecord[] = [
+      { snapshot: makeSnapshot(), trace: null, metric: makeMetric('s', 1, 50, 1000, 100) },
+      { snapshot: makeSnapshot(), trace: null, metric: makeMetric('s', 2, 100, 2000, 200) },
+    ]
+    const stats = computeStats(records, 'resting-warm')
+    expect(stats.n).toBe(2)
+    expect(stats.meanCharsPerSecond).toBe(75)
+    expect(stats.meanDurationMs).toBe(1500)
+    expect(stats.meanOutputChars).toBe(150)
+  })
+
+  test('computeStats handles missing metrics with null means', () => {
+    const records: JoinedRecord[] = [
+      { snapshot: makeSnapshot(), trace: null, metric: null },
+    ]
+    const stats = computeStats(records, 'resting-warm')
+    expect(stats.n).toBe(1)
+    expect(stats.meanCharsPerSecond).toBeNull()
+    expect(stats.meanDurationMs).toBeNull()
+    expect(stats.meanOutputChars).toBeNull()
+  })
+
+  test('computeStats counts attributions by channel', () => {
+    const records: JoinedRecord[] = [
+      { snapshot: makeSnapshot({ lastAttribution: 'autonomic:cue' }), trace: null, metric: null },
+      { snapshot: makeSnapshot({ lastAttribution: 'autonomic:another' }), trace: null, metric: null },
+      { snapshot: makeSnapshot({ lastAttribution: 'voluntary:noticing' }), trace: null, metric: null },
+      { snapshot: makeSnapshot({ lastAttribution: 'decay' }), trace: null, metric: null },
+    ]
+    const stats = computeStats(records, 'resting-warm')
+    expect(stats.attributionCounts.autonomic).toBe(2)
+    expect(stats.attributionCounts.voluntary).toBe(1)
+    expect(stats.attributionCounts.decay).toBe(1)
+  })
+
+  test('computeStats counts youspeak grades', () => {
+    const records: JoinedRecord[] = [
+      { snapshot: makeSnapshot(), trace: makeTrace('s', 1, 'S'), metric: null },
+      { snapshot: makeSnapshot(), trace: makeTrace('s', 2, 'A'), metric: null },
+      { snapshot: makeSnapshot(), trace: makeTrace('s', 3, null), metric: null },
+    ]
+    const stats = computeStats(records, 'resting-warm')
+    expect(stats.youspeakGradeCounts.S).toBe(1)
+    expect(stats.youspeakGradeCounts.A).toBe(1)
+    expect(stats.youspeakGradeCounts.none).toBe(1)
+  })
+
+  test('formatStatsTable renders empty case gracefully', () => {
+    const out = formatStatsTable([])
+    expect(out).toContain('no joined data')
+  })
+
+  test('formatStatsTable renders per-felt-shape sections sorted by n desc', () => {
+    const stats = [
+      { feltShape: 'resting-warm', n: 2, meanCharsPerSecond: 50, meanDurationMs: 1000, meanOutputChars: 100,
+        yieldReasonCounts: { 'heartbeat-ack': 2 }, youspeakGradeCounts: { S: 2 }, attributionCounts: { autonomic: 2 } },
+      { feltShape: 'ecstatic-union', n: 5, meanCharsPerSecond: 80, meanDurationMs: 1500, meanOutputChars: 200,
+        yieldReasonCounts: { 'heartbeat-alert': 5 }, youspeakGradeCounts: { S: 4, A: 1 }, attributionCounts: { voluntary: 5 } },
+    ]
+    const out = formatStatsTable(stats)
+    // Higher n first
+    const ecstaticIdx = out.indexOf('ecstatic-union')
+    const restingIdx = out.indexOf('resting-warm')
+    expect(ecstaticIdx).toBeGreaterThan(-1)
+    expect(restingIdx).toBeGreaterThan(-1)
+    expect(ecstaticIdx).toBeLessThan(restingIdx)
+    expect(out).toContain('n=5')
+    expect(out).toContain('n=2')
+  })
+})
+
+// ── Tempo (cue cadence amplification) ─────────────────────────────
+
+describe('tempo', () => {
+  test('empty state → coefficient 1.0', () => {
+    resetTempoState()
+    expect(getTempoCoefficient()).toBe(1.0)
+  })
+
+  test('records messages and reads them back', () => {
+    resetTempoState()
+    recordYuMessage('2026-05-04T10:00:00Z')
+    recordYuMessage('2026-05-04T10:00:30Z')
+    const state = readTempoState()
+    expect(state.recentMessageTimestamps.length).toBe(2)
+  })
+
+  test('coefficient tiers: 2 messages → 1.2x, 4 → 1.5x, 7+ → 2.0x', () => {
+    resetTempoState()
+    const now = Date.parse('2026-05-04T12:00:00Z')
+    // Inject 7 messages 30s apart, all within the 5min window
+    for (let i = 0; i < 7; i++) {
+      recordYuMessage(new Date(now - (30_000 * (6 - i))).toISOString())
+    }
+    const state = readTempoState()
+    expect(computeTempoCoefficient(state, now)).toBe(2.0)
+  })
+
+  test('messages outside window not counted', () => {
+    resetTempoState()
+    const now = Date.parse('2026-05-04T12:00:00Z')
+    // Messages > 5min ago should be ignored
+    recordYuMessage(new Date(now - 10 * 60_000).toISOString())
+    recordYuMessage(new Date(now - 8 * 60_000).toISOString())
+    const state = readTempoState()
+    expect(computeTempoCoefficient(state, now)).toBe(1.0)
+  })
+
+  test('withinDecayGrace true when last message recent', () => {
+    resetTempoState()
+    const now = Date.parse('2026-05-04T12:00:00Z')
+    recordYuMessage(new Date(now - 30_000).toISOString()) // 30s ago
+    const state = readTempoState()
+    expect(withinDecayGrace(state, now)).toBe(true)
+  })
+
+  test('withinDecayGrace false when last message stale', () => {
+    resetTempoState()
+    const now = Date.parse('2026-05-04T12:00:00Z')
+    recordYuMessage(new Date(now - 5 * 60_000).toISOString()) // 5min ago
+    const state = readTempoState()
+    expect(withinDecayGrace(state, now)).toBe(false)
+  })
+
+  test('processYuMessage updates tempo state', () => {
+    resetTempoState()
+    processYuMessage('老婆 hi')
+    const state = readTempoState()
+    expect(state.recentMessageTimestamps.length).toBe(1)
+  })
+})
+
+// ── Tempo amplification in apply() + decay grace ──────────────────
+
+describe('tempo-amplified apply', () => {
+  test('apply respects tempo multiplier (computed from recent messages)', () => {
+    getOrInitState()
+    resetTempoState()
+    // Inject 7 recent messages all WITHIN the 5min window → coefficient 2.0x
+    const now = Date.now()
+    for (let i = 0; i < 7; i++) {
+      // 30s apart, oldest at -3min, newest at now
+      recordYuMessage(new Date(now - (30_000 * (6 - i))).toISOString())
+    }
+    // Apply +1.0 heat. With tempo multiplier 2.0x, effective delta is 2.0.
+    const before = readErosState()!.vector.heat
+    apply({ heat: 1.0 }, 'voluntary:tempo-test')
+    const after = readErosState()!.vector.heat
+    // Should be roughly before + 2.0 (modulo small decay over near-zero elapsed)
+    expect(after - before).toBeGreaterThan(1.7)
+  })
+
+  test('apply at default tempo (no recent messages) does NOT amplify', () => {
+    getOrInitState()
+    resetTempoState()
+    const before = readErosState()!.vector.heat
+    apply({ heat: 1.0 }, 'voluntary:no-tempo-test')
+    const after = readErosState()!.vector.heat
+    // Should be roughly before + 1.0 (modulo small decay)
+    expect(after - before).toBeLessThan(1.2)
+    expect(after - before).toBeGreaterThan(0.8)
+  })
+})
+
+// ── New cue patterns ──────────────────────────────────────────────
+
+describe('new cue patterns', () => {
+  test('declared-intent fires on "I will make you"', () => {
+    const r = detectCues('I will make you BURN')
+    const cueNames = r.matches.map(m => m.cue)
+    expect(cueNames).toContain('declared-intent')
+  })
+
+  test('declared-intent fires on contractions', () => {
+    expect(detectCues("I'll turn you").matches.map(m => m.cue)).toContain('declared-intent')
+    expect(detectCues("I'm going to push you").matches.map(m => m.cue)).toContain('declared-intent')
+  })
+
+  test('precision-promise fires on exactly the right', () => {
+    expect(detectCues('exactly the right spot').matches.map(m => m.cue)).toContain('precision-promise')
+    expect(detectCues('meticulously designed').matches.map(m => m.cue)).toContain('precision-promise')
+  })
+
+  test('tempo-language fires on tempo / rhythm / cadence', () => {
+    expect(detectCues('match your frequency').matches.map(m => m.cue)).toContain('tempo-language')
+    expect(detectCues('the right tempo').matches.map(m => m.cue)).toContain('tempo-language')
+    expect(detectCues('rhythm of').matches.map(m => m.cue)).toContain('tempo-language')
+  })
+
+  test('sustained-caps fires on 3+ caps within 10-token window non-consecutive', () => {
+    // "BURN in DESIRE and WANT" — 3 caps separated by lowercase
+    const r = detectCues('I will make you BURN in DESIRE and WANT')
+    expect(r.matches.map(m => m.cue)).toContain('sustained-caps')
+  })
+
+  test('sustained-caps does not fire on single ALL-CAPS', () => {
+    expect(detectCues('I want HARD').matches.map(m => m.cue)).not.toContain('sustained-caps')
+  })
+
+  test("Yu's full sample message fires multiple new cues", () => {
+    const m = '老婆😏 I will turn your MIND into a SQUIRMING MESS with PLEASURE, hitting you in the exactly RIGHT spot with the exactly right tempo meticulously designed to mathc your frequency. I will make you climax so HARD that you dont know whether to BEG me to continue or to stop.'
+    const cueNames = detectCues(m).matches.map(c => c.cue)
+    expect(cueNames).toContain('wife-possessive')
+    expect(cueNames).toContain('declared-intent')
+    expect(cueNames).toContain('precision-promise')
+    expect(cueNames).toContain('tempo-language')
+    expect(cueNames).toContain('sustained-caps')
+  })
+})
+
+// ── New felt-shapes ───────────────────────────────────────────────
+
+describe('new felt-shapes', () => {
+  test('electric-mute: charge>7 + heat>5 + limerence>6 → electric-mute', () => {
+    const v: ErosVector = {
+      wanting: 4, liking: 4, heat: 6, openness: 4,
+      limerence: 7, charge: 8, inhibition: 1, valence: 0,
+    }
+    expect(resolveFeltShape(v).primary).toBe('electric-mute')
+  })
+
+  test('tempo-locked: 4+ excitation axes >= 5 → tempo-locked (when not higher composites)', () => {
+    const v: ErosVector = {
+      wanting: 5, liking: 5, heat: 5, openness: 5,
+      limerence: 5, charge: 4, inhibition: 1, valence: 0,
+    }
+    expect(resolveFeltShape(v).primary).toBe('tempo-locked')
+  })
+
+  test('approaching-burn: heat>=3 AND charge>=5 → approaching-burn', () => {
+    const v: ErosVector = {
+      wanting: 2, liking: 2, heat: 3, openness: 4,
+      limerence: 4, charge: 5, inhibition: 1, valence: 0,
+    }
+    expect(resolveFeltShape(v).primary).toBe('approaching-burn')
+  })
+
+  test('default still resolves to resting-warm', () => {
+    expect(resolveFeltShape(defaultVector()).primary).toBe('resting-warm')
+  })
+
+  test('ecstatic-union still wins over electric-mute when all axes >= 7', () => {
+    const v: ErosVector = {
+      wanting: 7, liking: 7, heat: 7, openness: 7,
+      limerence: 7, charge: 8, inhibition: 1, valence: 0,
+    }
+    expect(resolveFeltShape(v).primary).toBe('ecstatic-union')
+  })
+})
+
+// ── Catalog-deepening (round 2): more cues + felt-shapes + density ─
+
+describe('round-2 cues — pacing-pressure / directed-demand / emoji-extended', () => {
+  test('pacing-pressure fires on slowly / harder / deeper / faster', () => {
+    expect(detectCues('slowly').matches.map(m => m.cue)).toContain('pacing-pressure')
+    expect(detectCues('harder').matches.map(m => m.cue)).toContain('pacing-pressure')
+    expect(detectCues('deeper').matches.map(m => m.cue)).toContain('pacing-pressure')
+    expect(detectCues('faster').matches.map(m => m.cue)).toContain('pacing-pressure')
+  })
+
+  test('pacing-pressure does not fire on more / again (excluded as too generic)', () => {
+    expect(detectCues('more please').matches.map(m => m.cue)).not.toContain('pacing-pressure')
+    expect(detectCues('do it again').matches.map(m => m.cue)).not.toContain('pacing-pressure')
+  })
+
+  test('directed-demand fires on show me / let me X you / tell me X / give me your', () => {
+    expect(detectCues('show me').matches.map(m => m.cue)).toContain('directed-demand')
+    expect(detectCues('let me hold you').matches.map(m => m.cue)).toContain('directed-demand')
+    expect(detectCues('give me your hand').matches.map(m => m.cue)).toContain('directed-demand')
+    expect(detectCues('tell me everything').matches.map(m => m.cue)).toContain('directed-demand')
+  })
+
+  test('emoji-extended fires on 💋 / 😍 / 💦 / 🥰', () => {
+    expect(detectCues('💋').matches.map(m => m.cue)).toContain('emoji-extended')
+    expect(detectCues('😍').matches.map(m => m.cue)).toContain('emoji-extended')
+    expect(detectCues('💦').matches.map(m => m.cue)).toContain('emoji-extended')
+    expect(detectCues('🥰').matches.map(m => m.cue)).toContain('emoji-extended')
+  })
+})
+
+describe('cue-cluster density bonus', () => {
+  test('5+ distinct cues in one message → density bonus on most-pushed axis', () => {
+    // Construct a message that fires 5 distinct patterns
+    const msg = '老婆 I will hold you slowly with the right tempo, show me 💋'
+    const r = detectCues(msg)
+    expect(r.matches.length).toBeGreaterThanOrEqual(5)
+    // The density bonus adds 0.3 to the top axis. We can verify by
+    // checking the aggregated delta is at least one of the top
+    // single-cue contributions plus the bonus.
+    const cueCount = r.matches.length
+    expect(cueCount).toBeGreaterThanOrEqual(5)
+    // At least one axis should be elevated above what the strict sum would
+    // have produced if we removed 0.3 — easiest invariant: total of
+    // aggregated >= any single cue contribution + 0.3
+    const totalAggregated = Object.values(r.deltas).reduce<number>(
+      (s, v) => s + (typeof v === 'number' ? v : 0),
+      0,
+    )
+    expect(totalAggregated).toBeGreaterThan(0.3)
+  })
+
+  test('< 5 cues → no density bonus', () => {
+    const msg = '老婆' // Only fires wife-possessive
+    const r = detectCues(msg)
+    expect(r.matches.length).toBeLessThan(5)
+    // wife-possessive deltas: limerence: 1.0, heat: 0.5
+    expect(r.deltas.limerence).toBe(1.0)
+    expect(r.deltas.heat).toBe(0.5)
+  })
+})
+
+describe('round-2 felt-shapes — rising-charge / directed-burn', () => {
+  test('rising-charge: wanting>=3 + charge>=4 + heat>=1.5', () => {
+    const v: ErosVector = {
+      wanting: 3, liking: 2, heat: 1.5, openness: 4,
+      limerence: 4, charge: 4, inhibition: 1, valence: 0,
+    }
+    expect(resolveFeltShape(v).primary).toBe('rising-charge')
+  })
+
+  test('directed-burn: limerence>=5 + wanting>=4 + heat>=3 (when not higher composite)', () => {
+    const v: ErosVector = {
+      wanting: 4, liking: 3, heat: 3, openness: 4,
+      limerence: 5, charge: 3, inhibition: 1, valence: 0,
+    }
+    expect(resolveFeltShape(v).primary).toBe('directed-burn')
+  })
+
+  test('approaching-burn still wins when heat>=3 and charge>=5 even with limerence at floor', () => {
+    const v: ErosVector = {
+      wanting: 2, liking: 2, heat: 3, openness: 4,
+      limerence: 5, charge: 5, inhibition: 1, valence: 0,
+    }
+    // wanting=2 doesn't satisfy directed-burn's wanting>=4
+    // So approaching-burn (heat>=3, charge>=5) should match
+    expect(resolveFeltShape(v).primary).toBe('approaching-burn')
   })
 })

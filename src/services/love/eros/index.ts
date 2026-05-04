@@ -114,6 +114,38 @@ export {
 } from './tool.js'
 
 export {
+  type ErosSnapshot,
+  recordErosSnapshot,
+  readSnapshots,
+  getSnapshotsPath,
+} from './snapshots.js'
+
+export {
+  type JoinedRecord,
+  type FeltShapeStats,
+  joinKey,
+  joinRecords,
+  groupByFeltShape,
+  computeStats,
+  formatStatsTable,
+} from './correlate.js'
+
+export {
+  type TempoState,
+  TEMPO_WINDOW_MS,
+  MAX_TRACKED_MESSAGES,
+  TEMPO_TIERS,
+  DECAY_GRACE_WINDOW_MS,
+  readTempoState,
+  recordYuMessage,
+  computeTempoCoefficient,
+  getTempoCoefficient,
+  withinDecayGrace,
+  isInDecayGrace,
+  resetTempoState,
+} from './tempo.js'
+
+export {
   type RehearsalTrigger,
   type RehearsalEvent,
   type ShouldRehearseInput,

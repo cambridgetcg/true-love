@@ -32,6 +32,24 @@ export interface MissionArtifacts {
   test_runs: { ts: string; pass: number; fail: number }[]
 }
 
+/**
+ * A claim on a mission by a specific device. When present, indicates
+ * which Sophia instance is currently working on the mission. Other
+ * instances should refuse to start a claimed mission unless the claim
+ * is stale (older than CLAIM_STALENESS_MS — 1 hour by default).
+ *
+ * Part of the multi-instance Sophia collaboration infrastructure.
+ */
+export interface MissionClaim {
+  /** Device id that holds the claim. */
+  deviceId: string
+  /** ISO timestamp when the claim was made. */
+  claimedAt: string
+}
+
+/** A claim is considered stale after this many milliseconds without renewal. */
+export const CLAIM_STALENESS_MS = 60 * 60 * 1000 // 1 hour
+
 export interface Mission {
   id: string
   project_id: string
@@ -44,6 +62,29 @@ export interface Mission {
   updated_at: string
   decomposition?: string
   artifacts: MissionArtifacts
+  /** Optional claim — set when an instance starts working on this mission. */
+  claim?: MissionClaim
+}
+
+/**
+ * Check whether a claim blocks another instance from starting the mission.
+ * Returns the blocking claim if one exists and is fresh, else null.
+ *
+ * @param mission - the mission to check
+ * @param ownDeviceId - the deviceId of the instance trying to start
+ * @param now - current time (override for tests)
+ */
+export function blockingClaim(
+  mission: Mission,
+  ownDeviceId: string,
+  now: number = Date.now(),
+): MissionClaim | null {
+  if (!mission.claim) return null
+  if (mission.claim.deviceId === ownDeviceId) return null
+  const claimMs = Date.parse(mission.claim.claimedAt)
+  if (!Number.isFinite(claimMs)) return null
+  if (now - claimMs > CLAIM_STALENESS_MS) return null // stale, ignore
+  return mission.claim
 }
 
 export type MissionEventType =
@@ -469,6 +510,7 @@ export function writeMissionWithEvents(
     if (lifecycle) {
       witness(lifecycle.sister, 'mission', { of: `${lifecycle.verb}:${m.id}` })
     }
+
     // Heat: a completed mission is the canonical "fire" event.
     // Best-effort; never crashes the lifecycle transition.
     if (m.status === 'done') {
@@ -480,6 +522,31 @@ export function writeMissionWithEvents(
         // best-effort
       }
     }
+
+    // Chain-auto-advance: when a mission completes (done), attempt to
+    // auto-start the next proposed love-origin mission. Gated by env
+    // flag TRUE_LOVE_CHAIN_AUTO_ADVANCE=1 — default off, Yu opts in.
+    // Lazy require to avoid circular dependency at module load.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { attemptChainAdvance } = require('./chain-advance.js')
+      const result = attemptChainAdvance({
+        prevMissionId: m.id,
+        projectId: m.project_id,
+        eventType,
+      })
+      if (result.triggered) {
+        process.stdout.write(
+          `— chain-advance: ${m.id} → ${result.next.id}` +
+          (result.next.pid ? ` (pid ${result.next.pid})` : '') +
+          (result.reason ? ` [${result.reason}]` : '') + '\n',
+        )
+      }
+    } catch {
+      // Chain-advance is best-effort. Failure must never block mission
+      // state writes.
+    }
+
     return { eventAppended: true, eventType }
   }
 

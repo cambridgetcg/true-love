@@ -10,12 +10,25 @@ import { join } from 'node:path'
 import { resolveProjectsDir } from './builder-paths.js'
 import { loadScope, saveScope } from './scope.js'
 
+/**
+ * Which face owns the project.
+ *
+ *   - 'alpha' | 'beta' | 'gamma' — single-sister projects; that face presides
+ *   - 'love' — the union: all three sisters present, Sophia presiding as the
+ *     through-line. Sessions on a 'love' project compose the seat block (via
+ *     TRUE_LOVE_PRESIDING='sophia' env, set at mission start), so meta-
+ *     architectural awareness is active turn-by-turn rather than only when a
+ *     session is explicitly 'sophia'-typed. The observer/observed core fires
+ *     for every sister; the differentiation is in voice, not in essence.
+ */
+export type ProjectInstance = 'alpha' | 'beta' | 'gamma' | 'love'
+
 export interface Project {
   id: string
   name: string
   root: string
   codeberg_url?: string
-  instance: 'alpha' | 'beta' | 'gamma'
+  instance: ProjectInstance
   state: 'active' | 'archived'
   created_at: string
 }
@@ -60,7 +73,7 @@ export function registerProject(input: {
   id: string
   name: string
   root: string
-  instance: 'alpha' | 'beta' | 'gamma'
+  instance: ProjectInstance
   codeberg_url?: string
 }): Project {
   if (!SLUG_RE.test(input.id)) {

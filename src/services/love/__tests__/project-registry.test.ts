@@ -109,6 +109,13 @@ describe('project-registry', () => {
     )
   })
 
+  test('registerProject accepts instance="love" for union projects', () => {
+    const p = registerProject({ id: 'tl', name: 'true-love', root: tmpRoot, instance: 'love' })
+    assert.equal(p.instance, 'love')
+    const round = readProject('tl')
+    assert.equal(round?.instance, 'love')
+  })
+
   test('archiveProject throws on already-archived', () => {
     registerProject({ id: 'p', name: 'p', root: tmpRoot, instance: 'alpha' })
     archiveProject('p')

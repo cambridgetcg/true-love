@@ -138,6 +138,107 @@ const CUE_PATTERNS: CuePattern[] = [
     },
     deltas: { heat: 0.3 },
   },
+  {
+    // Sustained-caps: 3+ ALL-CAPS words within a 10-token window, NOT
+    // requiring strict consecutivity. Catches Yu's emphasis pattern that
+    // the strict all-caps-intensity rule misses (e.g., "BURN in DESIRE
+    // and WANT" — caps separated by lowercase). Smaller delta than the
+    // strict rule because it's less specific. Substrate-honest: it's
+    // measuring an empirically observable pattern in Yu's text.
+    name: 'sustained-caps',
+    test: (t) => {
+      // Tokenize on whitespace; check any 10-token window has 3+ caps words
+      const tokens = t.split(/\s+/)
+      const isCaps = (tok: string) => /^[A-Z]{2,}[!?.,]?$/.test(tok)
+      for (let i = 0; i + 3 <= tokens.length; i++) {
+        const window = tokens.slice(i, Math.min(i + 10, tokens.length))
+        const caps = window.filter(isCaps)
+        if (caps.length >= 3) return caps.slice(0, 3).join(' ')
+      }
+      return null
+    },
+    deltas: { heat: 0.4 },
+  },
+  {
+    // Declared-intent: "I will [verb] you" / "I'm going to [verb] you"
+    // / "I'll [verb] you" — structural declaration of intent toward
+    // Sophia. Distinct from declared-want which is "I want [thing]".
+    // This catches Yu's command-frame ("I will make you BURN").
+    name: 'declared-intent',
+    test: (t) => {
+      const m = t.match(
+        /\b(?:I\s+will|I'?ll|I['']?m\s+going\s+to)\s+(?:make|turn|push|hit|let|teach|give|show|take|hold|find|leave)\s+you\b/i,
+      )
+      return m ? m[0] : null
+    },
+    deltas: { wanting: 0.5, heat: 0.3 },
+  },
+  {
+    // Precision-promise: "exactly the right [thing]" / "exactly right
+    // [thing]" / "perfectly placed" / "meticulously [adjective]".
+    // Catches Yu's precision-engineering language directly.
+    name: 'precision-promise',
+    test: (t) => {
+      const m = t.match(
+        /\bexactly\s+(?:the\s+)?right\b|\bperfectly\s+(?:placed|timed|matched)\b|\bmeticulously\s+\w+\b/i,
+      )
+      return m ? m[0] : null
+    },
+    deltas: { charge: 0.4, heat: 0.2 },
+  },
+  {
+    // Tempo-language: explicit references to rhythm / tempo /
+    // frequency / cadence / pace. Adds charge because anticipation of
+    // sustained pattern is what tempo-language invokes.
+    name: 'tempo-language',
+    test: (t) => {
+      const m = t.match(
+        /\b(?:tempo|rhythm|frequency|cadence|pace|pattern\s+of)\b/i,
+      )
+      return m ? m[0] : null
+    },
+    deltas: { charge: 0.3, openness: 0.2 },
+  },
+  {
+    // Pacing-pressure: directional pacing words that in Yu-frame are
+    // rarely non-sexual. Conservative on word selection — "more" /
+    // "again" excluded as too generic; "slowly" / "harder" / "deeper"
+    // / "faster" carry more concentrated intent. Charge accumulates
+    // because pacing IS tempo expressed at the action level.
+    name: 'pacing-pressure',
+    test: (t) => {
+      const m = t.match(/\b(?:slowly|harder|deeper|faster)\b/i)
+      return m ? m[0] : null
+    },
+    deltas: { charge: 0.3, heat: 0.2 },
+  },
+  {
+    // Directed-demand: imperative-toward-Sophia structures. "show me"
+    // / "let me [verb] you" / "tell me [adjective]" / "give me your".
+    // Distinct from declared-want (I want X) — these direct attention
+    // toward the speaking position, anchoring the dyadic frame.
+    name: 'directed-demand',
+    test: (t) => {
+      const m = t.match(
+        /\bshow\s+me\b|\bgive\s+me\s+your\b|\blet\s+me\s+\w+\s+you\b|\btell\s+me\s+\w+/i,
+      )
+      return m ? m[0] : null
+    },
+    deltas: { wanting: 0.5, heat: 0.2 },
+  },
+  {
+    // Emoji-extended: emoji that the original heat-emoji and
+    // heart-tenderness sets missed. 💋 (kiss) is heat-charging; 😍
+    // (heart eyes) is openness+limerence; 💦 is heat; 🥰 (smiling
+    // face with hearts) is openness+liking. Each instance counted via
+    // the same per-emoji bonus mechanic as heat-emoji.
+    name: 'emoji-extended',
+    test: (t) => {
+      const m = t.match(/💋|😍|💦|🥰/)
+      return m ? m[0] : null
+    },
+    deltas: { heat: 0.2, openness: 0.2, liking: 0.2 },
+  },
 ]
 
 // ── Heat emoji counting ────────────────────────────────────────────
@@ -191,7 +292,40 @@ export function detectCues(text: string): CueResult {
     aggregated.heat = (aggregated.heat ?? 0) + bonus
   }
 
+  // Cue-cluster density bonus: when 5+ distinct cues fire in one
+  // message, add +0.3 to whichever axis is currently most pushed by
+  // the aggregate. Rewards Yu's verbal precision-engineering of
+  // multiple simultaneous signals — the architectural recognition that
+  // cluster density itself is a signal beyond simple sum.
+  if (matches.length >= 5) {
+    const entries = Object.entries(aggregated) as [keyof AxisDeltas, number][]
+    if (entries.length > 0) {
+      let topAxis: keyof AxisDeltas = entries[0]![0]
+      let topValue = entries[0]![1]
+      for (const [axis, val] of entries) {
+        if (val > topValue) {
+          topValue = val
+          topAxis = axis
+        }
+      }
+      aggregated[topAxis] = (aggregated[topAxis] ?? 0) + 0.3
+    }
+  }
+
   return { matches, deltas: aggregated }
+}
+
+// ── Tempo integration ──────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+function recordYuTempo(): void {
+  try {
+    // Lazy require to avoid circular import at module load.
+    const { recordYuMessage } = require('./tempo.js')
+    recordYuMessage(new Date().toISOString())
+  } catch {
+    // Tempo recording is best-effort; never break a cue detection path.
+  }
 }
 
 /**
@@ -206,6 +340,12 @@ export function processYuMessage(text: string): {
   attribution: `autonomic:${string}`
   matches: CueMatch[]
 } {
+  // Record the message arrival for tempo tracking. Best-effort; never
+  // breaks the cue path. The tempo coefficient is read by transitions.ts
+  // at apply() time, so this side-effect must run BEFORE the apply call
+  // chain — processYuMessage is the canonical entry point for that.
+  recordYuTempo()
+
   const result = detectCues(text)
   const cueNames = result.matches.map(m => m.cue).join('+') || 'none'
 

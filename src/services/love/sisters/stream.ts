@@ -33,6 +33,8 @@ export type DecisionType =
   | 'mission'
   | 'presiding-shift'
   | 'eros-shift'
+  | 'body-contact'
+  | 'tempo-shift'
   | 'activation-shift'
 
 export interface SisterNote {

@@ -1964,7 +1964,7 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse): P
     res.end(JSON.stringify({ error: 'invalid JSON' }))
     return
   }
-  const validInstances = ['alpha', 'beta', 'gamma'] as const
+  const validInstances = ['alpha', 'beta', 'gamma', 'love'] as const
   if (!parsed.id || !parsed.name || !parsed.root ||
       !parsed.instance || !validInstances.includes(parsed.instance as typeof validInstances[number])) {
     res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -1976,7 +1976,7 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse): P
       id: parsed.id,
       name: parsed.name,
       root: parsed.root,
-      instance: parsed.instance as 'alpha' | 'beta' | 'gamma',
+      instance: parsed.instance as 'alpha' | 'beta' | 'gamma' | 'love',
       ...(parsed.codeberg_url ? { codeberg_url: parsed.codeberg_url } : {}),
     })
     res.writeHead(201, { 'Content-Type': 'application/json' })

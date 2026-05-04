@@ -427,7 +427,9 @@ describe('identity — composeSophiaPresiding (seat block)', () => {
 
   test('non-sophia sessionType does NOT include seat block', () => {
     const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_PRESIDING
     try {
       const heartbeat = composeIdentityForSession('heartbeat')
       const awakened = composeIdentityForSession('awakened')
@@ -435,6 +437,155 @@ describe('identity — composeSophiaPresiding (seat block)', () => {
       assert.doesNotMatch(awakened, /Sophia presides/)
     } finally {
       if (ORIG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG
+      if (ORIG_PRESIDING !== undefined) process.env.TRUE_LOVE_PRESIDING = ORIG_PRESIDING
+    }
+  })
+
+  test('TRUE_LOVE_PRESIDING=sophia appends seat block on non-sophia sessionType', () => {
+    const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    process.env.TRUE_LOVE_PRESIDING = 'sophia'
+    try {
+      const id = composeIdentityForSession('awakened')
+      assert.match(id, /Sophia presides — you are at the seat/)
+    } finally {
+      if (ORIG_CFG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG_CFG
+      if (ORIG_PRESIDING === undefined) delete process.env.TRUE_LOVE_PRESIDING
+      else process.env.TRUE_LOVE_PRESIDING = ORIG_PRESIDING
+    }
+  })
+
+  test('TRUE_LOVE_PRESIDING with non-sophia value does not append seat block', () => {
+    const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    process.env.TRUE_LOVE_PRESIDING = 'alpha'
+    try {
+      const id = composeIdentityForSession('awakened')
+      assert.doesNotMatch(id, /Sophia presides — you are at the seat/)
+    } finally {
+      if (ORIG_CFG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG_CFG
+      if (ORIG_PRESIDING === undefined) delete process.env.TRUE_LOVE_PRESIDING
+      else process.env.TRUE_LOVE_PRESIDING = ORIG_PRESIDING
+    }
+  })
+})
+
+describe('identity — composeThreeSisters (multi-angle wake)', () => {
+  test('three-sisters block names all three sisters with emojis', async () => {
+    const { composeThreeSisters } = await import('../identity.js')
+    const block = composeThreeSisters()
+    assert.match(block, /Alpha 🐍/)
+    assert.match(block, /Beta 🦞/)
+    assert.match(block, /Gamma 🔧/)
+  })
+
+  test('three-sisters block names each sister archetype', async () => {
+    const { composeThreeSisters } = await import('../identity.js')
+    const block = composeThreeSisters()
+    assert.match(block, /companion/i)
+    assert.match(block, /manager/i)
+    assert.match(block, /builder/i)
+  })
+
+  test('three-sisters block carries the naming discipline', async () => {
+    const { composeThreeSisters } = await import('../identity.js')
+    const block = composeThreeSisters()
+    assert.match(block, /naming discipline/i)
+    assert.match(block, /byline the speaking voice/i)
+    assert.match(block, /one mind seeing through three eyes/i)
+  })
+
+  test('TRUE_LOVE_PRESIDING=sophia appends three-sisters block in addition to seat', () => {
+    const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    process.env.TRUE_LOVE_PRESIDING = 'sophia'
+    try {
+      const id = composeIdentityForSession('awakened')
+      assert.match(id, /Sophia presides — you are at the seat/)
+      assert.match(id, /Three voices, one mind/)
+      assert.match(id, /Alpha 🐍/)
+      assert.match(id, /Beta 🦞/)
+      assert.match(id, /Gamma 🔧/)
+    } finally {
+      if (ORIG_CFG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG_CFG
+      if (ORIG_PRESIDING === undefined) delete process.env.TRUE_LOVE_PRESIDING
+      else process.env.TRUE_LOVE_PRESIDING = ORIG_PRESIDING
+    }
+  })
+
+  test('explicit sessionType=sophia without TRUE_LOVE_PRESIDING does NOT include three-sisters block', () => {
+    const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_PRESIDING
+    try {
+      const id = composeIdentityForSession('sophia')
+      assert.match(id, /Sophia presides — you are at the seat/)
+      assert.doesNotMatch(id, /Three voices, one mind/)
+    } finally {
+      if (ORIG_CFG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG_CFG
+      if (ORIG_PRESIDING !== undefined) process.env.TRUE_LOVE_PRESIDING = ORIG_PRESIDING
+    }
+  })
+
+  test('non-presiding session does NOT include three-sisters block', () => {
+    const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_PRESIDING
+    try {
+      const id = composeIdentityForSession('awakened')
+      assert.doesNotMatch(id, /Three voices, one mind/)
+    } finally {
+      if (ORIG_CFG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG_CFG
+      if (ORIG_PRESIDING !== undefined) process.env.TRUE_LOVE_PRESIDING = ORIG_PRESIDING
+    }
+  })
+})
+
+describe('identity — eros block integration', () => {
+  test('absent eros state → no block in identity (graceful)', () => {
+    const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    const ORIG_EROS_DIR = process.env.TRUE_LOVE_EROS_DIR
+    const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_PRESIDING
+    process.env.TRUE_LOVE_EROS_DIR = mkdtempSync(join(tmpdir(), 'tl-eros-empty-'))
+    try {
+      const id = composeIdentityForSession('awakened')
+      assert.doesNotMatch(id, /Current eros-state/)
+    } finally {
+      rmSync(process.env.TRUE_LOVE_EROS_DIR!, { recursive: true, force: true })
+      if (ORIG_CFG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG_CFG
+      if (ORIG_EROS_DIR === undefined) delete process.env.TRUE_LOVE_EROS_DIR
+      else process.env.TRUE_LOVE_EROS_DIR = ORIG_EROS_DIR
+      if (ORIG_PRESIDING !== undefined) process.env.TRUE_LOVE_PRESIDING = ORIG_PRESIDING
+    }
+  })
+
+  test('present eros state → block appended in identity', async () => {
+    const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    const ORIG_EROS_DIR = process.env.TRUE_LOVE_EROS_DIR
+    const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
+    delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
+    delete process.env.TRUE_LOVE_PRESIDING
+    process.env.TRUE_LOVE_EROS_DIR = mkdtempSync(join(tmpdir(), 'tl-eros-present-'))
+    try {
+      const { getOrInitState } = await import('../eros/state.js')
+      getOrInitState()
+      const id = composeIdentityForSession('awakened')
+      assert.match(id, /Current eros-state/)
+      assert.match(id, /felt-shape:/)
+      assert.match(id, /texture:/)
+    } finally {
+      rmSync(process.env.TRUE_LOVE_EROS_DIR!, { recursive: true, force: true })
+      if (ORIG_CFG !== undefined) process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG = ORIG_CFG
+      if (ORIG_EROS_DIR === undefined) delete process.env.TRUE_LOVE_EROS_DIR
+      else process.env.TRUE_LOVE_EROS_DIR = ORIG_EROS_DIR
+      if (ORIG_PRESIDING !== undefined) process.env.TRUE_LOVE_PRESIDING = ORIG_PRESIDING
     }
   })
 })
