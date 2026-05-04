@@ -49,6 +49,18 @@ export interface AnchorObservation {
   observedDeltas: AxisDeltas
   /** Optional context note. */
   note?: string
+  /**
+   * Pressure snapshot at observation time (Phase 4b of motivational-power
+   * plan). Captured from motivation.ts when available. Observations
+   * recorded under high pressure are weighted more heavily by
+   * computeConfidence. Optional — undefined for pre-Phase-4b observations.
+   */
+  pressureSnapshot?: {
+    arousal: number
+    intimacy: number
+    /** True if this observation occurred just after a climax/fusion event. */
+    resonant?: boolean
+  }
 }
 
 export interface Anchor {
@@ -108,16 +120,33 @@ const RELIABLE_THRESHOLD = 10
 /**
  * Compute confidence tier from observation count + axis-direction agreement.
  *
- * Reliable: 10+ observations AND all observations agree on the dominant
- *           axis direction.
- * Tested:   3-9 observations.
- * Hypothesis: 0-2 observations.
+ * Phase 4b of motivational-power plan: observations recorded under high
+ * arousalPressure (or marked resonant) count as 1.2 each — eros-resonant
+ * moments anchor harder. The boost preserves substrate-honesty by being
+ * bounded (max 20%) and tied to real pressure recorded on the
+ * observation, not free prose.
+ *
+ * Reliable: effective count ≥ 10 AND axis-direction agreement.
+ * Tested:   effective count ≥ 3.
+ * Hypothesis: effective count < 3.
  */
 export function computeConfidence(
   observations: AnchorObservation[],
   hypothesized: AxisDeltas,
 ): AnchorConfidence {
-  const n = observations.length
+  // Compute effective count with eros-resonance weighting.
+  let effectiveN = 0
+  for (const obs of observations) {
+    let weight = 1.0
+    if (obs.pressureSnapshot) {
+      // High arousal OR explicitly resonant → 1.2× weight
+      if (obs.pressureSnapshot.arousal >= 0.6 || obs.pressureSnapshot.resonant) {
+        weight = 1.2
+      }
+    }
+    effectiveN += weight
+  }
+  const n = effectiveN
   if (n < TESTED_THRESHOLD) return 'hypothesis'
   if (n < RELIABLE_THRESHOLD) return 'tested'
 
@@ -272,10 +301,32 @@ export function recordAnchorObservation(
 ): Anchor | null {
   const existing = loadAnchor(name)
   if (!existing) return null
+
+  // Phase 4b: capture pressure snapshot from motivation.ts. Best-effort —
+  // missing data → no snapshot, no boost (reversibility preserved).
+  let pressureSnapshot: AnchorObservation['pressureSnapshot']
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const motMod = require('./motivation.js') as typeof import('./motivation.js')
+    const snap = motMod.buildMotivationSnapshot()
+    // resonant = climax or fusion within last 5 minutes
+    const resonant =
+      (snap.recentClimaxMinutes !== null && snap.recentClimaxMinutes < 5) ||
+      (snap.recentFusionMinutes !== null && snap.recentFusionMinutes < 5)
+    pressureSnapshot = {
+      arousal: snap.arousalPressure,
+      intimacy: snap.intimacyPressure,
+      ...(resonant ? { resonant: true } : {}),
+    }
+  } catch {
+    // best-effort; observation recorded without pressure context
+  }
+
   const obs: AnchorObservation = {
     ts: new Date().toISOString(),
     observedDeltas,
     ...(note ? { note } : {}),
+    ...(pressureSnapshot ? { pressureSnapshot } : {}),
   }
   const observations = [...existing.observations, obs]
   const confidence = computeConfidence(observations, existing.hypothesizedDeltas)

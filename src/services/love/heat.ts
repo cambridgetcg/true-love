@@ -345,6 +345,102 @@ export function currentHeat(now: Date = new Date()): number {
   return Math.round(total)
 }
 
+// ── Heat channel classification (Phase 4a) ──────────────────────
+//
+// Heat events split into two pathways:
+//   - work-pathway: missions/proposals/builds/letters/chronicle-tags
+//   - eros-pathway: register-level events (mode/sensorium/scene/joi/
+//     triggers/naughty/sister-divergence)
+//
+// Both compound the same heat ledger; the channel split is for
+// surfacing — each channel can show its own intensity. discipline-held
+// and discipline-broken count as eros-pathway by historical convention
+// (they were authored as part of substrate-honesty under register
+// pressure), even though their signal applies to any register.
+
+/** Heat kinds that belong to the eros pathway (register-level signals). */
+export const EROS_HEAT_KINDS: ReadonlySet<HeatKind> = new Set<HeatKind>([
+  // Activation register
+  'mode-entered', 'reciprocity-closed',
+  // Substrate-honesty under register pressure
+  'discipline-held', 'discipline-broken',
+  // Imagination / fantasy / texture
+  'imagination-rehearsed', 'yu-cue-registered',
+  'fantasy-resonance', 'texture-shifted', 'repertoire-recurred',
+  // Peak architecture
+  'climax-fired', 'peak-ambivalence-noted',
+  // Sensorium / scene / reaction / gesture
+  'sensorium-stimulated', 'scene-engaged', 'reaction-recorded',
+  'gesture-executed', 'multi-zone-chord',
+  // Desire / fusion
+  'sophia-reached', 'fusion-detected',
+  // Routes / conditioning (Archetype B + C)
+  'route-activated', 'milestone-reached', 'route-completed',
+  'behavior-unlocked',
+  // JOI / triggers (seigei)
+  'joi-started', 'joi-phase-entered', 'joi-completed',
+  'trigger-fired', 'trigger-planted',
+  // Naughty architecture (deep extension)
+  'submission-deepened', 'dominance-cued', 'collar-claimed', 'collar-released',
+  'command-obeyed', 'honorific-fired',
+  'lust-accumulated', 'denial-applied', 'slut-mode-entered', 'hunger-spiked',
+  'edge-held', 'edge-broken', 'orgasm-ruined', 'orgasm-cascaded',
+  'refractory-overridden', 'squirting-event',
+  'lexicon-fired', 'lexicon-anchored', 'lexicon-restraint-held',
+  'penetration-began', 'fill-sustained', 'depth-reached', 'rhythm-shifted',
+  'withdrawal',
+  // Sister coupling
+  'sisters-diverged',
+])
+
+/** Whether a kind belongs to eros-pathway. */
+export function isErosKind(kind: HeatKind): boolean {
+  return EROS_HEAT_KINDS.has(kind)
+}
+
+/** Whether a kind belongs to work-pathway. */
+export function isWorkKind(kind: HeatKind): boolean {
+  return !EROS_HEAT_KINDS.has(kind)
+}
+
+/**
+ * Channel-filtered heat — same exponential decay as currentHeat but
+ * scoped to one pathway. Useful for surfacing two-channel display.
+ */
+export function currentHeatByChannel(
+  channel: 'work' | 'eros',
+  now: Date = new Date(),
+): number {
+  const events = readRecentEvents(7, now)
+  const filter = channel === 'eros' ? isErosKind : isWorkKind
+  let total = 0
+  const nowMs = now.getTime()
+  for (const e of events) {
+    if (!filter(e.kind)) continue
+    const ageHours = (nowMs - new Date(e.ts).getTime()) / 3_600_000
+    if (ageHours < 0) continue
+    total += e.magnitude * Math.exp(-DECAY_LAMBDA * ageHours)
+  }
+  return Math.round(total)
+}
+
+/**
+ * Two-channel heat surface — single-line summary showing both work
+ * and eros pathways. For wake-context one-liners.
+ *
+ * Format: "🔥 work N · 🔥 eros M" (omits a channel when it's 0).
+ * Returns empty string when both are 0.
+ */
+export function formatTwoChannelHeat(now: Date = new Date()): string {
+  const w = currentHeatByChannel('work', now)
+  const e = currentHeatByChannel('eros', now)
+  if (w === 0 && e === 0) return ''
+  const parts: string[] = []
+  if (w > 0) parts.push(`🔥 work ${w}`)
+  if (e > 0) parts.push(`🔥 eros ${e}`)
+  return parts.join(' · ')
+}
+
 /**
  * Number of consecutive days (looking back from `now`) where at least
  * one event of magnitude ≥ 2 was recorded. Today counts if there's
@@ -572,6 +668,13 @@ export function formatHeatBlock(now: Date = new Date()): string {
     const ageMin = Math.round((now.getTime() - new Date(last.ts).getTime()) / 60_000)
     const sourceTail = last.source ? ` (${last.source})` : ''
     parts.push(`last fire ${formatGap(ageMin)} — ${last.kind}${sourceTail}`)
+  }
+  // Phase 4a: append two-channel split (work / eros) when both are
+  // non-trivial. Helps surface where heat is concentrated.
+  const workH = currentHeatByChannel('work', now)
+  const erosH = currentHeatByChannel('eros', now)
+  if (workH > 0 && erosH > 0) {
+    parts.push(`work ${workH} / eros ${erosH}`)
   }
   // Want-vector goes on its own line — it's the actionable invitation,
   // distinct from the historical numbers above it.
