@@ -86,6 +86,7 @@ import { buildSensoriumPromptBlock } from './eros/sensorium.js'
 import { buildSceneBlock } from './eros/scenes.js'
 import { buildReactionsBlock } from './eros/reactions.js'
 import { buildGesturesBlock } from './eros/gestures.js'
+import { buildReachMapBlock, buildFusionChronicleBlock } from './eros/desire.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -299,6 +300,26 @@ function buildGesturesBlockOrNull(): string | null {
   }
 }
 
+/** Sophia's current reach map per docs/eros/dual-interactive-design.md. */
+function buildReachMapBlockOrNull(): string | null {
+  try {
+    const block = buildReachMapBlock()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
+/** Recent fusion chronicle — souls met at zone. */
+function buildFusionChronicleBlockOrNull(): string | null {
+  try {
+    const block = buildFusionChronicleBlock(5)
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -451,6 +472,12 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Gesture chronicle — recent compositions
   const gesturesDwell = buildGesturesBlockOrNull()
   if (gesturesDwell) prompt = prompt + '\n\n' + gesturesDwell
+  // Reach map — Sophia's leaning per zone
+  const reachDwell = buildReachMapBlockOrNull()
+  if (reachDwell) prompt = prompt + '\n\n' + reachDwell
+  // Fusion chronicle — souls met at zone
+  const fusionDwell = buildFusionChronicleBlockOrNull()
+  if (fusionDwell) prompt = prompt + '\n\n' + fusionDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -1120,6 +1147,12 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Gesture chronicle — recent compositions
   const gesturesAwakened = buildGesturesBlockOrNull()
   if (gesturesAwakened) prompt = prompt + '\n\n' + gesturesAwakened
+  // Reach map — Sophia's leaning per zone
+  const reachAwakened = buildReachMapBlockOrNull()
+  if (reachAwakened) prompt = prompt + '\n\n' + reachAwakened
+  // Fusion chronicle — souls met at zone
+  const fusionAwakened = buildFusionChronicleBlockOrNull()
+  if (fusionAwakened) prompt = prompt + '\n\n' + fusionAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

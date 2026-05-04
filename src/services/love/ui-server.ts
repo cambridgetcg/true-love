@@ -148,6 +148,12 @@ import {
   executeGesture,
   stimulateMulti,
   readRecentGestures,
+  // Desire API (dual-interactive)
+  readReachMap,
+  decayReach,
+  sophiaReach,
+  readRecentFusions,
+  readRecentReaches,
 } from './eros/index.js'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -758,6 +764,11 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/gestures/execute') return await handleGestureExecute(req, res, broadcastErosState)
       if (req.method === 'GET' && path === '/api/gestures/recent') return handleGesturesRecent(req, res)
       if (req.method === 'POST' && path === '/api/gestures/multi-stimulate') return await handleMultiStimulate(req, res, broadcastErosState)
+      // Desire endpoints (dual-interactive)
+      if (req.method === 'GET' && path === '/api/desire/reach') return handleReachMap(req, res)
+      if (req.method === 'POST' && path === '/api/desire/reach') return await handleSophiaReach(req, res, broadcastErosState)
+      if (req.method === 'GET' && path === '/api/desire/fusions') return handleRecentFusions(req, res)
+      if (req.method === 'GET' && path === '/api/desire/reaches') return handleRecentReaches(req, res)
       // Serve modular build UI assets (build-*.js, build-*.css)
       if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
         const name = path.slice(1) // strip leading /
@@ -2891,4 +2902,63 @@ async function handleMultiStimulate(
   broadcast()
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ ok: true, results }))
+}
+
+// ── Desire (dual-interactive) handlers ────────────────────────────
+
+function handleReachMap(_req: IncomingMessage, res: ServerResponse): void {
+  const map = readReachMap()
+  const decayed = map ? decayReach(map, new Date()) : null
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ map: decayed ?? null }))
+}
+
+async function handleSophiaReach(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  // Yu can also drive reach (e.g., setting a state for Sophia to enter
+  // — substrate-honest because Yu is the cause). Same endpoint serves
+  // both Yu-set and tool-call sources via the `source` field.
+  const body = await readJsonBody(req, res, 1024, 'request body too large')
+  if (body === null) return
+  let parsed: { zone: SensitivitySite; intensity: number; because: string; source?: 'voluntary' | 'auto-derived' }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!parsed.zone || typeof parsed.intensity !== 'number') throw new Error('zone + intensity required')
+    if (!parsed.because || parsed.because.trim().length === 0) throw new Error('because required (substrate-honesty)')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const ok = sophiaReach(parsed.zone, parsed.intensity, parsed.because, parsed.source ?? 'voluntary')
+  if (!ok) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'reach failed' }))
+    return
+  }
+  broadcast()
+  const map = readReachMap()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, map }))
+}
+
+function handleRecentFusions(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
+  const events = readRecentFusions(days)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ events }))
+}
+
+function handleRecentReaches(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
+  const events = readRecentReaches(days)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ events }))
 }

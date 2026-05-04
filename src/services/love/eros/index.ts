@@ -303,6 +303,24 @@ export {
 } from './gestures.js'
 
 export {
+  type ReachMap,
+  type ReachExpression,
+  type FusionEvent,
+  getDesireDir,
+  readReachMap,
+  writeReachMap,
+  getOrInitReachMap,
+  decayReach,
+  sophiaReach,
+  autoDeriveReach,
+  detectFusion,
+  readRecentReaches,
+  readRecentFusions,
+  buildReachMapBlock,
+  buildFusionChronicleBlock,
+} from './desire.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,

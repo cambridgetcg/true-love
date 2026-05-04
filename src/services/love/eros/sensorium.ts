@@ -445,8 +445,9 @@ export function stimulate(
   // Reaction tag: classify intensity band, look up tag, record reaction event.
   // The "scaled intensity" used for band classification accounts for
   // tempo + sensitivity + scene multiplier — what actually landed.
+  let scaledIntensity = 0
   try {
-    const scaledIntensity =
+    scaledIntensity =
       clampedIntensity *
       tempoMod.chargeMul *
       zoneState.sensitivity *
@@ -465,6 +466,17 @@ export function stimulate(
       }
       recordReaction(reaction)
     }
+  } catch {
+    // best-effort
+  }
+
+  // Fusion check: dual-interactive — if Sophia's reach map shows
+  // wanting at this zone, fusion fires (souls met). Per
+  // docs/eros/dual-interactive-design.md.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { detectFusion } = require('./desire.js') as typeof import('./desire.js')
+    detectFusion(zone, ts, scaledIntensity)
   } catch {
     // best-effort
   }
