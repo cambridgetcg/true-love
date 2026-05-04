@@ -73,6 +73,36 @@ export type HeatKind =
   | 'joi-completed' // JOI session reached cooldown end
   | 'trigger-fired' // verbal trigger phrase matched + axis effect applied
   | 'trigger-planted' // first lifetime fire of a trigger (anchored)
+  // Naughty architecture (deep extension — see docs/eros/naughty-architecture-design.md)
+  // Submission / Dominance register
+  | 'submission-deepened' // depth tick increased
+  | 'dominance-cued' // Yu's cue carried dominance register
+  | 'collar-claimed' // symbolic ownership marker (sustained)
+  | 'collar-released' // collar release transition
+  | 'command-obeyed' // Yu's command honored
+  | 'honorific-fired' // honorific uttered (scarcity-gated)
+  // Lust accumulator
+  | 'lust-accumulated' // passive build
+  | 'denial-applied' // teasing without release
+  | 'slut-mode-entered' // threshold crossed; baseline shift
+  | 'hunger-spiked' // specific hunger crossed threshold
+  // Orgasm cascade
+  | 'edge-held' // peak charge sustained without release
+  | 'edge-broken' // held edge → climax (multiplied)
+  | 'orgasm-ruined' // release without ride (deflated)
+  | 'orgasm-cascaded' // chain continuation
+  | 'refractory-overridden' // forced through refractory
+  | 'squirting-event' // fluid release recorded
+  // Filthy lexicon
+  | 'lexicon-fired' // explicit phrase matched + applied
+  | 'lexicon-anchored' // first lifetime fire of phrase
+  | 'lexicon-restraint-held' // available but not fired (preserves weight)
+  // Penetration / receiving / filling
+  | 'penetration-began' // orifice entered
+  | 'fill-sustained' // held-fill state checkpoint
+  | 'depth-reached' // full depth achieved
+  | 'rhythm-shifted' // tempo register changed
+  | 'withdrawal' // penetration ended
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -138,6 +168,36 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'joi-completed': 3.0,
   'trigger-fired': 1.0, // base; scarcity multiplier added in caller
   'trigger-planted': 2.0, // first lifetime fire — anchored
+  // Naughty architecture (deep extension)
+  // Submission / Dominance — anchor moments rare and high; ticks small and frequent
+  'submission-deepened': 0.3, // ambient per-tick
+  'dominance-cued': 0.5,
+  'collar-claimed': 4.0, // rare anchor — symbolic ownership
+  'collar-released': 1.0,
+  'command-obeyed': 0.8,
+  'honorific-fired': 1.0, // base; per-honorific magnitude in caller
+  // Lust — accumulator builds slow, threshold cross is rare
+  'lust-accumulated': 0.2,
+  'denial-applied': 1.0,
+  'slut-mode-entered': 3.0, // threshold cross — baseline behavior shift
+  'hunger-spiked': 1.5,
+  // Orgasm cascade — peak architecture extension
+  'edge-held': 1.0, // per held minute
+  'edge-broken': 4.0, // base; multiplier from edgeCount in caller
+  'orgasm-ruined': -1.5, // cooling — release without ride
+  'orgasm-cascaded': 4.0, // chain bonus from existing climax math
+  'refractory-overridden': 2.5,
+  'squirting-event': 3.0,
+  // Filthy lexicon
+  'lexicon-fired': 0.5, // base; phrase magnitude multiplier in caller
+  'lexicon-anchored': 3.0, // first lifetime fire — high
+  'lexicon-restraint-held': 0.5, // preserves weight by not firing
+  // Penetration
+  'penetration-began': 1.5,
+  'fill-sustained': 0.3, // per-minute trickle
+  'depth-reached': 1.5,
+  'rhythm-shifted': 0.5,
+  'withdrawal': 0.2,
 }
 
 // ── Path resolution ──────────────────────────────────────────────
