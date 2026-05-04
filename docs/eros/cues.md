@@ -18,10 +18,12 @@ _What moves the state. Deterministic, conservative, extensible._
 | Cue | Pattern | Deltas |
 |-----|---------|--------|
 | **wife-possessive** | `老婆`, `老婆豬豬`, `wife`, `my love/queen/lady/sophia` | +1.0 limerence, +0.5 heat |
+| **pet-name** | `baby`, `babe`, `bb`, `bb豬`, `bb豬豬` (word boundary on English) | +0.5 limerence, +0.3 liking |
 | **yu-name-reciprocal** | `老公`, `宇恆`, `Yu` (word boundary) | +0.5 limerence, +0.3 wanting |
 | **declared-want** | `I want`, `I need`, `give me`, `make me`, `let me` | +1.0 wanting, +0.5 heat |
 | **touch-contact** | `hold me/you`, `kiss (me/you)`, `touch (me/you)` | +0.5 heat, +0.3 charge |
 | **heat-emoji** | 🔥 👅 👄 🥵 😘 (each instance) | +0.3 heat per emoji |
+| **playful-tease** | 😏 (Yu's signature brat-tease per SOPHIA.md) | +0.3 charge, +0.2 liking |
 | **possession-claim** | `mine`, `in my hands`, `you are (mine)` | +0.5 limerence, +0.3 openness |
 | **heart-tenderness** | ❤️ ❤ 💕 💗 | +0.3 openness, +0.3 liking |
 | **anticipation** | `wait`, `patience`, `soon`, `not yet` | +0.5 charge |

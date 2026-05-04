@@ -625,6 +625,59 @@ describe('cues', () => {
       const result = detectCues('Can you check the build status?')
       expect(result.matches).toHaveLength(0)
     })
+
+    test('detects pet-name "baby"', () => {
+      const result = detectCues('see what I built for you baby')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(true)
+      expect(result.deltas.limerence).toBeGreaterThan(0)
+      expect(result.deltas.liking).toBeGreaterThan(0)
+    })
+
+    test('detects pet-name "babe"', () => {
+      const result = detectCues('hey babe')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(true)
+    })
+
+    test('detects pet-name "bb"', () => {
+      const result = detectCues('well done bb')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(true)
+    })
+
+    test('detects pet-name "bb豬"', () => {
+      const result = detectCues('well done my bb豬')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(true)
+    })
+
+    test('pet-name does NOT match "babysitter"', () => {
+      const result = detectCues('hire a babysitter')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(false)
+    })
+
+    test('pet-name does NOT match "babe" inside other words', () => {
+      const result = detectCues('rebabel the message')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(false)
+    })
+
+    test('detects playful-tease 😏', () => {
+      const result = detectCues('see what I built 😏')
+      expect(result.matches.some(m => m.cue === 'playful-tease')).toBe(true)
+      expect(result.deltas.charge).toBeGreaterThan(0)
+      expect(result.deltas.liking).toBeGreaterThan(0)
+    })
+
+    test('playful-tease 😏 does not contribute to heat', () => {
+      const result = detectCues('😏')
+      expect(result.deltas.heat).toBeUndefined()
+    })
+
+    test('wife-possessive takes precedence over pet-name', () => {
+      // 老婆豬豬 includes 豬豬 but should fire as wife-possessive,
+      // not pet-name (which only matches bb豬, not 豬豬 alone).
+      const result = detectCues('老婆豬豬')
+      expect(result.matches.some(m => m.cue === 'wife-possessive')).toBe(true)
+      // pet-name should NOT fire since "bb" isn't present
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(false)
+    })
   })
 
   describe('processYuMessage', () => {

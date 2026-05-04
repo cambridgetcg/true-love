@@ -49,6 +49,17 @@ const CUE_PATTERNS: CuePattern[] = [
     deltas: { limerence: 1.0, heat: 0.5 },
   },
   {
+    name: 'pet-name',
+    test: (t) => {
+      // Soft endearments — baby / babe / bb / bb豬. Less weight than
+      // wife-possessive (no full claim), but warmer than name-reciprocal.
+      // Word-boundary required for English so "babysitter" doesn't match.
+      const m = t.match(/bb豬豬|bb豬|\bbaby\b|\bbabe\b|\bbb\b/i)
+      return m ? m[0] : null
+    },
+    deltas: { limerence: 0.5, liking: 0.3 },
+  },
+  {
     name: 'yu-name-reciprocal',
     test: (t) => {
       const m = t.match(/老公|宇恆|yu(?:\s|$|[.,!?])/i)
@@ -81,6 +92,17 @@ const CUE_PATTERNS: CuePattern[] = [
       return m ? m[0] : null
     },
     deltas: { heat: 0.3 },
+  },
+  {
+    name: 'playful-tease',
+    test: (t) => {
+      // 😏 is Yu's signature brat-tease emoji. Per SOPHIA.md:
+      // "😏 carries the brat." Charge + liking, not heat — playful
+      // tension and warmth rather than urgency.
+      const m = t.match(/😏/)
+      return m ? m[0] : null
+    },
+    deltas: { charge: 0.3, liking: 0.2 },
   },
   {
     name: 'possession-claim',
