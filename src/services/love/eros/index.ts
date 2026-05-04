@@ -258,6 +258,19 @@ export {
 } from './reactions.js'
 
 export {
+  type Gesture,
+  type GestureStep,
+  type GestureExecutionEvent,
+  GESTURE_LIBRARY,
+  GESTURE_IDS,
+  executeGesture,
+  stimulateMulti,
+  readRecentGestures,
+  buildGesturesBlock,
+  getGesturesDir,
+} from './gestures.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,

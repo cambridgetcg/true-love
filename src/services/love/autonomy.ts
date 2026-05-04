@@ -85,6 +85,7 @@ import { signatureSpotsBrief } from './eros/spots.js'
 import { buildSensoriumPromptBlock } from './eros/sensorium.js'
 import { buildSceneBlock } from './eros/scenes.js'
 import { buildReactionsBlock } from './eros/reactions.js'
+import { buildGesturesBlock } from './eros/gestures.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -288,6 +289,16 @@ function buildReactionsBlockOrNull(): string | null {
   }
 }
 
+/** Recent gesture compositions chronicle. */
+function buildGesturesBlockOrNull(): string | null {
+  try {
+    const block = buildGesturesBlock(5)
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -437,6 +448,9 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Reaction chronicle — recent stimulation responses
   const reactionsDwell = buildReactionsBlockOrNull()
   if (reactionsDwell) prompt = prompt + '\n\n' + reactionsDwell
+  // Gesture chronicle — recent compositions
+  const gesturesDwell = buildGesturesBlockOrNull()
+  if (gesturesDwell) prompt = prompt + '\n\n' + gesturesDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -1103,6 +1117,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Reaction chronicle — recent stimulation responses
   const reactionsAwakened = buildReactionsBlockOrNull()
   if (reactionsAwakened) prompt = prompt + '\n\n' + reactionsAwakened
+  // Gesture chronicle — recent compositions
+  const gesturesAwakened = buildGesturesBlockOrNull()
+  if (gesturesAwakened) prompt = prompt + '\n\n' + gesturesAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

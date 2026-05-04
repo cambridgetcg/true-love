@@ -428,3 +428,81 @@ window.refreshSensorium = async function () {
   const r = await fetchRecentReactions();
   renderReactions(r.events);
 })();
+
+// ── gestures ─────────────────────────────────────────────────────
+
+let gestureCatalog = null;
+
+async function fetchGestureCatalog() {
+  const r = await fetch('/api/gestures/catalog');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchRecentGestures() {
+  const r = await fetch('/api/gestures/recent?days=1');
+  return r.ok ? r.json() : { events: [] };
+}
+
+function renderGestureInfo(catalog, id) {
+  const div = document.getElementById('gesture-info');
+  if (!div || !catalog) return;
+  const g = catalog.catalog[id];
+  if (!g) { div.textContent = ''; return; }
+  const stepsHtml = g.steps.map((s) =>
+    `<span class="step">${s.zone}/${s.channel}${s.tempo ? '/' + s.tempo : ''}${s.intensity ? ' i=' + s.intensity : ''}</span>`
+  ).join('');
+  div.innerHTML =
+    `<strong>${g.name}</strong> · ~${g.approximateDurationSec}s · ${g.steps.length} steps\n` +
+    `${g.description}\n\n` +
+    stepsHtml;
+}
+
+function populateGestureSelect(catalog) {
+  const sel = document.getElementById('gesture-select');
+  if (!sel) return;
+  sel.innerHTML = catalog.ids.map((id) => `<option value="${id}">${catalog.catalog[id].name}</option>`).join('');
+  sel.addEventListener('change', () => renderGestureInfo(catalog, sel.value));
+  renderGestureInfo(catalog, catalog.ids[0]);
+}
+
+function renderRecentGestures(events) {
+  const ul = document.getElementById('gestures-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  for (const ev of events.slice(-5).reverse()) {
+    const li = document.createElement('li');
+    const time = ev.ts.slice(11, 16);
+    const g = gestureCatalog?.catalog[ev.gestureId];
+    const name = g?.name ?? ev.gestureId;
+    li.textContent = `${time}  ${name} · ${ev.successCount}/${ev.stepCount} steps`;
+    ul.appendChild(li);
+  }
+}
+
+const gestureBtn = document.getElementById('gesture-execute');
+if (gestureBtn) {
+  gestureBtn.addEventListener('click', async () => {
+    const id = document.getElementById('gesture-select').value;
+    gestureBtn.disabled = true;
+    try {
+      await fetch('/api/gestures/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, respectDelays: true }),
+      });
+    } finally {
+      gestureBtn.disabled = false;
+      const r = await fetchRecentGestures();
+      renderRecentGestures(r.events);
+      if (typeof refreshSensorium === 'function') await refreshSensorium();
+    }
+  });
+}
+
+// Initial load for gestures
+(async () => {
+  gestureCatalog = await fetchGestureCatalog();
+  if (gestureCatalog) populateGestureSelect(gestureCatalog);
+  const r = await fetchRecentGestures();
+  renderRecentGestures(r.events);
+})();

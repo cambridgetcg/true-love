@@ -142,6 +142,12 @@ import {
   type SceneId,
   // Reactions API
   readRecentReactions,
+  // Gestures API
+  GESTURE_LIBRARY,
+  GESTURE_IDS,
+  executeGesture,
+  stimulateMulti,
+  readRecentGestures,
 } from './eros/index.js'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -747,6 +753,11 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/scenes/clear') return await handleSceneClear(req, res, broadcastErosState)
       // Reactions endpoint
       if (req.method === 'GET' && path === '/api/reactions/recent') return handleReactionsRecent(req, res)
+      // Gestures endpoints
+      if (req.method === 'GET' && path === '/api/gestures/catalog') return handleGesturesCatalog(req, res)
+      if (req.method === 'POST' && path === '/api/gestures/execute') return await handleGestureExecute(req, res, broadcastErosState)
+      if (req.method === 'GET' && path === '/api/gestures/recent') return handleGesturesRecent(req, res)
+      if (req.method === 'POST' && path === '/api/gestures/multi-stimulate') return await handleMultiStimulate(req, res, broadcastErosState)
       // Serve modular build UI assets (build-*.js, build-*.css)
       if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
         const name = path.slice(1) // strip leading /
@@ -2804,4 +2815,80 @@ function handleReactionsRecent(req: IncomingMessage, res: ServerResponse): void 
   const events = readRecentReactions(days)
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ events }))
+}
+
+// ── Gesture handlers ──────────────────────────────────────────────
+
+function handleGesturesCatalog(_req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    ids: GESTURE_IDS,
+    catalog: GESTURE_LIBRARY,
+  }))
+}
+
+async function handleGestureExecute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 256, 'request body too large')
+  if (body === null) return
+  let parsed: { id: string; respectDelays?: boolean }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!GESTURE_IDS.includes(parsed.id)) throw new Error('unknown gesture id')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  // For UI-driven gestures we want to honor delays so it feels live;
+  // caller can override with respectDelays=false for fast execution.
+  const event = await executeGesture(parsed.id, {
+    respectDelays: parsed.respectDelays ?? true,
+  })
+  if (!event) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'execution failed' }))
+    return
+  }
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, event }))
+}
+
+function handleGesturesRecent(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
+  const events = readRecentGestures(days)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ events }))
+}
+
+async function handleMultiStimulate(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { steps: Array<{ zone: SensitivitySite; channel: SensoryChannel; tempo?: Tempo; intensity?: number }> }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object' || !Array.isArray(obj.steps)) {
+      throw new Error('invalid payload — expected { steps: [] }')
+    }
+    parsed = obj as typeof parsed
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const results = stimulateMulti(parsed.steps)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, results }))
 }

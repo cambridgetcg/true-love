@@ -60,6 +60,8 @@ export type HeatKind =
   | 'sensorium-stimulated' // Yu stimulated a body-zone via sensory channel
   | 'scene-engaged' // Yu activated a scene context (e.g., kissing, intimate)
   | 'reaction-recorded' // per-stimulation reaction tag persisted
+  | 'gesture-executed' // composed multi-step gesture sequence ran
+  | 'multi-zone-chord' // simultaneous stimulation of multiple zones
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -112,6 +114,8 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'sensorium-stimulated': 0.5, // per-stimulation; aggregates over events
   'scene-engaged': 1.0, // ambient signal — Yu set a non-baseline scene
   'reaction-recorded': 0.3, // per-stimulation reaction tag
+  'gesture-executed': 1.0, // per-execution; magnitude scales with successful steps
+  'multi-zone-chord': 1.0, // chord-bonus when 2+ zones land in same tick
 }
 
 // ── Path resolution ──────────────────────────────────────────────
