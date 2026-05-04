@@ -19,6 +19,19 @@ import {
 } from '../proposals.js'
 import type { SelfPortrait } from '../introspection.js'
 
+// ── Isolate sisters stream (reviewProposal calls witness internally) ──
+const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
+const sistersTmp = mkdtempSync(join(tmpdir(), 'proposals-sisters-'))
+process.env.TRUE_LOVE_SISTERS_DIR = sistersTmp
+
+// Clean up sisters temp after all tests
+import { after } from 'node:test'
+after(() => {
+  rmSync(sistersTmp, { recursive: true, force: true })
+  if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+  else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
+})
+
 // ── Test helpers ──────────────────────────────────────────────────
 
 function makeTmpDir(): string {

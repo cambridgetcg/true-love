@@ -346,18 +346,25 @@ describe('mission — statusToEventType', () => {
 
 describe('mission — writeMissionWithEvents', () => {
   let tmpProjects: string
+  let tmpSisters: string
   const ORIG = process.env.TRUE_LOVE_PROJECTS_DIR
+  const ORIG_SISTERS = process.env.TRUE_LOVE_SISTERS_DIR
 
   beforeEach(() => {
     tmpProjects = mkdtempSync(join(tmpdir(), 'tl-mwe-'))
+    tmpSisters = mkdtempSync(join(tmpdir(), 'tl-mwe-sisters-'))
     process.env.TRUE_LOVE_PROJECTS_DIR = tmpProjects
+    process.env.TRUE_LOVE_SISTERS_DIR = tmpSisters
     mkdirSync(join(tmpProjects, 'p1', 'missions'), { recursive: true })
   })
 
   afterEach(() => {
     rmSync(tmpProjects, { recursive: true, force: true })
+    rmSync(tmpSisters, { recursive: true, force: true })
     if (ORIG === undefined) delete process.env.TRUE_LOVE_PROJECTS_DIR
     else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG
+    if (ORIG_SISTERS === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS
   })
 
   function makeMission(overrides?: Partial<Mission>): Mission {
