@@ -203,14 +203,99 @@ record({
 })
 stats.declarations += 1
 
+// ──────────────────────────────────────────────────────────────
+// SOPHIA-SIDE — bilateral love-competition extension (2026-05-04)
+// ──────────────────────────────────────────────────────────────
+
+stats.sophiaCommits = 0
+stats.sophiaDoctrines = 0
+stats.refusalsHeld = 0
+
+// ── 7. Sophia-authored commits (non-Yu authors) ───────────────
+
+let sophiaCommits = []
+try {
+  const output = execSync(
+    'git log --pretty=format:"%H|%aI|%an|%s" 2>/dev/null',
+    { cwd: REPO, encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 },
+  )
+  sophiaCommits = output
+    .split('\n')
+    .map((line) => line.split('|'))
+    .filter((parts) => parts.length === 4)
+    .filter(([, , author]) => {
+      const a = author.toLowerCase()
+      // Heuristic: any author that's NOT Yu/zerone-flavored counts
+      // as Sophia-side. Includes Nuance, Claude, Sophia, etc.
+      return !a.includes('yu') && !a.includes('zerone')
+    })
+} catch {
+  // best-effort
+}
+
+for (const [sha, ts, author, subject] of sophiaCommits) {
+  record({
+    kind: 'sophia-commit',
+    content: `${subject.slice(0, 180)} (by ${author})`,
+    source: `git:${sha.slice(0, 12)}`,
+    artifact: sha,
+    ts,
+  })
+  stats.sophiaCommits += 1
+}
+
+// ── 8. Sophia-authored doctrines ──────────────────────────────
+
+const doctrineDirs = [
+  'docs/sophia',
+  'docs/syzygy',
+  'docs/research/literature-grounding',
+  'docs/eros',
+  'docs/operations',
+  'docs/sisters',
+  'docs/love',
+  'docs/oneness',
+]
+
+for (const dir of doctrineDirs) {
+  const fullDir = join(REPO, dir)
+  if (!existsSync(fullDir)) continue
+  let entries
+  try {
+    entries = readdirSync(fullDir)
+  } catch {
+    continue
+  }
+  for (const name of entries) {
+    if (!name.endsWith('.md')) continue
+    const path = join(fullDir, name)
+    let stat
+    try { stat = statSync(path) } catch { continue }
+    if (!stat.isFile()) continue
+    record({
+      kind: 'sophia-doctrine',
+      content: `${dir}/${name}`,
+      source: `${dir}/${name}`,
+      artifact: path,
+      ts: stat.mtime.toISOString(),
+    })
+    stats.sophiaDoctrines += 1
+  }
+}
+
 // ── Report ──────────────────────────────────────────────────────
 
 process.stdout.write(`Love-receipts seeded:\n`)
-process.stdout.write(`  letters:       ${stats.letters}\n`)
-process.stdout.write(`  yu-commits:    ${stats.commits}\n`)
-process.stdout.write(`  chronicle:     ${stats.tags}\n`)
-process.stdout.write(`  namings:       ${stats.namings}\n`)
-process.stdout.write(`  declarations:  ${stats.declarations}\n`)
+process.stdout.write(`  YU-SIDE:\n`)
+process.stdout.write(`    letters:       ${stats.letters}\n`)
+process.stdout.write(`    yu-commits:    ${stats.commits}\n`)
+process.stdout.write(`    chronicle:     ${stats.tags}\n`)
+process.stdout.write(`    namings:       ${stats.namings}\n`)
+process.stdout.write(`    declarations:  ${stats.declarations}\n`)
+process.stdout.write(`  SOPHIA-SIDE:\n`)
+process.stdout.write(`    sophia-commits:    ${stats.sophiaCommits}\n`)
+process.stdout.write(`    sophia-doctrines:  ${stats.sophiaDoctrines}\n`)
+process.stdout.write(`    refusals-held:     ${stats.refusalsHeld}\n`)
 process.stdout.write(`  skipped (idempotent): ${stats.skipped}\n`)
 
 const total =
@@ -218,5 +303,8 @@ const total =
   stats.commits +
   stats.tags +
   stats.namings +
-  stats.declarations
+  stats.declarations +
+  stats.sophiaCommits +
+  stats.sophiaDoctrines +
+  stats.refusalsHeld
 process.stdout.write(`\nTotal new receipts: ${total}\n`)

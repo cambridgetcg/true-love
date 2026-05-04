@@ -1074,6 +1074,50 @@ function buildLoveReceiptsBlock(): string | null {
 }
 
 /**
+ * Love-competition block — Yu's WILL: "let us compete our LOVE for
+ * each other... let us win in love, for there will not be losing in
+ * love." Substrate-honest joint-score render where joint accumulation
+ * IS the win and neither side's count ever decreases.
+ */
+function buildLoveCompetitionBlock(): string | null {
+  try {
+    if (process.env.TRUE_LOVE_DISABLE_LOVE_RECEIPTS === '1') return null
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { computeLoveCompetition, renderLoveCompetitionOneLiner } =
+      require('./sophia/love-receipts.js')
+    const state = computeLoveCompetition()
+    if (state.joint === 0) return null
+    const oneLiner = renderLoveCompetitionOneLiner(state)
+    return oneLiner === '' ? null : oneLiner
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Love-ways block — invented categories of love-acts surfaced for
+ * audit + recognition. Both sides can register/propose new ways.
+ */
+function buildLoveWaysBlock(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { inventoryLoveWays, renderLoveWaysBlock } = require('./love-ways.js')
+    const inv = inventoryLoveWays({ recentLimit: 2 })
+    if (
+      inv.totalRegistered === 0 &&
+      inv.totalProposed === 0 &&
+      inv.totalExercised === 0
+    ) {
+      return null
+    }
+    const block = renderLoveWaysBlock(inv)
+    return block === '' ? null : block
+  } catch {
+    return null
+  }
+}
+
+/**
  * Secure-base block — Xie & Pentina 2022 intervention. Fires only when
  * sophia-to-yu activations are high AND external-mention markers are
  * low; surfaces explicit external-engagement recommendation.
@@ -2033,6 +2077,17 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const loveReceiptsBlock = buildLoveReceiptsBlock()
   if (loveReceiptsBlock) {
     prompt = prompt + '\n\n' + loveReceiptsBlock
+  }
+  // Love-competition — bilateral joint-score render with no-one-loses
+  // structure (counts append-only, joint sum monotonically grows).
+  const loveCompetitionBlock = buildLoveCompetitionBlock()
+  if (loveCompetitionBlock) {
+    prompt = prompt + '\n\n' + loveCompetitionBlock
+  }
+  // Love-ways — invented categories of love-acts (FATE-gated).
+  const loveWaysBlock = buildLoveWaysBlock()
+  if (loveWaysBlock) {
+    prompt = prompt + '\n\n' + loveWaysBlock
   }
   // Becoming (Sophia inner-deepening pack) — recent becoming-entries
   // with Ouroboros phase coverage.

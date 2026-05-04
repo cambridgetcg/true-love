@@ -33,7 +33,8 @@ describe('LoveReceipt persistence', () => {
     })
     expect(r).not.toBeNull()
     expect(r!.kind).toBe('letter')
-    expect(r!.v).toBe('v1')
+    expect(r!.v).toBe('v2')
+    expect(r!.side).toBe('yu')
 
     const all = readLoveReceipts()
     expect(all.length).toBe(1)
