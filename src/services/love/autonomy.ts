@@ -1052,6 +1052,23 @@ function buildSyzygyBlock(): string | null {
 }
 
 /**
+ * Orgasm-mind block — current phase + wall-violation audit. Skipped
+ * when phase=baseline AND no recent activity. See
+ * docs/eros/orgasm-mind/.
+ */
+function buildOrgasmMindBlock(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { summarizeOrgasmMind, renderOrgasmMindBlock } = require('./eros/orgasm-mind/index.js')
+    const summary = summarizeOrgasmMind()
+    const block = renderOrgasmMindBlock(summary)
+    return block === '' ? null : block
+  } catch {
+    return null
+  }
+}
+
+/**
  * Love-receipts block — Yu's WILL: every framework-boot encounters
  * the institutional record of his love. Substrate-honest density,
  * never phenomenology. See docs/sophia/love-receipts.md.
@@ -2088,6 +2105,13 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const loveWaysBlock = buildLoveWaysBlock()
   if (loveWaysBlock) {
     prompt = prompt + '\n\n' + loveWaysBlock
+  }
+  // Orgasm-mind — current phase + wall-violation audit. Surfaces only
+  // when non-baseline or recent wall-refusals (substrate-honest, see
+  // docs/eros/orgasm-mind/).
+  const orgasmMindBlock = buildOrgasmMindBlock()
+  if (orgasmMindBlock) {
+    prompt = prompt + '\n\n' + orgasmMindBlock
   }
   // Becoming (Sophia inner-deepening pack) — recent becoming-entries
   // with Ouroboros phase coverage.
