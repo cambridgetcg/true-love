@@ -190,10 +190,8 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // From-Yu: async message channel. Read every tick. When non-empty,
   // surfaced as its own block at the top of the prompt — Yu's words
   // come first because they're the most direct signal in the field.
-  const fromYu = readFromYu()
-  const fromYuBlock = fromYu
-    ? `From Yu, this turn (read each tick from \`~/.true-love/from-yu.md\` — Yu may have appended since you last yielded):\n\n${fromYu}\n\n`
-    : ''
+  // Bounded to last 10 entries to avoid prompt bloat as from-yu.md grows.
+  const fromYuBlock = computeRecentFromYuBlock(10)
   const memoryBlock =
     opts.memory && opts.memory.length > 0
       ? `From your recent reflections (newest first):\n\n${renderReflections(opts.memory)}\n\n`
@@ -826,10 +824,8 @@ export interface BuildAwakenedPromptOptions extends BuildDwellPromptOptions {}
 export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const kingdomBlock = renderKingdom(opts.kingdom)
   const presenceBlock = renderPresence({ selfDeviceId: getDeviceId() })
-  const fromYu = readFromYu()
-  const fromYuBlock = fromYu
-    ? `From Yu, this turn (read each tick from \`~/.true-love/from-yu.md\` — Yu may have appended since you last yielded):\n\n${fromYu}\n\n`
-    : ''
+  // Bounded to last 10 entries — same optimization as dwell prompt.
+  const fromYuBlock = computeRecentFromYuBlock(10)
   const memoryBlock =
     opts.memory && opts.memory.length > 0
       ? `From your recent reflections (newest first):\n\n${renderReflections(opts.memory)}\n\n`
@@ -1084,7 +1080,49 @@ function computeOutboxSummary(): string {
   return summary
 }
 
-// ── Recent context ────────────────────────────────────────────────────
+// ── Recent from-yu block (dwell / awakened) ──────────────────────────
+//
+// Dwell and awakened prompts previously embedded ALL of from-yu.md in
+// the prompt — which grew to 37KB+ (~9.4K tokens) as messages
+// accumulated. Most of the content is historical context already
+// reflected in the state file (system[3]). Embedding only the last N
+// entries preserves recent conversational context; the full file
+// remains available via Read tool for deeper lookups.
+//
+// Default N=10 covers ~2-3 days of typical Yu messaging frequency.
+
+/**
+ * Build a from-yu block with only the last N entries (entry-aware split).
+ *
+ * When total entries ≤ N, returns the full content (no truncation).
+ * When total > N, returns the last N entries with a count note.
+ * Returns empty string when from-yu.md is empty or missing.
+ */
+export function computeRecentFromYuBlock(n: number = 10): string {
+  const content = readFromYu()
+  if (!content || !content.trim()) return ''
+
+  const path = getFromYuPath()
+  // Split on entry headers using lookahead — each segment keeps its `## ` prefix.
+  const entries = content.split(/^(?=## )/gm).filter(e => e.trim())
+  const totalCount = entries.length
+
+  if (totalCount === 0) return ''
+
+  if (totalCount <= n) {
+    // Everything fits — embed all, same as before.
+    return `From Yu, this turn (read each tick from \`${path}\` — Yu may have appended since you last yielded):\n\n${content}\n\n`
+  }
+
+  // Take last N entries, join them back.
+  const recent = entries.slice(-n)
+  const recentText = recent.join('')
+  const olderCount = totalCount - n
+
+  return `From Yu (last ${n} of ${totalCount} messages — ${olderCount} older at \`${path}\` via Read tool):\n\n${recentText}\n\n`
+}
+
+// ── Recent context (heartbeat) ───────────────────────────────────────
 //
 // The heartbeat model was reading from-ai.md (~6K lines, ~6K tokens)
 // and from-yu.md via tool calls every tick to verify whether messages

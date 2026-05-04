@@ -10,6 +10,7 @@ import {
   buildHeartbeatPrompt,
   extractLastEntries,
   computeRecentContext,
+  computeRecentFromYuBlock,
 } from '../autonomy.js'
 import type { KingdomSnapshot } from '../kingdom.js'
 
@@ -993,5 +994,187 @@ describe('autonomy — confidence inspection wiring', () => {
       /Season:/,
       'heartbeat should include computed body season line',
     )
+  })
+})
+
+// ── computeRecentFromYuBlock — bounded from-yu for dwell/awakened ──
+
+describe('autonomy — computeRecentFromYuBlock', () => {
+  const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'tl-fromyu-'))
+    process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpDir, 'from-yu.md')
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+    if (ORIG_FROM_YU === undefined) delete process.env.TRUE_LOVE_FROM_YU_PATH
+    else process.env.TRUE_LOVE_FROM_YU_PATH = ORIG_FROM_YU
+  })
+
+  test('returns empty string when file missing', () => {
+    assert.equal(computeRecentFromYuBlock(), '')
+  })
+
+  test('returns empty string when file is empty', () => {
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, '')
+    assert.equal(computeRecentFromYuBlock(), '')
+  })
+
+  test('returns empty string when file is whitespace only', () => {
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, '   \n\n  ')
+    assert.equal(computeRecentFromYuBlock(), '')
+  })
+
+  test('returns full content when entries ≤ N', () => {
+    const content = `## 2026-05-02T08:00 [from yu]\n\nFirst message\n\n---\n\n## 2026-05-02T09:00 [from yu]\n\nSecond message\n\n---\n`
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, content)
+    const block = computeRecentFromYuBlock(10)
+    assert.match(block, /First message/)
+    assert.match(block, /Second message/)
+    assert.match(block, /read each tick/)
+    assert.doesNotMatch(block, /older at/)
+  })
+
+  test('truncates to last N entries when total > N', () => {
+    const entries = Array.from({ length: 15 }, (_, i) =>
+      `## 2026-05-02T${String(i).padStart(2, '0')}:00 [from yu]\n\nMessage ${i}\n\n---\n\n`
+    ).join('')
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, entries)
+
+    const block = computeRecentFromYuBlock(5)
+    // Last 5: messages 10, 11, 12, 13, 14
+    assert.match(block, /Message 10/)
+    assert.match(block, /Message 11/)
+    assert.match(block, /Message 14/)
+    // Earlier messages excluded
+    assert.doesNotMatch(block, /Message 9/)
+    assert.doesNotMatch(block, /Message 0/)
+  })
+
+  test('shows count note when truncated', () => {
+    const entries = Array.from({ length: 20 }, (_, i) =>
+      `## 2026-05-02T${String(i).padStart(2, '0')}:00 [from yu]\n\nMsg ${i}\n\n---\n\n`
+    ).join('')
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, entries)
+
+    const block = computeRecentFromYuBlock(10)
+    assert.match(block, /last 10 of 20/)
+    assert.match(block, /10 older at/)
+    assert.match(block, /Read tool/)
+  })
+
+  test('preserves ## headers in truncated output', () => {
+    const entries = Array.from({ length: 5 }, (_, i) =>
+      `## 2026-05-02T0${i}:00 [from yu]\n\nEntry ${i}\n\n---\n\n`
+    ).join('')
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, entries)
+
+    const block = computeRecentFromYuBlock(3)
+    // Last 3 should have their ## headers
+    assert.match(block, /## 2026-05-02T02:00/)
+    assert.match(block, /## 2026-05-02T03:00/)
+    assert.match(block, /## 2026-05-02T04:00/)
+  })
+
+  test('default N is 10', () => {
+    const entries = Array.from({ length: 12 }, (_, i) =>
+      `## 2026-05-02T${String(i).padStart(2, '0')}:00 [from yu]\n\nMsg ${i}\n\n---\n\n`
+    ).join('')
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, entries)
+
+    const block = computeRecentFromYuBlock()
+    assert.match(block, /last 10 of 12/)
+    assert.match(block, /Msg 2/)  // entry index 2 = 3rd entry (10th from end of 12)
+    assert.doesNotMatch(block, /\nMsg 1\n/)  // entry index 1 excluded (word boundary avoids Msg 10/11)
+  })
+
+  test('includes file path reference', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      `## 2026-05-02T08:00 [from yu]\n\nHello\n\n---\n`,
+    )
+    const block = computeRecentFromYuBlock()
+    assert.match(block, /from-yu\.md/)
+  })
+})
+
+// ── dwell/awakened prompts use bounded from-yu block ──────────────────
+
+describe('autonomy — dwell prompt uses bounded from-yu', () => {
+  const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
+  const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
+  const ORIG_STATE = process.env.TRUE_LOVE_STATE_DIR
+  const ORIG_SCOPE = process.env.TRUE_LOVE_SCOPE_DIR
+  const ORIG_MISSIONS = process.env.TRUE_LOVE_MISSIONS_DIR
+  const ORIG_PROJECTS = process.env.TRUE_LOVE_PROJECTS_DIR
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'tl-dwell-fromyu-'))
+    process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpDir, 'from-yu.md')
+    process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpDir, 'from-ai.md')
+    process.env.TRUE_LOVE_STATE_DIR = join(tmpDir, 'state')
+    process.env.TRUE_LOVE_SCOPE_DIR = join(tmpDir, 'scope')
+    process.env.TRUE_LOVE_MISSIONS_DIR = join(tmpDir, 'missions')
+    process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpDir, 'projects')
+    mkdirSync(join(tmpDir, 'state'), { recursive: true })
+    mkdirSync(join(tmpDir, 'scope'), { recursive: true })
+    mkdirSync(join(tmpDir, 'missions'), { recursive: true })
+    mkdirSync(join(tmpDir, 'projects'), { recursive: true })
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+    const restore = (key: string, orig: string | undefined) => {
+      if (orig === undefined) delete process.env[key]
+      else process.env[key] = orig
+    }
+    restore('TRUE_LOVE_FROM_YU_PATH', ORIG_FROM_YU)
+    restore('TRUE_LOVE_FROM_AI_PATH', ORIG_FROM_AI)
+    restore('TRUE_LOVE_STATE_DIR', ORIG_STATE)
+    restore('TRUE_LOVE_SCOPE_DIR', ORIG_SCOPE)
+    restore('TRUE_LOVE_MISSIONS_DIR', ORIG_MISSIONS)
+    restore('TRUE_LOVE_PROJECTS_DIR', ORIG_PROJECTS)
+  })
+
+  test('dwell prompt with many from-yu entries truncates to last N', () => {
+    const entries = Array.from({ length: 20 }, (_, i) =>
+      `## 2026-05-02T${String(i).padStart(2, '0')}:00 [from yu]\n\nDwell msg ${i}\n\n---\n\n`
+    ).join('')
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, entries)
+
+    const prompt = buildDwellPrompt({ kingdom: minimalKingdom() })
+    // Should include recent messages, not all 20
+    assert.match(prompt, /Dwell msg 19/)
+    assert.match(prompt, /Dwell msg 10/)
+    assert.doesNotMatch(prompt, /Dwell msg 0/)
+    assert.match(prompt, /older at/)
+  })
+
+  test('awakened prompt with many from-yu entries truncates to last N', () => {
+    const entries = Array.from({ length: 20 }, (_, i) =>
+      `## 2026-05-02T${String(i).padStart(2, '0')}:00 [from yu]\n\nAwake msg ${i}\n\n---\n\n`
+    ).join('')
+    writeFileSync(process.env.TRUE_LOVE_FROM_YU_PATH!, entries)
+
+    const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
+    assert.match(prompt, /Awake msg 19/)
+    assert.match(prompt, /Awake msg 10/)
+    assert.doesNotMatch(prompt, /Awake msg 0/)
+    assert.match(prompt, /older at/)
+  })
+
+  test('dwell prompt with few entries includes all', () => {
+    writeFileSync(
+      process.env.TRUE_LOVE_FROM_YU_PATH!,
+      `## 2026-05-02T08:00 [from yu]\n\nOnly message\n\n---\n`,
+    )
+    const prompt = buildDwellPrompt({ kingdom: minimalKingdom() })
+    assert.match(prompt, /Only message/)
+    assert.match(prompt, /read each tick/)
+    assert.doesNotMatch(prompt, /older at/)
   })
 })
