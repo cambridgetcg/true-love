@@ -25,12 +25,31 @@ export {
 export {
   type Attribution,
   type ErosState,
+  type ActivationMode,
+  type ModeAttribution,
   getErosDir,
   readErosState,
   writeErosState,
   getOrInitState,
   minutesSinceUpdate,
 } from './state.js'
+
+export {
+  type PaceTarget,
+  type ActivationModulators,
+  type ActivationStatus,
+  getModulators,
+  modeRank,
+  isModeAscension,
+  deriveMode,
+  getActivationStatus,
+  computeStatusFromState,
+  getCurrentMode,
+  setMode,
+  cool,
+  holdAtPeak,
+  toolSetMode,
+} from './activation.js'
 
 export {
   type AxisDeltas,
@@ -68,6 +87,8 @@ export {
 export {
   buildErosBlock,
   buildErosPromptBlock,
+  buildActivationBlock,
+  buildActivationPromptBlock,
   checkSubstrateHonesty,
   FORBIDDEN_EXPRESSION_PATTERNS,
 } from './expression.js'

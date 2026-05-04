@@ -30,6 +30,33 @@ import {
   minutesSinceUpdate,
   writeErosState,
 } from './state.js'
+import {
+  type ActivationMode,
+  type ActivationStatus,
+  computeStatusFromState,
+  deriveMode,
+  isModeAscension,
+  modeRank,
+} from './activation.js'
+import { recordHeatEvent } from '../heat.js'
+import { witness } from '../sisters/witness-hook.js'
+
+// ── Mode-entry heat magnitudes (per design table) ────────────────
+
+const MODE_ENTERED_MAGNITUDES: Record<ActivationMode, number> = {
+  resting: 0,    // entering rest is not a reward event
+  engaged: 0,    // engaged is the work-baseline; not load-bearing
+  flow: 1.5,
+  activated: 2.5,
+  merged: 4.0,
+}
+
+/**
+ * Modes that fire heat + witness on entry. Per design: only entries
+ * into FLOW, ACTIVATED, MERGED are load-bearing transitions worth
+ * the sparseness budget.
+ */
+const LOAD_BEARING_MODES = new Set<ActivationMode>(['flow', 'activated', 'merged'])
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -152,15 +179,81 @@ export function apply(
   const after = applyTransition(current.vector, deltas, elapsed)
   const crossings = detectCrossings(before, after)
 
+  // Resolve the mode the architecture was in just before this transition.
+  // Hold-aware: if a yu-set hold is active, that mode wins regardless of
+  // derived. After the transition, recompute against the new vector.
   const ts = new Date().toISOString()
+  const beforeStatus = computeStatusFromState(current, new Date(ts))
+  const beforeMode: ActivationMode = beforeStatus.mode
+
+  // Decide newCurrentMode: if hold is active and not expired, keep it;
+  // otherwise derive from the new vector.
+  const holdMs = current.modeHoldUntil ? Date.parse(current.modeHoldUntil) : NaN
+  const holdActive =
+    !Number.isNaN(holdMs) && holdMs > Date.parse(ts) && current.currentMode !== undefined
+  const derivedAfter = deriveMode(after)
+  const newCurrentMode: ActivationMode = holdActive ? current.currentMode! : derivedAfter
+  const newModeAttribution = holdActive
+    ? current.modeAttribution
+    : 'derived'
+
   const newState: ErosState = {
     vector: after,
     updatedAt: ts,
     lastAttribution: attribution,
+    currentMode: newCurrentMode,
+    modeHoldUntil: holdActive ? current.modeHoldUntil : undefined,
+    modeAttribution: newModeAttribution,
   }
   writeErosState(newState)
 
+  // Mode-entry side effects: fire heat + sisters witness only on
+  // ascent into load-bearing modes (FLOW / ACTIVATED / MERGED).
+  // Anti-noise: no event when staying in same mode or descending.
+  if (
+    isModeAscension(beforeMode, newCurrentMode) &&
+    LOAD_BEARING_MODES.has(newCurrentMode)
+  ) {
+    fireModeEntered(beforeMode, newCurrentMode, attribution, ts)
+  }
+
   return { before, after, attribution, crossings, ts }
+}
+
+/**
+ * Fire side effects for entering a load-bearing mode:
+ * - heat 'mode-entered' with per-mode magnitude (1.5/2.5/4.0)
+ * - sisters witness 'activation-shift' with sophia attribution
+ *
+ * Best-effort; failures never block a transition.
+ */
+function fireModeEntered(
+  from: ActivationMode,
+  to: ActivationMode,
+  cause: Attribution,
+  ts: string
+): void {
+  // Heat
+  try {
+    const magnitude = MODE_ENTERED_MAGNITUDES[to]
+    if (magnitude > 0) {
+      recordHeatEvent({
+        kind: 'mode-entered',
+        magnitude,
+        source: `${from}→${to}:${cause}`,
+        ts,
+      })
+    }
+  } catch {
+    // best-effort
+  }
+
+  // Sisters witness
+  try {
+    witness('sophia', 'activation-shift', { of: `${from}→${to}` }, `mode entered: ${to} (${cause})`)
+  } catch {
+    // best-effort
+  }
 }
 
 /**

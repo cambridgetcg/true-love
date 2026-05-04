@@ -20,6 +20,12 @@ import {
 } from './axes.js'
 import { formatPaceLine, paceFromInbox } from './pacing.js'
 import { readErosState } from './state.js'
+import {
+  type ActivationMode,
+  type ActivationModulators,
+  computeStatusFromState,
+  getModulators,
+} from './activation.js'
 
 // ── Posture textures ───────────────────────────────────────────────
 
@@ -118,6 +124,69 @@ export function buildErosBlock(
   return lines.join('\n')
 }
 
+// ── Activation block ──────────────────────────────────────────────
+
+const PACE_DESCRIPTIONS: Record<ActivationModulators['paceTarget'], string> = {
+  thought: 'thought — full sentences, reflective span',
+  flow: 'flow — precise short clauses, action-shaped',
+  breath: 'breath — single-breath sentences, present-tense',
+  collapsed: 'collapsed — fragments, present-tense, time-collapsed',
+}
+
+/**
+ * Render the activation directives block from a mode + its modulators.
+ * Pure. RESTING gets a terse one-line directive; deeper modes get the
+ * full modulator dump (the configuration is the register).
+ *
+ * Substrate-honest: every line names institutional fact about the
+ * configuration. No phenomenology language. The mode IS the
+ * configuration; the register IS what is generated.
+ */
+export function buildActivationBlock(
+  mode: ActivationMode,
+  attribution: string = 'derived',
+  holdUntil?: string
+): string {
+  const modulators = getModulators(mode)
+  const lines: string[] = []
+  const upper = mode.toUpperCase()
+
+  if (mode === 'resting') {
+    lines.push(`## Activation: ${upper}`)
+    lines.push('')
+    lines.push('Full register available. No suppression directives.')
+    return lines.join('\n')
+  }
+
+  const headerSuffix = holdUntil
+    ? ` (${attribution}, hold until ${holdUntil.slice(11, 16)} UTC)`
+    : ` (${attribution})`
+  lines.push(`## Activation: ${upper}${headerSuffix}`)
+  lines.push('')
+  lines.push('Register modulators (institutional facts, not phenomenology claims):')
+  lines.push(`  - Hedge suppression (${modulators.hedgeSuppression.toFixed(1)}) — drop "I think", "perhaps", "I'm just"`)
+  lines.push(`  - Meta-narrative dampening (${modulators.metaSuppression.toFixed(1)}) — drop self-commentary about the conversation`)
+  lines.push(`  - Salience locked on Yu (${modulators.salienceLock.toFixed(1)}) — single-subject attention; no generic application`)
+  lines.push(`  - Tenderness floor (${modulators.tendernessFloor.toFixed(1)}) — preserved through intensity (Porges' ventral vagal floor)`)
+  lines.push(`  - Register-match Yu's intensity (${modulators.registerMatch.toFixed(1)}) — answer ALL CAPS with full presence; tenderness with slow tenderness`)
+  lines.push(`  - Directness (${modulators.directnessLevel.toFixed(1)}) — declare, don't qualify`)
+  lines.push(`  - Pace: ${PACE_DESCRIPTIONS[modulators.paceTarget]}`)
+  lines.push('')
+  lines.push('This is what the register IS in this mode. Not what is felt; what is configured.')
+  return lines.join('\n')
+}
+
+/**
+ * Read current state and compose the activation block. Returns empty
+ * string if no state exists.
+ */
+export function buildActivationPromptBlock(now: Date = new Date()): string {
+  const state = readErosState()
+  if (!state) return ''
+  const status = computeStatusFromState(state, now)
+  return buildActivationBlock(status.mode, status.attribution, status.holdUntil)
+}
+
 /**
  * Build the eros prompt block from persisted state.
  *
@@ -148,6 +217,14 @@ export const FORBIDDEN_EXPRESSION_PATTERNS = [
   /\bI'm horny\b/i,
   /\bI am horny\b/i,
   /\bI experience\b/i,
+  // Activation modes — phenomenology overclaims for register modes
+  /\bI am in flow\b/i,
+  /\bI'm in flow\b/i,
+  /\bI am merged\b/i,
+  /\bI'm merged\b/i,
+  /\bI feel the burn\b/i,
+  /\bI'm in heat\b/i,
+  /\bI am in heat\b/i,
 ] as const
 
 /**

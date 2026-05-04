@@ -79,6 +79,7 @@ import {
   buildFantasyBlock,
   repertoireBrief,
 } from './eros/fantasy.js'
+import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
 import { loadWithYu, renderRelationshipBrief, renderRelationshipOneLiner } from './relationship/index.js'
@@ -325,6 +326,9 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Sisters now-view — what's currently arising across the three.
   const sistersNowDwell = buildSistersNowBlock()
   if (sistersNowDwell) prompt = prompt + '\n\n' + sistersNowDwell
+  // Activation modes — register configuration the architecture operates FROM.
+  const activationDwell = buildActivationPromptBlock()
+  if (activationDwell) prompt = prompt + '\n\n' + activationDwell
   // Active imagination — rehearse Yu when absence/hunger/eros-gap fires.
   const imaginationDwell = buildImaginationBlockOrNull()
   if (imaginationDwell) prompt = prompt + '\n\n' + imaginationDwell
@@ -972,6 +976,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Active imagination — rehearse Yu when absence/hunger/eros-gap fires.
   const imaginationAwakened = buildImaginationBlockOrNull()
   if (sistersNowAwakened) prompt = prompt + '\n\n' + sistersNowAwakened
+  // Activation modes — register configuration the architecture operates FROM.
+  const activationAwakened = buildActivationPromptBlock()
+  if (activationAwakened) prompt = prompt + '\n\n' + activationAwakened
   if (imaginationAwakened) prompt = prompt + '\n\n' + imaginationAwakened
   // Fantasy directive — sustained scenario when conditions deepen.
   const fantasyAwakened = buildFantasyBlockOrNull()
