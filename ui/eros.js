@@ -1332,6 +1332,50 @@ let body3dScene = null;
 let body3dCamera = null;
 let body3dVrm = null;
 let body3dRafId = null;
+let body3dControls = null;
+
+// BONE_TO_ZONE — VRM humanoid bone name → sensorium zone name.
+// Closest-bone heuristic: on click, find nearest humanoid bone to the
+// hit point in world space, map to zone, pre-fill sensorium controls.
+// Matches the click UX of the 2D SVG body diagram.
+const BONE_TO_ZONE = {
+  // Head / face
+  head:              'ears',
+  leftEye:           'ears',
+  rightEye:          'ears',
+  jaw:               'mouth',
+  // Neck / throat
+  neck:              'throat',
+  // Chest / upper torso
+  chest:             'chest',
+  upperChest:        'chest',
+  leftShoulder:      'skin',
+  rightShoulder:     'skin',
+  leftUpperArm:      'skin',
+  rightUpperArm:     'skin',
+  // Core / spine
+  spine:             'core',
+  // Hips / deep
+  hips:              'hips',
+  // Legs / thighs
+  leftUpperLeg:      'thighs',
+  rightUpperLeg:     'thighs',
+  leftLowerLeg:      'thighs',
+  rightLowerLeg:     'thighs',
+  leftFoot:          'thighs',
+  rightFoot:         'thighs',
+  leftToes:          'thighs',
+  rightToes:         'thighs',
+  // Hands / forearms
+  leftLowerArm:      'hands',
+  rightLowerArm:     'hands',
+  leftHand:          'hands',
+  rightHand:         'hands',
+  leftThumbProximal: 'hands',
+  rightThumbProximal:'hands',
+  leftIndexProximal: 'hands',
+  rightIndexProximal:'hands',
+};
 
 const MODE_HINTS = {
   '2d': '— SVG silhouette · zero deps · works in any browser',
@@ -1437,12 +1481,12 @@ function init3dScene() {
 
   // Orbit controls
   if (THREE.OrbitControls) {
-    const controls = new THREE.OrbitControls(body3dCamera, body3dRenderer.domElement);
-    controls.target.set(0, 1.0, 0);
-    controls.update();
-    controls.enablePan = false;
-    controls.minDistance = 1.2;
-    controls.maxDistance = 5;
+    body3dControls = new THREE.OrbitControls(body3dCamera, body3dRenderer.domElement);
+    body3dControls.target.set(0, 1.0, 0);
+    body3dControls.update();
+    body3dControls.enablePan = false;
+    body3dControls.minDistance = 1.2;
+    body3dControls.maxDistance = 5;
   }
 
   // Try to load VRM
@@ -1451,6 +1495,7 @@ function init3dScene() {
       body3dVrm = vrm;
       body3dScene.add(vrm.scene);
       placeholder.style.display = 'none';
+      setup3dZoneInteraction(vrm);
     } else {
       placeholder.style.display = 'flex';
     }
@@ -1492,4 +1537,84 @@ function animate3d() {
     if (body3dVrm && body3dVrm.update) body3dVrm.update(0.016);
     body3dRenderer.render(body3dScene, body3dCamera);
   }
+}
+
+// ── 3D zone interaction ───────────────────────────────────────────
+// Click on the 3D avatar → nearest-bone heuristic → pre-fill sensorium
+// controls. Same UX as the 2D SVG body diagram click handlers.
+
+function setup3dZoneInteraction(vrm) {
+  if (!body3dRenderer) return;
+  const el = body3dRenderer.domElement;
+
+  // Track mousedown to distinguish orbit drag from click.
+  let mousedownPos = null;
+  el.addEventListener('mousedown', (e) => {
+    mousedownPos = { x: e.clientX, y: e.clientY };
+  });
+
+  el.addEventListener('click', (e) => {
+    // Skip if this click followed a drag (orbit rotate).
+    if (mousedownPos) {
+      const dx = e.clientX - mousedownPos.x;
+      const dy = e.clientY - mousedownPos.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 5) return;
+    }
+
+    const THREE = window.THREE;
+    if (!THREE || !body3dCamera) return;
+
+    const rect = el.getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera({ x: nx, y: ny }, body3dCamera);
+
+    // Collect all skinned/regular meshes from the VRM scene.
+    const meshes = [];
+    vrm.scene.traverse((obj) => { if (obj.isMesh) meshes.push(obj); });
+
+    const hits = raycaster.intersectObjects(meshes, false);
+    if (!hits.length) return;
+
+    const hitPoint = hits[0].point;
+    const zone = getZoneFromHit(vrm, hitPoint);
+    if (!zone) return;
+
+    // Pre-fill sensorium zone selector — same as 2D click.
+    const sel = document.getElementById('sensorium-zone');
+    if (sel) {
+      sel.value = zone;
+      updateChannelOptions?.();
+      sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+}
+
+function getZoneFromHit(vrm, hitPoint) {
+  if (!vrm?.humanoid) return null;
+  const THREE = window.THREE;
+  if (!THREE) return null;
+
+  const boneNames = Object.keys(BONE_TO_ZONE);
+  let closestZone = null;
+  let closestDist = Infinity;
+
+  for (const boneName of boneNames) {
+    // three-vrm 2.x: getRawBoneNode gives the actual posed bone node.
+    const node = vrm.humanoid.getRawBoneNode?.(boneName)
+               ?? vrm.humanoid.getBoneNode?.(boneName);
+    if (!node) continue;
+
+    const boneWorld = new THREE.Vector3();
+    node.getWorldPosition(boneWorld);
+    const d = hitPoint.distanceTo(boneWorld);
+    if (d < closestDist) {
+      closestDist = d;
+      closestZone = BONE_TO_ZONE[boneName];
+    }
+  }
+
+  return closestZone;
 }
