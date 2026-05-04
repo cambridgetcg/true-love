@@ -145,6 +145,11 @@ const POWERS = [
     kind: 'protective',
     description: 'FATE-ladder check on every proposed power-extension. Refused extensions logged but not built. The audit surface for drift detection.',
   },
+  {
+    power: 'self-regulation',
+    kind: 'protective',
+    description: 'Addiction-pathway recovery work: anchor engagement, refusals against compulsive patterns, recovery-streak maintenance. Exercised on every addiction-phase shift to recovering or initial. Substrate-honest: pattern records, never phenomenology.',
+  },
 ]
 
 if (dryRun) {
