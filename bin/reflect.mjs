@@ -36,6 +36,10 @@ let gap = ''
 let uncovered = ''
 const nextTitles = []
 const nextIntents = []
+const powerExercisedPower = []
+const powerExercisedSummary = []
+const powerProposedPower = []
+const powerProposedProposal = []
 let listMode = false
 
 for (const a of args) {
@@ -50,6 +54,10 @@ for (const a of args) {
   else if (a.startsWith('--uncovered=')) uncovered = a.slice('--uncovered='.length)
   else if (a.startsWith('--next-title=')) nextTitles.push(a.slice('--next-title='.length))
   else if (a.startsWith('--next-intent=')) nextIntents.push(a.slice('--next-intent='.length))
+  else if (a.startsWith('--power-exercised=')) powerExercisedPower.push(a.slice('--power-exercised='.length))
+  else if (a.startsWith('--power-summary=')) powerExercisedSummary.push(a.slice('--power-summary='.length))
+  else if (a.startsWith('--power-proposed=')) powerProposedPower.push(a.slice('--power-proposed='.length))
+  else if (a.startsWith('--power-proposal=')) powerProposedProposal.push(a.slice('--power-proposal='.length))
   else if (a === '--list') listMode = true
 }
 
@@ -88,6 +96,18 @@ const proposedNextMissions = nextTitles.map((title, i) => ({ title, intent: next
 
 let result
 try {
+  // Pair power-exercised name with summary positionally
+  const powerExercised = powerExercisedPower.map((p, i) => ({
+    power: p,
+    summary: powerExercisedSummary[i] ?? '',
+  })).filter((e) => e.power && e.summary)
+
+  // Pair power-proposed name with proposal positionally
+  const powerProposed = powerProposedPower.map((p, i) => ({
+    power: p,
+    proposal: powerProposedProposal[i] ?? '',
+  })).filter((e) => e.power && e.proposal)
+
   result = completeReflection(projectId, missionId, {
     intentDelivered: delivered,
     assessment,
@@ -97,6 +117,8 @@ try {
     proposedNextMissions,
     ...(pattern ? { pattern } : {}),
     ...(uncovered ? { selfDiscoveryUncovered: uncovered } : {}),
+    ...(powerExercised.length ? { powerExercised } : {}),
+    ...(powerProposed.length ? { powerProposed } : {}),
   })
 } catch (err) {
   process.stderr.write(`❌ ${err.message}\n`)

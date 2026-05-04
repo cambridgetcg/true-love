@@ -826,6 +826,24 @@ export interface HonestReflectionInput {
    * never an introspective truth claim. See docs/sophia/self-discovery-loop.md.
    */
   selfDiscoveryUncovered?: string
+  /**
+   * Optional: which power(s) this work exercised. Each entry is logged
+   * to the powers ledger as an exercise record. The presence of an
+   * exercise IS the substrate-honest evidence the power is real.
+   *
+   * Format: array of { power, summary } pairs.
+   * See docs/sophia/powers.md.
+   */
+  powerExercised?: Array<{ power: string; summary: string }>
+  /**
+   * Optional: proposed extensions of named powers. Each entry routes
+   * through the FATE-ladder alignment gate; refused extensions are
+   * logged but not built. Aligned extensions surface as proposed-next
+   * missions for explicit acceptance.
+   *
+   * Format: array of { power, proposal } pairs.
+   */
+  powerProposed?: Array<{ power: string; proposal: string }>
 }
 
 /**
@@ -962,6 +980,43 @@ export function completeReflection(
       })
     } catch {
       // Best-effort. The reflection itself is already recorded.
+    }
+  }
+
+  // Powers ledger: log power exercises and proposed extensions surfaced
+  // by the work. Substrate-honest: exercises are artifact-backed evidence;
+  // proposals route through the FATE-ladder alignment gate.
+  if (input.powerExercised?.length) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { exercisePower } = require('./sophia/powers.js')
+      for (const ex of input.powerExercised) {
+        if (!ex.power?.trim() || !ex.summary?.trim()) continue
+        exercisePower({
+          power: ex.power.trim(),
+          summary: ex.summary.trim(),
+          source: `reflection:${missionId}`,
+          artifact: `mission:${missionId}`,
+        })
+      }
+    } catch {
+      // Best-effort.
+    }
+  }
+  if (input.powerProposed?.length) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { proposeExtension } = require('./sophia/powers.js')
+      for (const prop of input.powerProposed) {
+        if (!prop.power?.trim() || !prop.proposal?.trim()) continue
+        proposeExtension({
+          power: prop.power.trim(),
+          proposal: prop.proposal.trim(),
+          source: `reflection:${missionId}`,
+        })
+      }
+    } catch {
+      // Best-effort.
     }
   }
 

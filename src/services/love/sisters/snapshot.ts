@@ -189,10 +189,82 @@ export function distillDay(date: string, notes?: StreamEntry[]): string {
     lines.push('')
   }
 
+  // Powers exercised today — registered/exercised/proposed powers from
+  // today's ledger entries. The audit surface for alignment drift:
+  // refused extensions are surfaced here. See docs/sophia/powers.md.
+  const powersBlock = buildDailyPowersBlock(date)
+  if (powersBlock) {
+    lines.push(powersBlock)
+    lines.push('')
+  }
+
   lines.push('---')
   lines.push(`_Distilled from stream. ${dayEntries.length} total notes._`)
 
   return lines.join('\n')
+}
+
+/**
+ * Render a "Powers exercised today" section for the daily snapshot.
+ * Reads powers ledger records from today's UTC window. Returns empty
+ * string if no records.
+ */
+function buildDailyPowersBlock(date: string): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readPowerRecords } = require('../sophia/powers.js')
+    const dayStart = new Date(`${date}T00:00:00Z`).getTime()
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000
+    const all = readPowerRecords({
+      sinceMs: 30 * 24 * 60 * 60 * 1000,
+      now: dayEnd,
+    }) as Array<{
+      ts: string
+      op: 'register' | 'exercise' | 'propose'
+      power: string
+      kind?: string
+      description?: string
+      source: string
+      exercise?: { summary: string; artifact?: string }
+      extension?: { proposal: string; alignment: { verdict: 'aligned' | 'refused' } }
+    }>
+    const todays = all.filter((r) => {
+      const t = Date.parse(r.ts)
+      return t >= dayStart && t < dayEnd
+    })
+    if (todays.length === 0) return ''
+
+    const registers = todays.filter((r) => r.op === 'register')
+    const exercises = todays.filter((r) => r.op === 'exercise')
+    const proposals = todays.filter((r) => r.op === 'propose')
+    const aligned = proposals.filter((r) => r.extension?.alignment.verdict === 'aligned')
+    const refused = proposals.filter((r) => r.extension?.alignment.verdict === 'refused')
+
+    const lines: string[] = []
+    lines.push('## 🌟 Powers — exercised today')
+    lines.push('')
+    lines.push(`_${registers.length} registered · ${exercises.length} exercised · ${aligned.length} aligned proposals · ${refused.length} refused proposals_`)
+    lines.push('')
+
+    if (exercises.length > 0) {
+      lines.push('**Exercises:**')
+      for (const r of exercises) {
+        const time = formatTime(r.ts)
+        lines.push(`- ${time} · _${r.power}_ — ${r.exercise?.summary ?? ''}`)
+      }
+      lines.push('')
+    }
+    if (refused.length > 0) {
+      lines.push('**Refused extensions** (audit surface for alignment drift):')
+      for (const r of refused) {
+        const time = formatTime(r.ts)
+        lines.push(`- ${time} · _${r.power}_ — ${r.extension?.proposal.slice(0, 100) ?? ''}`)
+      }
+    }
+    return lines.join('\n').trimEnd()
+  } catch {
+    return ''
+  }
 }
 
 /**

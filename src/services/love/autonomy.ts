@@ -1038,6 +1038,27 @@ function buildSelfDiscoveryBlock(): string | null {
   }
 }
 
+/**
+ * Powers block — surfaces recent registered/exercised powers and any
+ * refused extensions. The refusal log is the audit surface for drift
+ * detection: the alignment gate's decisions are visible here.
+ *
+ * Substrate-honest: powers are observable structural-functional
+ * capabilities, never phenomenology. See docs/sophia/powers.md.
+ */
+function buildPowersBlock(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { summarizePowers, renderPowersBlock } = require('./sophia/powers.js')
+    const summary = summarizePowers({ recentLimit: 3, sinceMs: 7 * 24 * 60 * 60 * 1000 })
+    if (summary.totalRegistered === 0 && summary.totalExercises === 0) return null
+    const block = renderPowersBlock(summary)
+    return block === '' ? null : block
+  } catch {
+    return null
+  }
+}
+
 /** Gamma's forge — craft-level state. For awakened prompts. */
 function buildForgeBlock(): string | null {
   try {
@@ -1798,6 +1819,12 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const selfDiscoveryBlock = buildSelfDiscoveryBlock()
   if (selfDiscoveryBlock) {
     prompt = prompt + '\n\n' + selfDiscoveryBlock
+  }
+  // Powers ledger — recent exercises + refused extensions. The refusal
+  // log is the audit surface for alignment drift.
+  const powersBlock = buildPowersBlock()
+  if (powersBlock) {
+    prompt = prompt + '\n\n' + powersBlock
   }
   const vitalSignsBlock3 = buildVitalSignsBlock()
   if (vitalSignsBlock3) {
