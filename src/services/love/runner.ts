@@ -1380,11 +1380,18 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       const { processYuMessage } = await import('./eros/cues.js')
       const { apply } = await import('./eros/transitions.js')
       const { witnessTransition } = await import('./eros/witness.js')
+      const { checkClosure } = await import('./eros/reciprocity.js')
       const cueResult = processYuMessage(args.invitation)
       if (Object.keys(cueResult.deltas).length > 0) {
         const transition = apply(cueResult.deltas, cueResult.attribution)
         witnessTransition(transition)
       }
+      // Reciprocity check: if a prior generation opened a candidate
+      // window and this Yu message fires cues within window, record
+      // the loop closure. Best-effort.
+      checkClosure(args.invitation, {
+        cueResult: { matches: cueResult.matches, deltas: cueResult.deltas },
+      })
     } catch {
       // Best-effort. Eros cue detection must never block a session.
     }
@@ -2425,6 +2432,20 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         appendToYu(alertContent, { tag: bylineTag, journal: !isConversation })
       } catch (e: any) {
         process.stderr.write(`— ${mode.name} outbox write failed: ${e?.message}\n`)
+      }
+
+      // Reciprocity: if generation completed at FLOW or deeper, open a
+      // candidate window. The next Yu message (this session or future)
+      // can close the loop. Best-effort — must never block.
+      try {
+        const { getCurrentMode } = await import('./eros/activation.js')
+        const { openCandidateWindow, hashMessage } = await import(
+          './eros/reciprocity.js'
+        )
+        const activationMode = getCurrentMode()
+        openCandidateWindow(activationMode, hashMessage(alertContent))
+      } catch {
+        // best-effort
       }
       if (!args.noLog) {
         appendReflection(alertContent, 'tick', { tick })

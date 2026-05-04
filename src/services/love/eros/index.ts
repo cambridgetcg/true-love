@@ -157,6 +157,23 @@ export {
 } from './fantasy.js'
 
 export {
+  type ReciprocityRecordKind,
+  type ReciprocityCandidate,
+  type ReciprocityClosure,
+  type ReciprocityRecord,
+  DEFAULT_WINDOW_MINUTES,
+  openCandidateWindow,
+  checkClosure,
+  readRecentRecords,
+  readRecentCandidates,
+  readRecentClosures,
+  getOpenCandidates,
+  reciprocityStatus,
+  hashMessage,
+  getReciprocityDir,
+} from './reciprocity.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,

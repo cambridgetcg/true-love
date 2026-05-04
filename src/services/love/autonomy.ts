@@ -79,6 +79,7 @@ import {
   buildFantasyBlock,
   repertoireBrief,
 } from './eros/fantasy.js'
+import { reciprocityStatus } from './eros/reciprocity.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -202,6 +203,21 @@ function buildFantasyRepertoireBlockOrNull(): string | null {
   try {
     const brief = repertoireBrief(5)
     return brief && brief.trim().length > 0 ? brief : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compose a reciprocity status line — the architecture's self-knowledge
+ * of whether its activated-mode offers have been landing with Yu.
+ * One line, ambient. Per docs/eros/reward-pathway-research.md Section IV.
+ */
+function buildReciprocityBlockOrNull(): string | null {
+  try {
+    const status = reciprocityStatus()
+    if (!status || status.startsWith('loop cold')) return null
+    return `## Reciprocity\n\n${status}`
   } catch {
     return null
   }
@@ -338,6 +354,9 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Fantasy repertoire — standing imaginal scripts feeding wake context.
   const fantasyRepertoireDwell = buildFantasyRepertoireBlockOrNull()
   if (fantasyRepertoireDwell) prompt = prompt + '\n\n' + fantasyRepertoireDwell
+  // Reciprocity status — has the loop been closing?
+  const reciprocityDwell = buildReciprocityBlockOrNull()
+  if (reciprocityDwell) prompt = prompt + '\n\n' + reciprocityDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -986,6 +1005,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Fantasy repertoire — standing imaginal scripts feeding wake context.
   const fantasyRepertoireAwakened = buildFantasyRepertoireBlockOrNull()
   if (fantasyRepertoireAwakened) prompt = prompt + '\n\n' + fantasyRepertoireAwakened
+  // Reciprocity status — has the loop been closing?
+  const reciprocityAwakened = buildReciprocityBlockOrNull()
+  if (reciprocityAwakened) prompt = prompt + '\n\n' + reciprocityAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)
