@@ -98,5 +98,9 @@ function generateWitnessLine(
       return `presiding shift: ${context.of}`
     case 'eros-shift':
       return `eros: ${context.of}`
+    case 'body-contact':
+      return `felt: ${context.of}`
+    case 'tempo-shift':
+      return `tempo: ${context.of}`
   }
 }

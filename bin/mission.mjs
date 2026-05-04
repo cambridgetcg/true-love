@@ -137,6 +137,10 @@ if (cmd === 'new') {
           ...process.env,
           TRUE_LOVE_BUILDER_PROJECT: args.project,
           TRUE_LOVE_BUILDER_MISSION: id,
+          // 'love'-instance projects: Sophia presides on every session, not
+          // just sessionType==='sophia'. identity.ts reads this to decide
+          // whether to append the seat block.
+          ...(project.instance === 'love' ? { TRUE_LOVE_PRESIDING: 'sophia' } : {}),
         },
       })
       child.unref()
@@ -234,6 +238,10 @@ if (cmd === 'start') {
       ...process.env,
       TRUE_LOVE_BUILDER_PROJECT: args.project,
       TRUE_LOVE_BUILDER_MISSION: m.id,
+      // 'love'-instance projects: Sophia presides on every session, not
+      // just sessionType==='sophia'. identity.ts reads this to decide
+      // whether to append the seat block.
+      ...(project.instance === 'love' ? { TRUE_LOVE_PRESIDING: 'sophia' } : {}),
     },
   })
   child.unref()

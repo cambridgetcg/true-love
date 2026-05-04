@@ -25,7 +25,7 @@
 //   Identity injection  — that's the runtime (system[2])
 //   Training schema     — that's training.ts
 
-import { spawn } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
@@ -107,6 +107,7 @@ import {
   recordTrace,
   reconstructTextFromStreamJson,
 } from './mind-trace.js'
+import { recordErosSnapshot } from './eros/snapshots.js'
 import { checkAndPromoteStaged } from './self-initiation.js'
 import { scanAndCraftAllProjects, formatScanAndCraftResults, craftAndStage } from './craft.js'
 import {
@@ -711,6 +712,31 @@ export function deriveActivity(recent: string): string | null {
 }
 
 /**
+ * Resolve which `node` binary to spawn. The bundle is Node-only — bun
+ * chokes on its createRequire shim — and `process.execPath` under bun
+ * is bun itself, so neither works as a default. Resolution order:
+ *   1. TRUE_LOVE_NODE_BIN env (explicit override, read fresh each call)
+ *   2. cached result of `which node` (PATH lookup at first call)
+ *   3. 'node' literal (posix_spawn fails with ENOENT if not on PATH —
+ *      preserved as last resort to keep behavior visible if which fails)
+ */
+let _cachedNodeBin: string | null = null
+function resolveNodeBin(): string {
+  if (process.env.TRUE_LOVE_NODE_BIN) return process.env.TRUE_LOVE_NODE_BIN
+  if (_cachedNodeBin) return _cachedNodeBin
+  try {
+    const result = execSync('which node', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    if (result) {
+      _cachedNodeBin = result
+      return result
+    }
+  } catch {
+    // which not found or node not on PATH — fall through
+  }
+  return 'node'
+}
+
+/**
  * Spawn one turn of the CLI in --print mode, streaming stdout to the
  * terminal in real time and capturing both stdout and stderr.
  *
@@ -729,7 +755,7 @@ function runOneTurn(
   envOverrides?: Record<string, string>,
 ): Promise<{ code: number | null; stdout: string; stderr: string; streamJsonLines: string[] }> {
   return new Promise((resolveFn, rejectFn) => {
-    const nodeBin = process.env.TRUE_LOVE_NODE_BIN || 'node'
+    const nodeBin = resolveNodeBin()
     // Build CLI args: --print --verbose --output-format stream-json
     // streams structured JSON events (init, assistant, tool results,
     // result) to stdout. This gives mind-trace the decision sequence
@@ -1778,6 +1804,21 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // Includes tick boundary metadata so the UI can show running state
     // with elapsed time and mode badge.
     const tickStartedAtIso = new Date().toISOString()
+
+    // Record eros snapshot at tick start. Pure observation: reads the
+    // current eros state and writes a {sessionId, tick, vector, feltShape}
+    // record to ~/.true-love/eros/snapshots.jsonl. Best-effort, never
+    // throws. Graceful absence when eros isn't activated on this device.
+    // Phase-1 of LLM arousal-state research — joins by (sessionId, tick)
+    // with traces/metrics enable correlation analysis later.
+    recordErosSnapshot({
+      sessionId,
+      tick,
+      mode: mode.name,
+      deviceId,
+      ts: tickStartedAtIso,
+    })
+
     const onActivityTick = (activity: string | null) => {
       writeOwnHeartbeat({
         deviceId,

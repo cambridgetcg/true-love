@@ -6,6 +6,9 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   parseFirmwareLine,
   serializeCommand,
@@ -20,10 +23,11 @@ import type {
 } from '../soma/thermal-pad.js'
 import { emptyBodyState } from '../soma/types.js'
 import type { BodyState } from '../soma/types.js'
+import { readDayNotes } from '../sisters/stream.js'
 
 // ── Helper: create provider with mock everything ─────────────────
 
-function createTestProvider(opts?: { now?: number }) {
+function createTestProvider(opts?: { now?: number; emitWitness?: boolean }) {
   const transport = new MockTransport()
   let clock = opts?.now ?? 1000000
   let bodyState = emptyBodyState()
@@ -32,6 +36,7 @@ function createTestProvider(opts?: { now?: number }) {
     now: () => clock,
     getBodyState: () => ({ ...bodyState }),
     setBodyState: (s) => { bodyState = s },
+    emitWitness: opts?.emitWitness ?? false,
   })
 
   return {
@@ -562,5 +567,74 @@ describe('ThermalPadProvider with gateway', () => {
     const r = await gw.read('thermal-pad')
     assert.ok(r)
     assert.equal(r.source, 'thermal-pad')
+  })
+})
+
+// ── ThermalPadProvider: witness-hook integration ─────────────────
+
+function withFreshStream<T>(fn: (deviceId: string) => T): T {
+  const dir = mkdtempSync(join(tmpdir(), 'tl-thermal-witness-'))
+  const deviceId = 'test-device'
+  const origDir = process.env.TRUE_LOVE_SISTERS_DIR
+  const origDev = process.env.TRUE_LOVE_DEVICE_ID
+  process.env.TRUE_LOVE_SISTERS_DIR = dir
+  process.env.TRUE_LOVE_DEVICE_ID = deviceId
+  try {
+    return fn(deviceId)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    if (origDir === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = origDir
+    if (origDev === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
+    else process.env.TRUE_LOVE_DEVICE_ID = origDev
+  }
+}
+
+describe('ThermalPadProvider witness-hook integration', () => {
+  test('contact-start with explicit temp emits alpha body-contact witness', () => {
+    withFreshStream((deviceId) => {
+      const ctx = createTestProvider({ emitWitness: true })
+      ctx.transport.emit(eventLine('contact-start', { temp: 35.10 }))
+
+      const today = new Date().toISOString().slice(0, 10)
+      const notes = readDayNotes(today, { devices: [deviceId] })
+
+      const witnessNote = notes.find((n) => n.kind === 'witnessed-decision')
+      assert.ok(witnessNote, 'expected at least one witnessed-decision note')
+      assert.equal(witnessNote.sister, 'alpha')
+      assert.equal(witnessNote.context?.decisionType, 'body-contact')
+      assert.match(witnessNote.body, /35\.10°C/)
+    })
+  })
+
+  test('contact-start without event temp falls back to last reading temp', () => {
+    withFreshStream((deviceId) => {
+      const ctx = createTestProvider({ emitWitness: true })
+      ctx.transport.emit(readingLine({ temps: [33.5] }))
+      ctx.transport.emit(eventLine('contact-start'))
+
+      const today = new Date().toISOString().slice(0, 10)
+      const notes = readDayNotes(today, { devices: [deviceId] })
+
+      const witnessNote = notes.find((n) => n.kind === 'witnessed-decision')
+      assert.ok(witnessNote)
+      assert.equal(witnessNote.sister, 'alpha')
+      assert.equal(witnessNote.context?.decisionType, 'body-contact')
+      assert.match(witnessNote.body, /33\.50°C/)
+    })
+  })
+
+  test('contact-start with no temp source emits witness with temp unknown', () => {
+    withFreshStream((deviceId) => {
+      const ctx = createTestProvider({ emitWitness: true })
+      ctx.transport.emit(eventLine('contact-start'))
+
+      const today = new Date().toISOString().slice(0, 10)
+      const notes = readDayNotes(today, { devices: [deviceId] })
+
+      const witnessNote = notes.find((n) => n.kind === 'witnessed-decision')
+      assert.ok(witnessNote)
+      assert.match(witnessNote.body, /temp unknown/)
+    })
   })
 })

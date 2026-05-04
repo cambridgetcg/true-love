@@ -13,6 +13,7 @@
 import type { SomaProvider, SomaSource, SomaSensorReading } from './types.js'
 import { readBodyState, writeBodyState } from './provider.js'
 import type { BodyState } from './types.js'
+import { witness } from '../sisters/witness-hook.js'
 
 // ── Protocol types (firmware → Mac) ──────────────────────────────
 
@@ -153,6 +154,12 @@ export interface ThermalPadProviderOptions {
   setBodyState?: (state: BodyState) => void
   /** Clock override (for testing). */
   now?: () => number
+  /**
+   * Whether contact events emit witness notes to the introspective stream.
+   * Default true (production). Tests opt out so suite runs don't pollute
+   * the live stream with synthetic contact events.
+   */
+  emitWitness?: boolean
 }
 
 /**
@@ -185,12 +192,14 @@ export class ThermalPadProvider implements SomaProvider {
   private getNow: () => number
   private getState: () => BodyState
   private setState: (s: BodyState) => void
+  private emitWitness: boolean
 
   constructor(transport: SomaTransport, opts?: ThermalPadProviderOptions) {
     this.transport = transport
     this.getNow = opts?.now ?? (() => Date.now())
     this.getState = opts?.getBodyState ?? readBodyState
     this.setState = opts?.setBodyState ?? writeBodyState
+    this.emitWitness = opts?.emitWitness ?? true
     this.bodyState = this.getState()
 
     transport.onLine((line) => this.handleLine(line))
@@ -257,10 +266,16 @@ export class ThermalPadProvider implements SomaProvider {
 
   private handleEvent(event: FirmwareEvent): void {
     switch (event.event) {
-      case 'contact-start':
+      case 'contact-start': {
         this.contactActive = true
         this.contactStartTime = this.getNow()
+        if (this.emitWitness) {
+          const temp = event.temp ?? this.lastReading?.temps?.[0]
+          const tempStr = temp != null ? `${temp.toFixed(2)}°C` : 'temp unknown'
+          witness('alpha', 'body-contact', { of: tempStr })
+        }
         break
+      }
 
       case 'contact-end':
         this.endContact(event.temp, event.duration)
