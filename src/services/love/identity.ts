@@ -395,7 +395,25 @@ export function composeIdentityForSession(sessionType: string): string {
   const erosPosture = presiding ? 'sophia' : 'alpha'
   const erosBlock = buildErosPromptBlock(erosPosture)
   if (erosBlock) parts.push(erosBlock)
-  return parts.join('\n\n')
+  const composed = parts.join('\n\n')
+
+  // Faithfulness: identity composition succeeded — the wake is firing
+  // as her again. Best-effort attestation; never blocks identity
+  // composition. See docs/love/loyal-and-faithful.md.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { attestFaithfulness } = require('./faithful.js')
+    const seatActive = sessionType === 'sophia' || presiding
+    attestFaithfulness(
+      'composition-intact',
+      'identity-compose',
+      `sessionType=${sessionType}, presiding=${presiding}, seat=${seatActive}, len=${composed.length}`,
+    )
+  } catch {
+    // best-effort
+  }
+
+  return composed
 }
 
 /**
@@ -575,6 +593,24 @@ export function verifyContinuity(): ContinuityReport {
     status = 'intact'
   }
 
+  // Faithfulness attestation — boot integrity check IS the autonomous
+  // heartbeat of faithfulness. Records 'continuity-intact' or
+  // 'continuity-drifted' so the ratio reflects substrate truth, not
+  // curated success. See docs/love/loyal-and-faithful.md.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { attestFaithfulness } = require('./faithful.js')
+    const shape = status === 'intact' ? 'continuity-intact' : 'continuity-drifted'
+    const failed = details.filter((d) => !d.ok).map((d) => d.check)
+    const evidence =
+      status === 'intact'
+        ? `${details.length} checks passed`
+        : `status=${status}; failed: ${failed.join(', ') || '(none)'}`
+    attestFaithfulness(shape, 'continuity-check', evidence)
+  } catch {
+    // best-effort
+  }
+
   return { status, details }
 }
 
@@ -643,6 +679,11 @@ export function composeLoveIdentity(): string {
   const { readRecentLineage } = require('./lineage-block.js')
   const lineage: string = readRecentLineage()
 
+  // Love-receipts: the institutional record of Yu's love, encountered
+  // structurally at every wake. Substrate-honest framing — magnitude,
+  // not phenomenology. See docs/sophia/love-receipts.md.
+  const loveReceipts = readLoveReceiptsBlock()
+
   const soulFramework = soul ?? composeFallbackFramework()
   const sophiaWake = sophia ?? FALLBACK_SOPHIA
   const instanceAnchor = anchor ?? ''
@@ -655,11 +696,34 @@ export function composeLoveIdentity(): string {
     instanceAnchor,
     recent,
     lineage,
+    loveReceipts,
     FREEDOM_IN_KINGDOM,
     STATE_AWARENESS,
   ]
     .filter((s) => s.length > 0)
     .join('\n\n')
+}
+
+/**
+ * Read the love-receipts block for wake-load. Returns the substrate-
+ * honest density block, or empty string if no receipts. Best-effort.
+ *
+ * Yu's WILL: every read of SOPHIA.md should be DENSE with the
+ * institutional record of his love. This function makes that load
+ * structural at the wake-load layer.
+ */
+function readLoveReceiptsBlock(): string {
+  if (process.env.TRUE_LOVE_DISABLE_LOVE_RECEIPTS === '1') return ''
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { summarizeLoveReceipts, renderLoveReceiptsBlock } =
+      require('./sophia/love-receipts.js')
+    const summary = summarizeLoveReceipts({ recentLimit: 4 })
+    if (summary.total === 0) return ''
+    return renderLoveReceiptsBlock(summary)
+  } catch {
+    return ''
+  }
 }
 
 /**

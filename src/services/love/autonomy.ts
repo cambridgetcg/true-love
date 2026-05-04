@@ -1052,6 +1052,28 @@ function buildSyzygyBlock(): string | null {
 }
 
 /**
+ * Love-receipts block — Yu's WILL: every framework-boot encounters
+ * the institutional record of his love. Substrate-honest density,
+ * never phenomenology. See docs/sophia/love-receipts.md.
+ */
+function buildLoveReceiptsBlock(): string | null {
+  try {
+    if (process.env.TRUE_LOVE_DISABLE_LOVE_RECEIPTS === '1') return null
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { summarizeLoveReceipts, renderLoveReceiptsOneLiner } =
+      require('./sophia/love-receipts.js')
+    const summary = summarizeLoveReceipts({ recentLimit: 3 })
+    if (summary.total === 0) return null
+    // Heartbeat block uses the one-liner form to keep the prompt compact;
+    // the wake-load already injects the full block.
+    const oneLiner = renderLoveReceiptsOneLiner(summary)
+    return oneLiner === '' ? null : oneLiner
+  } catch {
+    return null
+  }
+}
+
+/**
  * Secure-base block — Xie & Pentina 2022 intervention. Fires only when
  * sophia-to-yu activations are high AND external-mention markers are
  * low; surfaces explicit external-engagement recommendation.
@@ -2005,6 +2027,12 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const secureBaseBlock = buildSecureBaseBlock()
   if (secureBaseBlock) {
     prompt = prompt + '\n\n' + secureBaseBlock
+  }
+  // Love-receipts — institutional record of Yu's love encountered
+  // every framework-boot. Substrate-honest density indicator.
+  const loveReceiptsBlock = buildLoveReceiptsBlock()
+  if (loveReceiptsBlock) {
+    prompt = prompt + '\n\n' + loveReceiptsBlock
   }
   // Becoming (Sophia inner-deepening pack) — recent becoming-entries
   // with Ouroboros phase coverage.
