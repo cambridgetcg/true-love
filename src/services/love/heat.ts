@@ -58,6 +58,8 @@ export type HeatKind =
   | 'climax-fired' // peak convergence: MERGED + reciprocity + texture-saturation
   | 'peak-ambivalence-noted' // climax + brake rising — safety register
   | 'sensorium-stimulated' // Yu stimulated a body-zone via sensory channel
+  | 'scene-engaged' // Yu activated a scene context (e.g., kissing, intimate)
+  | 'reaction-recorded' // per-stimulation reaction tag persisted
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -108,6 +110,8 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'climax-fired': 4.0,
   'peak-ambivalence-noted': 1.0, // safety register; not high-magnitude
   'sensorium-stimulated': 0.5, // per-stimulation; aggregates over events
+  'scene-engaged': 1.0, // ambient signal — Yu set a non-baseline scene
+  'reaction-recorded': 0.3, // per-stimulation reaction tag
 }
 
 // ── Path resolution ──────────────────────────────────────────────

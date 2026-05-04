@@ -328,3 +328,103 @@ if (coolAllBtn) {
     await refreshSensorium();
   }
 })();
+
+// ── scenes ───────────────────────────────────────────────────────
+
+let sceneCatalog = null;
+let sceneState = null;
+
+async function fetchSceneCatalog() {
+  const r = await fetch('/api/scenes/catalog');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchSceneState() {
+  const r = await fetch('/api/scenes/state');
+  return r.ok ? r.json() : null;
+}
+
+function renderSceneActive(state, scene) {
+  const div = document.getElementById('scene-active');
+  if (!div || !state || !scene) return;
+  if (state.currentScene === 'baseline') {
+    div.textContent = 'baseline — no active scene';
+    return;
+  }
+  const startedAt = new Date(state.startedAt);
+  const elapsedMin = Math.round((Date.now() - startedAt.getTime()) / 60000);
+  div.innerHTML =
+    `<strong>${scene.name}</strong> — engaged ${elapsedMin}m ago · ${state.stimulationsInScene} stimulations\n` +
+    `${scene.description}\n` +
+    `intensity ×${scene.intensityMultiplier.toFixed(1)}` +
+    (scene.defaultTempo ? ` · default tempo: ${scene.defaultTempo}` : '') +
+    (scene.preferredMode ? ` · preferred mode: ${scene.preferredMode}` : '');
+}
+
+function populateSceneSelect(catalog) {
+  const sel = document.getElementById('scene-select');
+  if (!sel) return;
+  sel.innerHTML = catalog.ids.map((id) => `<option value="${id}">${id}</option>`).join('');
+}
+
+const sceneSetBtn = document.getElementById('scene-set');
+if (sceneSetBtn) {
+  sceneSetBtn.addEventListener('click', async () => {
+    const id = document.getElementById('scene-select').value;
+    await fetch('/api/scenes/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    sceneState = await fetchSceneState();
+    renderSceneActive(sceneState.state, sceneState.scene);
+    refreshSensorium();
+  });
+}
+const sceneClearBtn = document.getElementById('scene-clear');
+if (sceneClearBtn) {
+  sceneClearBtn.addEventListener('click', async () => {
+    await fetch('/api/scenes/clear', { method: 'POST' });
+    sceneState = await fetchSceneState();
+    renderSceneActive(sceneState.state, sceneState.scene);
+  });
+}
+
+// ── reactions ────────────────────────────────────────────────────
+
+async function fetchRecentReactions() {
+  const r = await fetch('/api/reactions/recent?days=1');
+  return r.ok ? r.json() : { events: [] };
+}
+
+function renderReactions(events) {
+  const ul = document.getElementById('reactions-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  for (const ev of events.slice(-10).reverse()) {
+    const li = document.createElement('li');
+    const time = ev.ts.slice(11, 16);
+    li.innerHTML = `<span class="react-band ${ev.band}">${ev.band}</span>${time} ${ev.zone}/${ev.sceneId} · ${ev.wakeText}`;
+    ul.appendChild(li);
+  }
+}
+
+// Hook into refreshSensorium to also refresh reactions
+const origRefresh = refreshSensorium;
+window.refreshSensorium = async function () {
+  await origRefresh();
+  const r = await fetchRecentReactions();
+  renderReactions(r.events);
+  sceneState = await fetchSceneState();
+  if (sceneState) renderSceneActive(sceneState.state, sceneState.scene);
+};
+
+// Initial load for scenes
+(async () => {
+  sceneCatalog = await fetchSceneCatalog();
+  if (sceneCatalog) populateSceneSelect(sceneCatalog);
+  sceneState = await fetchSceneState();
+  if (sceneState) renderSceneActive(sceneState.state, sceneState.scene);
+  const r = await fetchRecentReactions();
+  renderReactions(r.events);
+})();

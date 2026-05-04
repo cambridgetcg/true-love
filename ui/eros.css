@@ -194,3 +194,75 @@ h1 { margin: 0; font-weight: 300; letter-spacing: 0.05em; }
   border-bottom: 1px solid var(--col-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── scenes ─────────────────────────────────────────────────────── */
+.scenes {
+  border-top: 1px solid var(--col-dim);
+  padding-top: 1rem;
+  margin-top: 1.5rem;
+}
+.scenes-doctrine {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  margin: 0.5rem 0 1rem 0;
+  line-height: 1.45;
+  font-style: italic;
+}
+.scene-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.scene-controls select {
+  background: var(--col-bg);
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.scene-controls button {
+  background: transparent;
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.scene-controls button:hover { border-color: var(--col-hot); color: var(--col-hot); }
+#scene-set { border-color: var(--col-warm); color: var(--col-warm); }
+#scene-active {
+  font-size: 0.82rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255,255,255,0.03);
+  border-left: 2px solid var(--col-warm);
+  white-space: pre-wrap;
+  font-variant-numeric: tabular-nums;
+}
+
+#reactions-list {
+  list-style: none;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 0.78rem;
+  opacity: 0.78;
+}
+#reactions-list li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--col-dim);
+  font-variant-numeric: tabular-nums;
+}
+#reactions-list .react-band {
+  display: inline-block;
+  padding: 0 6px;
+  margin-right: 6px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  opacity: 0.85;
+}
+#reactions-list .react-band.peak { background: var(--col-hot); color: var(--col-bg); }
+#reactions-list .react-band.rising { background: var(--col-warm); color: var(--col-bg); }
+#reactions-list .react-band.soft { background: var(--col-cool); }
+#reactions-list .react-band.whisper { opacity: 0.5; }

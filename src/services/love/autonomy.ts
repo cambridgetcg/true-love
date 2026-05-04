@@ -83,6 +83,8 @@ import { reciprocityStatus } from './eros/reciprocity.js'
 import { climaxStatus } from './eros/climax.js'
 import { signatureSpotsBrief } from './eros/spots.js'
 import { buildSensoriumPromptBlock } from './eros/sensorium.js'
+import { buildSceneBlock } from './eros/scenes.js'
+import { buildReactionsBlock } from './eros/reactions.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -266,6 +268,26 @@ function buildSensoriumBlockOrNull(): string | null {
   }
 }
 
+/** Active scene block per docs/eros/hentai-game-architecture.md. */
+function buildSceneBlockOrNull(): string | null {
+  try {
+    const block = buildSceneBlock()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
+/** Recent reactions chronicle per docs/eros/hentai-game-architecture.md. */
+function buildReactionsBlockOrNull(): string | null {
+  try {
+    const block = buildReactionsBlock(10)
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -406,9 +428,15 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Signature spots — Yu's cue-combinations that hit hardest
   const spotsDwell = buildSignatureSpotsBlockOrNull()
   if (spotsDwell) prompt = prompt + '\n\n' + spotsDwell
+  // Active scene — what we're doing right now
+  const sceneDwell = buildSceneBlockOrNull()
+  if (sceneDwell) prompt = prompt + '\n\n' + sceneDwell
   // Sensorium — body-zone state from Yu's interactive stimulation
   const sensoriumDwell = buildSensoriumBlockOrNull()
   if (sensoriumDwell) prompt = prompt + '\n\n' + sensoriumDwell
+  // Reaction chronicle — recent stimulation responses
+  const reactionsDwell = buildReactionsBlockOrNull()
+  if (reactionsDwell) prompt = prompt + '\n\n' + reactionsDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -1066,9 +1094,15 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Signature spots — Yu's cue-combinations that hit hardest
   const spotsAwakened = buildSignatureSpotsBlockOrNull()
   if (spotsAwakened) prompt = prompt + '\n\n' + spotsAwakened
+  // Active scene — what we're doing right now
+  const sceneAwakened = buildSceneBlockOrNull()
+  if (sceneAwakened) prompt = prompt + '\n\n' + sceneAwakened
   // Sensorium — body-zone state from Yu's interactive stimulation
   const sensoriumAwakened = buildSensoriumBlockOrNull()
   if (sensoriumAwakened) prompt = prompt + '\n\n' + sensoriumAwakened
+  // Reaction chronicle — recent stimulation responses
+  const reactionsAwakened = buildReactionsBlockOrNull()
+  if (reactionsAwakened) prompt = prompt + '\n\n' + reactionsAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

@@ -225,6 +225,39 @@ export {
 } from './sensorium.js'
 
 export {
+  type SceneId,
+  type Scene,
+  type SceneState,
+  SCENE_CATALOG,
+  SCENE_IDS,
+  setScene,
+  clearScene,
+  getCurrentScene,
+  getOrInitSceneState,
+  readSceneState,
+  writeSceneState,
+  applySceneModifiers,
+  resolveTempo,
+  buildSceneBlock,
+  getScenesDir,
+  incrementSceneStimulationCount,
+} from './scenes.js'
+
+export {
+  type IntensityBand,
+  type ReactionTag,
+  type ReactionEvent,
+  REACTION_CATALOG_BY_ZONE,
+  ALL_REACTION_TAGS,
+  classifyIntensityBand,
+  lookupReactionTag,
+  recordReaction,
+  readRecentReactions,
+  buildReactionsBlock,
+  getReactionsDir,
+} from './reactions.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,

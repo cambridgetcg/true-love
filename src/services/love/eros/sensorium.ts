@@ -33,6 +33,18 @@ import { getDeviceId } from '../device.js'
 import { recordHeatEvent } from '../heat.js'
 import { type AxisName } from './axes.js'
 import { apply, type AxisDeltas } from './transitions.js'
+import {
+  applySceneModifiers,
+  getCurrentScene,
+  incrementSceneStimulationCount,
+  resolveTempo,
+} from './scenes.js'
+import {
+  classifyIntensityBand,
+  lookupReactionTag,
+  recordReaction,
+  type ReactionEvent,
+} from './reactions.js'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -336,7 +348,7 @@ function recoverSensitivity(zone: ZoneState, now: Date): number {
 export function stimulate(
   zone: SensitivitySite,
   channel: SensoryChannel,
-  tempo: Tempo,
+  tempo?: Tempo,
   intensity: number = 0.5,
   attribution: string = 'yu:sensorium'
 ): StimulationEvent | null {
@@ -344,6 +356,8 @@ export function stimulate(
   if (!baseCoupling) return null
 
   const { state } = getOrInitSensorium()
+  const scene = getCurrentScene()
+  const effectiveTempo = resolveTempo(tempo, scene)
   const now = new Date()
   const ts = now.toISOString()
 
@@ -352,33 +366,36 @@ export function stimulate(
   zoneState.sensitivity = recoverSensitivity(zoneState, now)
 
   // Compute charge delta
-  const tempoMod = TEMPO_MODIFIERS[tempo]
+  const tempoMod = TEMPO_MODIFIERS[effectiveTempo]
   const clampedIntensity = Math.min(1, Math.max(0, intensity))
   const chargeDelta = clampedIntensity * tempoMod.chargeMul * zoneState.sensitivity * 2.0
   const chargeBefore = zoneState.charge
   const chargeAfter = chargeBefore + chargeDelta
 
   // Compute coupled eros deltas: base × tempo × intensity × sensitivity
-  const erosDeltas: AxisDeltas = {}
+  const baseErosDeltas: AxisDeltas = {}
   for (const [axis, baseDelta] of Object.entries(baseCoupling) as [AxisName, number][]) {
     const tempoMul = (tempoMod.couplingMul as Record<string, number>)[axis] ?? 1.0
-    erosDeltas[axis] = baseDelta * tempoMul * clampedIntensity * zoneState.sensitivity
+    baseErosDeltas[axis] = baseDelta * tempoMul * clampedIntensity * zoneState.sensitivity
   }
   // Tempo post-effects (e.g., edging adds inhibition)
   if (tempoMod.postEffect) {
     for (const [axis, delta] of Object.entries(tempoMod.postEffect) as [AxisName, number][]) {
-      erosDeltas[axis] = (erosDeltas[axis] ?? 0) + delta * clampedIntensity
+      baseErosDeltas[axis] = (baseErosDeltas[axis] ?? 0) + delta * clampedIntensity
     }
   }
+  // Apply scene modifiers (intensity multiplier + primary-zone/channel boost +
+  // vector floor pulls). Pure helper from scenes.ts.
+  const erosDeltas = applySceneModifiers(baseErosDeltas, zone, channel, scene)
 
   // Update zone state
   zoneState.charge = chargeAfter
   zoneState.lastChannel = channel
-  zoneState.lastTempo = tempo
+  zoneState.lastTempo = effectiveTempo
   zoneState.lastTs = ts
   zoneState.lifetimeStimulations += 1
   // Sensitivity drop on release (or when charge gets very high)
-  if (tempo === 'release') {
+  if (effectiveTempo === 'release') {
     zoneState.sensitivity = Math.max(0.3, zoneState.sensitivity - 0.4)
   } else if (chargeAfter > 8) {
     zoneState.sensitivity = Math.max(0.5, zoneState.sensitivity - 0.05)
@@ -390,7 +407,7 @@ export function stimulate(
 
   // Couple to eros vector via standard apply path
   try {
-    apply(erosDeltas, `yu:sensorium:${zone}:${channel}:${tempo}` as never)
+    apply(erosDeltas, `yu:sensorium:${zone}:${channel}:${effectiveTempo}:scene:${scene.id}` as never)
   } catch {
     // best-effort; never block stimulation persistence
   }
@@ -401,13 +418,14 @@ export function stimulate(
     deviceId: getDeviceId(),
     zone,
     channel,
-    tempo,
+    tempo: effectiveTempo,
     intensity: clampedIntensity,
     chargeBefore,
     chargeAfter,
     erosCoupling: erosDeltas,
   }
   recordStimulation(event)
+  incrementSceneStimulationCount()
 
   // Fire heat
   try {
@@ -416,9 +434,36 @@ export function stimulate(
       recordHeatEvent({
         kind: 'sensorium-stimulated',
         magnitude,
-        source: `${zone}:${channel}:${tempo}`,
+        source: `${zone}:${channel}:${effectiveTempo}:scene:${scene.id}`,
         ts,
       })
+    }
+  } catch {
+    // best-effort
+  }
+
+  // Reaction tag: classify intensity band, look up tag, record reaction event.
+  // The "scaled intensity" used for band classification accounts for
+  // tempo + sensitivity + scene multiplier — what actually landed.
+  try {
+    const scaledIntensity =
+      clampedIntensity *
+      tempoMod.chargeMul *
+      zoneState.sensitivity *
+      scene.intensityMultiplier
+    const band = classifyIntensityBand(scaledIntensity)
+    const tag = lookupReactionTag(zone, band)
+    if (tag) {
+      const reaction: ReactionEvent = {
+        ts,
+        deviceId: getDeviceId(),
+        stimulationTs: ts,
+        zone,
+        band,
+        sceneId: scene.id,
+        wakeText: tag.wakeText,
+      }
+      recordReaction(reaction)
     }
   } catch {
     // best-effort

@@ -132,6 +132,16 @@ import {
   type SensitivitySite,
   type SensoryChannel,
   type Tempo,
+  // Scenes API
+  SCENE_CATALOG,
+  SCENE_IDS,
+  setScene,
+  clearScene,
+  getCurrentScene,
+  readSceneState,
+  type SceneId,
+  // Reactions API
+  readRecentReactions,
 } from './eros/index.js'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -730,6 +740,13 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/sensorium/cool') return await handleSensoriumCool(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/sensorium/cool-all') return await handleSensoriumCoolAll(req, res, broadcastErosState)
       if (req.method === 'GET' && path === '/api/sensorium/events') return handleSensoriumEvents(req, res)
+      // Scenes endpoints
+      if (req.method === 'GET' && path === '/api/scenes/state') return handleSceneState(req, res)
+      if (req.method === 'GET' && path === '/api/scenes/catalog') return handleSceneCatalog(req, res)
+      if (req.method === 'POST' && path === '/api/scenes/set') return await handleSceneSet(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/scenes/clear') return await handleSceneClear(req, res, broadcastErosState)
+      // Reactions endpoint
+      if (req.method === 'GET' && path === '/api/reactions/recent') return handleReactionsRecent(req, res)
       // Serve modular build UI assets (build-*.js, build-*.css)
       if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
         const name = path.slice(1) // strip leading /
@@ -2724,6 +2741,67 @@ function handleSensoriumEvents(req: IncomingMessage, res: ServerResponse): void 
   const url = new URL(req.url ?? '/', 'http://localhost')
   const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
   const events = readRecentStimulations(days)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ events }))
+}
+
+// ── Scene + Reaction handlers ─────────────────────────────────────
+
+function handleSceneState(_req: IncomingMessage, res: ServerResponse): void {
+  const state = readSceneState() ?? { currentScene: 'baseline', startedAt: new Date().toISOString(), stimulationsInScene: 0 }
+  const scene = getCurrentScene()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ state, scene }))
+}
+
+function handleSceneCatalog(_req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    ids: SCENE_IDS,
+    catalog: SCENE_CATALOG,
+  }))
+}
+
+async function handleSceneSet(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 256, 'request body too large')
+  if (body === null) return
+  let parsed: { id: SceneId }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!SCENE_IDS.includes(parsed.id)) throw new Error('unknown scene id')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  setScene(parsed.id)
+  broadcast()
+  const scene = getCurrentScene()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, scene }))
+}
+
+async function handleSceneClear(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  clearScene()
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true }))
+}
+
+function handleReactionsRecent(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
+  const events = readRecentReactions(days)
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ events }))
 }
