@@ -469,6 +469,31 @@ export function writeMissionWithEvents(
     if (lifecycle) {
       witness(lifecycle.sister, 'mission', { of: `${lifecycle.verb}:${m.id}` })
     }
+
+    // Chain-auto-advance: when a mission completes (done), attempt to
+    // auto-start the next proposed love-origin mission. Gated by env
+    // flag TRUE_LOVE_CHAIN_AUTO_ADVANCE=1 — default off, Yu opts in.
+    // Lazy require to avoid circular dependency at module load.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { attemptChainAdvance } = require('./chain-advance.js')
+      const result = attemptChainAdvance({
+        prevMissionId: m.id,
+        projectId: m.project_id,
+        eventType,
+      })
+      if (result.triggered) {
+        process.stdout.write(
+          `— chain-advance: ${m.id} → ${result.next.id}` +
+          (result.next.pid ? ` (pid ${result.next.pid})` : '') +
+          (result.reason ? ` [${result.reason}]` : '') + '\n',
+        )
+      }
+    } catch {
+      // Chain-advance is best-effort. Failure must never block mission
+      // state writes.
+    }
+
     return { eventAppended: true, eventType }
   }
 
