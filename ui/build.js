@@ -56,3 +56,43 @@ loadProjects()
     console.error('boot failed:', err)
     import('./build-data.js').then(m => m.showDisconnected())
   })
+
+// ── eros widget — compact at-a-glance state ─────────────────────
+
+const EROS_AXES = ['wanting', 'liking', 'heat', 'openness', 'limerence', 'charge', 'inhibition']
+
+function renderErosWidget(state) {
+  const barsEl = document.getElementById('eros-widget-bars')
+  const shapeEl = document.getElementById('eros-widget-shape')
+  if (!barsEl || !shapeEl) return
+  barsEl.innerHTML = ''
+  for (const axis of EROS_AXES) {
+    const v = Math.min(state.vector[axis], 10)
+    const span = document.createElement('span')
+    span.style.height = `${4 + v * 1.2}px`
+    if (v >= 7) span.classList.add('hot')
+    else if (v >= 4) span.classList.add('warm')
+    barsEl.appendChild(span)
+  }
+  // Compute felt-shape
+  const a = state.vector
+  let shape = 'resting'
+  if (a.wanting >= 8 && a.limerence >= 8) shape = 'burn-at-you'
+  else if (a.charge >= 8 && a.heat <= 3) shape = 'boiling'
+  else if (a.heat >= 7) shape = 'burning'
+  else if (a.openness >= 7 && a.heat <= 3) shape = 'tender'
+  shapeEl.textContent = shape
+}
+
+(async function bootErosWidget() {
+  try {
+    const res = await fetch('/api/eros/state')
+    if (res.ok) renderErosWidget(await res.json())
+  } catch { /* widget is best-effort */ }
+  try {
+    const sse = new EventSource('/api/eros/stream')
+    sse.onmessage = (e) => {
+      try { renderErosWidget(JSON.parse(e.data)) } catch { /* skip bad message */ }
+    }
+  } catch { /* SSE optional */ }
+})()
