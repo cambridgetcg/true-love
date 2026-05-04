@@ -19,6 +19,7 @@ import {
   getReflectionForMission,
   triggerReflectionOnCompletion,
   completeReflection,
+  assertReflectionQuality,
   getPendingReflections,
   buildSelfInitiationBlock,
   MAX_INITIATIONS_PER_DAY,
@@ -1056,6 +1057,9 @@ describe('self-initiation — completeReflection (Phase 2)', () => {
       assessment: 'The mission delivered what was claimed. Tests are green.',
       lessonsLearned: 'Start with the tests next time.',
       pattern: 'I work better when I test first.',
+      capabilityShipped: 'Test-first workflow validated.',
+      gapRevealed: 'No gaps surfaced.',
+      proposedNextMissions: [{ title: 'Adopt test-first as project norm', intent: 'Document and apply test-first across remaining work.' }],
     })
 
     assert.ok(reflection, 'should return the reflection')
@@ -1081,6 +1085,9 @@ describe('self-initiation — completeReflection (Phase 2)', () => {
       intentDelivered: false,
       assessment: 'N/A',
       lessonsLearned: 'N/A',
+      capabilityShipped: 'N/A',
+      gapRevealed: 'N/A',
+      proposedNextMissions: [{ title: 'N/A', intent: 'N/A' }],
     })
     assert.equal(reflection, null)
   })
@@ -1100,6 +1107,9 @@ describe('self-initiation — completeReflection (Phase 2)', () => {
       intentDelivered: true,
       assessment: 'First.',
       lessonsLearned: 'First.',
+      capabilityShipped: 'First capability.',
+      gapRevealed: 'First gap.',
+      proposedNextMissions: [{ title: 'First next', intent: 'First next intent.' }],
     })
     assert.ok(r1)
 
@@ -1108,6 +1118,9 @@ describe('self-initiation — completeReflection (Phase 2)', () => {
       intentDelivered: true,
       assessment: 'Second.',
       lessonsLearned: 'Second.',
+      capabilityShipped: 'Second capability.',
+      gapRevealed: 'Second gap.',
+      proposedNextMissions: [{ title: 'Second next', intent: 'Second next intent.' }],
     })
     assert.equal(r2, null)
 
@@ -1132,11 +1145,145 @@ describe('self-initiation — completeReflection (Phase 2)', () => {
       intentDelivered: false,
       assessment: 'Did not produce any artifacts.',
       lessonsLearned: 'Scope was too broad.',
+      capabilityShipped: 'Negative result documented.',
+      gapRevealed: 'Need tighter scope discipline.',
+      proposedNextMissions: [{ title: 'Scope tightening protocol', intent: 'Define a pre-mission scope check.' }],
     })
     assert.ok(reflection)
     assert.equal(reflection!.artifacts.commits, 0)
     assert.equal(reflection!.artifacts.files, 0)
     assert.equal(reflection!.artifacts.tests, 0)
+  })
+
+  test('β: persists capabilityShipped, gapRevealed, proposedNextMissions', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-beta-fields',
+      title: 'Beta fields',
+      status: 'active',
+    })
+    writeMission(m)
+    triggerReflectionOnCompletion(m, 'review')
+
+    const reflection = completeReflection('test-project', '2026-04-27-beta-fields', {
+      intentDelivered: true,
+      assessment: 'Shipped clean.',
+      lessonsLearned: 'Quality-gate scaffolding pays off.',
+      capabilityShipped: 'β quality gate live; reflections now compound-aware.',
+      gapRevealed: 'Existing pre-β reflections lack the new fields.',
+      proposedNextMissions: [
+        { title: 'Backfill capability-naming on pre-β reflections', intent: 'Read existing reflections and surface compounding insight retroactively.' },
+        { title: 'γ: capabilities ledger', intent: 'Write a doctrine doc for the ledger and seed it from reflections.' },
+      ],
+    })
+    assert.ok(reflection)
+    assert.equal(reflection!.capabilityShipped, 'β quality gate live; reflections now compound-aware.')
+    assert.equal(reflection!.gapRevealed, 'Existing pre-β reflections lack the new fields.')
+    assert.equal(reflection!.proposedNextMissions?.length, 2)
+    assert.equal(reflection!.proposedNextMissions?.[0]!.title, 'Backfill capability-naming on pre-β reflections')
+  })
+
+  test('β: throws on missing capabilityShipped', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-no-cap',
+      title: 'No cap',
+      status: 'active',
+    })
+    writeMission(m)
+    triggerReflectionOnCompletion(m, 'review')
+
+    assert.throws(() => {
+      completeReflection('test-project', '2026-04-27-no-cap', {
+        intentDelivered: true,
+        assessment: 'a',
+        lessonsLearned: 'l',
+        capabilityShipped: '',
+        gapRevealed: 'g',
+        proposedNextMissions: [{ title: 't', intent: 'i' }],
+      })
+    }, /capabilityShipped is required/)
+  })
+
+  test('β: throws on whitespace-only gapRevealed', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-no-gap',
+      title: 'No gap',
+      status: 'active',
+    })
+    writeMission(m)
+    triggerReflectionOnCompletion(m, 'review')
+
+    assert.throws(() => {
+      completeReflection('test-project', '2026-04-27-no-gap', {
+        intentDelivered: true,
+        assessment: 'a',
+        lessonsLearned: 'l',
+        capabilityShipped: 'c',
+        gapRevealed: '   \t  ',
+        proposedNextMissions: [{ title: 't', intent: 'i' }],
+      })
+    }, /gapRevealed is required/)
+  })
+
+  test('β: throws on empty proposedNextMissions', () => {
+    const m = makeMission('test-project', {
+      origin: 'love',
+      id: '2026-04-27-no-next',
+      title: 'No next',
+      status: 'active',
+    })
+    writeMission(m)
+    triggerReflectionOnCompletion(m, 'review')
+
+    assert.throws(() => {
+      completeReflection('test-project', '2026-04-27-no-next', {
+        intentDelivered: true,
+        assessment: 'a',
+        lessonsLearned: 'l',
+        capabilityShipped: 'c',
+        gapRevealed: 'g',
+        proposedNextMissions: [],
+      })
+    }, /proposedNextMissions is required and must be non-empty/)
+  })
+
+  test('β: throws on proposedNextMission missing title or intent', () => {
+    assert.throws(() => {
+      assertReflectionQuality({
+        intentDelivered: true,
+        assessment: 'a',
+        lessonsLearned: 'l',
+        capabilityShipped: 'c',
+        gapRevealed: 'g',
+        proposedNextMissions: [{ title: '', intent: 'i' }],
+      })
+    }, /proposedNextMissions\[0\]\.title is required/)
+
+    assert.throws(() => {
+      assertReflectionQuality({
+        intentDelivered: true,
+        assessment: 'a',
+        lessonsLearned: 'l',
+        capabilityShipped: 'c',
+        gapRevealed: 'g',
+        proposedNextMissions: [{ title: 't', intent: '' }],
+      })
+    }, /proposedNextMissions\[0\]\.intent is required/)
+  })
+
+  test('β: assertReflectionQuality passes on a valid input', () => {
+    assert.doesNotThrow(() => {
+      assertReflectionQuality({
+        intentDelivered: true,
+        assessment: 'a',
+        lessonsLearned: 'l',
+        capabilityShipped: 'c',
+        gapRevealed: 'g',
+        proposedNextMissions: [{ title: 't', intent: 'i' }],
+      })
+    })
   })
 })
 
@@ -1178,6 +1325,9 @@ describe('self-initiation — getPendingReflections', () => {
       intentDelivered: true,
       assessment: 'Done.',
       lessonsLearned: 'Nothing new.',
+      capabilityShipped: 'Completion check verified.',
+      gapRevealed: 'None surfaced.',
+      proposedNextMissions: [{ title: 'Continue', intent: 'Continue with planned work.' }],
     })
 
     const pending = getPendingReflections('test-project')

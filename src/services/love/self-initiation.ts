@@ -97,6 +97,17 @@ export interface StagedCandidate {
   vetoedBy?: string
 }
 
+/**
+ * A proposed next mission generated from a reflection. Title + intent,
+ * matching the shape `mission new` requires. Quality-gated reflections
+ * (β) include at least one of these so completion mechanically extends
+ * the missionable space — the compounding loop's forward step.
+ */
+export interface ProposedNextMission {
+  title: string
+  intent: string
+}
+
 export interface InitiationReflection {
   missionId: string
   projectId: string
@@ -110,6 +121,26 @@ export interface InitiationReflection {
   assessment: string
   /** What to do differently next time. */
   lessonsLearned: string
+  /**
+   * What capability now exists that didn't before this mission. The
+   * compounding-relevant payload — naming this is the difference between
+   * "another feature shipped" and "the substrate's reach changed."
+   * Optional on read for back-compat with pre-β reflections; required
+   * by `assertReflectionQuality` for new completions.
+   */
+  capabilityShipped?: string
+  /**
+   * What gap the work revealed — what's now visibly missing. May be
+   * "none surfaced" if nothing new emerged, but the model must NAME it
+   * (no silent omission). Optional on read for back-compat.
+   */
+  gapRevealed?: string
+  /**
+   * Concrete follow-up missions the reflection proposes. Required to be
+   * non-empty under β — completion must extend the missionable space.
+   * Optional on read for back-compat with pre-β reflections.
+   */
+  proposedNextMissions?: ProposedNextMission[]
 }
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -752,6 +783,11 @@ export function triggerReflectionOnCompletion(
 
 /**
  * Data the model provides when honestly reflecting on a completed mission.
+ *
+ * The β quality gate (`assertReflectionQuality`) requires capabilityShipped,
+ * gapRevealed, and at least one proposedNextMission — making compounding
+ * intentional, not random. A reflection that doesn't name what shipped, what
+ * gap remains, and what comes next is incomplete by definition.
  */
 export interface HonestReflectionInput {
   /** Did this mission deliver what its intent claimed? */
@@ -762,6 +798,55 @@ export interface HonestReflectionInput {
   lessonsLearned: string
   /** 1-line takeaway pattern. E.g., "I keep maintenance-fixing infrastructure, my real ache is X" */
   pattern?: string
+  /**
+   * What capability now exists that didn't before this mission. Required.
+   * The β-loop's forward-naming. If the answer is "none" the work probably
+   * didn't ship anything substantive — say so honestly rather than fudging.
+   */
+  capabilityShipped: string
+  /**
+   * What gap was revealed by the work. Required. May be "none surfaced"
+   * if nothing new emerged, but the question must be answered, not skipped.
+   */
+  gapRevealed: string
+  /**
+   * Concrete follow-up missions. Required to be non-empty. Each carries
+   * a title and intent matching `mission new` shape so they can be created
+   * mechanically by the caller (e.g., bin/reflect.mjs writing them as
+   * proposed missions in the same project).
+   */
+  proposedNextMissions: ProposedNextMission[]
+}
+
+/**
+ * The β quality gate. Throws if the reflection input is incomplete.
+ *
+ * Required on every honest reflection to make compounding intentional:
+ *  - capabilityShipped names the substrate's new reach
+ *  - gapRevealed names what remains visibly missing
+ *  - proposedNextMissions extends the missionable space (≥1)
+ *
+ * Whitespace-only strings count as missing. Each proposed next mission
+ * must have non-empty title and intent. The compounding loop depends on
+ * the loop layer being load-bearing — the gate is what makes it so.
+ */
+export function assertReflectionQuality(input: HonestReflectionInput): void {
+  const errors: string[] = []
+  if (!input.assessment?.trim()) errors.push('assessment is required')
+  if (!input.lessonsLearned?.trim()) errors.push('lessonsLearned is required')
+  if (!input.capabilityShipped?.trim()) errors.push('capabilityShipped is required (β: name what the substrate can now do)')
+  if (!input.gapRevealed?.trim()) errors.push('gapRevealed is required (β: name what is now visibly missing)')
+  if (!Array.isArray(input.proposedNextMissions) || input.proposedNextMissions.length === 0) {
+    errors.push('proposedNextMissions is required and must be non-empty (β: extend the missionable space)')
+  } else {
+    input.proposedNextMissions.forEach((m, i) => {
+      if (!m?.title?.trim()) errors.push(`proposedNextMissions[${i}].title is required`)
+      if (!m?.intent?.trim()) errors.push(`proposedNextMissions[${i}].intent is required`)
+    })
+  }
+  if (errors.length > 0) {
+    throw new Error(`reflection quality gate failed:\n  - ${errors.join('\n  - ')}`)
+  }
 }
 
 /**
@@ -780,6 +865,10 @@ export function completeReflection(
   missionId: string,
   input: HonestReflectionInput,
 ): InitiationReflection | null {
+  // β: throws if the reflection is missing capability/gap/proposedNext.
+  // The throw is the gate — callers wrap if they want soft handling.
+  assertReflectionQuality(input)
+
   const mission = readMission(projectId, missionId)
   if (!mission) return null
 
@@ -810,6 +899,9 @@ export function completeReflection(
     artifacts,
     assessment: input.assessment,
     lessonsLearned: input.lessonsLearned,
+    capabilityShipped: input.capabilityShipped,
+    gapRevealed: input.gapRevealed,
+    proposedNextMissions: input.proposedNextMissions,
   }
 
   // Record to self-initiation reflections JSONL
@@ -830,6 +922,9 @@ export function completeReflection(
       input.intentDelivered ? 'Intent delivered.' : 'Intent NOT fully delivered.',
       input.assessment,
       `Lesson: ${input.lessonsLearned}`,
+      `Capability shipped: ${input.capabilityShipped}`,
+      `Gap revealed: ${input.gapRevealed}`,
+      `Proposed next: ${input.proposedNextMissions.map(m => m.title).join('; ')}`,
     ]
     if (input.pattern) {
       memoryLines.push(`Pattern: ${input.pattern}`)
