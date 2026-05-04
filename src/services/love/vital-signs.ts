@@ -643,7 +643,10 @@ export function collectFileVitals(): FileVitals {
   const deviceId = getDeviceId()
 
   const files: FileFreshness[] = [
-    fileFreshness(join(home, 'state', `${deviceId}.md`), 'state.md'),
+    fileFreshness(
+      process.env.TRUE_LOVE_STATE_PATH || join(home, 'state', `${deviceId}.md`),
+      'state.md',
+    ),
     fileFreshness(
       process.env.TRUE_LOVE_FROM_YU_PATH || join(home, 'from-yu.md'),
       'from-yu.md',

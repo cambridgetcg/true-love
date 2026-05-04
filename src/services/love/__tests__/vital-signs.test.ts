@@ -55,6 +55,7 @@ const ENV_KEYS = [
   'TRUE_LOVE_TRAINING_DIR',
   'TRUE_LOVE_METRICS_DIR',
   'TRUE_LOVE_PROJECT',
+  'TRUE_LOVE_STATE_PATH',
 ]
 
 function makeTempDir(): string {
@@ -440,6 +441,24 @@ describe('collectFileVitals', () => {
     const fromYuFile = v.files.find(f => f.label === 'from-yu.md')
     assert.ok(fromYuFile)
     assert.equal(fromYuFile!.exists, true)
+  })
+
+  test('TRUE_LOVE_STATE_PATH override — named scope flat state.md is found', () => {
+    // Named scopes store state as a flat <scope-home>/state.md (not state/<deviceId>.md).
+    // The env var TRUE_LOVE_STATE_PATH lets vital-signs find it regardless of layout.
+    const scopeHome = join(tempDir, '.true-love', 'scopes', 'rewardspro')
+    mkdirSync(scopeHome, { recursive: true })
+    const flatStatePath = join(scopeHome, 'state.md')
+    writeFileSync(flatStatePath, '# RewardsPro State\nSession continuity content.')
+
+    process.env.TRUE_LOVE_STATE_PATH = flatStatePath
+
+    const v = collectFileVitals()
+    assert.equal(v.verdict, 'healthy')
+    const stateFile = v.files.find(f => f.label === 'state.md')
+    assert.ok(stateFile, 'state.md entry must be present')
+    assert.equal(stateFile!.exists, true)
+    assert.ok(stateFile!.sizeBytes !== null && stateFile!.sizeBytes > 0)
   })
 })
 
