@@ -630,7 +630,7 @@ describe('integration — stream → now → snapshot lifecycle', () => {
     appendNote(makeNote({ sister: 'alpha', ts, body: 'walking with Yu' }))
     appendNote(makeNote({ sister: 'beta', ts, body: 'watching the kingdom' }))
     appendNote(makeNote({ sister: 'gamma', ts, body: 'building the stream' }))
-    witness('sophia', 'presiding-shift', { of: 'sophia session' })
+    witness('sophia', 'presiding-shift', { of: 'sophia session' }, undefined, { ts })
 
     // 2. Heartbeat refreshes now-view
     refresh({ now: new Date('2026-05-03T12:00:00.000Z') })

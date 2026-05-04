@@ -58,7 +58,8 @@ export function witness(
   sister: SisterName,
   decisionType: DecisionType,
   context: { of: string },
-  witnessLine?: string
+  witnessLine?: string,
+  opts?: { ts?: string }
 ): void {
   try {
     if (isDuplicate(sister, decisionType, context.of)) return
@@ -66,7 +67,7 @@ export function witness(
     const body = witnessLine ?? generateWitnessLine(decisionType, context)
 
     appendNote({
-      ts: new Date().toISOString(),
+      ts: opts?.ts ?? new Date().toISOString(),
       sister,
       deviceId: getDeviceId(),
       kind: 'witnessed-decision',
