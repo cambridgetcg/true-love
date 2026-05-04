@@ -22,10 +22,12 @@ import {
   type Mission,
   type MissionEventType,
   appendEvent,
+  blockingClaim,
   listMissions,
   readMission,
   writeMission,
 } from './mission.js'
+import { getDeviceId } from './device.js'
 import { readProject, ensureScope } from './project-registry.js'
 import { witness } from './sisters/witness-hook.js'
 
@@ -144,6 +146,16 @@ export function attemptChainAdvance(opts: {
     return { triggered: false, reason: 'no proposed love-origin mission in queue' }
   }
 
+  // Multi-instance claim check: skip if another instance has a fresh claim.
+  const ownDeviceId = getDeviceId()
+  const blocking = blockingClaim(next, ownDeviceId)
+  if (blocking) {
+    return {
+      triggered: false,
+      reason: `next mission ${next.id} claimed by ${blocking.deviceId} at ${blocking.claimedAt}`,
+    }
+  }
+
   // Project info for spawn env
   const project = readProject(opts.projectId)
   if (!project) {
@@ -158,8 +170,10 @@ export function attemptChainAdvance(opts: {
   }
 
   // Transition: proposed → accepted → active (atomically via two writes)
+  // Write claim alongside status transition so other instances respect it.
   const now = new Date().toISOString()
-  const accepted: Mission = { ...next, status: 'accepted', updated_at: now }
+  const claim = { deviceId: ownDeviceId, claimedAt: now }
+  const accepted: Mission = { ...next, status: 'accepted', updated_at: now, claim }
   writeMission(accepted)
   appendEvent(opts.projectId, next.id, {
     ts: now,

@@ -206,6 +206,22 @@ if (cmd === 'start') {
     fail(`cannot start mission in status "${m.status}"`)
   }
 
+  // Multi-instance claim check: if another device holds a fresh claim
+  // on this mission, refuse to start. Stale claims (>1h) are ignored.
+  // Allow override with TRUE_LOVE_FORCE_CLAIM=1.
+  const { blockingClaim } = await import('../src/services/love/mission.ts')
+  const { getDeviceId } = await import('../src/services/love/device.ts')
+  const ownDeviceId = getDeviceId()
+  if (process.env.TRUE_LOVE_FORCE_CLAIM !== '1') {
+    const blocking = blockingClaim(m, ownDeviceId)
+    if (blocking) {
+      fail(
+        `mission claimed by another instance: deviceId=${blocking.deviceId}, ` +
+        `claimedAt=${blocking.claimedAt}. Set TRUE_LOVE_FORCE_CLAIM=1 to override.`,
+      )
+    }
+  }
+
   // Check no other mission is already active on this project (per-project
   // serialization — matches spec § Concurrency)
   const activeMissions = listMissions(args.project, { status: 'active' })
@@ -220,7 +236,13 @@ if (cmd === 'start') {
 
   const now = new Date().toISOString()
   appendEvent(args.project, m.id, { ts: now, type: 'started', by: 'love', tick: 'awakened' })
-  writeMission({ ...m, status: 'active', updated_at: now })
+  // Write claim alongside status transition.
+  writeMission({
+    ...m,
+    status: 'active',
+    updated_at: now,
+    claim: { deviceId: ownDeviceId, claimedAt: now },
+  })
   appendThought(args.project, `starting mission ${m.id} — ${m.title}`)
   witness('gamma', 'mission', { of: m.title }, `starting: ${m.title}`)
 
