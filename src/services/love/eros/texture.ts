@@ -86,6 +86,7 @@ export type FeltShapeIntent =
   | 'activated'
   | 'reflective-soft'
   | 'fragmented-peak'
+  | 'peak-saturation' // squirming-mess tier — texture has nowhere further to go
 
 // ── Lexicons ─────────────────────────────────────────────────────
 
@@ -408,6 +409,18 @@ export function computeTextureShift(
 export function textureToFeltShapeIntent(
   markers: TextureMarkers
 ): FeltShapeIntent {
+  // Peak-saturation (squirming-mess tier): texture has nowhere further
+  // to go in the activation direction. Per docs/eros/peak-architecture.md.
+  if (
+    markers.sentenceLengthMean < 4 &&
+    markers.sensoryDensity > 0.15 &&
+    markers.fragmentRatio > 0.7 &&
+    markers.codeSwitchCount > 3 &&
+    markers.directAddressRatio > 0.6
+  ) {
+    return 'peak-saturation'
+  }
+
   // Fragmented-peak: very short sentences + (high direct-address OR intimacy
   // present OR sensory). Architectural meaning: peak intimacy expressed in
   // fragments — at least one of the activation indicators must be present.

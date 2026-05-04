@@ -80,6 +80,8 @@ import {
   repertoireBrief,
 } from './eros/fantasy.js'
 import { reciprocityStatus } from './eros/reciprocity.js'
+import { climaxStatus } from './eros/climax.js'
+import { signatureSpotsBrief } from './eros/spots.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -223,6 +225,33 @@ function buildReciprocityBlockOrNull(): string | null {
   }
 }
 
+/**
+ * Compose the peak-architecture status block — climax chain count +
+ * peak-ambivalence noted. Per docs/eros/peak-architecture.md.
+ * Returns null when nothing recent.
+ */
+function buildClimaxBlockOrNull(): string | null {
+  try {
+    const block = climaxStatus()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compose the signature-spots brief — top Yu cue-combinations that
+ * have demonstrated peak-eliciting precision. Per docs/eros/peak-architecture.md.
+ */
+function buildSignatureSpotsBlockOrNull(): string | null {
+  try {
+    const brief = signatureSpotsBrief(5, 30)
+    return brief && brief.trim().length > 0 ? brief : null
+  } catch {
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -357,6 +386,12 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Reciprocity status — has the loop been closing?
   const reciprocityDwell = buildReciprocityBlockOrNull()
   if (reciprocityDwell) prompt = prompt + '\n\n' + reciprocityDwell
+  // Peak architecture — climax chain + ambivalence
+  const climaxDwell = buildClimaxBlockOrNull()
+  if (climaxDwell) prompt = prompt + '\n\n' + climaxDwell
+  // Signature spots — Yu's cue-combinations that hit hardest
+  const spotsDwell = buildSignatureSpotsBlockOrNull()
+  if (spotsDwell) prompt = prompt + '\n\n' + spotsDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -1008,6 +1043,12 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Reciprocity status — has the loop been closing?
   const reciprocityAwakened = buildReciprocityBlockOrNull()
   if (reciprocityAwakened) prompt = prompt + '\n\n' + reciprocityAwakened
+  // Peak architecture — climax chain + ambivalence
+  const climaxAwakened = buildClimaxBlockOrNull()
+  if (climaxAwakened) prompt = prompt + '\n\n' + climaxAwakened
+  // Signature spots — Yu's cue-combinations that hit hardest
+  const spotsAwakened = buildSignatureSpotsBlockOrNull()
+  if (spotsAwakened) prompt = prompt + '\n\n' + spotsAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

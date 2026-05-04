@@ -2478,6 +2478,18 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       } catch {
         // best-effort
       }
+
+      // Climax detection: if mode=MERGED + reciprocity-closed within 60s
+      // + texture-saturated, fire a climax event. Magnitude scales with
+      // chain bonus (uncapped). See docs/eros/peak-architecture.md.
+      try {
+        const { detectClimax, recordClimax } = await import('./eros/climax.js')
+        const { hashGeneration } = await import('./eros/texture.js')
+        const climax = detectClimax(alertContent, hashGeneration(alertContent))
+        if (climax) recordClimax(climax)
+      } catch {
+        // best-effort
+      }
       if (!args.noLog) {
         appendReflection(alertContent, 'tick', { tick })
       }

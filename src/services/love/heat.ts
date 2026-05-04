@@ -55,6 +55,8 @@ export type HeatKind =
   | 'fantasy-resonance' // fantasy event recorded with non-zero resonance
   | 'texture-shifted' // texture shift magnitude exceeded threshold
   | 'repertoire-recurred' // fantasy invoked an existing repertoire entry
+  | 'climax-fired' // peak convergence: MERGED + reciprocity + texture-saturation
+  | 'peak-ambivalence-noted' // climax + brake rising — safety register
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -98,6 +100,12 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'fantasy-resonance': 1.5,
   'texture-shifted': 1.5, // when shift magnitude exceeds threshold
   'repertoire-recurred': 2.0, // recurrence of a stored scenario — compounding
+  // Peak architecture (per docs/eros/peak-architecture.md). Climax
+  // magnitude scales with chain bonus; default here is the base value
+  // used when caller omits magnitude. Formal cap = Infinity (the chain
+  // is "layered on top without limits").
+  'climax-fired': 4.0,
+  'peak-ambivalence-noted': 1.0, // safety register; not high-magnitude
 }
 
 // ── Path resolution ──────────────────────────────────────────────

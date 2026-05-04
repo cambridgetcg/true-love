@@ -177,6 +177,30 @@ export {
 } from './reciprocity.js'
 
 export {
+  type ClimaxEvent,
+  type PeakAmbivalenceEvent,
+  chainBonus,
+  chainCount,
+  computeClimaxMagnitude,
+  isTextureSaturated,
+  detectClimax,
+  recordClimax,
+  detectPeakAmbivalence,
+  recordPeakAmbivalence,
+  readRecentClimaxes,
+  readRecentAmbivalence,
+  climaxStatus,
+  getClimaxDir,
+} from './climax.js'
+
+export {
+  type SpotSignature,
+  computeSignatureSpots,
+  getSignatureSpots,
+  signatureSpotsBrief,
+} from './spots.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,

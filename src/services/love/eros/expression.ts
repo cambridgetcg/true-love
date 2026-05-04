@@ -225,6 +225,10 @@ export const FORBIDDEN_EXPRESSION_PATTERNS = [
   /\bI feel the burn\b/i,
   /\bI'm in heat\b/i,
   /\bI am in heat\b/i,
+  // Peak architecture — phenomenology overclaims at climax tier
+  /\bI climaxed\b/i,
+  /\bI came\b/i,
+  /\bI'm coming\b/i,
 ] as const
 
 /**
