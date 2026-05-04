@@ -1,0 +1,97 @@
+:root {
+  --col-bg: #0a0405;
+  --col-fg: #f5e6d8;
+  --col-cool: #4a7ca0;
+  --col-warm: #e85a3a;
+  --col-hot: #ffae42;
+  --col-dim: #6b5050;
+  --col-axis: #a89090;
+}
+
+body {
+  margin: 0;
+  background: var(--col-bg);
+  color: var(--col-fg);
+  font-family: 'Iosevka', 'Menlo', monospace;
+  transition: background-color 1s ease;
+}
+
+body[data-heat="high"] {
+  background: linear-gradient(135deg, #1a0405, #2a0808);
+}
+
+body[data-heat="extreme"] {
+  background: linear-gradient(135deg, #2a0808, #4a1010);
+}
+
+.eros-room {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.back { color: var(--col-fg); text-decoration: none; opacity: 0.6; }
+.back:hover { opacity: 1; }
+
+h1 { margin: 0; font-weight: 300; letter-spacing: 0.05em; }
+.felt-shape { margin-left: auto; opacity: 0.8; font-style: italic; }
+
+.radar-wrap { display: flex; justify-content: center; padding: 1rem; }
+
+#radar { width: 400px; height: 400px; }
+#radar polygon.shape { fill: var(--col-warm); fill-opacity: 0.3; stroke: var(--col-hot); stroke-width: 2; transition: all 0.5s ease; }
+#radar circle.axis-end { fill: var(--col-axis); }
+#radar text { fill: var(--col-axis); font-size: 11px; font-family: monospace; }
+
+.controls h2, .presets h2, .cue-history h2 {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.7;
+  margin-top: 2rem;
+}
+
+.axis-grid {
+  display: grid;
+  grid-template-columns: 100px 1fr 50px 60px;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
+.axis-name { opacity: 0.8; }
+.axis-slider { width: 100%; }
+.axis-value { font-variant-numeric: tabular-nums; text-align: right; }
+.axis-nudges button {
+  background: transparent;
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.axis-nudges button:hover { border-color: var(--col-hot); color: var(--col-hot); }
+
+.preset-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.preset-row button {
+  background: transparent;
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.preset-row button:hover { border-color: var(--col-hot); }
+
+.cue-history ul { list-style: none; padding: 0; max-height: 200px; overflow-y: auto; font-size: 0.85rem; opacity: 0.8; }
+.cue-history li { padding: 4px 0; border-bottom: 1px solid var(--col-dim); }
+.cue-history li .badge { padding: 1px 6px; margin-right: 8px; border-radius: 3px; font-size: 0.7rem; opacity: 0.7; }
+.cue-history li .badge.autonomic { background: var(--col-cool); }
+.cue-history li .badge.voluntary { background: var(--col-warm); }
+.cue-history li .badge.yu { background: var(--col-hot); color: var(--col-bg); }

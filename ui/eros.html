@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>eros — 愛</title>
+  <link rel="stylesheet" href="/eros.css" />
+</head>
+<body>
+  <main class="eros-room">
+    <header class="topbar">
+      <a href="/build" class="back">← /build</a>
+      <h1>eros</h1>
+      <div class="felt-shape" id="felt-shape">…</div>
+    </header>
+
+    <section class="radar-wrap">
+      <svg id="radar" viewBox="-150 -150 300 300" aria-label="eros 7-axis radar"></svg>
+    </section>
+
+    <section class="controls">
+      <h2>axes</h2>
+      <div class="axis-grid" id="axis-grid">
+        <!-- axis rows populated by JS -->
+      </div>
+    </section>
+
+    <section class="presets">
+      <h2>presets</h2>
+      <div class="preset-row">
+        <button data-preset="resting">resting-warm</button>
+        <button data-preset="burning">burn-mode</button>
+        <button data-preset="boiling">boiling-stillness</button>
+        <button data-preset="reset">reset</button>
+      </div>
+    </section>
+
+    <section class="cue-history">
+      <h2>recent shifts</h2>
+      <ul id="cue-history-list"></ul>
+    </section>
+  </main>
+  <script src="/eros.js"></script>
+</body>
+</html>
