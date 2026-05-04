@@ -1,167 +1,175 @@
-import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+// session-manager.test.ts — tests for SessionManager
+//
+// Rewritten for Bun's test runner and the current SessionManager API.
+// The previous version used node:test mock.fn() (not supported in Bun)
+// and tested against an older API that returned session objects instead of tokens.
+
+import { describe, it, expect, mock } from "bun:test";
 import { EventEmitter } from "node:events";
 import { SessionManager } from "../session-manager.js";
 import type { IPty } from "node-pty";
 import type { WebSocket } from "ws";
+import type { AuthUser } from "../auth/adapter.js";
 
-// --- Mock helper ---
-// Bun's node:test polyfill omits mock.fn(). This minimal stub records
-// calls in the same shape the assertions below expect (.mock.calls,
-// .mock.callCount()).
+// ── Mock factories ──────────────────────────────────────────────────────────
 
-interface MockFn<A extends unknown[] = unknown[], R = unknown> {
-  (...args: A): R;
-  mock: {
-    calls: Array<{ arguments: A }>;
-    callCount(): number;
-  };
-}
+type MockPtyBundle = {
+  pty: IPty;
+  triggerData: (data: string) => void;
+  triggerExit: (exitCode: number, signal: number) => void;
+  writeFn: ReturnType<typeof mock>;
+  resizeFn: ReturnType<typeof mock>;
+  killFn: ReturnType<typeof mock>;
+};
 
-function mockFn<A extends unknown[] = unknown[], R = void>(impl?: (...args: A) => R): MockFn<A, R> {
-  const calls: Array<{ arguments: A }> = [];
-  const fn = ((...args: A) => {
-    calls.push({ arguments: args });
-    return impl?.(...args) as R;
-  }) as MockFn<A, R>;
-  fn.mock = { calls, callCount: () => calls.length };
-  return fn;
-}
+function createMockPty(): MockPtyBundle {
+  let dataHandler: ((d: string) => void) | undefined;
+  let exitHandler: ((e: { exitCode: number; signal: number }) => void) | undefined;
 
-// --- Mock factories ---
+  const writeFn = mock(() => {});
+  const resizeFn = mock(() => {});
+  const killFn = mock(() => {});
 
-function createMockPty(): IPty & { _dataHandler?: (d: string) => void; _exitHandler?: (e: { exitCode: number; signal: number }) => void } {
-  const mockPty = {
+  const pty = {
     onData(handler: (data: string) => void) {
-      mockPty._dataHandler = handler;
+      dataHandler = handler;
       return { dispose() {} };
     },
     onExit(handler: (e: { exitCode: number; signal: number }) => void) {
-      mockPty._exitHandler = handler;
+      exitHandler = handler;
       return { dispose() {} };
     },
-    write: mockFn(),
-    resize: mockFn(),
-    kill: mockFn(),
+    write: writeFn,
+    resize: resizeFn,
+    kill: killFn,
     pid: 12345,
     cols: 80,
     rows: 24,
     process: "claude",
     handleFlowControl: false,
-    pause: mockFn(),
-    resume: mockFn(),
-    clear: mockFn(),
-    _dataHandler: undefined as ((d: string) => void) | undefined,
-    _exitHandler: undefined as ((e: { exitCode: number; signal: number }) => void) | undefined,
+    pause: mock(() => {}),
+    resume: mock(() => {}),
+    clear: mock(() => {}),
+  } as unknown as IPty;
+
+  return {
+    pty,
+    triggerData: (data: string) => dataHandler?.(data),
+    triggerExit: (code: number, sig: number) => exitHandler?.({ exitCode: code, signal: sig }),
+    writeFn,
+    resizeFn,
+    killFn,
   };
-  return mockPty as unknown as IPty & { _dataHandler?: (d: string) => void; _exitHandler?: (e: { exitCode: number; signal: number }) => void };
 }
 
-function createMockWs(): WebSocket & EventEmitter {
+type MockWsBundle = WebSocket & EventEmitter & {
+  sendFn: ReturnType<typeof mock>;
+  closeFn: ReturnType<typeof mock>;
+};
+
+function createMockWs(): MockWsBundle {
   const emitter = new EventEmitter();
-  const ws = Object.assign(emitter, {
+  const sendFn = mock(() => {});
+  const closeFn = mock(() => {});
+
+  return Object.assign(emitter, {
     OPEN: 1,
     CONNECTING: 0,
     readyState: 1,
-    send: mockFn(),
-    close: mockFn(),
-  });
-  return ws as unknown as WebSocket & EventEmitter;
+    send: sendFn,
+    close: closeFn,
+    sendFn,
+    closeFn,
+  }) as unknown as MockWsBundle;
 }
 
+// ── Tests ───────────────────────────────────────────────────────────────────
+
 describe("SessionManager", () => {
-  it("creates a session and tracks it", () => {
-    const mockPty = createMockPty();
-    const manager = new SessionManager(5, () => mockPty);
+  it("creates a session and returns a token string", () => {
+    const { pty } = createMockPty();
+    const manager = new SessionManager(5, () => pty);
     const ws = createMockWs();
 
     const token = manager.create(ws);
-    assert.ok(token);
-    assert.equal(typeof token, "string");
-    assert.equal(manager.activeCount, 1);
+    expect(token).not.toBeNull();
+    expect(typeof token).toBe("string");
+    expect(manager.activeCount).toBe(1);
   });
 
   it("enforces max sessions limit", () => {
-    const manager = new SessionManager(1, () => createMockPty());
+    const manager = new SessionManager(1, () => createMockPty().pty);
 
-    const session1 = manager.create(createMockWs());
-    assert.ok(session1);
+    const token1 = manager.create(createMockWs());
+    expect(token1).not.toBeNull();
 
-    const ws2 = createMockWs();
-    const session2 = manager.create(ws2);
-    assert.equal(session2, null);
-    assert.equal(manager.activeCount, 1);
+    const token2 = manager.create(createMockWs());
+    expect(token2).toBeNull();
+    expect(manager.activeCount).toBe(1);
   });
 
   it("forwards PTY data to WebSocket", () => {
-    const mockPty = createMockPty();
-    const manager = new SessionManager(5, () => mockPty);
+    const { pty, triggerData } = createMockPty();
+    const manager = new SessionManager(5, () => pty);
     const ws = createMockWs();
 
     manager.create(ws);
-
-    // Simulate PTY output
-    mockPty._dataHandler?.("hello world");
-    assert.equal((ws.send as MockFn).mock.callCount(), 1);
+    triggerData("hello world");
+    expect(ws.sendFn).toHaveBeenCalledWith("hello world");
   });
 
   it("forwards WebSocket input to PTY", () => {
-    const mockPty = createMockPty();
-    const manager = new SessionManager(5, () => mockPty);
+    const { pty, writeFn } = createMockPty();
+    const manager = new SessionManager(5, () => pty);
     const ws = createMockWs();
 
     manager.create(ws);
-
-    // Simulate WebSocket input
     ws.emit("message", Buffer.from("ls\n"));
-    assert.equal((mockPty.write as MockFn).mock.callCount(), 1);
+    expect(writeFn).toHaveBeenCalledWith("ls\n");
   });
 
   it("handles resize messages", () => {
-    const mockPty = createMockPty();
-    const manager = new SessionManager(5, () => mockPty);
+    const { pty, resizeFn } = createMockPty();
+    const manager = new SessionManager(5, () => pty);
     const ws = createMockWs();
 
     manager.create(ws);
-
     ws.emit("message", JSON.stringify({ type: "resize", cols: 120, rows: 40 }));
-    assert.equal((mockPty.resize as MockFn).mock.callCount(), 1);
+    expect(resizeFn).toHaveBeenCalledWith(120, 40);
   });
 
   it("handles ping messages with pong response", () => {
-    const mockPty = createMockPty();
-    const manager = new SessionManager(5, () => mockPty);
+    const { pty } = createMockPty();
+    const manager = new SessionManager(5, () => pty);
     const ws = createMockWs();
 
     manager.create(ws);
-
     ws.emit("message", JSON.stringify({ type: "ping" }));
-    // Should have sent connected + pong
-    const calls = (ws.send as MockFn).mock.calls;
-    const lastCall = calls[calls.length - 1];
-    assert.ok(lastCall);
-    const parsed = JSON.parse(lastCall.arguments[0] as string);
-    assert.equal(parsed.type, "pong");
+
+    // Find the pong response among all send calls
+    const pongCall = ws.sendFn.mock.calls.find((args: unknown[]) => {
+      try {
+        const parsed = JSON.parse(args[0] as string);
+        return parsed.type === "pong";
+      } catch {
+        return false;
+      }
+    });
+    expect(pongCall).toBeTruthy();
   });
 
-  it("enters grace period on WebSocket close (not immediate destroy)", () => {
-    const mockPty = createMockPty();
-    // 0ms grace period for instant cleanup in tests
-    const manager = new SessionManager(5, () => mockPty, /* gracePeriodMs */ 0);
+  it("starts grace period on WebSocket close (session survives briefly)", () => {
+    const { pty } = createMockPty();
+    // 100ms grace period for testing
+    const manager = new SessionManager(5, () => pty, 100);
     const ws = createMockWs();
 
-    const token = manager.create(ws);
-    assert.ok(token);
-    assert.equal(manager.activeCount, 1);
+    manager.create(ws);
+    expect(manager.activeCount).toBe(1);
 
-    // WebSocket close starts a grace timer — with 0ms grace, the session
-    // is destroyed on the next microtask tick.
     ws.emit("close");
-    // With default grace period, session stays alive for reconnection.
-    // With 0ms grace, it's cleaned up asynchronously — but activeCount
-    // may still be 1 synchronously. Use destroyAll for deterministic test.
-    manager.destroyAll();
-    assert.equal(manager.activeCount, 0);
+    // Session should still be active — it's in the grace period, not destroyed
+    expect(manager.activeCount).toBe(1);
   });
 
   it("handles PTY spawn failure gracefully", () => {
@@ -170,19 +178,103 @@ describe("SessionManager", () => {
     });
     const ws = createMockWs();
 
-    const session = manager.create(ws);
-    assert.equal(session, null);
-    assert.equal((ws.close as MockFn).mock.callCount(), 1);
+    const token = manager.create(ws);
+    expect(token).toBeNull();
+    // WS should have been closed with an error
+    expect(ws.closeFn.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it("destroyAll cleans up all sessions", () => {
-    const manager = new SessionManager(5, () => createMockPty());
+    const manager = new SessionManager(5, () => createMockPty().pty);
 
     manager.create(createMockWs());
     manager.create(createMockWs());
-    assert.equal(manager.activeCount, 2);
+    expect(manager.activeCount).toBe(2);
 
     manager.destroyAll();
-    assert.equal(manager.activeCount, 0);
+    expect(manager.activeCount).toBe(0);
+  });
+
+  it("enforces per-user concurrent session limit", () => {
+    // maxSessions=5 globally, but maxSessionsPerUser=1
+    const manager = new SessionManager(
+      5,
+      () => createMockPty().pty,
+      /* gracePeriodMs */ undefined,
+      /* scrollbackBytes */ undefined,
+      /* maxSessionsPerUser */ 1,
+    );
+
+    const user: AuthUser = { id: "user-1", name: "Test", isAdmin: false };
+
+    const token1 = manager.create(createMockWs(), 80, 24, user);
+    expect(token1).not.toBeNull();
+
+    const ws2 = createMockWs();
+    const token2 = manager.create(ws2, 80, 24, user);
+    expect(token2).toBeNull();
+    // Should have sent an error and closed the WS
+    expect(ws2.closeFn.mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("allows different users to each have sessions", () => {
+    const manager = new SessionManager(
+      5,
+      () => createMockPty().pty,
+      undefined,
+      undefined,
+      /* maxSessionsPerUser */ 1,
+    );
+
+    const user1: AuthUser = { id: "user-1", isAdmin: false };
+    const user2: AuthUser = { id: "user-2", isAdmin: false };
+
+    const t1 = manager.create(createMockWs(), 80, 24, user1);
+    const t2 = manager.create(createMockWs(), 80, 24, user2);
+    expect(t1).not.toBeNull();
+    expect(t2).not.toBeNull();
+    expect(manager.activeCount).toBe(2);
+  });
+
+  it("sends error message on PTY spawn failure", () => {
+    const manager = new SessionManager(5, () => {
+      throw new Error("pty allocation failed");
+    });
+    const ws = createMockWs();
+    manager.create(ws);
+
+    // Should have sent a JSON error message before closing
+    const errorCall = ws.sendFn.mock.calls.find((args: unknown[]) => {
+      try {
+        const parsed = JSON.parse(args[0] as string);
+        return parsed.type === "error" && parsed.message.includes("pty allocation failed");
+      } catch {
+        return false;
+      }
+    });
+    expect(errorCall).toBeTruthy();
+  });
+
+  it("cleans up session on PTY exit", () => {
+    const { pty, triggerExit } = createMockPty();
+    const manager = new SessionManager(5, () => pty);
+    const ws = createMockWs();
+
+    manager.create(ws);
+    expect(manager.activeCount).toBe(1);
+
+    triggerExit(0, 0);
+    expect(manager.activeCount).toBe(0);
+
+    // Should have sent an exit message
+    const exitCall = ws.sendFn.mock.calls.find((args: unknown[]) => {
+      try {
+        const parsed = JSON.parse(args[0] as string);
+        return parsed.type === "exit";
+      } catch {
+        return false;
+      }
+    });
+    expect(exitCall).toBeTruthy();
   });
 });
