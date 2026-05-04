@@ -5,7 +5,10 @@
 //
 // Distillation rules (sparseness budget):
 //   - 5–15 lines per facet, in voice
-//   - All witnessed-decision notes preserved verbatim
+//   - All witnessed-decision notes (including polyphonic LoveDecision voices)
+//     preserved verbatim
+//   - LoveDecision entries are EXPANDED: each sister's voice appears under
+//     her own facet section, making the polyphony structurally visible.
 //   - Routine noting entries condensed
 //   - Silent facets: "silent today; the silence held."
 //   - Sophia integrates (through-line, not summary)
@@ -15,7 +18,14 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { readYuWitnessDay } from '../yu-witness.js'
-import { readDayNotes, type SisterName, type SisterNote } from './stream.js'
+import {
+  isLoveDecision,
+  readDayNotes,
+  type DecisionType,
+  type NoteKind,
+  type SisterName,
+  type StreamEntry,
+} from './stream.js'
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -41,21 +51,69 @@ export function getSnapshotsDir(): string {
   )
 }
 
+// ── Flat note ────────────────────────────────────────────────────
+
+/**
+ * Single-voice distillation unit. LoveDecision entries expand into multiple
+ * FlatNote values before the per-facet distillation loop.
+ */
+interface FlatNote {
+  ts: string
+  facet: SisterName
+  kind: NoteKind
+  body: string
+  context?: { decisionType: DecisionType; of: string }
+}
+
+/**
+ * Expand StreamEntry[] into FlatNote[] for per-facet distillation.
+ *
+ * LoveDecision → three (or four, if sophia present) FlatNote values, each
+ * tagged `witnessed-decision` and carrying the relevant voice body.
+ * Legacy SisterNote → one FlatNote preserving all existing fields.
+ */
+function expandToFlatNotes(entries: StreamEntry[]): FlatNote[] {
+  const result: FlatNote[] = []
+  for (const entry of entries) {
+    if (isLoveDecision(entry)) {
+      const ctx = { decisionType: entry.decisionType, of: entry.of }
+      result.push({ ts: entry.ts, facet: 'alpha', kind: 'witnessed-decision', body: entry.voices.alpha, context: ctx })
+      result.push({ ts: entry.ts, facet: 'beta', kind: 'witnessed-decision', body: entry.voices.beta, context: ctx })
+      result.push({ ts: entry.ts, facet: 'gamma', kind: 'witnessed-decision', body: entry.voices.gamma, context: ctx })
+      if (entry.sophia) {
+        result.push({ ts: entry.ts, facet: 'sophia', kind: 'witnessed-decision', body: entry.sophia, context: ctx })
+      }
+    } else {
+      result.push({
+        ts: entry.ts,
+        facet: entry.sister,
+        kind: entry.kind,
+        body: entry.body,
+        context: entry.context ?? undefined,
+      })
+    }
+  }
+  return result
+}
+
 // ── Distillation (pure) ──────────────────────────────────────────
 
 /**
  * Distill a day's stream into a sparse markdown chronicle.
  * Pure function — reads notes, returns markdown string.
+ *
+ * Accepts both legacy SisterNote and new LoveDecision entries (StreamEntry).
  */
-export function distillDay(date: string, notes?: SisterNote[]): string {
-  const dayNotes = notes ?? readDayNotes(date)
+export function distillDay(date: string, notes?: StreamEntry[]): string {
+  const dayEntries = notes ?? readDayNotes(date)
+  const flat = expandToFlatNotes(dayEntries)
   const lines: string[] = []
 
   lines.push(`# Sisters — ${date}`)
   lines.push('')
 
   for (const facet of FACET_ORDER) {
-    const facetNotes = dayNotes.filter((n) => n.sister === facet)
+    const facetNotes = flat.filter((n) => n.facet === facet)
     lines.push(`## ${FACET_DISPLAY[facet]}`)
     lines.push('')
 
@@ -76,13 +134,13 @@ export function distillDay(date: string, notes?: SisterNote[]): string {
     )
     const routine = facetNotes.filter((n) => n.kind !== 'witnessed-decision')
 
-    for (const note of witnessed) {
-      const time = formatTime(note.note.ts)
-      const prefix = note.note.context
-        ? `[${note.note.context.decisionType}: ${note.note.context.of}] `
+    for (const entry of witnessed) {
+      const time = formatTime(entry.note.ts)
+      const prefix = entry.note.context
+        ? `[${entry.note.context.decisionType}: ${entry.note.context.of}] `
         : ''
-      const suffix = note.repeatCount > 1 ? ` _(×${note.repeatCount})_` : ''
-      lines.push(`- ${time} · ${prefix}${note.note.body}${suffix}`)
+      const suffix = entry.repeatCount > 1 ? ` _(×${entry.repeatCount})_` : ''
+      lines.push(`- ${time} · ${prefix}${entry.note.body}${suffix}`)
     }
 
     // Condense routine notes. Take the first and last, plus any
@@ -123,7 +181,7 @@ export function distillDay(date: string, notes?: SisterNote[]): string {
   }
 
   lines.push('---')
-  lines.push(`_Distilled from stream. ${dayNotes.length} total notes._`)
+  lines.push(`_Distilled from stream. ${dayEntries.length} total notes._`)
 
   return lines.join('\n')
 }
@@ -163,11 +221,11 @@ export function snapshotExists(date: string): boolean {
 const DISTILL_BUCKET_MS = 5 * 60 * 1000
 
 interface WitnessedEntry {
-  note: SisterNote
+  note: FlatNote
   repeatCount: number
 }
 
-function collapseWitnessedRuns(notes: SisterNote[]): WitnessedEntry[] {
+function collapseWitnessedRuns(notes: FlatNote[]): WitnessedEntry[] {
   const collapsed: WitnessedEntry[] = []
   for (const note of notes) {
     const last = collapsed[collapsed.length - 1]

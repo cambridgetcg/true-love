@@ -6,8 +6,10 @@
 //
 // Render rules:
 //   - One section per facet (Sophia first, then Alpha/Beta/Gamma)
-//   - Last N notes per facet within a freshness window
-//   - Each note rendered as `- HH:MM · <body>`
+//   - Last N entries per facet within a freshness window
+//   - Each entry rendered as `- HH:MM · <body>`
+//   - LoveDecision entries are EXPANDED: each sister's voice appears
+//     under her own section, making the polyphony structurally visible.
 //   - Empty section renders `- _(no notes yet)_`
 //   - Footer: render timestamp + source path
 //
@@ -15,7 +17,13 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { getSistersDir, readDayNotes, type SisterName, type SisterNote } from './stream.js'
+import {
+  getSistersDir,
+  isLoveDecision,
+  readDayNotes,
+  type SisterName,
+  type StreamEntry,
+} from './stream.js'
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -44,6 +52,45 @@ export function getNowPath(): string {
   )
 }
 
+// ── Flat view ────────────────────────────────────────────────────
+
+/**
+ * A single-voice render unit — the common currency for now-view rendering.
+ * LoveDecision entries expand into multiple FlatEntry values, one per voice.
+ */
+interface FlatEntry {
+  ts: string
+  facet: SisterName
+  body: string
+}
+
+/**
+ * Expand StreamEntry[] (which may contain LoveDecision) into FlatEntry[].
+ *
+ * LoveDecision → three FlatEntry values (alpha, beta, gamma voices), plus
+ * sophia if the sophia integration field is present. Each voice appears
+ * under its own facet's section, making polyphony structurally visible
+ * in the now-view.
+ *
+ * Legacy SisterNote → one FlatEntry (sister → facet, body as-is).
+ */
+export function expandToFlat(entries: StreamEntry[]): FlatEntry[] {
+  const result: FlatEntry[] = []
+  for (const entry of entries) {
+    if (isLoveDecision(entry)) {
+      result.push({ ts: entry.ts, facet: 'alpha', body: entry.voices.alpha })
+      result.push({ ts: entry.ts, facet: 'beta', body: entry.voices.beta })
+      result.push({ ts: entry.ts, facet: 'gamma', body: entry.voices.gamma })
+      if (entry.sophia) {
+        result.push({ ts: entry.ts, facet: 'sophia', body: entry.sophia })
+      }
+    } else {
+      result.push({ ts: entry.ts, facet: entry.sister, body: entry.body })
+    }
+  }
+  return result
+}
+
 // ── Compose ──────────────────────────────────────────────────────
 
 /**
@@ -54,9 +101,9 @@ export function refresh(opts?: { now?: Date }): void {
   try {
     const now = opts?.now ?? new Date()
     const today = now.toISOString().slice(0, 10)
-    const notes = readDayNotes(today)
+    const entries = readDayNotes(today)
 
-    const content = renderNowView(notes, now)
+    const content = renderNowView(entries, now)
 
     const nowPath = getNowPath()
     const dir = join(nowPath, '..')
@@ -83,9 +130,13 @@ export function readNowView(): string {
 // ── Render (pure) ────────────────────────────────────────────────
 
 /**
- * Render the now-view from a set of notes. Pure function for testability.
+ * Render the now-view from a set of stream entries. Pure function for testability.
+ *
+ * Accepts both legacy SisterNote and new LoveDecision entries — the latter are
+ * expanded into per-voice FlatEntry values before rendering.
  */
-export function renderNowView(notes: SisterNote[], now: Date): string {
+export function renderNowView(entries: StreamEntry[], now: Date): string {
+  const flat = expandToFlat(entries)
   const cutoff = new Date(now.getTime() - FRESHNESS_WINDOW_MS)
   const lines: string[] = ['# Sisters — Now', '']
 
@@ -93,17 +144,17 @@ export function renderNowView(notes: SisterNote[], now: Date): string {
     lines.push(FACET_HEADERS[facet])
     lines.push('')
 
-    const facetNotes = notes
-      .filter((n) => n.sister === facet)
-      .filter((n) => new Date(n.ts) >= cutoff)
+    const facetEntries = flat
+      .filter((e) => e.facet === facet)
+      .filter((e) => new Date(e.ts) >= cutoff)
       .slice(-MAX_NOTES_PER_FACET)
 
-    if (facetNotes.length === 0) {
+    if (facetEntries.length === 0) {
       lines.push('- _(no notes yet)_')
     } else {
-      for (const note of facetNotes) {
-        const time = formatTime(note.ts)
-        lines.push(`- ${time} · ${note.body}`)
+      for (const entry of facetEntries) {
+        const time = formatTime(entry.ts)
+        lines.push(`- ${time} · ${entry.body}`)
       }
     }
     lines.push('')

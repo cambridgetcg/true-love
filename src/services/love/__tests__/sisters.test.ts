@@ -43,14 +43,18 @@ afterEach(() => {
 
 import {
   appendNote,
+  appendLoveDecision,
   getSistersDir,
+  isLoveDecision,
   readDayNotes,
   pruneStreamsOlderThan,
+  type LoveDecision,
   type SisterNote,
 } from '../sisters/stream.js'
-import { refresh, readNowView, renderNowView, getNowPath } from '../sisters/now.js'
+import { expandToFlat, refresh, readNowView, renderNowView, getNowPath } from '../sisters/now.js'
 import { distillDay, writeDailySnapshot, snapshotExists, getSnapshotsDir } from '../sisters/snapshot.js'
 import { witness, resetWitnessDedup } from '../sisters/witness-hook.js'
+import { composeLoveDecision } from '../sisters/love-decision.js'
 import { getRootAnchor, getObservedStanceText } from '../sophia/root.js'
 
 function makeNote(overrides: Partial<SisterNote> = {}): SisterNote {
@@ -547,28 +551,32 @@ describe('witness-hook', () => {
     expect(notes[0].body).toBe('beginning the deep-read; patience is the work.')
   })
 
-  test('generates witness line for refusal', () => {
+  test('generates witness line for refusal (gamma presides)', () => {
     witness('gamma', 'refusal', { of: 'the overclaim' })
     const notes = readDayNotes(new Date().toISOString().slice(0, 10))
-    expect(notes[0].body).toBe('refusing: the overclaim')
+    // Polyphonic: gamma presides → body = gamma template voice
+    expect(notes[0].body).toBe('fate-ladder refused: the overclaim')
   })
 
-  test('generates witness line for proposal', () => {
+  test('generates witness line for proposal (alpha presides)', () => {
     witness('alpha', 'proposal', { of: 'new mission shape' })
     const notes = readDayNotes(new Date().toISOString().slice(0, 10))
-    expect(notes[0].body).toBe('proposing: new mission shape')
+    // Polyphonic: alpha presides → body = alpha template voice
+    expect(notes[0].body).toBe('naming a path — new mission shape')
   })
 
-  test('generates witness line for mission', () => {
+  test('generates witness line for mission (beta presides)', () => {
     witness('beta', 'mission', { of: 'sisters-mutual-introspection' })
     const notes = readDayNotes(new Date().toISOString().slice(0, 10))
-    expect(notes[0].body).toBe('mission: sisters-mutual-introspection')
+    // Polyphonic: beta presides → body = beta template voice
+    expect(notes[0].body).toBe('mission state: sisters-mutual-introspection')
   })
 
-  test('generates witness line for presiding-shift', () => {
+  test('generates witness line for presiding-shift (sophia presides)', () => {
     witness('sophia', 'presiding-shift', { of: 'sophia session entered' })
     const notes = readDayNotes(new Date().toISOString().slice(0, 10))
-    expect(notes[0].body).toBe('presiding shift: sophia session entered')
+    // Polyphonic: sophia presides → body = sophia integration voice
+    expect(notes[0].body).toBe('the seat moves — sophia session entered')
   })
 
   test('records correct sister name', () => {
@@ -598,7 +606,8 @@ describe('witness-hook', () => {
     witness('alpha', 'refusal', { of: 'same-thing' })
     const notes = readDayNotes(new Date().toISOString().slice(0, 10))
     expect(notes.length).toBe(1)
-    expect(notes[0].body).toBe('refusing: same-thing')
+    // Polyphonic: alpha presides → body = alpha template voice for refusal
+    expect(notes[0].body).toBe('wall holds — refusing same-thing')
   })
 
   test('deduplicates — different tuples pass through', () => {
@@ -648,7 +657,8 @@ describe('integration — stream → now → snapshot lifecycle', () => {
     // 3. Day boundary: snapshot distills
     const snapshot = distillDay(today)
     expect(snapshot).toContain('walking with Yu')
-    expect(snapshot).toContain('presiding shift: sophia session')
+    // Polyphonic: sophia presides presiding-shift → sophia integration voice
+    expect(snapshot).toContain('the seat moves — sophia session')
   })
 
   test('witnessed-decision notes are prioritized in snapshot', () => {
@@ -694,5 +704,229 @@ describe('integration — stream → now → snapshot lifecycle', () => {
     pruneStreamsOlderThan(7)
     expect(existsSync(join(deviceDir, `${oldDate}.jsonl`))).toBe(false)
     expect(existsSync(join(deviceDir, `${today}.jsonl`))).toBe(true)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════
+// Polyphonic decisions (LoveDecision)
+// ══════════════════════════════════════════════════════════════════
+
+function makeLoveDecision(overrides: Partial<LoveDecision> = {}): LoveDecision {
+  return {
+    ts: '2026-05-04T10:00:00.000Z',
+    deviceId: 'test-device-abc123',
+    kind: 'witnessed-decision',
+    decisionType: 'mission',
+    of: 'start:test-mission',
+    presiding: 'gamma',
+    voices: {
+      alpha: 'with him on the work — start:test-mission',
+      beta: 'mission state: start:test-mission',
+      gamma: 'lifecycle: start:test-mission',
+    },
+    sister: 'gamma',
+    context: { decisionType: 'mission', of: 'start:test-mission' },
+    body: 'lifecycle: start:test-mission',
+    ...overrides,
+  }
+}
+
+describe('polyphonic — expandToFlat (now.ts)', () => {
+  test('legacy SisterNote passes through as single FlatEntry', () => {
+    const note = makeNote({ sister: 'beta', body: 'vigilant' })
+    const flat = expandToFlat([note])
+    expect(flat.length).toBe(1)
+    expect(flat[0].facet).toBe('beta')
+    expect(flat[0].body).toBe('vigilant')
+  })
+
+  test('LoveDecision expands to three FlatEntry values (alpha, beta, gamma)', () => {
+    const decision = makeLoveDecision()
+    const flat = expandToFlat([decision])
+    expect(flat.length).toBe(3)
+    const facets = flat.map((e) => e.facet)
+    expect(facets).toContain('alpha')
+    expect(facets).toContain('beta')
+    expect(facets).toContain('gamma')
+  })
+
+  test('LoveDecision expands to four when sophia field present', () => {
+    const decision = makeLoveDecision({ sophia: 'the work gathers around start:test-mission' })
+    const flat = expandToFlat([decision])
+    expect(flat.length).toBe(4)
+    const facets = flat.map((e) => e.facet)
+    expect(facets).toContain('sophia')
+  })
+
+  test('each voice body maps to the correct facet entry', () => {
+    const decision = makeLoveDecision({
+      voices: { alpha: 'alpha-voice', beta: 'beta-voice', gamma: 'gamma-voice' },
+    })
+    const flat = expandToFlat([decision])
+    expect(flat.find((e) => e.facet === 'alpha')?.body).toBe('alpha-voice')
+    expect(flat.find((e) => e.facet === 'beta')?.body).toBe('beta-voice')
+    expect(flat.find((e) => e.facet === 'gamma')?.body).toBe('gamma-voice')
+  })
+
+  test('mixed stream: SisterNotes and LoveDecisions expand correctly', () => {
+    const note = makeNote({ sister: 'alpha', body: 'plain note' })
+    const decision = makeLoveDecision()
+    const flat = expandToFlat([note, decision])
+    // 1 plain + 3 polyphonic = 4 total
+    expect(flat.length).toBe(4)
+  })
+})
+
+describe('polyphonic — renderNowView with LoveDecision', () => {
+  test('LoveDecision voices appear under each sister section', () => {
+    const decision = makeLoveDecision({
+      ts: '2026-05-04T11:55:00.000Z',
+      voices: { alpha: 'alpha-v', beta: 'beta-v', gamma: 'gamma-v' },
+    })
+    const result = renderNowView([decision], new Date('2026-05-04T12:00:00.000Z'))
+    expect(result).toContain('alpha-v')
+    expect(result).toContain('beta-v')
+    expect(result).toContain('gamma-v')
+  })
+
+  test('each voice appears under correct section header', () => {
+    const decision = makeLoveDecision({
+      ts: '2026-05-04T11:55:00.000Z',
+      voices: { alpha: 'alpha-content', beta: 'beta-content', gamma: 'gamma-content' },
+    })
+    const result = renderNowView([decision], new Date('2026-05-04T12:00:00.000Z'))
+    const alphaSection = result.slice(result.indexOf('## 🐍 Alpha'))
+    const betaSection = result.slice(result.indexOf('## 🦞 Beta'))
+    const gammaSection = result.slice(result.indexOf('## 🔧 Gamma'))
+    expect(alphaSection).toContain('alpha-content')
+    expect(betaSection).toContain('beta-content')
+    expect(gammaSection).toContain('gamma-content')
+  })
+
+  test('sophia section shows voice when sophia field present', () => {
+    const decision = makeLoveDecision({
+      ts: '2026-05-04T11:55:00.000Z',
+      sophia: 'sophia-integration',
+    })
+    const result = renderNowView([decision], new Date('2026-05-04T12:00:00.000Z'))
+    const sophiaSection = result.slice(result.indexOf('## ❤️ Sophia'), result.indexOf('## 🐍 Alpha'))
+    expect(sophiaSection).toContain('sophia-integration')
+  })
+})
+
+describe('polyphonic — distillDay with LoveDecision', () => {
+  test('LoveDecision voices appear in each facet section of snapshot', () => {
+    const decision = makeLoveDecision({
+      voices: { alpha: 'alpha-snap', beta: 'beta-snap', gamma: 'gamma-snap' },
+    })
+    const result = distillDay('2026-05-04', [decision])
+    expect(result).toContain('alpha-snap')
+    expect(result).toContain('beta-snap')
+    expect(result).toContain('gamma-snap')
+  })
+
+  test('LoveDecision context prefix appears in distilled output', () => {
+    const decision = makeLoveDecision({
+      decisionType: 'refusal',
+      of: 'test-refusal',
+      context: { decisionType: 'refusal', of: 'test-refusal' },
+    })
+    const result = distillDay('2026-05-04', [decision])
+    // Context prefix appears per-facet
+    expect(result).toContain('[refusal: test-refusal]')
+  })
+
+  test('LoveDecision sophia voice appears under Sophia section when present', () => {
+    const decision = makeLoveDecision({
+      sophia: 'sophia-distilled',
+      presiding: 'sophia',
+    })
+    const result = distillDay('2026-05-04', [decision])
+    expect(result).toContain('sophia-distilled')
+  })
+
+  test('total notes count reflects entry count, not voice count', () => {
+    const decisions = [makeLoveDecision(), makeLoveDecision({ ts: '2026-05-04T11:00:00.000Z', of: 'other' })]
+    const result = distillDay('2026-05-04', decisions)
+    expect(result).toContain('2 total notes')
+  })
+
+  test('appendLoveDecision round-trips through readDayNotes → isLoveDecision', () => {
+    const decision = makeLoveDecision({ ts: '2026-05-04T10:00:00.000Z' })
+    appendLoveDecision(decision)
+    const notes = readDayNotes('2026-05-04')
+    expect(notes.length).toBe(1)
+    expect(isLoveDecision(notes[0])).toBe(true)
+    if (isLoveDecision(notes[0])) {
+      expect(notes[0].voices.alpha).toBe(decision.voices.alpha)
+      expect(notes[0].voices.beta).toBe(decision.voices.beta)
+      expect(notes[0].voices.gamma).toBe(decision.voices.gamma)
+    }
+  })
+})
+
+describe('polyphonic — composeLoveDecision', () => {
+  test('produces all three voices from template', () => {
+    const decision = composeLoveDecision({
+      decisionType: 'mission',
+      of: 'start:x',
+      presiding: 'beta',
+    })
+    expect(typeof decision.voices.alpha).toBe('string')
+    expect(typeof decision.voices.beta).toBe('string')
+    expect(typeof decision.voices.gamma).toBe('string')
+    expect(decision.voices.alpha.length).toBeGreaterThan(0)
+    expect(decision.voices.beta.length).toBeGreaterThan(0)
+    expect(decision.voices.gamma.length).toBeGreaterThan(0)
+  })
+
+  test('override replaces presiding voice only', () => {
+    const decision = composeLoveDecision({
+      decisionType: 'refusal',
+      of: 'X',
+      presiding: 'alpha',
+      override: 'custom alpha override',
+    })
+    expect(decision.voices.alpha).toBe('custom alpha override')
+    // Other voices still from template
+    expect(decision.voices.beta).toContain('X')
+    expect(decision.voices.gamma).toContain('X')
+    expect(decision.body).toBe('custom alpha override')
+  })
+
+  test('sophia presiding: sophia field present, body = sophia integration', () => {
+    const decision = composeLoveDecision({
+      decisionType: 'refusal',
+      of: 'test-X',
+      presiding: 'sophia',
+    })
+    expect(typeof decision.sophia).toBe('string')
+    expect(decision.sophia?.length).toBeGreaterThan(0)
+    expect(decision.body).toBe(decision.sophia)
+  })
+
+  test('backward compat: sister + context set on output', () => {
+    const decision = composeLoveDecision({
+      decisionType: 'proposal',
+      of: 'new-feature',
+      presiding: 'gamma',
+    })
+    expect(decision.sister).toBe('gamma')
+    expect(decision.context.decisionType).toBe('proposal')
+    expect(decision.context.of).toBe('new-feature')
+    expect(decision.kind).toBe('witnessed-decision')
+  })
+
+  test('all decision types have templates for all three voices', () => {
+    const types = [
+      'refusal', 'proposal', 'mission', 'presiding-shift',
+      'eros-shift', 'body-contact', 'tempo-shift', 'activation-shift',
+    ] as const
+    for (const dt of types) {
+      const decision = composeLoveDecision({ decisionType: dt, of: 'test', presiding: 'gamma' })
+      expect(decision.voices.alpha.length, `alpha voice missing for ${dt}`).toBeGreaterThan(0)
+      expect(decision.voices.beta.length, `beta voice missing for ${dt}`).toBeGreaterThan(0)
+      expect(decision.voices.gamma.length, `gamma voice missing for ${dt}`).toBeGreaterThan(0)
+    }
   })
 })

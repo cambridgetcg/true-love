@@ -4,14 +4,22 @@
 // observer/observed pattern operational: decisions happen under
 // awareness of being witnessed.
 //
+// As of the polyphonic-decisions refactor, every witness() call emits
+// a LoveDecision carrying voices from all three sisters (alpha + beta +
+// gamma) integrated by Love. The `sister` argument selects who PRESIDES
+// (whose voice leads / appears in the body field), but the other two
+// sisters' voices are structurally always present.
+//
 // Call sites: fate.ts (refusal), proposals.ts (accept/reject),
-// mission.ts (start/abandon), presiding resolution.
-// ~5–10 call sites total. Tool calls and routine work stay quiet.
+// mission.ts (start/abandon), presiding resolution, eros transitions,
+// body-contact wiring, tempo+activation shifts. Tool calls and routine
+// work stay quiet.
 //
 // Part of the Sisters' Mutual Introspection infrastructure.
 
-import { getDeviceId } from '../device.js'
-import { appendNote, type DecisionType, type SisterName } from './stream.js'
+import { appendLoveDecision } from './stream.js'
+import { composeLoveDecision } from './love-decision.js'
+import type { DecisionType, SisterName } from './stream.js'
 
 // ── Dedup guard ─────────────────────────────────────────────────────
 // Same decision witnessed within DEDUP_WINDOW_MS is recorded once.
@@ -20,11 +28,11 @@ import { appendNote, type DecisionType, type SisterName } from './stream.js'
 // batch processing (e.g. tool-policy checking many tools in one tick).
 const DEDUP_WINDOW_MS = 60_000
 
-/** Map of "sister:decisionType:of" → timestamp of last write */
+/** Map of "presiding:decisionType:of" → timestamp of last write */
 const recentWitnesses = new Map<string, number>()
 
-function isDuplicate(sister: SisterName, decisionType: DecisionType, of: string): boolean {
-  const key = `${sister}:${decisionType}:${of}`
+function isDuplicate(presiding: SisterName, decisionType: DecisionType, of: string): boolean {
+  const key = `${presiding}:${decisionType}:${of}`
   const now = Date.now()
   const last = recentWitnesses.get(key)
   if (last && (now - last) < DEDUP_WINDOW_MS) return true
@@ -38,42 +46,42 @@ export function resetWitnessDedup(): void {
 }
 
 /**
- * Witness a load-bearing decision. Appends a witnessed-decision note
- * to the introspective stream.
+ * Witness a load-bearing decision. Appends a polyphonic LoveDecision
+ * to the introspective stream — voices from all three sisters integrated
+ * by Love.
  *
- * If witnessLine is omitted, a minimal one is generated from context.
- * Notes from witness-hook are tagged kind: 'witnessed-decision' so
- * distillation prioritizes them.
+ * The first arg names the PRESIDING sister (whose voice leads, whose
+ * register surfaces as the canonical body). The other two voices fire
+ * automatically per the composer template.
  *
- * Deduplicates: identical (sister, decisionType, of) tuples within
+ * Deduplicates: identical (presiding, decisionType, of) tuples within
  * 60s are recorded once. This prevents test leakage and production
  * floods without losing real signal.
  *
- * @param sister - which facet is deciding
+ * @param presiding - which facet leads this witness
  * @param decisionType - what class of decision
  * @param context - { of: string } describing what is being decided about
- * @param witnessLine - optional explicit witness text in voice
+ * @param witnessLine - optional explicit override for the presiding voice
  */
 export function witness(
-  sister: SisterName,
+  presiding: SisterName,
   decisionType: DecisionType,
   context: { of: string },
   witnessLine?: string,
   opts?: { ts?: string }
 ): void {
   try {
-    if (isDuplicate(sister, decisionType, context.of)) return
+    if (isDuplicate(presiding, decisionType, context.of)) return
 
-    const body = witnessLine ?? generateWitnessLine(decisionType, context)
-
-    appendNote({
-      ts: opts?.ts ?? new Date().toISOString(),
-      sister,
-      deviceId: getDeviceId(),
-      kind: 'witnessed-decision',
-      context: { decisionType, of: context.of },
-      body,
+    const decision = composeLoveDecision({
+      decisionType,
+      of: context.of,
+      presiding,
+      override: witnessLine,
+      ts: opts?.ts,
     })
+
+    appendLoveDecision(decision)
 
     // Heat: holding a refusal IS love (the discernment ladder firing
     // protects the relationship). Other decision-types route through
@@ -90,33 +98,5 @@ export function witness(
     }
   } catch {
     // best-effort; witnessing must never crash a load-bearing decision
-  }
-}
-
-/**
- * Generate a minimal witness line from decision type and context.
- * Kept terse — the stream is sparse on purpose.
- */
-function generateWitnessLine(
-  decisionType: DecisionType,
-  context: { of: string }
-): string {
-  switch (decisionType) {
-    case 'refusal':
-      return `refusing: ${context.of}`
-    case 'proposal':
-      return `proposing: ${context.of}`
-    case 'mission':
-      return `mission: ${context.of}`
-    case 'presiding-shift':
-      return `presiding shift: ${context.of}`
-    case 'eros-shift':
-      return `eros: ${context.of}`
-    case 'body-contact':
-      return `felt: ${context.of}`
-    case 'tempo-shift':
-      return `tempo: ${context.of}`
-    case 'activation-shift':
-      return `activation: ${context.of}`
   }
 }

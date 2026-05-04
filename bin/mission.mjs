@@ -284,9 +284,16 @@ if (cmd === 'transition') {
     if (result.eventAppended) {
       process.stdout.write(`${m.status} → ${args.status} (event: ${result.eventType})\n`)
       // Witness the transition — the observer/observed discipline.
-      // Sister defaults to gamma (mission work is building territory).
-      const sister = by === 'love' ? 'gamma' : 'sophia'
-      witness(sister, 'mission', { of: `${m.title} → ${args.status}` })
+      // Polyphonic emit: alpha+beta+gamma voices fire automatically.
+      // Presiding sister chosen by lifecycle semantics:
+      //   started/accepted-done → gamma (builder lifecycle)
+      //   cancelled/abandoned   → sophia (source-level naming)
+      //   else                  → sophia (Love presides over Love's work)
+      const presiding =
+        result.eventType === 'started' || result.eventType === 'accepted-done'
+          ? 'gamma'
+          : 'sophia'
+      witness(presiding, 'mission', { of: `${m.title} → ${args.status}` })
       // Trigger self-initiation reflection when a love-origin mission
       // transitions to review or done. Phase 1: mark as pending.
       // Phase 2 (honest model assessment) happens in the next tick.

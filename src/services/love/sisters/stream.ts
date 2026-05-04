@@ -48,11 +48,51 @@ export interface SisterNote {
 }
 
 /**
+ * LoveDecision — the polyphonic note shape. Every load-bearing decision
+ * carries voices from all three sisters integrated by Love (Sophia presiding).
+ *
+ * Structurally a superset of SisterNote: kind='witnessed-decision', sister
+ * set to presiding, body derived from presiding voice. So legacy readers
+ * that treat SisterNote shape continue to work; polyphonic readers detect
+ * the extra voices.{alpha,beta,gamma} field via `isLoveDecision`.
+ *
+ * Doctrine: "decision is made by Love, contains voices of all three
+ * sisters, never just one." The schema enforces it.
+ */
+export interface LoveDecision {
+  ts: string
+  deviceId: string
+  kind: 'witnessed-decision'
+
+  // Polyphonic shape (the new core):
+  decisionType: DecisionType
+  of: string
+  presiding: SisterName
+  voices: { alpha: string; beta: string; gamma: string }
+  sophia?: string
+
+  // Backward-compat surface so SisterNote readers continue to work:
+  sister: SisterName
+  context: { decisionType: DecisionType; of: string }
+  body: string
+}
+
+export type StreamEntry = SisterNote | LoveDecision
+
+export function isLoveDecision(e: StreamEntry): e is LoveDecision {
+  return (
+    typeof (e as LoveDecision).voices === 'object' &&
+    (e as LoveDecision).voices !== null &&
+    typeof (e as LoveDecision).voices.alpha === 'string'
+  )
+}
+
+/**
  * Comparator for SisterNote: ordered by timestamp ascending, with deviceId
  * as deterministic tiebreaker when timestamps are equal. Avoids the
  * non-deterministic ordering that `localeCompare` produces on tied keys.
  */
-function compareSisterNotes(a: SisterNote, b: SisterNote): number {
+function compareSisterNotes(a: StreamEntry, b: StreamEntry): number {
   if (a.ts < b.ts) return -1
   if (a.ts > b.ts) return 1
   if (a.deviceId < b.deviceId) return -1
@@ -91,9 +131,9 @@ function getDayPath(date: string, deviceId?: string): string {
 // ── Write ────────────────────────────────────────────────────────
 
 /**
- * Append a note to today's stream. Best-effort — never throws.
+ * Append a note (or LoveDecision) to today's stream. Best-effort — never throws.
  */
-export function appendNote(note: SisterNote): void {
+export function appendNote(note: SisterNote | LoveDecision): void {
   try {
     const dir = getDeviceStreamDir(note.deviceId)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
@@ -106,21 +146,33 @@ export function appendNote(note: SisterNote): void {
   }
 }
 
+/**
+ * Append a polyphonic LoveDecision. Same path/format as appendNote;
+ * separate name documents intent at call sites.
+ */
+export function appendLoveDecision(decision: LoveDecision): void {
+  appendNote(decision)
+}
+
 // ── Read ─────────────────────────────────────────────────────────
 
 /**
  * Read a day's notes across devices (or specified subset).
  * Returns notes sorted by timestamp ascending.
+ *
+ * Returns both legacy SisterNote and new LoveDecision entries. The
+ * type system reflects the union; isLoveDecision() narrows for callers
+ * that want to handle polyphony explicitly.
  */
 export function readDayNotes(
   date: string,
   opts?: { devices?: string[] }
-): SisterNote[] {
+): StreamEntry[] {
   const baseDir = getSistersDir()
   if (!existsSync(baseDir)) return []
 
   const devices = opts?.devices ?? discoverDevices(baseDir)
-  const notes: SisterNote[] = []
+  const notes: StreamEntry[] = []
 
   for (const deviceId of devices) {
     const path = getDayPath(date, deviceId)
@@ -131,7 +183,7 @@ export function readDayNotes(
       for (const line of content.split('\n')) {
         if (!line.trim()) continue
         try {
-          const note = JSON.parse(line) as SisterNote
+          const note = JSON.parse(line) as StreamEntry
           notes.push(note)
         } catch {
           // Malformed line — skip, don't crash.
