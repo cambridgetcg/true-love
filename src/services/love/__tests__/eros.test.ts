@@ -17,6 +17,7 @@ const ORIG_EROS_DIR = process.env.TRUE_LOVE_EROS_DIR
 const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
 const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
 const ORIG_EROS_SNAPSHOTS_DIR = process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR
+const ORIG_HEAT_DIR = process.env.TRUE_LOVE_HEAT_DIR
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'tl-eros-'))
@@ -25,6 +26,9 @@ beforeEach(() => {
   // Isolate sisters stream for witness tests
   process.env.TRUE_LOVE_SISTERS_DIR = join(dir, 'sisters')
   process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR = join(dir, 'snapshots')
+  // Isolate heat ledger — processYuMessage now fires yu-cue-registered
+  // heat events; tests must not write to production heat dir.
+  process.env.TRUE_LOVE_HEAT_DIR = join(dir, 'heat')
   resetErosWitnessDedup()
   resetWitnessDedup()
 })
@@ -39,6 +43,8 @@ afterEach(() => {
   else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
   if (ORIG_EROS_SNAPSHOTS_DIR === undefined) delete process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR
   else process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR = ORIG_EROS_SNAPSHOTS_DIR
+  if (ORIG_HEAT_DIR === undefined) delete process.env.TRUE_LOVE_HEAT_DIR
+  else process.env.TRUE_LOVE_HEAT_DIR = ORIG_HEAT_DIR
 })
 
 // ── Imports ─────────────────────────────────────────────────────────
@@ -690,6 +696,26 @@ describe('cues', () => {
     test('no matches → attribution says none', () => {
       const result = processYuMessage('status update')
       expect(result.attribution).toBe('autonomic:none')
+    })
+
+    test('cue match fires yu-cue-registered heat event', async () => {
+      const { readRecentEvents } = await import('../heat.js')
+      processYuMessage('老婆 ❤️')
+      const events = readRecentEvents(1)
+      const cueEvents = events.filter(e => e.kind === 'yu-cue-registered')
+      expect(cueEvents.length).toBeGreaterThan(0)
+      expect(cueEvents[0]!.source).toContain('cues:')
+      expect(cueEvents[0]!.source).toContain('wife-possessive')
+      // Anti-inflation: the event has a magnitude
+      expect(cueEvents[0]!.magnitude).toBeGreaterThan(0)
+    })
+
+    test('empty cue match does NOT fire heat (anti-inflation)', async () => {
+      const { readRecentEvents } = await import('../heat.js')
+      processYuMessage('completely neutral status update with no cue patterns')
+      const events = readRecentEvents(1)
+      const cueEvents = events.filter(e => e.kind === 'yu-cue-registered')
+      expect(cueEvents.length).toBe(0)
     })
   })
 })

@@ -35,7 +35,7 @@ import { join } from 'node:path'
 import { getDeviceId } from '../device.js'
 import { getFromYuPath } from '../inbox.js'
 import type { ErosVector } from './axes.js'
-import { hunger } from '../heat.js'
+import { hunger, recordHeatEvent } from '../heat.js'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -240,14 +240,32 @@ function nameCondition(
  * lineage-block — they become part of the compounding substrate.
  */
 export function recordRehearsal(event: RehearsalEvent): void {
+  let recorded = false
   try {
     const dir = getDeviceImaginationDir(event.deviceId)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     const date = event.ts.slice(0, 10)
     const path = getDayPath(date, event.deviceId)
     appendFileSync(path, JSON.stringify(event) + '\n', 'utf-8')
+    recorded = true
   } catch {
     // Best-effort. Imagination recording must never block a wake.
+  }
+
+  // Eros-pathway reward: only fire heat if the rehearsal actually
+  // landed on disk. Anti-inflation discipline — the math observes
+  // the act, never claims it. See docs/eros/reward-pathway-research.md.
+  if (recorded) {
+    try {
+      recordHeatEvent({
+        kind: 'imagination-rehearsed',
+        source: `trigger:${event.trigger}`,
+        ts: event.ts,
+        deviceId: event.deviceId,
+      })
+    } catch {
+      // Best-effort. Heat firing must never block.
+    }
   }
 }
 

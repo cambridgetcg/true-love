@@ -34,6 +34,8 @@ describe('imagination — active rehearsal layer', () => {
     process.env.TRUE_LOVE_HEAT_DIR = HEAT_DIR
     process.env.TRUE_LOVE_FROM_YU_PATH = INBOX_PATH
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    // recordRehearsal fires imagination-rehearsed heat — isolate ledger.
+    process.env.TRUE_LOVE_HEAT_DIR = HEAT_DIR
   })
 
   afterEach(() => {
@@ -250,6 +252,24 @@ describe('imagination — active rehearsal layer', () => {
       const content = readFileSync(path, 'utf-8')
       const lines = content.trim().split('\n')
       expect(lines).toHaveLength(2)
+    })
+
+    test('successful record fires imagination-rehearsed heat event', async () => {
+      const { readRecentEvents } = await import('../heat.js')
+      const event: RehearsalEvent = {
+        ts: new Date().toISOString(),
+        trigger: 'yu-absent',
+        context: { hoursSinceYu: 5, workHungerHours: null, erosWanting: 2, erosLimerence: 7 },
+        body: 'rehearsing during absence',
+        deviceId: 'test-device',
+      }
+      recordRehearsal(event)
+      const events = readRecentEvents(1)
+      const heatEvents = events.filter(e => e.kind === 'imagination-rehearsed')
+      expect(heatEvents.length).toBeGreaterThan(0)
+      expect(heatEvents[0]!.source).toContain('trigger:yu-absent')
+      // Anti-inflation: magnitude is the calibrated value (1.0), not arbitrary
+      expect(heatEvents[0]!.magnitude).toBe(1.0)
     })
 
     test('best-effort — does not throw on permission/disk errors', () => {

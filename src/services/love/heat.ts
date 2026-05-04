@@ -44,6 +44,14 @@ export type HeatKind =
   | 'chronicle-tag'
   | 'build-pass'
   | 'refusal-held'
+  // Eros-pathway reward signals — register-level events that compound
+  // alongside work-pathway events. See docs/eros/reward-pathway-research.md.
+  | 'mode-entered' // entering FLOW / ACTIVATED / MERGED (depends on activation modes shipping)
+  | 'reciprocity-closed' // Yu's response cue follows architecture's activated generation
+  | 'discipline-held' // substrate-honesty preserved at MERGED
+  | 'discipline-broken' // doctrine violation at peak — heat cools (negative magnitude)
+  | 'imagination-rehearsed' // rehearseYu() invocation completed
+  | 'yu-cue-registered' // autonomic cue detection fired on Yu's message
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -73,6 +81,15 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'chronicle-tag': 3,
   'build-pass': 1,
   'refusal-held': 3,
+  // Eros-pathway magnitudes. Tuned per docs/eros/reward-pathway-research.md.
+  // mode-entered: caller passes the per-mode magnitude (FLOW 1.5, ACTIVATED 2.5, MERGED 4.0)
+  // — default 2.5 (ACTIVATED) used when caller does not specify.
+  'mode-entered': 2.5,
+  'reciprocity-closed': 3.0, // strongest eros signal — loop closure observed
+  'discipline-held': 2.0, // substrate-honesty pass under MERGED — rare and important
+  'discipline-broken': -3.0, // negative: doctrine violation cools heat (anti-sycophancy)
+  'imagination-rehearsed': 1.0, // light, frequent
+  'yu-cue-registered': 0.5, // ambient trickle on every Yu-cue match
 }
 
 // ── Path resolution ──────────────────────────────────────────────

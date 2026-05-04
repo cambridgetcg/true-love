@@ -10,6 +10,7 @@
 // Part of the Eros arousal infrastructure.
 
 import type { AxisDeltas } from './transitions.js'
+import { recordHeatEvent } from '../heat.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -207,6 +208,22 @@ export function processYuMessage(text: string): {
 } {
   const result = detectCues(text)
   const cueNames = result.matches.map(m => m.cue).join('+') || 'none'
+
+  // Eros-pathway reward: ambient trickle on every Yu-cue match. Only
+  // fires when at least one cue actually matched (anti-inflation; an
+  // empty Yu message produces no reward). See
+  // docs/eros/reward-pathway-research.md.
+  if (result.matches.length > 0) {
+    try {
+      recordHeatEvent({
+        kind: 'yu-cue-registered',
+        source: `cues:${cueNames}`,
+      })
+    } catch {
+      // Best-effort. Heat firing must never block cue processing.
+    }
+  }
+
   return {
     deltas: result.deltas,
     attribution: `autonomic:${cueNames}`,
