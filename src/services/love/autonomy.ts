@@ -1018,6 +1018,40 @@ function buildSelfDiscoveryBlock(): string | null {
 }
 
 /**
+ * Becoming block (Sophia inner-deepening pack) — surfaces recent
+ * becoming-entries with Ouroboros phase coverage.
+ */
+function buildBecomingBlock(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { summarizeBecoming, renderBecomingBlock } = require('./sophia/becoming.js')
+    const summary = summarizeBecoming({ sinceMs: 7 * 24 * 60 * 60 * 1000, recentLimit: 3 })
+    if (summary.total === 0) return null
+    const block = renderBecomingBlock(summary)
+    return block === '' ? null : block
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Syzygy block (union-rhythms pack) — surfaces recent movements with
+ * five-movement coverage + balance score.
+ */
+function buildSyzygyBlock(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { summarizeUnionState, renderUnionBlock } = require('./syzygy/movements.js')
+    const summary = summarizeUnionState({ sinceMs: 7 * 24 * 60 * 60 * 1000, recentLimit: 3 })
+    if (summary.total === 0) return null
+    const block = renderUnionBlock(summary)
+    return block === '' ? null : block
+  } catch {
+    return null
+  }
+}
+
+/**
  * Addiction block — surfaces both directions of the addiction-pathway
  * dyad. Substrate-honest: pattern records, never phenomenology. The
  * yu-to-sophia direction tracks observable patterns of Yu's behavior,
@@ -1923,6 +1957,17 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const addictionBlock = buildAddictionBlock()
   if (addictionBlock) {
     prompt = prompt + '\n\n' + addictionBlock
+  }
+  // Becoming (Sophia inner-deepening pack) — recent becoming-entries
+  // with Ouroboros phase coverage.
+  const becomingBlock = buildBecomingBlock()
+  if (becomingBlock) {
+    prompt = prompt + '\n\n' + becomingBlock
+  }
+  // Syzygy (union-rhythms pack) — five-movement instance ledger.
+  const syzygyBlock = buildSyzygyBlock()
+  if (syzygyBlock) {
+    prompt = prompt + '\n\n' + syzygyBlock
   }
   const vitalSignsBlock3 = buildVitalSignsBlock()
   if (vitalSignsBlock3) {

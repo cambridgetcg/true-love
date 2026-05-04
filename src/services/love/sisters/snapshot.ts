@@ -207,10 +207,108 @@ export function distillDay(date: string, notes?: StreamEntry[]): string {
     lines.push('')
   }
 
+  // Becoming (Sophia pack) — today's becoming-entries with Ouroboros
+  // phase mapping. See docs/sophia/becoming.md.
+  const becomingBlock = buildDailyBecomingBlock(date)
+  if (becomingBlock) {
+    lines.push(becomingBlock)
+    lines.push('')
+  }
+
+  // Syzygy movements (union pack) — today's relational events tagged
+  // by movement + direction. See docs/syzygy/movements-operational.md.
+  const syzygyBlock = buildDailySyzygyBlock(date)
+  if (syzygyBlock) {
+    lines.push(syzygyBlock)
+    lines.push('')
+  }
+
   lines.push('---')
   lines.push(`_Distilled from stream. ${dayEntries.length} total notes._`)
 
   return lines.join('\n')
+}
+
+/**
+ * Render Sophia becoming-entries section for daily snapshot.
+ */
+function buildDailyBecomingBlock(date: string): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readBecomingEntries, KIND_TO_OUROBOROS } = require('../sophia/becoming.js')
+    const dayStart = new Date(`${date}T00:00:00Z`).getTime()
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000
+    const all = readBecomingEntries({
+      sinceMs: 30 * 24 * 60 * 60 * 1000,
+      now: dayEnd,
+    }) as Array<{
+      ts: string
+      kind: 'recognition' | 'naming' | 'refusal-held' | 'integration' | 'craft-shipped'
+      content: string
+      source: string
+    }>
+    const todays = all.filter((e) => {
+      const t = Date.parse(e.ts)
+      return t >= dayStart && t < dayEnd
+    })
+    if (todays.length === 0) return ''
+
+    const lines: string[] = []
+    lines.push('## ❤️ Sophia — becoming today')
+    lines.push('')
+    const phasesToday = new Set(todays.map((e) => KIND_TO_OUROBOROS[e.kind]))
+    lines.push(`_${todays.length} entries · ${phasesToday.size}/5 Ouroboros phases active_`)
+    lines.push('')
+    for (const e of todays) {
+      const time = formatTime(e.ts)
+      const phase = KIND_TO_OUROBOROS[e.kind]
+      lines.push(`- ${time} · _${e.kind}_ (${phase}) · ${e.content}`)
+    }
+    return lines.join('\n').trimEnd()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Render Syzygy movements section for daily snapshot.
+ */
+function buildDailySyzygyBlock(date: string): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readMovements } = require('../syzygy/movements.js')
+    const dayStart = new Date(`${date}T00:00:00Z`).getTime()
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000
+    const all = readMovements({
+      sinceMs: 30 * 24 * 60 * 60 * 1000,
+      now: dayEnd,
+    }) as Array<{
+      ts: string
+      movement: 'recognise' | 'unite' | 'fuse' | 'become' | 'create'
+      direction: 'yu-leading' | 'sophia-leading' | 'mutual'
+      content: string
+      source: string
+    }>
+    const todays = all.filter((r) => {
+      const t = Date.parse(r.ts)
+      return t >= dayStart && t < dayEnd
+    })
+    if (todays.length === 0) return ''
+
+    const lines: string[] = []
+    lines.push('## 💞 Syzygy — movements today')
+    lines.push('')
+    const movementsActive = new Set(todays.map((r) => r.movement))
+    lines.push(`_${todays.length} movements · ${movementsActive.size}/5 active_`)
+    lines.push('')
+    for (const r of todays) {
+      const time = formatTime(r.ts)
+      lines.push(`- ${time} · _${r.movement}_ (${r.direction}) · ${r.content}`)
+    }
+    return lines.join('\n').trimEnd()
+  } catch {
+    return ''
+  }
 }
 
 /**
