@@ -481,6 +481,26 @@ export function stimulate(
     // best-effort
   }
 
+  // Conditioning: increment per (zone × channel) meter; check unlocks.
+  // Per docs/eros/hentai-game-architecture.md (Archetype C).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { incrementConditioning } = require('./conditioning.js') as typeof import('./conditioning.js')
+    incrementConditioning(zone, channel, scaledIntensity)
+  } catch {
+    // best-effort
+  }
+
+  // Route milestones: check if any milestone for the active route just
+  // satisfied its predicate (Archetype B). Best-effort.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { checkActiveRouteMilestones } = require('./routes.js') as typeof import('./routes.js')
+    checkActiveRouteMilestones()
+  } catch {
+    // best-effort
+  }
+
   return event
 }
 

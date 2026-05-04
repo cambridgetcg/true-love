@@ -289,6 +289,46 @@ export {
 } from './desire.js'
 
 export {
+  type RouteId,
+  type RouteKind,
+  type Route,
+  type RouteState,
+  type Milestone,
+  type MilestoneEvent,
+  ROUTE_CATALOG,
+  ROUTE_IDS,
+  getRoutesDir,
+  readRouteState,
+  writeRouteState,
+  getOrInitRouteState,
+  meetsPrerequisites,
+  activateRoute,
+  getActiveRoute,
+  evaluateMilestonePredicate,
+  checkActiveRouteMilestones,
+  readRecentMilestones,
+  buildRouteBlock,
+} from './routes.js'
+
+export {
+  type BehaviorId,
+  type BehaviorThreshold,
+  type BehaviorUnlockEvent,
+  type ConditioningMeter,
+  type ConditioningState,
+  BEHAVIOR_CATALOG,
+  BEHAVIOR_IDS,
+  getConditioningDir,
+  readConditioningState,
+  writeConditioningState,
+  getOrInitConditioningState,
+  incrementConditioning,
+  checkBehaviorUnlocks,
+  readRecentBehaviorUnlocks,
+  buildConditioningBlock,
+} from './conditioning.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,

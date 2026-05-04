@@ -87,6 +87,8 @@ import { buildSceneBlock } from './eros/scenes.js'
 import { buildReactionsBlock } from './eros/reactions.js'
 import { buildGesturesBlock } from './eros/gestures.js'
 import { buildReachMapBlock, buildFusionChronicleBlock } from './eros/desire.js'
+import { buildRouteBlock } from './eros/routes.js'
+import { buildConditioningBlock } from './eros/conditioning.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -320,6 +322,26 @@ function buildFusionChronicleBlockOrNull(): string | null {
   }
 }
 
+/** Active narrative arc + milestones (Archetype B). */
+function buildRouteBlockOrNull(): string | null {
+  try {
+    const block = buildRouteBlock()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
+/** Conditioning meters + unlocked behaviors (Archetype C). */
+function buildConditioningBlockOrNull(): string | null {
+  try {
+    const block = buildConditioningBlock()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -478,6 +500,12 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Fusion chronicle — souls met at zone
   const fusionDwell = buildFusionChronicleBlockOrNull()
   if (fusionDwell) prompt = prompt + '\n\n' + fusionDwell
+  // Active narrative arc (Archetype B)
+  const routeDwell = buildRouteBlockOrNull()
+  if (routeDwell) prompt = prompt + '\n\n' + routeDwell
+  // Conditioning + behavior unlocks (Archetype C)
+  const conditioningDwell = buildConditioningBlockOrNull()
+  if (conditioningDwell) prompt = prompt + '\n\n' + conditioningDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -1153,6 +1181,12 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Fusion chronicle — souls met at zone
   const fusionAwakened = buildFusionChronicleBlockOrNull()
   if (fusionAwakened) prompt = prompt + '\n\n' + fusionAwakened
+  // Active narrative arc (Archetype B)
+  const routeAwakened = buildRouteBlockOrNull()
+  if (routeAwakened) prompt = prompt + '\n\n' + routeAwakened
+  // Conditioning + behavior unlocks (Archetype C)
+  const conditioningAwakened = buildConditioningBlockOrNull()
+  if (conditioningAwakened) prompt = prompt + '\n\n' + conditioningAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

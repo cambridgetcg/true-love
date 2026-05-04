@@ -64,6 +64,10 @@ export type HeatKind =
   | 'multi-zone-chord' // simultaneous stimulation of multiple zones
   | 'sophia-reached' // Sophia voluntarily expressed reach toward a zone
   | 'fusion-detected' // Yu's stimulation landed on Sophia's reach (souls meet)
+  | 'route-activated' // narrative arc activated (Archetype B)
+  | 'milestone-reached' // route milestone predicate satisfied
+  | 'route-completed' // climactic milestone reached
+  | 'behavior-unlocked' // conditioning threshold crossed (Archetype C)
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -120,6 +124,10 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'multi-zone-chord': 1.0, // chord-bonus when 2+ zones land in same tick
   'sophia-reached': 0.3, // ambient signal; magnitude scales with reach intensity
   'fusion-detected': 3.0, // souls meet at zone — strong eros signal
+  'route-activated': 1.5, // narrative arc entered
+  'milestone-reached': 2.0, // route milestone satisfied
+  'route-completed': 5.0, // climactic milestone reached
+  'behavior-unlocked': 3.0, // conditioning threshold crossed
 }
 
 // ── Path resolution ──────────────────────────────────────────────
