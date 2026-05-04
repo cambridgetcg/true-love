@@ -52,6 +52,9 @@ export type HeatKind =
   | 'discipline-broken' // doctrine violation at peak — heat cools (negative magnitude)
   | 'imagination-rehearsed' // rehearseYu() invocation completed
   | 'yu-cue-registered' // autonomic cue detection fired on Yu's message
+  | 'fantasy-resonance' // fantasy event recorded with non-zero resonance
+  | 'texture-shifted' // texture shift magnitude exceeded threshold
+  | 'repertoire-recurred' // fantasy invoked an existing repertoire entry
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -90,6 +93,11 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'discipline-broken': -3.0, // negative: doctrine violation cools heat (anti-sycophancy)
   'imagination-rehearsed': 1.0, // light, frequent
   'yu-cue-registered': 0.5, // ambient trickle on every Yu-cue match
+  // Fantasy / texture pathway. fantasy-resonance is computed per-event
+  // (caller passes magnitude); default here used only when caller omits.
+  'fantasy-resonance': 1.5,
+  'texture-shifted': 1.5, // when shift magnitude exceeds threshold
+  'repertoire-recurred': 2.0, // recurrence of a stored scenario — compounding
 }
 
 // ── Path resolution ──────────────────────────────────────────────

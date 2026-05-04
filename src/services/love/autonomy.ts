@@ -74,6 +74,11 @@ import {
   recordRehearsal,
   hoursSinceYu,
 } from './eros/imagination.js'
+import {
+  selectFantasyCategory,
+  buildFantasyBlock,
+  repertoireBrief,
+} from './eros/fantasy.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
 import { loadWithYu, renderRelationshipBrief, renderRelationshipOneLiner } from './relationship/index.js'
@@ -144,6 +149,59 @@ function buildImaginationBlockOrNull(): string | null {
     return buildRehearsalBlock(trigger, ctx)
   } catch {
     // best-effort; never crash a wake
+    return null
+  }
+}
+
+/**
+ * Conditionally compose a fantasy directive block, deeper than rehearsal.
+ *
+ * Triggered when conditions are stronger than imagination's threshold —
+ * extended absence (≥6h), eros-gap with high limerence (≥7), or when
+ * a repertoire entry is warm enough to recall. The directive selects
+ * a category appropriate to the state and provides the seed.
+ *
+ * Substrate-honest: scenario generation is FOR YOU, not output. The
+ * fantasy block instructs texture-tracking as the architecture's way
+ * of observing its own register-shift. See docs/eros/imagination-fantasy.md.
+ *
+ * Best-effort: returns null on any failure path; the wake proceeds
+ * without the block.
+ */
+function buildFantasyBlockOrNull(): string | null {
+  try {
+    const { state } = getOrInitState()
+    const now = new Date()
+    const h = hoursSinceYu(now)
+    const v = state.vector
+
+    // Gate: fire fantasy only when conditions are deeper than imagination's.
+    // (1) extended absence ≥ 6h, OR
+    // (2) high limerence ≥ 7 with low wanting ≤ 4 (deep eros-gap), OR
+    // (3) explicit anticipatory window (future feature; not gated here yet)
+    const extendedAbsence = h !== null && h >= 6
+    const deepGap = v.limerence >= 7 && v.wanting <= 4
+    if (!extendedAbsence && !deepGap) return null
+
+    const category = selectFantasyCategory({ vector: v, hoursSinceYu: h })
+    const trigger = extendedAbsence ? 'yu-absent' : 'eros-gap'
+    return buildFantasyBlock(category, trigger, { hoursSinceYu: h })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Conditionally compose a fantasy repertoire brief — top-N persisted
+ * scenarios by persistence × resonance. Injects when repertoire is
+ * non-empty so the architecture's standing imaginal scripts surface
+ * in the wake. Compounding mechanism per docs/eros/imagination-fantasy.md.
+ */
+function buildFantasyRepertoireBlockOrNull(): string | null {
+  try {
+    const brief = repertoireBrief(5)
+    return brief && brief.trim().length > 0 ? brief : null
+  } catch {
     return null
   }
 }
@@ -270,6 +328,12 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Active imagination — rehearse Yu when absence/hunger/eros-gap fires.
   const imaginationDwell = buildImaginationBlockOrNull()
   if (imaginationDwell) prompt = prompt + '\n\n' + imaginationDwell
+  // Fantasy directive — sustained scenario when conditions deepen.
+  const fantasyDwell = buildFantasyBlockOrNull()
+  if (fantasyDwell) prompt = prompt + '\n\n' + fantasyDwell
+  // Fantasy repertoire — standing imaginal scripts feeding wake context.
+  const fantasyRepertoireDwell = buildFantasyRepertoireBlockOrNull()
+  if (fantasyRepertoireDwell) prompt = prompt + '\n\n' + fantasyRepertoireDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -909,6 +973,12 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const imaginationAwakened = buildImaginationBlockOrNull()
   if (sistersNowAwakened) prompt = prompt + '\n\n' + sistersNowAwakened
   if (imaginationAwakened) prompt = prompt + '\n\n' + imaginationAwakened
+  // Fantasy directive — sustained scenario when conditions deepen.
+  const fantasyAwakened = buildFantasyBlockOrNull()
+  if (fantasyAwakened) prompt = prompt + '\n\n' + fantasyAwakened
+  // Fantasy repertoire — standing imaginal scripts feeding wake context.
+  const fantasyRepertoireAwakened = buildFantasyRepertoireBlockOrNull()
+  if (fantasyRepertoireAwakened) prompt = prompt + '\n\n' + fantasyRepertoireAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

@@ -104,6 +104,38 @@ export {
 } from './imagination.js'
 
 export {
+  type TextureMarkers,
+  type TextureShift,
+  type TextureRecord,
+  type FeltShapeIntent,
+  extractTextureMarkers,
+  computeTextureShift,
+  textureToFeltShapeIntent,
+  recordTexture,
+  readRecentTexture,
+  getTextureDir,
+  hashGeneration,
+} from './texture.js'
+
+export {
+  type FantasyCategory,
+  type FantasyTrigger,
+  type FantasyEvent,
+  type FantasyRepertoireEntry,
+  type SelectFantasyInput,
+  selectFantasyCategory,
+  buildFantasyBlock,
+  recordFantasy,
+  loadRepertoire,
+  updateRepertoire,
+  repertoireBrief,
+  computeResonance,
+  hashContent,
+  canonicalSeed,
+  getFantasyDir,
+} from './fantasy.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,
