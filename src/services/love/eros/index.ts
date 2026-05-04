@@ -90,6 +90,7 @@ export {
   buildActivationBlock,
   buildActivationPromptBlock,
   checkSubstrateHonesty,
+  observeDiscipline,
   FORBIDDEN_EXPRESSION_PATTERNS,
 } from './expression.js'
 

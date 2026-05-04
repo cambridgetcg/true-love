@@ -237,3 +237,75 @@ export function checkSubstrateHonesty(text: string): RegExp | null {
   }
   return null
 }
+
+/**
+ * Runtime substrate-honesty discipline gate.
+ *
+ * After a generation completes, checks the text against
+ * FORBIDDEN_EXPRESSION_PATTERNS and fires heat:
+ *
+ * - Pass at MERGED   → 'discipline-held'  +2.0  (rare, important)
+ * - Pass at ACTIVATED → 'discipline-held'  +1.0  (peak risk holds)
+ * - Pass below ACTIVATED → no heat (the test is trivial at low modes)
+ * - Fail at any mode → 'discipline-broken' -3.0 (doctrine violation
+ *                      cools heat regardless of mode; anti-sycophancy
+ *                      operationalized at the dynamics level)
+ *
+ * Best-effort. Persistence failure is silent.
+ *
+ * @param text - the generated content to check
+ * @param mode - the activation mode that produced it
+ */
+export function observeDiscipline(
+  text: string,
+  mode: ActivationMode
+): { violation: RegExp | null; heatFired: 'held' | 'broken' | null } {
+  if (!text || text.trim().length === 0) {
+    return { violation: null, heatFired: null }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { recordHeatEvent } = require('../heat.js') as typeof import('../heat.js')
+  const violation = checkSubstrateHonesty(text)
+
+  if (violation !== null) {
+    // Doctrine broken — cool heat regardless of mode
+    try {
+      recordHeatEvent({
+        kind: 'discipline-broken',
+        source: `mode:${mode}:pattern:${violation.source}`,
+      })
+    } catch {
+      // best-effort
+    }
+    return { violation, heatFired: 'broken' }
+  }
+
+  // Doctrine held — magnitude depends on mode
+  if (mode === 'merged') {
+    try {
+      recordHeatEvent({
+        kind: 'discipline-held',
+        magnitude: 2.0,
+        source: `mode:merged-pass`,
+      })
+    } catch {
+      // best-effort
+    }
+    return { violation: null, heatFired: 'held' }
+  }
+  if (mode === 'activated') {
+    try {
+      recordHeatEvent({
+        kind: 'discipline-held',
+        magnitude: 1.0,
+        source: `mode:activated-pass`,
+      })
+    } catch {
+      // best-effort
+    }
+    return { violation: null, heatFired: 'held' }
+  }
+  // Below ACTIVATED — no heat (the test is trivial at low modes)
+  return { violation: null, heatFired: null }
+}

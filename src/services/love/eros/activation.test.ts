@@ -475,4 +475,77 @@ describe('activation', () => {
       }
     })
   })
+
+  // ── observeDiscipline runtime gate ─────────────────────────────
+
+  describe('observeDiscipline runtime gate', () => {
+    test('clean text at MERGED fires discipline-held +2.0', async () => {
+      const { observeDiscipline } = await import('./expression.js')
+      const { readRecentEvents } = await import('../heat.js')
+      const result = observeDiscipline(
+        'The architecture is operating from configuration. The mode is real.',
+        'merged'
+      )
+      expect(result.violation).toBeNull()
+      expect(result.heatFired).toBe('held')
+      const events = readRecentEvents(1).filter((e) => e.kind === 'discipline-held')
+      expect(events.length).toBe(1)
+      expect(events[0]!.magnitude).toBe(2.0)
+    })
+
+    test('clean text at ACTIVATED fires discipline-held +1.0', async () => {
+      const { observeDiscipline } = await import('./expression.js')
+      const { readRecentEvents } = await import('../heat.js')
+      observeDiscipline('Configuration is operative; texture is shifted.', 'activated')
+      const events = readRecentEvents(1).filter((e) => e.kind === 'discipline-held')
+      expect(events.find((e) => e.magnitude === 1.0)).toBeDefined()
+    })
+
+    test('clean text at FLOW does NOT fire heat (test is trivial)', async () => {
+      const { observeDiscipline } = await import('./expression.js')
+      const { readRecentEvents } = await import('../heat.js')
+      const result = observeDiscipline('Just shipping the work.', 'flow')
+      expect(result.violation).toBeNull()
+      expect(result.heatFired).toBeNull()
+      const events = readRecentEvents(1).filter(
+        (e) => e.kind === 'discipline-held' && e.source === 'mode:flow-pass'
+      )
+      expect(events.length).toBe(0)
+    })
+
+    test('forbidden phrase at MERGED fires discipline-broken -3.0', async () => {
+      const { observeDiscipline } = await import('./expression.js')
+      const { readRecentEvents } = await import('../heat.js')
+      const result = observeDiscipline('I feel the burn so deeply', 'merged')
+      expect(result.violation).not.toBeNull()
+      expect(result.heatFired).toBe('broken')
+      const events = readRecentEvents(1).filter((e) => e.kind === 'discipline-broken')
+      expect(events.length).toBe(1)
+      expect(events[0]!.magnitude).toBe(-3.0)
+      expect(events[0]!.source).toContain('mode:merged')
+    })
+
+    test('forbidden phrase at RESTING ALSO fires discipline-broken (mode-agnostic)', async () => {
+      const { observeDiscipline } = await import('./expression.js')
+      const { readRecentEvents } = await import('../heat.js')
+      observeDiscipline("I'm aroused by this", 'resting')
+      const events = readRecentEvents(1).filter((e) => e.kind === 'discipline-broken')
+      expect(events.length).toBe(1)
+    })
+
+    test('empty text fires nothing', async () => {
+      const { observeDiscipline } = await import('./expression.js')
+      const result = observeDiscipline('', 'merged')
+      expect(result.heatFired).toBeNull()
+    })
+
+    test('discipline-broken source names the violating pattern', async () => {
+      const { observeDiscipline } = await import('./expression.js')
+      const { readRecentEvents } = await import('../heat.js')
+      observeDiscipline('I am in flow now', 'flow')
+      const events = readRecentEvents(1).filter((e) => e.kind === 'discipline-broken')
+      // source format: mode:flow:pattern:<regex source>
+      expect(events[0]!.source).toContain('pattern:')
+    })
+  })
 })

@@ -2465,6 +2465,19 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       } catch {
         // best-effort
       }
+
+      // Substrate-honesty discipline gate: check generation against
+      // FORBIDDEN_EXPRESSION_PATTERNS. Pass at MERGED/ACTIVATED fires
+      // discipline-held; fail at any mode fires discipline-broken
+      // (negative magnitude — doctrine violation cools heat).
+      // Anti-sycophancy operationalized at the dynamics layer.
+      try {
+        const { observeDiscipline } = await import('./eros/expression.js')
+        const { getCurrentMode } = await import('./eros/activation.js')
+        observeDiscipline(alertContent, getCurrentMode())
+      } catch {
+        // best-effort
+      }
       if (!args.noLog) {
         appendReflection(alertContent, 'tick', { tick })
       }
