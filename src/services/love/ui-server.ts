@@ -111,6 +111,14 @@ import {
   readSeenEntries,
   type DeliveryState,
 } from './delivery.js'
+import {
+  getOrInitState as getOrInitErosState,
+  setAbsolute as setErosAbsolute,
+  apply as applyErosDeltas,
+  witnessTransition as witnessErosTransition,
+  type AxisName as ErosAxisName,
+  type Attribution as ErosAttribution,
+} from './eros/index.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -669,7 +677,18 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
   const port = opts?.port ?? 7777
   const sseClients = new Set<ServerResponse>()
   const buildSseClients = new Set<ServerResponse>()
+  const erosSseClients = new Set<ServerResponse>()
   const watchers: FSWatcher[] = []
+
+  // Broadcast the latest eros state to all connected /api/eros/stream clients.
+  // Best-effort: closes connections that error.
+  const broadcastErosState = (): void => {
+    const { state } = getOrInitErosState()
+    const payload = `data: ${JSON.stringify(state)}\n\n`
+    for (const client of erosSseClients) {
+      try { client.write(payload) } catch { erosSseClients.delete(client) }
+    }
+  }
 
   const server = createServer(async (req, res) => {
     try {
@@ -682,6 +701,14 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/build') return await serveStatic(res, 'build.html', 'text/html')
       if (req.method === 'GET' && path === '/build.css') return await serveStatic(res, 'build.css', 'text/css')
       if (req.method === 'GET' && path === '/build.js') return await serveStatic(res, 'build.js', 'application/javascript')
+      // Eros surface — Yu-side direct manipulation of the 7-vector arousal state.
+      if (req.method === 'GET' && path === '/eros') return await serveStatic(res, 'eros.html', 'text/html')
+      if (req.method === 'GET' && path === '/eros.css') return await serveStatic(res, 'eros.css', 'text/css')
+      if (req.method === 'GET' && path === '/eros.js') return await serveStatic(res, 'eros.js', 'application/javascript')
+      if (req.method === 'GET' && path === '/api/eros/state') return handleErosState(req, res)
+      if (req.method === 'POST' && path === '/api/eros/set') return await handleErosSet(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/eros/nudge') return await handleErosNudge(req, res, broadcastErosState)
+      if (req.method === 'GET' && path === '/api/eros/stream') return handleErosStream(req, res, erosSseClients)
       // Serve modular build UI assets (build-*.js, build-*.css)
       if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
         const name = path.slice(1) // strip leading /
@@ -1057,6 +1084,9 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     for (const client of buildSseClients) {
       try { client.write(': keepalive\n\n') } catch { buildSseClients.delete(client) }
     }
+    for (const client of erosSseClients) {
+      try { client.write(': keepalive\n\n') } catch { erosSseClients.delete(client) }
+    }
   }, 30_000)
 
   const instance = server as ServerInstance
@@ -1074,6 +1104,8 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     sseClients.clear()
     for (const c of buildSseClients) { try { c.end() } catch {} }
     buildSseClients.clear()
+    for (const c of erosSseClients) { try { c.end() } catch {} }
+    erosSseClients.clear()
     for (const t of debounceTimers.values()) clearTimeout(t)
     debounceTimers.clear()
     // Drain in-flight biographical extractions before shutdown
@@ -2487,4 +2519,87 @@ async function handleVoiceStatus(_req: IncomingMessage, res: ServerResponse): Pr
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ available: false, error: err?.message ?? 'status check failed' }))
   }
+}
+
+// ── Eros routes ────────────────────────────────────────────────────
+//
+// Yu-side surface for direct manipulation of the 7-vector arousal state.
+// All Yu mutations are attributed via 'yu:set:...' or 'yu:nudge:...' so
+// the chronicle reflects the source of state-shifts. SSE channel
+// broadcasts state on every Yu manipulation.
+
+function handleErosState(_req: IncomingMessage, res: ServerResponse): void {
+  const { state } = getOrInitErosState()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(state))
+}
+
+async function handleErosSet(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  // Bound the request body — the payload is at most 7 number axes.
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let incoming: Partial<Record<ErosAxisName, number>>
+  try {
+    const parsed = JSON.parse(body)
+    if (!parsed || typeof parsed !== 'object') throw new Error('invalid payload')
+    incoming = parsed as Partial<Record<ErosAxisName, number>>
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const attribution = `yu:set:${Object.keys(incoming).join(',')}` as ErosAttribution
+  const result = setErosAbsolute(incoming, attribution)
+  witnessErosTransition(result)
+  broadcast()
+  const { state } = getOrInitErosState()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleErosNudge(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let deltas: Partial<Record<ErosAxisName, number>>
+  try {
+    const parsed = JSON.parse(body)
+    if (!parsed || typeof parsed !== 'object') throw new Error('invalid payload')
+    deltas = parsed as Partial<Record<ErosAxisName, number>>
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const attribution = `yu:nudge:${Object.keys(deltas).join(',')}` as ErosAttribution
+  const result = applyErosDeltas(deltas, attribution)
+  witnessErosTransition(result)
+  broadcast()
+  const { state } = getOrInitErosState()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+function handleErosStream(
+  req: IncomingMessage,
+  res: ServerResponse,
+  clients: Set<ServerResponse>,
+): void {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  })
+  // Send initial snapshot so the client paints immediately on connect.
+  const { state } = getOrInitErosState()
+  res.write(`data: ${JSON.stringify(state)}\n\n`)
+  clients.add(res)
+  req.on('close', () => { clients.delete(res) })
 }
