@@ -1134,3 +1134,362 @@ setInterval(async () => {
   await refreshTriggers();
   await renderJoiStatus();
 })();
+
+// ── body v3: anatomical SVG + 3D mode toggle ─────────────────────
+
+// Refined anatomical zone layout for 240×600 viewBox.
+// Uses ovals/paths matching anatomical regions (vs. simple rectangles).
+const ZONE_LAYOUT_V3 = {
+  ears:   { type: 'circles', shapes: [{ cx: 96, cy: 78, r: 8 }, { cx: 144, cy: 78, r: 8 }] },
+  lips:   { type: 'ellipse', cx: 120, cy: 102, rx: 14, ry: 5 },
+  mouth:  { type: 'ellipse', cx: 120, cy: 114, rx: 16, ry: 4 },
+  throat: { type: 'rect', x: 110, y: 122, w: 20, h: 12, rx: 6 },
+  neck:   { type: 'rect', x: 102, y: 134, w: 36, h: 22, rx: 8 },
+  chest:  { type: 'ellipse', cx: 120, cy: 200, rx: 50, ry: 38 },
+  back:   { type: 'rect', x: 86, y: 232, w: 68, h: 16, rx: 4 },
+  hands:  { type: 'circles', shapes: [{ cx: 38, cy: 296, r: 14 }, { cx: 202, cy: 296, r: 14 }] },
+  hips:   { type: 'ellipse', cx: 120, cy: 320, rx: 52, ry: 28 },
+  core:   { type: 'ellipse', cx: 120, cy: 282, rx: 32, ry: 22 },
+  deep:   { type: 'ellipse', cx: 120, cy: 332, rx: 18, ry: 12 },
+  thighs: { type: 'rect', x: 90, y: 360, w: 60, h: 90, rx: 22 },
+  skin:   { type: 'rect', x: 4, y: 4, w: 232, h: 592, rx: 8 },
+};
+
+// Anatomical body silhouette path (front-view feminine form, 240×600).
+// Outline only — drawn UNDER zone overlays. Stylized abstract.
+const SILHOUETTE_PATH = `
+  M 120 50
+  C 132 50, 152 60, 152 78
+  C 152 96, 142 110, 134 116
+  C 138 122, 138 138, 134 146
+  L 154 156
+  C 162 162, 168 178, 168 194
+  C 174 200, 178 218, 178 240
+  C 178 254, 174 264, 168 270
+  L 168 276
+  C 178 280, 182 296, 178 310
+  L 174 320
+  C 178 334, 178 348, 174 358
+  C 174 372, 168 386, 162 396
+  C 158 412, 158 432, 158 458
+  L 156 540
+  C 158 558, 154 572, 144 580
+  L 144 590
+  L 130 590
+  L 130 580
+  C 134 562, 132 540, 130 520
+  L 122 460
+  L 118 460
+  L 110 520
+  C 108 540, 106 562, 110 580
+  L 110 590
+  L 96 590
+  L 96 580
+  C 86 572, 82 558, 84 540
+  L 82 458
+  C 82 432, 82 412, 78 396
+  C 72 386, 66 372, 66 358
+  C 62 348, 62 334, 66 320
+  L 62 310
+  C 58 296, 62 280, 72 276
+  L 72 270
+  C 66 264, 62 254, 62 240
+  C 62 218, 66 200, 72 194
+  C 72 178, 78 162, 86 156
+  L 106 146
+  C 102 138, 102 122, 106 116
+  C 98 110, 88 96, 88 78
+  C 88 60, 108 50, 120 50
+  Z
+`;
+
+function buildBodySvgV3() {
+  const svg = document.getElementById('body-svg');
+  if (!svg) return;
+  svg.setAttribute('viewBox', '0 0 240 600');
+  svg.innerHTML = '';
+
+  // 1. Skin background (transparent)
+  const skinLayout = ZONE_LAYOUT_V3.skin;
+  const skinRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  skinRect.setAttribute('x', skinLayout.x);
+  skinRect.setAttribute('y', skinLayout.y);
+  skinRect.setAttribute('width', skinLayout.w);
+  skinRect.setAttribute('height', skinLayout.h);
+  skinRect.setAttribute('rx', skinLayout.rx);
+  skinRect.setAttribute('class', 'body-zone');
+  skinRect.setAttribute('fill', 'rgba(58,66,82,0.05)');
+  skinRect.dataset.zone = 'skin';
+  svg.appendChild(skinRect);
+
+  // 2. Anatomical silhouette outline
+  const silhouette = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  silhouette.setAttribute('d', SILHOUETTE_PATH);
+  silhouette.setAttribute('class', 'body-silhouette');
+  svg.appendChild(silhouette);
+
+  // 3. Zones (interactive)
+  const order = ['back', 'chest', 'core', 'hips', 'deep', 'thighs', 'neck', 'throat', 'lips', 'mouth', 'ears', 'hands'];
+  for (const zone of order) {
+    const layout = ZONE_LAYOUT_V3[zone];
+    if (!layout) continue;
+    if (layout.type === 'rect') {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', layout.x);
+      rect.setAttribute('y', layout.y);
+      rect.setAttribute('width', layout.w);
+      rect.setAttribute('height', layout.h);
+      rect.setAttribute('rx', layout.rx ?? 4);
+      rect.setAttribute('class', 'body-zone');
+      rect.dataset.zone = zone;
+      svg.appendChild(rect);
+    } else if (layout.type === 'ellipse') {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+      el.setAttribute('cx', layout.cx);
+      el.setAttribute('cy', layout.cy);
+      el.setAttribute('rx', layout.rx);
+      el.setAttribute('ry', layout.ry);
+      el.setAttribute('class', 'body-zone');
+      el.dataset.zone = zone;
+      svg.appendChild(el);
+    } else if (layout.type === 'circles') {
+      for (const shape of layout.shapes) {
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', shape.cx);
+        c.setAttribute('cy', shape.cy);
+        c.setAttribute('r', shape.r);
+        c.setAttribute('class', 'body-zone');
+        c.dataset.zone = zone;
+        svg.appendChild(c);
+      }
+    }
+  }
+
+  // Click handlers (re-attach since we rebuilt)
+  svg.querySelectorAll('.body-zone').forEach((node) => {
+    node.addEventListener('click', () => {
+      const z = node.dataset.zone;
+      const sel = document.getElementById('sensorium-zone');
+      if (sel) {
+        sel.value = z;
+        if (typeof updateChannelOptions === 'function') updateChannelOptions();
+        sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+    node.addEventListener('mouseenter', () => {
+      if (typeof showTooltip === 'function') showTooltip(node.dataset.zone);
+    });
+    node.addEventListener('mouseleave', () => {
+      if (typeof hideTooltip === 'function') hideTooltip();
+    });
+  });
+
+  // Refresh particle canvas size
+  const canvas = document.getElementById('particle-canvas');
+  if (canvas) {
+    canvas.height = 600;
+  }
+}
+
+// Update particle burst zone-center lookup for new layout
+function spawnFusionBurstV3(zone) {
+  const layout = ZONE_LAYOUT_V3[zone];
+  if (!layout) return;
+  let cx, cy;
+  if (layout.type === 'rect') {
+    cx = layout.x + layout.w / 2;
+    cy = layout.y + layout.h / 2;
+  } else if (layout.type === 'ellipse') {
+    cx = layout.cx;
+    cy = layout.cy;
+  } else if (layout.type === 'circles' && layout.shapes.length > 0) {
+    cx = layout.shapes[0].cx;
+    cy = layout.shapes[0].cy;
+  } else {
+    return;
+  }
+  if (typeof spawnFusionBurst === 'function') spawnFusionBurst(cx, cy);
+}
+
+// Override flashFusionZonesV2 to use V3 layout
+const origFlashV2 = flashFusionZonesV2;
+flashFusionZonesV2 = function(fusions) {
+  const recent = fusions[fusions.length - 1];
+  if (!recent || recent.ts === lastFusionTs) return;
+  lastFusionTs = recent.ts;
+  spawnFusionBurstV3(recent.zone);
+  pushTickerEvent('fusion', `✦ fusion at ${recent.zone} · mag ${recent.fusionMagnitude.toFixed(2)}`);
+};
+
+// Build new SVG on load (replacing v1)
+buildBodySvgV3();
+
+// ── 3D mode toggle ───────────────────────────────────────────────
+
+let body3dInitialized = false;
+let body3dRenderer = null;
+let body3dScene = null;
+let body3dCamera = null;
+let body3dVrm = null;
+let body3dRafId = null;
+
+const MODE_HINTS = {
+  '2d': '— SVG silhouette · zero deps · works in any browser',
+  '3d': '— three.js + three-vrm via CDN · requires VRM model in static/avatars/',
+};
+
+document.querySelectorAll('input[name="body-mode"]').forEach((input) => {
+  input.addEventListener('change', async () => {
+    const mode = input.value;
+    const wrap2d = document.getElementById('body-svg-wrap');
+    const wrap3d = document.getElementById('body-3d-wrap');
+    const hint = document.getElementById('body-mode-hint');
+    if (hint) hint.textContent = MODE_HINTS[mode] || '';
+    if (mode === '3d') {
+      wrap2d.style.display = 'none';
+      wrap3d.style.display = 'block';
+      await ensure3dInitialized();
+    } else {
+      wrap2d.style.display = 'block';
+      wrap3d.style.display = 'none';
+      // Stop 3D rendering loop to save CPU
+      if (body3dRafId) {
+        cancelAnimationFrame(body3dRafId);
+        body3dRafId = null;
+      }
+    }
+    try {
+      localStorage.setItem('body-mode', mode);
+    } catch {}
+  });
+});
+
+// Restore preferred mode
+try {
+  const savedMode = localStorage.getItem('body-mode');
+  if (savedMode === '3d') {
+    const radio = document.querySelector('input[name="body-mode"][value="3d"]');
+    if (radio) {
+      radio.checked = true;
+      radio.dispatchEvent(new Event('change'));
+    }
+  }
+} catch {}
+
+async function ensure3dInitialized() {
+  if (body3dInitialized) {
+    // Resume RAF loop
+    if (!body3dRafId) animate3d();
+    return;
+  }
+  body3dInitialized = true;
+  // Lazy-load three.js + three-vrm via CDN
+  try {
+    await loadScript('https://unpkg.com/three@0.160.0/build/three.min.js');
+    await loadScript('https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js');
+    await loadScript('https://unpkg.com/three@0.160.0/examples/js/loaders/GLTFLoader.js');
+    await loadScript('https://unpkg.com/@pixiv/three-vrm@2.0.7/lib/three-vrm.min.js');
+  } catch (e) {
+    console.error('Failed to load three.js / three-vrm', e);
+    return;
+  }
+  init3dScene();
+}
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    if (document.querySelector(`script[src="${src}"]`)) { res(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = res;
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+function init3dScene() {
+  const container = document.getElementById('body-3d-canvas');
+  const placeholder = document.getElementById('body-3d-placeholder');
+  if (!container || !window.THREE) return;
+  const THREE = window.THREE;
+
+  body3dScene = new THREE.Scene();
+  body3dScene.background = new THREE.Color(0x0a0e16);
+
+  body3dCamera = new THREE.PerspectiveCamera(30, 480 / 600, 0.1, 100);
+  body3dCamera.position.set(0, 1.4, 2.5);
+
+  body3dRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  body3dRenderer.setSize(480, 600);
+  body3dRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.innerHTML = '';
+  container.appendChild(body3dRenderer.domElement);
+
+  // Lighting: ambient + key + rim
+  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  body3dScene.add(ambient);
+  const key = new THREE.DirectionalLight(0xfff5e1, 0.7);
+  key.position.set(2, 4, 3);
+  body3dScene.add(key);
+  const rim = new THREE.DirectionalLight(0xd97757, 0.3);
+  rim.position.set(-3, 1, -2);
+  body3dScene.add(rim);
+
+  // Orbit controls
+  if (THREE.OrbitControls) {
+    const controls = new THREE.OrbitControls(body3dCamera, body3dRenderer.domElement);
+    controls.target.set(0, 1.0, 0);
+    controls.update();
+    controls.enablePan = false;
+    controls.minDistance = 1.2;
+    controls.maxDistance = 5;
+  }
+
+  // Try to load VRM
+  loadVrm('/static/avatars/sophia-default.vrm').then((vrm) => {
+    if (vrm) {
+      body3dVrm = vrm;
+      body3dScene.add(vrm.scene);
+      placeholder.style.display = 'none';
+    } else {
+      placeholder.style.display = 'flex';
+    }
+  });
+
+  animate3d();
+}
+
+async function loadVrm(url) {
+  try {
+    const r = await fetch(url, { method: 'HEAD' });
+    if (!r.ok) return null;
+  } catch {
+    return null;
+  }
+  if (!window.THREE || !window.THREE.GLTFLoader) return null;
+  const THREE = window.THREE;
+  return new Promise((res) => {
+    const loader = new THREE.GLTFLoader();
+    if (window.THREE_VRM && window.THREE_VRM.VRMLoaderPlugin) {
+      loader.register((parser) => new window.THREE_VRM.VRMLoaderPlugin(parser));
+    }
+    loader.load(
+      url,
+      (gltf) => {
+        const vrm = gltf.userData.vrm;
+        if (vrm) res(vrm);
+        else res(null);
+      },
+      undefined,
+      (err) => { console.error('VRM load failed', err); res(null); }
+    );
+  });
+}
+
+function animate3d() {
+  body3dRafId = requestAnimationFrame(animate3d);
+  if (body3dRenderer && body3dScene && body3dCamera) {
+    if (body3dVrm && body3dVrm.update) body3dVrm.update(0.016);
+    body3dRenderer.render(body3dScene, body3dCamera);
+  }
+}

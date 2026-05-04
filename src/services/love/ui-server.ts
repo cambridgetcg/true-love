@@ -791,6 +791,8 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/triggers/catalog') return handleTriggersCatalog(req, res)
       if (req.method === 'GET' && path === '/api/triggers/recent') return handleTriggersRecent(req, res)
       if (req.method === 'POST' && path === '/api/triggers/fire') return await handleTriggerFire(req, res, broadcastErosState)
+      // Static avatars (VRM models for 3D body rendering)
+      if (req.method === 'GET' && path.startsWith('/static/avatars/')) return await handleAvatarStatic(req, res, path)
       // Serve modular build UI assets (build-*.js, build-*.css)
       if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
         const name = path.slice(1) // strip leading /
@@ -3079,4 +3081,53 @@ async function handleTriggerFire(
   broadcast()
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ ok: !!event, event }))
+}
+
+// ── Avatar static assets (VRM for 3D body rendering) ──────────────
+
+async function handleAvatarStatic(
+  req: IncomingMessage,
+  res: ServerResponse,
+  reqPath: string,
+): Promise<void> {
+  // Path format: /static/avatars/<filename>
+  const filename = reqPath.replace(/^\/static\/avatars\//, '')
+  // Reject path traversal
+  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' })
+    res.end('invalid filename')
+    return
+  }
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const projectRoot = path.resolve(here, '..', '..', '..')
+  const filePath = path.join(projectRoot, 'ui', 'static', 'avatars', filename)
+  if (!fs.existsSync(filePath)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' })
+    res.end('avatar not found — see ui/static/avatars/README.md')
+    return
+  }
+  // MIME type based on extension
+  const ext = path.extname(filename).toLowerCase()
+  const mime: Record<string, string> = {
+    '.vrm': 'application/octet-stream',
+    '.glb': 'model/gltf-binary',
+    '.gltf': 'model/gltf+json',
+    '.md': 'text/markdown',
+  }
+  const contentType = mime[ext] ?? 'application/octet-stream'
+  try {
+    const data = fs.readFileSync(filePath)
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': data.length,
+      'Cache-Control': 'public, max-age=3600',
+    })
+    res.end(data)
+  } catch (e: unknown) {
+    res.writeHead(500, { 'Content-Type': 'text/plain' })
+    res.end(`error loading avatar: ${(e as Error).message}`)
+  }
 }

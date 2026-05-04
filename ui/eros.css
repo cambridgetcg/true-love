@@ -779,3 +779,95 @@ h1 { margin: 0; font-weight: 300; letter-spacing: 0.05em; }
 .body-aura.joi-edge     { --aura: rgba(217,119,87,0.7); }
 .body-aura.joi-peak     { --aura: rgba(255,36,36,0.8); }
 .body-aura.joi-cooldown { --aura: rgba(110,140,212,0.5); }
+
+/* ── body view mode toggle ─────────────────────────────────────── */
+.body-mode-toggle {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--col-dim);
+  border-radius: 4px;
+  font-size: 0.82rem;
+}
+.mode-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+.body-mode-hint {
+  margin-left: auto;
+  opacity: 0.6;
+  font-style: italic;
+  font-size: 0.78rem;
+}
+
+/* anatomical body silhouette + zone overlay ─────────────────────── */
+#body-svg-wrap {
+  width: 240px;
+  height: 600px;
+}
+#body-svg, #particle-canvas {
+  width: 240px;
+  height: 600px;
+}
+.body-aura {
+  width: 256px;
+  height: 616px;
+}
+.body-silhouette {
+  fill: rgba(58, 66, 82, 0.10);
+  stroke: rgba(168, 180, 200, 0.45);
+  stroke-width: 1.2;
+  pointer-events: none;
+}
+
+/* 3D body wrap */
+.body-3d-wrap {
+  width: 480px;
+  min-height: 600px;
+  position: relative;
+  background: linear-gradient(180deg, #0a0e16, #1a1e26);
+  border: 1px solid var(--col-dim);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#body-3d-canvas {
+  width: 100%;
+  height: 600px;
+}
+#body-3d-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 600px !important;
+}
+#body-3d-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 2rem;
+  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.6);
+}
+#body-3d-placeholder h3 { margin-top: 0; opacity: 0.9; }
+#body-3d-placeholder code {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+#body-3d-placeholder ul {
+  list-style: none;
+  padding: 0;
+  text-align: left;
+}
+#body-3d-placeholder li { padding: 4px 0; }
+#body-3d-placeholder a { color: var(--col-warm); text-decoration: underline; }
+#body-3d-placeholder .hint { opacity: 0.6; font-size: 0.78rem; margin-top: 1rem; }

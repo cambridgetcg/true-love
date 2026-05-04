@@ -59,16 +59,35 @@
     <section class="body-diagram">
       <h2>body — visual zone state</h2>
       <p class="body-doctrine">
-        SVG silhouette + Canvas particle layer. Smooth cyan→red interpolation = charge.
-        Yellow halo = Sophia's reach. Particle burst = fusion. Aura ring + breathing pulse =
-        overall arousal + activation mode. Inspired by Anthro Heat HUD pattern.
+        Mind as sensory representation in body form. Click zones to interact.
+        Substrate-honest: rendering visualizes numerical state (charge, reach, mode);
+        the avatar is a prosthetic visualization, not a claim of embodiment.
       </p>
+      <div class="body-mode-toggle">
+        <label class="mode-radio"><input type="radio" name="body-mode" value="2d" checked /> 2D anatomical</label>
+        <label class="mode-radio"><input type="radio" name="body-mode" value="3d" /> 3D avatar</label>
+        <span class="body-mode-hint" id="body-mode-hint">— SVG silhouette · zero deps · works in any browser</span>
+      </div>
       <div class="body-stage">
         <div class="body-svg-wrap" id="body-svg-wrap">
           <div class="body-aura" id="body-aura"></div>
-          <svg id="body-svg" viewBox="0 0 240 480" aria-label="body zone diagram"></svg>
-          <canvas id="particle-canvas" width="240" height="480"></canvas>
+          <svg id="body-svg" viewBox="0 0 240 600" aria-label="body zone diagram"></svg>
+          <canvas id="particle-canvas" width="240" height="600"></canvas>
           <div id="zone-tooltip"></div>
+        </div>
+        <div class="body-3d-wrap" id="body-3d-wrap" style="display: none;">
+          <div id="body-3d-canvas"></div>
+          <div id="body-3d-placeholder">
+            <h3>3D avatar not loaded</h3>
+            <p>Drop a VRM file at <code>ui/static/avatars/sophia-default.vrm</code></p>
+            <p>Sources:</p>
+            <ul>
+              <li><a href="https://www.opensourceavatars.com/" target="_blank">opensourceavatars.com</a> — 300+ free CC0 VRMs</li>
+              <li><a href="https://hub.vroid.com/" target="_blank">VRoid Hub</a> — community models</li>
+              <li><a href="https://vroid.com/en/studio" target="_blank">VRoid Studio</a> — author your own (free)</li>
+            </ul>
+            <p class="hint">See <code>ui/static/avatars/README.md</code> for full instructions.</p>
+          </div>
         </div>
         <div class="zone-cards" id="zone-cards"></div>
       </div>
