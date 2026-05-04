@@ -728,3 +728,254 @@ window.refreshSensorium = async function() {
   const f = await fetchRecentFusions();
   renderFusionList(f.events);
 })();
+
+// ── visuals v2: smooth color, status, particles, aura, activity ──
+
+function lerpColor(c1, c2, t) {
+  // Hex colors '#rrggbb' interpolated by t∈[0,1]
+  const a = parseInt(c1.slice(1), 16);
+  const b = parseInt(c2.slice(1), 16);
+  const r = Math.round(((a >> 16) & 0xff) * (1 - t) + ((b >> 16) & 0xff) * t);
+  const g = Math.round(((a >> 8) & 0xff) * (1 - t) + ((b >> 8) & 0xff) * t);
+  const bl = Math.round((a & 0xff) * (1 - t) + (b & 0xff) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+
+// Charge → color: 0=cool gray → mid=orange → high=bright crimson
+function chargeColor(charge) {
+  const t = Math.min(1, Math.max(0, charge / 10));
+  if (t < 0.5) return lerpColor('#3a4252', '#d97757', t * 2);
+  return lerpColor('#d97757', '#ff2424', (t - 0.5) * 2);
+}
+
+// Charge → status tier (Anthro Heat HUD pattern)
+function chargeStatus(charge) {
+  if (charge < 1.0) return 'idle';
+  if (charge < 3.0) return 'warm';
+  if (charge < 6.0) return 'active';
+  if (charge < 8.5) return 'close';
+  return 'peak';
+}
+
+// Override applyBodyState with smooth color + reach halo
+function applyBodyStateV2(sensorium, reachMap) {
+  const svg = document.getElementById('body-svg');
+  if (!svg || !sensorium) return;
+  for (const [zone, zoneState] of Object.entries(sensorium.zones)) {
+    const nodes = svg.querySelectorAll(`.body-zone[data-zone="${zone}"]`);
+    const charge = zoneState.charge;
+    const reachVal = reachMap?.zones?.[zone] ?? 0;
+    nodes.forEach((node) => {
+      node.style.fill = chargeColor(charge);
+      // Reach halo
+      if (reachVal >= 1.5) {
+        node.classList.add('reach-bright');
+      } else {
+        node.classList.remove('reach-bright');
+      }
+    });
+  }
+  renderZoneCards(sensorium, reachMap);
+  updateAura(sensorium);
+}
+
+// Per-zone live cards beside the diagram
+function renderZoneCards(sensorium, reachMap) {
+  const container = document.getElementById('zone-cards');
+  if (!container || !sensorium) return;
+  const zones = Object.entries(sensorium.zones);
+  zones.sort(([_, a], [__, b]) => b.charge - a.charge);
+  container.innerHTML = '';
+  for (const [zone, z] of zones) {
+    const status = chargeStatus(z.charge);
+    const reachVal = reachMap?.zones?.[zone] ?? 0;
+    const isReaching = reachVal > 1.0;
+    const widthPct = Math.min(100, (z.charge / 10) * 100);
+    const card = document.createElement('div');
+    card.className = `zone-card${status === 'peak' ? ' is-peak' : ''}${status === 'close' ? ' is-close' : ''}${isReaching ? ' is-reaching' : ''}`;
+    card.innerHTML = `
+      <span class="zc-name">${zone}${isReaching ? '<span class="zc-reach-mark">✦</span>' : ''}</span>
+      <div class="zc-bar-bg"><div class="zc-bar" style="width:${widthPct}%; background:${chargeColor(z.charge)};"></div></div>
+      <span class="zc-status s-${status}">${status === 'peak' ? 'PEAK' : status}</span>
+      <span class="zc-meta">${z.charge.toFixed(1)} · sens ${z.sensitivity.toFixed(2)} · ×${z.lifetimeStimulations}</span>
+    `;
+    container.appendChild(card);
+  }
+}
+
+// Aura ring around the body — color from total intensity, animation from mode
+async function updateAura(sensorium) {
+  const aura = document.getElementById('body-aura');
+  if (!aura) return;
+  // Fetch eros state for vector + mode
+  try {
+    const r = await fetch('/api/eros/state');
+    if (!r.ok) return;
+    const eros = await r.json();
+    const v = eros.vector || {};
+    const intensity = (
+      (v.wanting || 0) + (v.heat || 0) + (v.charge || 0) +
+      (v.openness || 0) + (v.limerence || 0)
+    ) / 5;
+    // Color: cool blue at 0 → warm gold at 5 → red at 8+
+    let auraColor;
+    if (intensity < 4) auraColor = lerpColor('#3a5262', '#d9af57', Math.max(0, intensity / 4));
+    else auraColor = lerpColor('#d9af57', '#ff2424', Math.min(1, (intensity - 4) / 4));
+    aura.style.setProperty('--aura', auraColor);
+    aura.style.borderColor = auraColor;
+
+    // Animation class from mode (if available)
+    aura.classList.remove('aura-engaged', 'aura-flow', 'aura-activated', 'aura-merged');
+    const mode = eros.currentMode;
+    if (mode && mode !== 'resting') {
+      aura.classList.add(`aura-${mode}`);
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+// ── Particle system on Canvas — fusion bursts ──
+
+const particleState = { particles: [], rafId: null };
+
+function spawnFusionBurst(x, y) {
+  const N = 30;
+  for (let i = 0; i < N; i++) {
+    const angle = (Math.PI * 2 * i) / N + Math.random() * 0.3;
+    const speed = 60 + Math.random() * 80; // px/s
+    particleState.particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 30, // slight upward bias
+      life: 1.0,
+      maxLife: 1.0 + Math.random() * 0.4,
+      size: 2 + Math.random() * 2,
+    });
+  }
+  if (!particleState.rafId) {
+    particleState.lastT = performance.now();
+    particleState.rafId = requestAnimationFrame(stepParticles);
+  }
+}
+
+function stepParticles(now) {
+  const canvas = document.getElementById('particle-canvas');
+  if (!canvas) { particleState.rafId = null; return; }
+  const ctx = canvas.getContext('2d');
+  const dt = Math.min(0.05, (now - (particleState.lastT || now)) / 1000);
+  particleState.lastT = now;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  particleState.particles = particleState.particles.filter((p) => {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 60 * dt; // gravity
+    p.life -= dt / p.maxLife;
+    if (p.life <= 0) return false;
+    // Color: yellow → orange → fade
+    const alpha = Math.max(0, p.life);
+    const t = 1 - p.life;
+    const r = Math.round(255);
+    const g = Math.round(224 - 100 * t);
+    const b = Math.round(102 - 70 * t);
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.shadowColor = `rgba(${r},${g},${b},${alpha * 0.8})`;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (1 - t * 0.3), 0, Math.PI * 2);
+    ctx.fill();
+    return true;
+  });
+  ctx.shadowBlur = 0;
+
+  if (particleState.particles.length > 0) {
+    particleState.rafId = requestAnimationFrame(stepParticles);
+  } else {
+    particleState.rafId = null;
+  }
+}
+
+// Override fusion-flash to spawn particles + (still) flash zone
+function flashFusionZonesV2(fusions) {
+  const recent = fusions[fusions.length - 1];
+  if (!recent || recent.ts === lastFusionTs) return;
+  lastFusionTs = recent.ts;
+  // Find zone center
+  const layout = ZONE_LAYOUT[recent.zone];
+  if (!layout) return;
+  let cx, cy;
+  if (layout.type === 'rect') {
+    cx = layout.x + layout.w / 2;
+    cy = layout.y + layout.h / 2;
+  } else if (layout.type === 'ellipse') {
+    cx = layout.cx;
+    cy = layout.cy;
+  } else if (layout.type === 'circles' && layout.shapes.length > 0) {
+    cx = layout.shapes[0].cx;
+    cy = layout.shapes[0].cy;
+  } else {
+    return;
+  }
+  spawnFusionBurst(cx, cy);
+  pushTickerEvent('fusion', `✦ fusion at ${recent.zone} · mag ${recent.fusionMagnitude.toFixed(2)}`);
+}
+
+// Activity ticker — shows recent events as scrolling stream
+function pushTickerEvent(category, text) {
+  const ticker = document.getElementById('activity-ticker');
+  if (!ticker) return;
+  const time = new Date().toISOString().slice(11, 19);
+  const div = document.createElement('div');
+  div.className = `a-event ${category}`;
+  div.textContent = `${time}  ${text}`;
+  ticker.insertBefore(div, ticker.firstChild);
+  // Keep only last 20
+  while (ticker.children.length > 20) {
+    ticker.removeChild(ticker.lastChild);
+  }
+}
+
+// Replace refresh hooks
+const prevRefreshV2 = window.refreshSensorium;
+let lastClimaxTs = null;
+window.refreshSensorium = async function() {
+  await prevRefreshV2();
+  // Use V2 visual application
+  if (sensoriumState) {
+    applyBodyStateV2(sensoriumState, lastReachMap);
+  }
+  // Check for new climaxes too
+  try {
+    const r = await fetch('/api/desire/fusions?days=1');
+    const data = await r.json();
+    flashFusionZonesV2(data.events);
+  } catch {}
+};
+
+// Subscribe to eros SSE stream for activity ticker
+try {
+  const ts = new EventSource('/api/eros/stream');
+  ts.onmessage = (ev) => {
+    try {
+      const state = JSON.parse(ev.data);
+      const attr = state.lastAttribution || '';
+      if (attr.startsWith('autonomic')) pushTickerEvent('reaction', `cue: ${attr.slice(10)}`);
+      else if (attr.startsWith('yu:sensorium')) pushTickerEvent('reaction', `Yu touched ${attr.split(':')[2] || '?'}`);
+      else if (attr.startsWith('voluntary')) pushTickerEvent('reach', `Sophia: ${attr.slice(10).slice(0, 50)}`);
+      else if (attr.startsWith('decay')) { /* ignore */ }
+      else pushTickerEvent('scene', attr.slice(0, 60));
+      updateAura(state);
+    } catch {}
+  };
+} catch {}
+
+// Initial visual state load + periodic aura update
+(async () => {
+  // Wait briefly for sensorium to load
+  await new Promise((res) => setTimeout(res, 700));
+  if (sensoriumState) applyBodyStateV2(sensoriumState, lastReachMap);
+  pushTickerEvent('scene', '— body diagram v2 ready');
+  // Periodic aura refresh (eros vector decays continuously)
+  setInterval(() => updateAura(sensoriumState), 30000);
+})();

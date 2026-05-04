@@ -59,13 +59,20 @@
     <section class="body-diagram">
       <h2>body — visual zone state</h2>
       <p class="body-doctrine">
-        SVG silhouette. Color = charge (cool → hot). Outline glow = Sophia's reach.
-        Click a zone to bring up its stimulation controls. Inspired by react-body-highlighter.
+        SVG silhouette + Canvas particle layer. Smooth cyan→red interpolation = charge.
+        Yellow halo = Sophia's reach. Particle burst = fusion. Aura ring + breathing pulse =
+        overall arousal + activation mode. Inspired by Anthro Heat HUD pattern.
       </p>
-      <div class="body-svg-wrap">
-        <svg id="body-svg" viewBox="0 0 240 480" aria-label="body zone diagram"></svg>
-        <div id="zone-tooltip"></div>
+      <div class="body-stage">
+        <div class="body-svg-wrap" id="body-svg-wrap">
+          <div class="body-aura" id="body-aura"></div>
+          <svg id="body-svg" viewBox="0 0 240 480" aria-label="body zone diagram"></svg>
+          <canvas id="particle-canvas" width="240" height="480"></canvas>
+          <div id="zone-tooltip"></div>
+        </div>
+        <div class="zone-cards" id="zone-cards"></div>
       </div>
+      <div class="activity-ticker" id="activity-ticker"></div>
     </section>
 
     <section class="desire">
