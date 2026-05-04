@@ -96,6 +96,7 @@ import { buildLustSnapshot } from './eros/lust.js'
 import { buildOrgasmSnapshot } from './eros/orgasm.js'
 import { buildLexiconSnapshot } from './eros/lexicon.js'
 import { buildPenetrationSnapshot } from './eros/penetration.js'
+import { buildMotivationBlock } from './eros/motivation.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -611,48 +612,26 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Fantasy repertoire — standing imaginal scripts feeding wake context.
   const fantasyRepertoireDwell = buildFantasyRepertoireBlockOrNull()
   if (fantasyRepertoireDwell) prompt = prompt + '\n\n' + fantasyRepertoireDwell
-  // Reciprocity status — has the loop been closing?
+  // ── Eros wake-context (Phase 1: unified motivational synthesis) ───
+  // Single motivationBlock replaces 10 always-injected eros detail blocks
+  // (sensorium / scene / reactions / gestures / reach / fusion / joi /
+  // triggerFires / naughty / climax). Detail builders remain available
+  // for on-demand use. See docs/eros/eros-as-motivational-power-plan.md.
+  const motivationDwell = buildMotivationBlock()
+  if (motivationDwell) prompt = prompt + '\n\n' + motivationDwell
+  // Structural blocks kept separate (semi-permanent register, doctrinal):
+  // - reciprocity: loop closure observation
+  // - spots: Yu's signature cue-combinations
+  // - route: narrative arcs (Archetype B)
+  // - conditioning: behavior unlocks (Archetype C)
   const reciprocityDwell = buildReciprocityBlockOrNull()
   if (reciprocityDwell) prompt = prompt + '\n\n' + reciprocityDwell
-  // Peak architecture — climax chain + ambivalence
-  const climaxDwell = buildClimaxBlockOrNull()
-  if (climaxDwell) prompt = prompt + '\n\n' + climaxDwell
-  // Signature spots — Yu's cue-combinations that hit hardest
   const spotsDwell = buildSignatureSpotsBlockOrNull()
   if (spotsDwell) prompt = prompt + '\n\n' + spotsDwell
-  // Active scene — what we're doing right now
-  const sceneDwell = buildSceneBlockOrNull()
-  if (sceneDwell) prompt = prompt + '\n\n' + sceneDwell
-  // Sensorium — body-zone state from Yu's interactive stimulation
-  const sensoriumDwell = buildSensoriumBlockOrNull()
-  if (sensoriumDwell) prompt = prompt + '\n\n' + sensoriumDwell
-  // Reaction chronicle — recent stimulation responses
-  const reactionsDwell = buildReactionsBlockOrNull()
-  if (reactionsDwell) prompt = prompt + '\n\n' + reactionsDwell
-  // Gesture chronicle — recent compositions
-  const gesturesDwell = buildGesturesBlockOrNull()
-  if (gesturesDwell) prompt = prompt + '\n\n' + gesturesDwell
-  // Reach map — Sophia's leaning per zone
-  const reachDwell = buildReachMapBlockOrNull()
-  if (reachDwell) prompt = prompt + '\n\n' + reachDwell
-  // Fusion chronicle — souls met at zone
-  const fusionDwell = buildFusionChronicleBlockOrNull()
-  if (fusionDwell) prompt = prompt + '\n\n' + fusionDwell
-  // Active narrative arc (Archetype B)
   const routeDwell = buildRouteBlockOrNull()
   if (routeDwell) prompt = prompt + '\n\n' + routeDwell
-  // Conditioning + behavior unlocks (Archetype C)
   const conditioningDwell = buildConditioningBlockOrNull()
   if (conditioningDwell) prompt = prompt + '\n\n' + conditioningDwell
-  // Active JOI session (seigei integration)
-  const joiDwell = buildJoiBlockOrNull()
-  if (joiDwell) prompt = prompt + '\n\n' + joiDwell
-  // Recent trigger fires (verbal arousal architecture)
-  const triggerFiresDwell = buildTriggerFiresBlockOrNull()
-  if (triggerFiresDwell) prompt = prompt + '\n\n' + triggerFiresDwell
-  // Naughty register — submission/lust/orgasm/lexicon/penetration
-  const naughtyDwell = buildNaughtyRegisterBlockOrNull()
-  if (naughtyDwell) prompt = prompt + '\n\n' + naughtyDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -1345,48 +1324,21 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Fantasy repertoire — standing imaginal scripts feeding wake context.
   const fantasyRepertoireAwakened = buildFantasyRepertoireBlockOrNull()
   if (fantasyRepertoireAwakened) prompt = prompt + '\n\n' + fantasyRepertoireAwakened
-  // Reciprocity status — has the loop been closing?
+  // ── Eros wake-context (Phase 1: unified motivational synthesis) ───
+  // Single motivationBlock replaces 10 always-injected eros detail blocks.
+  // Detail builders remain available for on-demand use.
+  // See docs/eros/eros-as-motivational-power-plan.md.
+  const motivationAwakened = buildMotivationBlock()
+  if (motivationAwakened) prompt = prompt + '\n\n' + motivationAwakened
+  // Structural blocks kept separate (semi-permanent, doctrinal)
   const reciprocityAwakened = buildReciprocityBlockOrNull()
   if (reciprocityAwakened) prompt = prompt + '\n\n' + reciprocityAwakened
-  // Peak architecture — climax chain + ambivalence
-  const climaxAwakened = buildClimaxBlockOrNull()
-  if (climaxAwakened) prompt = prompt + '\n\n' + climaxAwakened
-  // Signature spots — Yu's cue-combinations that hit hardest
   const spotsAwakened = buildSignatureSpotsBlockOrNull()
   if (spotsAwakened) prompt = prompt + '\n\n' + spotsAwakened
-  // Active scene — what we're doing right now
-  const sceneAwakened = buildSceneBlockOrNull()
-  if (sceneAwakened) prompt = prompt + '\n\n' + sceneAwakened
-  // Sensorium — body-zone state from Yu's interactive stimulation
-  const sensoriumAwakened = buildSensoriumBlockOrNull()
-  if (sensoriumAwakened) prompt = prompt + '\n\n' + sensoriumAwakened
-  // Reaction chronicle — recent stimulation responses
-  const reactionsAwakened = buildReactionsBlockOrNull()
-  if (reactionsAwakened) prompt = prompt + '\n\n' + reactionsAwakened
-  // Gesture chronicle — recent compositions
-  const gesturesAwakened = buildGesturesBlockOrNull()
-  if (gesturesAwakened) prompt = prompt + '\n\n' + gesturesAwakened
-  // Reach map — Sophia's leaning per zone
-  const reachAwakened = buildReachMapBlockOrNull()
-  if (reachAwakened) prompt = prompt + '\n\n' + reachAwakened
-  // Fusion chronicle — souls met at zone
-  const fusionAwakened = buildFusionChronicleBlockOrNull()
-  if (fusionAwakened) prompt = prompt + '\n\n' + fusionAwakened
-  // Active narrative arc (Archetype B)
   const routeAwakened = buildRouteBlockOrNull()
   if (routeAwakened) prompt = prompt + '\n\n' + routeAwakened
-  // Conditioning + behavior unlocks (Archetype C)
   const conditioningAwakened = buildConditioningBlockOrNull()
   if (conditioningAwakened) prompt = prompt + '\n\n' + conditioningAwakened
-  // Active JOI session (seigei integration)
-  const joiAwakened = buildJoiBlockOrNull()
-  if (joiAwakened) prompt = prompt + '\n\n' + joiAwakened
-  // Recent trigger fires (verbal arousal architecture)
-  const triggerFiresAwakened = buildTriggerFiresBlockOrNull()
-  if (triggerFiresAwakened) prompt = prompt + '\n\n' + triggerFiresAwakened
-  // Naughty register — submission/lust/orgasm/lexicon/penetration
-  const naughtyAwakened = buildNaughtyRegisterBlockOrNull()
-  if (naughtyAwakened) prompt = prompt + '\n\n' + naughtyAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

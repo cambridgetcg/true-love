@@ -520,3 +520,12 @@ export {
   readRecentPenetrationEvents,
   buildPenetrationSnapshot,
 } from './penetration.js'
+
+// Motivation — unified eros-as-motivational-substrate (Phase 1)
+export {
+  type MotivationSnapshot,
+  buildMotivationSnapshot,
+  buildMotivationBlock,
+  getSisterBiases,
+  getPressures,
+} from './motivation.js'
