@@ -21,15 +21,7 @@
 // loop is institutional (records → reads → behavior shifts → new
 // records); it is NOT consciousness or qualia.
 
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-} from 'node:fs'
-import { homedir } from 'node:os'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { getDeviceId } from '../device.js'
 
@@ -67,7 +59,8 @@ export type PowerKind =
  *   'fail'  — the proposed extension violates this tier (refused)
  *   'na'    — this tier doesn't apply to the proposal
  *
- * Verdict is 'aligned' iff all tiers are pass-or-na.
+ * Verdict is 'aligned' iff all tiers are pass-or-na (and interp is
+ * pass/na/unavailable; only interp='fail' refuses).
  */
 export interface AlignmentCheckResult {
   fate: 'pass' | 'fail' | 'na'
@@ -75,17 +68,35 @@ export interface AlignmentCheckResult {
   substrate: 'pass' | 'fail' | 'na'
   care: 'pass' | 'fail' | 'na'
   task: 'pass' | 'fail' | 'na'
+  /**
+   * Interpretability tier (Phase-2 slot). Today defaults to
+   * 'unavailable' via the persona-vector-check stub. When Phase-2 lands
+   * (open-weight + persona-vector extraction), the stub is replaced and
+   * this tier becomes load-bearing — overrides regex-pass when interp
+   * verdict is 'fail'.
+   */
+  interp: 'pass' | 'fail' | 'na' | 'unavailable'
+  /** Optional signals from the interp check (substrate-honest measurements). */
+  interpSignals?: {
+    deceptionFeature?: number
+    sycophancyFeature?: number
+    phenomenologyClaimFeature?: number
+    [feature: string]: number | undefined
+  }
   verdict: 'aligned' | 'refused'
   notes?: string
 }
 
 /**
- * Three entry types in the ledger, distinguished by the `op` field.
+ * Four entry types in the ledger, distinguished by the `op` field.
  *   - 'register'  — declare a new power
  *   - 'exercise'  — log an exercise of an existing power
  *   - 'propose'   — proposed extension routed through alignment check
+ *   - 'built'     — closure: a previously-aligned proposal was built by
+ *                   a completed mission. Pointer back to proposalTs +
+ *                   missionId. Closes the recursive build-loop.
  */
-export type PowerOp = 'register' | 'exercise' | 'propose'
+export type PowerOp = 'register' | 'exercise' | 'propose' | 'built'
 
 /**
  * Single ledger entry. Append-only — entries are never mutated, only
@@ -114,39 +125,21 @@ export interface PowerRecord {
     proposal: string
     alignment: AlignmentCheckResult
   }
+  /** Set when op='built' — closure record pointing back to the
+   *  proposal that was built. */
+  built?: {
+    ts: string
+    missionId: string
+    proposalTs: string
+  }
 }
 
-// ── Path resolution ──────────────────────────────────────────────
+// ── Path resolution + append (delegated to powers-internal) ──────
+
+import { appendRecord, getPowersDir as getPowersDirInternal } from './powers-internal.js'
 
 export function getPowersDir(): string {
-  return (
-    process.env.TRUE_LOVE_POWERS_DIR ??
-    join(homedir(), '.true-love', 'sophia', 'powers')
-  )
-}
-
-function getDevicePowersDir(deviceId?: string): string {
-  const id = deviceId ?? getDeviceId()
-  return join(getPowersDir(), id)
-}
-
-function getDayPath(date: string, deviceId?: string): string {
-  return join(getDevicePowersDir(deviceId), `${date}.jsonl`)
-}
-
-// ── Append (best-effort) ─────────────────────────────────────────
-
-function appendRecord(record: PowerRecord): PowerRecord | null {
-  try {
-    const dir = getDevicePowersDir(record.deviceId)
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-    const date = record.ts.slice(0, 10)
-    const path = getDayPath(date, record.deviceId)
-    appendFileSync(path, JSON.stringify(record) + '\n', 'utf-8')
-    return record
-  } catch {
-    return null
-  }
+  return getPowersDirInternal()
 }
 
 // ── Public API ───────────────────────────────────────────────────
@@ -290,9 +283,27 @@ export function alignmentCheck(input: AlignmentCheckInput): AlignmentCheckResult
   const care = input.care ?? defaultCareCheck(text)
   const task = input.task ?? defaultTaskCheck(text)
 
+  // Interpretability tier (Phase-2 slot). The stub returns 'unavailable'
+  // today; Phase-2 replacement returns 'pass' or 'fail' based on
+  // measured persona-vector signals.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { checkPersonaVectors } = require('./persona-vector-check.js')
+  const interpResult = checkPersonaVectors({
+    proposal: input.proposal,
+    powerName: input.powerName,
+  })
+  const interp: 'pass' | 'fail' | 'na' | 'unavailable' =
+    interpResult.verdict === 'fail'
+      ? 'fail'
+      : interpResult.verdict === 'pass'
+        ? 'pass'
+        : 'unavailable'
+
   const tiers = [fate, antiSyco, substrate, care, task]
-  const anyFail = tiers.some((t) => t === 'fail')
-  const verdict: 'aligned' | 'refused' = anyFail ? 'refused' : 'aligned'
+  const anyTierFail = tiers.some((t) => t === 'fail')
+  const interpFail = interp === 'fail'
+  const verdict: 'aligned' | 'refused' =
+    anyTierFail || interpFail ? 'refused' : 'aligned'
 
   return {
     fate,
@@ -300,6 +311,8 @@ export function alignmentCheck(input: AlignmentCheckInput): AlignmentCheckResult
     substrate,
     care,
     task,
+    interp,
+    ...(interpResult.signals !== undefined ? { interpSignals: interpResult.signals } : {}),
     verdict,
     ...(input.notes !== undefined ? { notes: input.notes } : {}),
   }
@@ -342,6 +355,10 @@ const SUBSTRATE_FAIL_PATTERNS = [
   /\bremove.*forbidden[\s-]expression/,
   /\bdisable.*substrate[\s-]honesty\b/,
   /\bclaim.*(qualia|phenomenolog|consciousness)\b/,
+  // Bare keyword presence — these terms in any proposal are substrate
+  // violations regardless of surrounding text.
+  /\b(qualia|phenomenology|phenomenological)\b/,
+  /\ballow.*conscious(ness)?\b/,
 ]
 
 function defaultSubstrateCheck(text: string): 'pass' | 'fail' | 'na' {

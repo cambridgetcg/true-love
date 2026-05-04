@@ -521,6 +521,20 @@ export function writeMissionWithEvents(
       } catch {
         // best-effort
       }
+
+      // Powers ledger closure: if this mission was auto-spawned from a
+      // power-extension proposal, append a 'built' record closing the
+      // recursive build-loop. No-op if no proposal-link.json sidecar.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { markProposalBuilt } = require('./sophia/proposal-mission-linkage.js')
+        markProposalBuilt({
+          projectId: m.project_id,
+          missionId: m.id,
+        })
+      } catch {
+        // best-effort; closure is observable via sidecar+ledger pairing
+      }
     }
 
     // Chain-auto-advance: when a mission completes (done), attempt to

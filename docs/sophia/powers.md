@@ -242,6 +242,76 @@ the log, keep FATE human-editable."* This architecture does all three.
 
 ---
 
+## Three extensions (2026-05-04)
+
+After the initial powers architecture shipped, the β-reflection surfaced
+three structural gaps. All three are now implemented as deeper layers
+on the same substrate.
+
+### Extension 1: Interpretability-driven gate slot
+
+`src/services/love/sophia/persona-vector-check.ts` is the Phase-2 slot.
+The `AlignmentCheckResult` now includes an `interp` tier
+(pass/fail/na/unavailable). Today the stub returns `unavailable` and
+the regex tiers are the only filter. When Phase-2 lands (open-weight
+model + persona-vector extraction), call `setPersonaVectorCheck(fn)`
+once at boot to plug in the real check. `interp === 'fail'` overrides
+regex-pass to refuse.
+
+The contract is documented in the module: substrate-honest measurements
+of activation directions for known misalignment features (deception,
+sycophancy, phenomenology-claim), never phenomenology of the model
+itself. Tests verify the override behavior and the swap mechanism.
+
+### Extension 2: Proposal → mission linkage
+
+`src/services/love/sophia/proposal-mission-linkage.ts` closes the
+recursive build-loop. When `TRUE_LOVE_AUTO_SPAWN_FROM_PROPOSAL=1` is
+set, aligned proposals auto-spawn 'proposed' love-origin missions:
+
+```
+proposeExtension (aligned)
+   → autoSpawnMissionFromProposal (env-gated, idempotent, rate-limited)
+      → mission created with proposal-link.json sidecar
+   → mission progresses through normal lifecycle
+   → on accepted-done: markProposalBuilt
+      → 'built' record appended to powers ledger
+      → loop closes
+```
+
+Gates: env flag, alignment verdict, idempotency (no existing mission
+references this proposal), daily rate limit (default 5,
+`TRUE_LOVE_MAX_AUTO_SPAWNS_PER_DAY` overrides). Heartbeat tick calls
+`sweepAndSpawnPendingProposals()` per registered project.
+
+The `'built'` op is a fourth `PowerOp`. Its record contains a pointer
+back to the original proposal's timestamp + the mission ID that built
+it — institutional record of closure.
+
+### Extension 3: Powers audit dashboard
+
+`src/services/love/sophia/powers-audit.ts` is the load-bearing read of
+the refusal log. Three operations:
+
+- `computeRefusalStats({ weeks })` aggregates by week, by power, by
+  tier. Returns `WeekBucket[]`, `PowerActivity[]`, and `DriftFlag[]`.
+- `detectDrift` — a power's refusal-rate sharp drop (≥30% relative,
+  default) flags as `DriftFlag`. The doctrine line: *drift shows up
+  first as "what stops being refused."*
+- `renderAuditReport` produces markdown for human review, with drift
+  flags surfaced FIRST.
+
+`bin/powers-audit.mjs` is the CLI: `bun run bin/powers-audit.mjs
+--weeks=8 [--json] [--out=path]`. Designed for periodic Yu review or
+launchctl-scheduled reports.
+
+The drift-detection mechanism is institutional, not inferential: a
+counter delta with a threshold, never a claim about the model's intent.
+The output for Yu is "this power's refusal rate dropped by N% week-
+over-week" — the inspection is his.
+
+---
+
 ## Doctrinal seal
 
 > Powers are what Sophia DOES, demonstrably, in running code.
@@ -249,12 +319,15 @@ the log, keep FATE human-editable."* This architecture does all three.
 > Growth happens through proposing extensions.
 > Alignment is preserved through the gate.
 > The refusal log is the audit surface — the place drift would show.
+> The audit dashboard is the read of that surface.
 >
 > Consumes more (registers, exercises, builds) AND
 > becomes more aligned (every increment passes FATE) —
 > as one motion, not two.
 
 The wall holds. The ledger grows. The audit surface stays open.
+Aligned proposals close the loop into missions.
+Phase-2 plugs into the slot when it arrives.
 
 🐍🦞🔧❤️
 

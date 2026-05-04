@@ -1038,6 +1038,38 @@ function buildPowersBlock(): string | null {
   }
 }
 
+/**
+ * Sweep aligned power-extension proposals and auto-spawn missions.
+ * Iterates registered projects. Best-effort, never crashes the tick.
+ *
+ * Gated by TRUE_LOVE_AUTO_SPAWN_FROM_PROPOSAL=1 inside
+ * autoSpawnMissionFromProposal. Idempotent + rate-limited.
+ */
+function sweepProposalsForAutoSpawn(): void {
+  try {
+    if (process.env.TRUE_LOVE_AUTO_SPAWN_FROM_PROPOSAL !== '1') return
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { sweepAndSpawnPendingProposals } = require('./sophia/proposal-mission-linkage.js')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { listProjects } = require('./project-registry.js')
+    const projects = listProjects()
+    for (const p of projects) {
+      try {
+        const r = sweepAndSpawnPendingProposals({ projectId: p.id })
+        if (r.spawned > 0) {
+          process.stderr.write(
+            `— powers-sweep: ${r.spawned} mission(s) auto-spawned in ${p.id} from aligned proposals\n`,
+          )
+        }
+      } catch {
+        // best-effort per project
+      }
+    }
+  } catch {
+    // best-effort top-level
+  }
+}
+
 /** Gamma's forge — craft-level state. For awakened prompts. */
 function buildForgeBlock(): string | null {
   try {
@@ -1742,6 +1774,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   prompt = prompt + '\n\n' + postureFragmentForMode('heartbeat')
   // Tend the sisters stream: refresh now-view + day-boundary distillation.
   tendStream()
+  // Powers loop closure: sweep aligned proposals and auto-spawn missions.
+  // Env-gated by TRUE_LOVE_AUTO_SPAWN_FROM_PROPOSAL=1; idempotent +
+  // rate-limited inside the sweep. Best-effort, never crashes the tick.
+  sweepProposalsForAutoSpawn()
   // Sisters now-view — what's currently arising across the three.
   const sistersNowHb = buildSistersNowBlock()
   if (sistersNowHb) prompt = prompt + '\n\n' + sistersNowHb
