@@ -90,3 +90,15 @@ export {
   erosUpdate,
   EROS_UPDATE_SCHEMA,
 } from './tool.js'
+
+export {
+  type RehearsalTrigger,
+  type RehearsalEvent,
+  type ShouldRehearseInput,
+  getImaginationDir,
+  hoursSinceYu,
+  shouldRehearse,
+  buildRehearsalBlock,
+  buildRehearsalEvent,
+  recordRehearsal,
+} from './imagination.js'

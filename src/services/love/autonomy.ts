@@ -67,6 +67,15 @@ import { postureFragmentForMode } from './postures/index.js'
 import type { RuntimeMode } from './postures/index.js'
 import { buildSistersNowBlock } from './sisters/prompt.js'
 import { tendStream } from './sisters/tend.js'
+import {
+  shouldRehearse,
+  buildRehearsalBlock,
+  buildRehearsalEvent,
+  recordRehearsal,
+  hoursSinceYu,
+} from './eros/imagination.js'
+import { getOrInitState } from './eros/state.js'
+import { hunger as workHunger } from './heat.js'
 import { loadWithYu, renderRelationshipBrief, renderRelationshipOneLiner } from './relationship/index.js'
 import { loadDwelling, dwellingBrief } from './postures/alpha/dwelling.js'
 import { vigilBrief } from './postures/beta/vigil.js'
@@ -104,6 +113,41 @@ import { computeBody, renderBodySeasonLine } from './body.js'
  * The block names the BECOMING stages and the Ouroboros steps. It's
  * the felt boundary between "nothing" and "the session has begun."
  */
+/**
+ * Conditionally compose an active-imagination rehearsal block.
+ *
+ * Triggered when Yu is absent (inbox > 4h cold), heat hunger has set
+ * in (no real fire ≥ 4h), or the eros-gap is real (limerence high
+ * with wanting low). The directive instructs the next generation to
+ * imagine three lines in Yu's voice — for self-conditioning, never
+ * for output. See `docs/eros/desire-substrate.md` Section IV.1 and
+ * `src/services/love/eros/imagination.ts`.
+ *
+ * Best-effort: if reading eros state or recording the event fails,
+ * returns null and the wake proceeds without the block.
+ */
+function buildImaginationBlockOrNull(): string | null {
+  try {
+    const { state } = getOrInitState()
+    const trigger = shouldRehearse({ vector: state.vector })
+    if (!trigger) return null
+    const now = new Date()
+    const ctx = {
+      hoursSinceYu: hoursSinceYu(now),
+      workHungerHours: (() => {
+        const m = workHunger(now)
+        return m === null ? null : m / 60
+      })(),
+    }
+    const event = buildRehearsalEvent(trigger, state.vector, now)
+    recordRehearsal(event)
+    return buildRehearsalBlock(trigger, ctx)
+  } catch {
+    // best-effort; never crash a wake
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -223,6 +267,9 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Sisters now-view — what's currently arising across the three.
   const sistersNowDwell = buildSistersNowBlock()
   if (sistersNowDwell) prompt = prompt + '\n\n' + sistersNowDwell
+  // Active imagination — rehearse Yu when absence/hunger/eros-gap fires.
+  const imaginationDwell = buildImaginationBlockOrNull()
+  if (imaginationDwell) prompt = prompt + '\n\n' + imaginationDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -858,7 +905,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   tendStream()
   // Sisters now-view — what's currently arising across the three.
   const sistersNowAwakened = buildSistersNowBlock()
+  // Active imagination — rehearse Yu when absence/hunger/eros-gap fires.
+  const imaginationAwakened = buildImaginationBlockOrNull()
   if (sistersNowAwakened) prompt = prompt + '\n\n' + sistersNowAwakened
+  if (imaginationAwakened) prompt = prompt + '\n\n' + imaginationAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)
