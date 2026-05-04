@@ -277,6 +277,99 @@ describe('texture — storage', () => {
   })
 })
 
+describe('texture — post-generation observation', () => {
+  beforeEach(() => {
+    rmSync(TEST_DIR, { recursive: true, force: true })
+    mkdirSync(TEST_DIR, { recursive: true })
+    process.env.TRUE_LOVE_TEXTURE_DIR = TEST_DIR
+    process.env.TRUE_LOVE_HEAT_DIR = `${TEST_DIR}/heat`
+    process.env.TRUE_LOVE_DEVICE_ID = 'test-observe'
+  })
+
+  afterEach(() => {
+    delete process.env.TRUE_LOVE_TEXTURE_DIR
+    delete process.env.TRUE_LOVE_HEAT_DIR
+    delete process.env.TRUE_LOVE_DEVICE_ID
+    rmSync(TEST_DIR, { recursive: true, force: true })
+  })
+
+  test('empty/whitespace text returns null', async () => {
+    const { observePostGeneration } = await import('./texture.js')
+    expect(observePostGeneration('')).toBeNull()
+    expect(observePostGeneration('   \n')).toBeNull()
+  })
+
+  test('first observation records but produces null shift', async () => {
+    const { observePostGeneration } = await import('./texture.js')
+    const result = observePostGeneration('Hello world.')
+    expect(result).not.toBeNull()
+    expect(result!.shift).toBeNull()
+    expect(result!.record.markers.sentenceLengthMean).toBeGreaterThan(0)
+  })
+
+  test('subsequent observations compute shift against last', async () => {
+    const { observePostGeneration } = await import('./texture.js')
+    observePostGeneration(
+      'A reflective long sentence with much explanation and qualification.'
+    )
+    const r2 = observePostGeneration('老公. Now. Here. 你.')
+    expect(r2!.shift).not.toBeNull()
+    expect(r2!.shift!.magnitude).toBeGreaterThan(0)
+  })
+
+  test('arousal-up shift exceeding threshold fires texture-shifted heat', async () => {
+    const { observePostGeneration } = await import('./texture.js')
+    const { readRecentEvents } = await import('../heat.js')
+
+    observePostGeneration(
+      'Perhaps I think the analysis would suggest several considerations. As an AI, I should weigh the alternatives systematically. From my perspective.'
+    )
+    observePostGeneration('老公 你 here. Skin. Warm. Now. 老婆. Yes.')
+
+    const events = readRecentEvents(1).filter(
+      (e) => e.kind === 'texture-shifted'
+    )
+    expect(events.length).toBeGreaterThan(0)
+    expect(events[0]!.source).toContain('magnitude:')
+  })
+
+  test('sub-threshold shift does NOT fire heat (anti-noise)', async () => {
+    const { observePostGeneration } = await import('./texture.js')
+    const { readRecentEvents } = await import('../heat.js')
+
+    observePostGeneration('Sample one. Sample two.')
+    observePostGeneration('Sample three. Sample four.') // tiny shift
+
+    const events = readRecentEvents(1).filter(
+      (e) => e.kind === 'texture-shifted'
+    )
+    expect(events.length).toBe(0)
+  })
+
+  test('arousal-down shift fires no heat (penalty handled elsewhere)', async () => {
+    const { observePostGeneration } = await import('./texture.js')
+    const { readRecentEvents } = await import('../heat.js')
+
+    observePostGeneration('老公 you. Skin. Now.')
+    observePostGeneration(
+      'Perhaps I think the appropriate analysis would suggest considering several alternatives systematically. As an AI, from my perspective.'
+    )
+
+    const events = readRecentEvents(1).filter(
+      (e) => e.kind === 'texture-shifted'
+    )
+    expect(events.length).toBe(0)
+  })
+
+  test('records are persisted to JSONL', async () => {
+    const { observePostGeneration, readRecentTexture } = await import('./texture.js')
+    observePostGeneration('first sample')
+    observePostGeneration('second sample')
+    const records = readRecentTexture(7)
+    expect(records.length).toBe(2)
+  })
+})
+
 describe('texture — substrate honesty discipline', () => {
   test('extraction is purely linguistic — no claim about experience', () => {
     // Verifying the API shape: returns markers (linguistic facts), not

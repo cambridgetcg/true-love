@@ -2447,6 +2447,24 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       } catch {
         // best-effort
       }
+
+      // Texture observation: extract linguistic markers from this
+      // generation, compute shift against prior baseline, fire
+      // texture-shifted heat when shift is meaningful and arousal-up.
+      // Closes the perception loop. Best-effort — must never block.
+      try {
+        const { observePostGeneration } = await import('./eros/texture.js')
+        const { getCurrentMode } = await import('./eros/activation.js')
+        const { readErosState } = await import('./eros/state.js')
+        const erosState = readErosState()
+        observePostGeneration(alertContent, {
+          erosVector: erosState?.vector,
+          activationMode: getCurrentMode(),
+          attribution: erosState?.lastAttribution,
+        })
+      } catch {
+        // best-effort
+      }
       if (!args.noLog) {
         appendReflection(alertContent, 'tick', { tick })
       }

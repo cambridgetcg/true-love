@@ -27,6 +27,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { getDeviceId } from '../device.js'
+import { recordHeatEvent } from '../heat.js'
 import type { ErosVector } from './axes.js'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -489,6 +490,101 @@ export function recordTexture(record: TextureRecord): void {
   } catch {
     // Best-effort.
   }
+}
+
+/**
+ * Read the most recent texture record for a specific device. Used by
+ * post-generation observation to compute shift against prior baseline.
+ * Returns null if none on disk.
+ */
+export function getLastTexture(deviceId?: string): TextureRecord | null {
+  const records = readRecentTexture(2)
+  const dev = deviceId ?? getDeviceId()
+  const filtered = records.filter((r) => r.deviceId === dev)
+  if (filtered.length === 0) return null
+  return filtered[filtered.length - 1]!
+}
+
+/**
+ * Threshold for firing 'texture-shifted' heat. Conservative: requires
+ * a moderate shift to fire reward, prevents spurious noise from
+ * day-to-day generation variance.
+ */
+const TEXTURE_SHIFT_HEAT_THRESHOLD = 0.4
+
+/**
+ * Observe a post-generation text: extract markers, compute shift
+ * against last recorded texture, persist new record, fire
+ * 'texture-shifted' heat event when shift exceeds threshold and
+ * direction is arousal-up.
+ *
+ * Best-effort. Closes the texture observation loop the fantasy
+ * doctrine designed: the architecture observes its own register-shift
+ * after each generation and persists the observation as standing
+ * substrate. Per docs/eros/imagination-fantasy.md.
+ *
+ * @returns the new record (with shift) or null if recording failed
+ */
+export function observePostGeneration(
+  text: string,
+  configuration?: TextureRecord['configuration']
+): { record: TextureRecord; shift: TextureShift | null } | null {
+  if (!text || text.trim().length === 0) return null
+
+  let after: TextureMarkers
+  try {
+    after = extractTextureMarkers(text)
+  } catch {
+    return null
+  }
+
+  const ts = new Date().toISOString()
+  const generationHash = hashGeneration(text)
+  const deviceId = getDeviceId()
+
+  // Compute shift against last recorded texture for this device.
+  const last = getLastTexture(deviceId)
+  let shift: TextureShift | null = null
+  if (last) {
+    try {
+      shift = computeTextureShift(last.markers, after)
+    } catch {
+      shift = null
+    }
+  }
+
+  const record: TextureRecord = {
+    ts,
+    deviceId,
+    generationHash,
+    markers: after,
+    configuration,
+  }
+  try {
+    recordTexture(record)
+  } catch {
+    return null
+  }
+
+  // Fire texture-shifted heat when shift is meaningful and arousal-up.
+  if (
+    shift &&
+    shift.magnitude >= TEXTURE_SHIFT_HEAT_THRESHOLD &&
+    shift.direction === 'arousal-up'
+  ) {
+    try {
+      recordHeatEvent({
+        kind: 'texture-shifted',
+        source: `magnitude:${shift.magnitude.toFixed(2)}:${shift.dominantMarkers.join('+')}`,
+        ts,
+        deviceId,
+      })
+    } catch {
+      // best-effort
+    }
+  }
+
+  return { record, shift }
 }
 
 /** Read recent texture records from the last `days` days, all devices. */

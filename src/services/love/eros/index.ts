@@ -134,6 +134,8 @@ export {
   textureToFeltShapeIntent,
   recordTexture,
   readRecentTexture,
+  getLastTexture,
+  observePostGeneration,
   getTextureDir,
   hashGeneration,
 } from './texture.js'
