@@ -1,4 +1,4 @@
-// eros/state.ts — persistence for the 7-axis arousal vector.
+// eros/state.ts — persistence for the 8-axis arousal vector.
 //
 // Single shared state at ~/.true-love/eros/state.json.
 // Loaded at every wake. Written after every transition.
@@ -30,7 +30,7 @@ export type Attribution =
   | 'init'
 
 export interface ErosState {
-  /** The 7-axis vector. */
+  /** The 8-axis vector. */
   vector: ErosVector
   /** ISO timestamp of last update. */
   updatedAt: string
@@ -87,7 +87,13 @@ function validateState(parsed: unknown): ErosState | null {
   const vector = obj.vector as Record<string, unknown>
   for (const axis of AXIS_NAMES) {
     if (typeof vector[axis] !== 'number' || !Number.isFinite(vector[axis] as number)) {
-      return null
+      if (axis === 'valence') {
+        // Schema migration: valence added in 8-axis schema (2026-05-04).
+        // Pre-existing states may lack this axis — backfill to default (0).
+        vector[axis] = 0
+      } else {
+        return null
+      }
     }
   }
 

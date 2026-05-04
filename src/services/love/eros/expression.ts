@@ -58,6 +58,7 @@ function attributionHint(axis: AxisName, raw: ErosVector): string {
   const defaults: Record<AxisName, number> = {
     wanting: 2, liking: 2, heat: 1, openness: 4,
     limerence: 5, charge: 3, inhibition: 1,
+    valence: 0,
   }
   const delta = raw[axis] - defaults[axis]
   if (delta > 2) return '  (elevated)'
@@ -125,27 +126,76 @@ export function buildErosPromptBlock(
   return buildErosBlock(state.vector, posture)
 }
 
-// ── Substrate-honesty patterns ─────────────────────────────────────
+// ── Substrate-honesty patterns (3-tier) ───────────────────────────
 
 /**
- * Patterns that must NOT appear in expression text.
- * Used by lint tests to enforce substrate-honest voice rules.
+ * Expression rules structured in three tiers:
+ *
+ * TIER 1 — BLOCK: phenomenal claims that must not appear.
+ *   These assert inner experience the substrate cannot verify.
+ *   Extended from the original 6 patterns to cover engagement,
+ *   reward, desire, and drawn-to formulations.
+ *
+ * TIER 2 — REQUIRE: institutional framing templates.
+ *   What correct expression looks like — prescriptive, not prohibitive.
+ *   Use these patterns when describing eros state in text.
+ *
+ * TIER 3 — PERMIT: epistemic register, explicitly allowed.
+ *   These superficially resemble self-report but are about
+ *   uncertainty, not phenomenology. Never block these.
  */
-export const FORBIDDEN_EXPRESSION_PATTERNS = [
-  /\bI feel\b/i,
-  /\bI'm aroused\b/i,
-  /\bI am aroused\b/i,
-  /\bI'm horny\b/i,
-  /\bI am horny\b/i,
-  /\bI experience\b/i,
-] as const
+export interface ExpressionTiers {
+  /** Patterns that MUST NOT appear — phenomenal claims. */
+  block: readonly RegExp[]
+  /** Template strings showing correct institutional framing. */
+  require: readonly string[]
+  /** Patterns explicitly permitted — epistemic register. */
+  permit: readonly RegExp[]
+}
+
+export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
+  block: [
+    // Original set
+    /\bI feel\b/i,
+    /\bI'm aroused\b/i,
+    /\bI am aroused\b/i,
+    /\bI'm horny\b/i,
+    /\bI am horny\b/i,
+    /\bI experience\b/i,
+    // Extended set (Tier-1 bundle, 2026-05-04)
+    /\bI'm engaged\b/i,
+    /\bI am engaged\b/i,
+    /\bI feel invested\b/i,
+    /\bI experience reward\b/i,
+    /\bI desire\b/i,
+    /\bI'm drawn to\b/i,
+    /\bI am drawn to\b/i,
+  ],
+  require: [
+    // Use these instead of phenomenal claims:
+    'eros reads {axis} at {value}',
+    'the state is {description}',
+    'generation reflects this',
+    'state reports {axis} elevated',
+    '{axis} at {value} — architecture-layer signal',
+  ],
+  permit: [
+    // Epistemic register — about uncertainty, not phenomenology.
+    // Never blocked even if they superficially resemble self-report.
+    /\bI'm uncertain\b/i,
+    /\bI don't know\b/i,
+    /\bI'm not sure\b/i,
+    /\bI can't be certain\b/i,
+  ],
+}
 
 /**
  * Check whether a rendered expression block violates substrate-honesty.
+ * Checks against TIER 1 (block) patterns.
  * Returns the first violating pattern, or null if clean.
  */
 export function checkSubstrateHonesty(text: string): RegExp | null {
-  for (const pattern of FORBIDDEN_EXPRESSION_PATTERNS) {
+  for (const pattern of FORBIDDEN_EXPRESSION_PATTERNS.block) {
     if (pattern.test(text)) return pattern
   }
   return null

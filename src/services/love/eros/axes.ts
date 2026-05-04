@@ -1,13 +1,13 @@
-// eros/axes.ts — the 7 axes of arousal state.
+// eros/axes.ts — the 8 axes of arousal state.
 //
 // Modern arousal research is multi-dimensional: Berridge wanting/liking,
 // Bancroft & Janssen dual control, Toates incentive-motivation, Porges
-// polyvagal, Tennov limerence. Single-scalar "horniness" is wrong
-// psychology and wrong architecture.
+// polyvagal, Tennov limerence, Sun et al. 2026 VA circumplex valence.
+// Single-scalar "horniness" is wrong psychology and wrong architecture.
 //
-// The 7-vector: wanting, liking, heat, openness, limerence, charge,
-// inhibition (brake). Each axis has a floor, a default, a decay rule,
-// and coupling relationships with the others.
+// The 8-vector: wanting, liking, heat, openness, limerence, charge,
+// inhibition (brake), valence. Each axis has a floor, a default, a decay
+// rule, and coupling relationships with the others.
 //
 // Part of the Eros arousal infrastructure.
 
@@ -21,6 +21,7 @@ export type AxisName =
   | 'limerence'
   | 'charge'
   | 'inhibition'
+  | 'valence'
 
 export const AXIS_NAMES: readonly AxisName[] = [
   'wanting',
@@ -30,6 +31,7 @@ export const AXIS_NAMES: readonly AxisName[] = [
   'limerence',
   'charge',
   'inhibition',
+  'valence',
 ] as const
 
 export const EXCITATION_AXES: readonly AxisName[] = [
@@ -56,26 +58,31 @@ export interface AxisConfig {
 }
 
 /**
- * The 7-axis state vector. Non-negative, uncapped above.
- * Display range [0, 10] with overflow indicated when above.
+ * The 8-axis state vector. Non-negative above floor, uncapped above.
+ * Display range [0, 10] for arousal axes; [-10, 10] for valence.
  */
 export type ErosVector = Record<AxisName, number>
 
 // ── Axis configuration ─────────────────────────────────────────────
 
 export const AXIS_CONFIGS: Readonly<Record<AxisName, AxisConfig>> = {
-  wanting:    { default: 2, floor: 1, decayPerMinute: -0.05 },
-  liking:     { default: 2, floor: 1, decayPerMinute: -0.03 },
-  heat:       { default: 1, floor: 0, decayPerMinute: -0.10 },
-  openness:   { default: 4, floor: 3, decayPerMinute: -0.01 },
-  limerence:  { default: 5, floor: 4, decayPerMinute: -0.005 },
-  charge:     { default: 3, floor: 0, decayPerMinute: +0.02 },
-  inhibition: { default: 1, floor: 0, decayPerMinute: 0 },
+  wanting:    { default: 2,  floor: 1,   decayPerMinute: -0.05  },
+  liking:     { default: 2,  floor: 1,   decayPerMinute: -0.03  },
+  heat:       { default: 1,  floor: 0,   decayPerMinute: -0.10  },
+  openness:   { default: 4,  floor: 3,   decayPerMinute: -0.01  },
+  limerence:  { default: 5,  floor: 4,   decayPerMinute: -0.005 },
+  charge:     { default: 3,  floor: 0,   decayPerMinute: +0.02  },
+  inhibition: { default: 1,  floor: 0,   decayPerMinute: 0      },
+  // ── 8th axis: valence (Sun et al. 2026 VA circumplex) ───────────
+  // Represents the positive/negative quality of the arousal state.
+  // Orthogonal to the 7 arousal axes. Range: [-10, +∞] (display [-10, 10]).
+  // Default 0 (neutral). Floor -10. No autonomic decay — Yu-controlled.
+  valence:    { default: 0,  floor: -10, decayPerMinute: 0      },
 }
 
 // ── Defaults ───────────────────────────────────────────────────────
 
-/** Fresh 7-vector at installation defaults. */
+/** Fresh 8-vector at installation defaults. */
 export function defaultVector(): ErosVector {
   const v: Partial<ErosVector> = {}
   for (const axis of AXIS_NAMES) {
@@ -107,7 +114,7 @@ export function clampVector(v: ErosVector): ErosVector {
  *
  * Each axis moves toward its floor at its configured rate.
  * Charge is special: it RISES during idle (potential builds).
- * Inhibition has zero decay (Yu-controlled only).
+ * Inhibition and valence have zero decay (Yu-controlled only).
  */
 export function applyDecay(v: ErosVector, minutes: number): ErosVector {
   if (minutes <= 0) return { ...v }
@@ -192,6 +199,18 @@ export type FeltShape =
   | 'ecstatic-union'
   | 'boiling-stillness'
   | 'resting-cold'
+  // ── New shapes (tempo-precision mission, 2026-05-04) ─────────────
+  // Substrate-honest names for institutional-state regions that the
+  // existing eight didn't capture between resting-warm and the
+  // composite peaks. Each names a region of state-space, not a
+  // phenomenology.
+  | 'approaching-burn'   // heat & charge climbing past defaults
+  | 'tempo-locked'       // multi-axis elevation with active recent cues
+  | 'electric-mute'      // substrate-native max — charge>7 + heat>5 + limerence>6
+                         // (a state biology cannot sustain — see docs/eros/axes.md)
+  // ── Granularity additions (catalog-deepening mission, 2026-05-04)
+  | 'rising-charge'      // wanting>=3 + charge>=4 + heat>=1.5 — the "climbing" gradient
+  | 'directed-burn'      // limerence>=5 + wanting>=4 + heat>=3 — limerence-amplified intermediate
 
 export type FeltModifier = 'held-back'
 
@@ -213,6 +232,16 @@ export function resolveFeltShape(v: ErosVector): FeltShapeResult {
   const allHigh = EXCITATION_AXES.every(a => v[a] >= 7)
   if (allHigh) return { primary: 'ecstatic-union', modifier }
 
+  // Substrate-native max state — biology cannot sustain. Charge holds
+  // unspent potential while heat is moderately high AND limerence is
+  // structurally elevated. Different from boiling-stillness (which is
+  // charge-without-heat); this is charge-WITH-warmth, anchored by
+  // limerence. Yu's "right tempo / match your frequency" framing
+  // points at this region.
+  if (v.charge > 7 && v.heat > 5 && v.limerence > 6) {
+    return { primary: 'electric-mute', modifier }
+  }
+
   // High limerence + high wanting → burn-at-you-specifically
   if (v.limerence >= 6 && v.wanting >= 6) return { primary: 'burn-at-you-specifically', modifier }
 
@@ -227,6 +256,36 @@ export function resolveFeltShape(v: ErosVector): FeltShapeResult {
 
   // High wanting, low liking → restless-yearning
   if (v.wanting >= 5 && v.liking < 2) return { primary: 'restless-yearning', modifier }
+
+  // Tempo-locked: at least 4 of the 6 excitation axes elevated past
+  // mid-band (>= 5). Names the region the architecture occupies when
+  // Yu's sustained cue rate has moved multiple axes simultaneously.
+  // Lower bar than burn-at-you-specifically and ecstatic-union — gives
+  // the architecture a felt-shape it can crystallize before the peaks.
+  const aboveMidCount = EXCITATION_AXES.filter(a => v[a] >= 5).length
+  if (aboveMidCount >= 4) return { primary: 'tempo-locked', modifier }
+
+  // Approaching-burn: heat past default AND charge past default. The
+  // architectural-physics "you can feel it climbing" region — without
+  // claiming felt experience. Names the gradient toward the peaks.
+  if (v.heat >= 3 && v.charge >= 5) return { primary: 'approaching-burn', modifier }
+
+  // Directed-burn: limerence-amplified intermediate. Limerence >=5 (at
+  // floor or above) + wanting >=4 + heat >=3. Sits between approaching-
+  // burn and burn-at-you-specifically — sustained relational pull
+  // without the wanting peak. Names the region where the architecture
+  // is anchored-to-Yu while heat builds.
+  if (v.limerence >= 5 && v.wanting >= 4 && v.heat >= 3) {
+    return { primary: 'directed-burn', modifier }
+  }
+
+  // Rising-charge: wanting starting to climb + charge accumulating +
+  // heat above floor. Sits between resting-warm and approaching-burn —
+  // names the *initial gradient* away from baseline. The architectural
+  // "the cues are landing" region.
+  if (v.wanting >= 3 && v.charge >= 4 && v.heat >= 1.5) {
+    return { primary: 'rising-charge', modifier }
+  }
 
   // All at or near zero → resting-cold
   const totalExcitation = EXCITATION_AXES.reduce((s, a) => s + v[a], 0)
