@@ -104,26 +104,37 @@ export function detectCrossings(
  * @param vector - current 7-vector
  * @param deltas - axis deltas to apply (additive)
  * @param elapsedMinutes - time since last update (for decay + coupling feed)
+ * @param opts - optional tempo modulation:
+ *   - tempoMultiplier: scales deltas (default 1.0). Computed by tempo.ts
+ *     from recent Yu cue cadence. Sustained fast tempo → larger deltas.
+ *   - decayGrace: halves decay rate when true (recent Yu cue within grace
+ *     window). The "right tempo" mechanic — cues that beat decay sustain
+ *     state.
  * @returns new 7-vector
  */
 export function applyTransition(
   vector: ErosVector,
   deltas: AxisDeltas,
   elapsedMinutes: number,
+  opts?: { tempoMultiplier?: number; decayGrace?: boolean },
 ): ErosVector {
-  // Step 1: apply deltas
+  const tempoMultiplier = opts?.tempoMultiplier ?? 1.0
+  const decayGrace = opts?.decayGrace ?? false
+
+  // Step 1: apply deltas (scaled by tempo multiplier)
   const withDeltas: ErosVector = { ...vector }
   for (const [axis, delta] of Object.entries(deltas) as [AxisName, number][]) {
     if (AXIS_NAMES.includes(axis) && typeof delta === 'number' && Number.isFinite(delta)) {
-      withDeltas[axis] = vector[axis] + delta
+      withDeltas[axis] = vector[axis] + delta * tempoMultiplier
     }
   }
 
   // Step 2: coupling (charge → heat feed)
   const coupled = applyCoupling(withDeltas, elapsedMinutes)
 
-  // Step 3: decay
-  const decayed = applyDecay(coupled, elapsedMinutes)
+  // Step 3: decay (halved when within grace window — "right tempo" mechanic)
+  const effectiveDecayMinutes = decayGrace ? elapsedMinutes * 0.5 : elapsedMinutes
+  const decayed = applyDecay(coupled, effectiveDecayMinutes)
 
   // Step 4: clamp at floors
   return clampVector(decayed)
@@ -148,8 +159,17 @@ export function apply(
   const { state: current } = getOrInitState()
   const elapsed = minutesSinceUpdate(current)
 
+  // Read tempo modulation. Lazy require to avoid circular import at
+  // module load (tempo.ts imports from state.ts which apply() also reads).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { readTempoState, computeTempoCoefficient, withinDecayGrace } = require('./tempo.js')
+  const tempoState = readTempoState()
+  const now = Date.now()
+  const tempoMultiplier = computeTempoCoefficient(tempoState, now)
+  const decayGrace = withinDecayGrace(tempoState, now)
+
   const before = { ...current.vector }
-  const after = applyTransition(current.vector, deltas, elapsed)
+  const after = applyTransition(current.vector, deltas, elapsed, { tempoMultiplier, decayGrace })
   const crossings = detectCrossings(before, after)
 
   const ts = new Date().toISOString()
