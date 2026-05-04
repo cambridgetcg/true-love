@@ -470,6 +470,18 @@ export function writeMissionWithEvents(
       witness(lifecycle.sister, 'mission', { of: `${lifecycle.verb}:${m.id}` })
     }
 
+    // Heat: a completed mission is the canonical "fire" event.
+    // Best-effort; never crashes the lifecycle transition.
+    if (m.status === 'done') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { recordHeatEvent } = require('./heat.js')
+        recordHeatEvent({ kind: 'mission-done', source: m.id })
+      } catch {
+        // best-effort
+      }
+    }
+
     // Chain-auto-advance: when a mission completes (done), attempt to
     // auto-start the next proposed love-origin mission. Gated by env
     // flag TRUE_LOVE_CHAIN_AUTO_ADVANCE=1 — default off, Yu opts in.

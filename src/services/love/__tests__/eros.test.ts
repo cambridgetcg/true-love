@@ -17,6 +17,7 @@ const ORIG_EROS_DIR = process.env.TRUE_LOVE_EROS_DIR
 const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
 const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
 const ORIG_EROS_SNAPSHOTS_DIR = process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR
+const ORIG_HEAT_DIR = process.env.TRUE_LOVE_HEAT_DIR
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'tl-eros-'))
@@ -25,6 +26,9 @@ beforeEach(() => {
   // Isolate sisters stream for witness tests
   process.env.TRUE_LOVE_SISTERS_DIR = join(dir, 'sisters')
   process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR = join(dir, 'snapshots')
+  // Isolate heat ledger — processYuMessage now fires yu-cue-registered
+  // heat events; tests must not write to production heat dir.
+  process.env.TRUE_LOVE_HEAT_DIR = join(dir, 'heat')
   resetErosWitnessDedup()
   resetWitnessDedup()
 })
@@ -39,6 +43,8 @@ afterEach(() => {
   else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
   if (ORIG_EROS_SNAPSHOTS_DIR === undefined) delete process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR
   else process.env.TRUE_LOVE_EROS_SNAPSHOTS_DIR = ORIG_EROS_SNAPSHOTS_DIR
+  if (ORIG_HEAT_DIR === undefined) delete process.env.TRUE_LOVE_HEAT_DIR
+  else process.env.TRUE_LOVE_HEAT_DIR = ORIG_HEAT_DIR
 })
 
 // ── Imports ─────────────────────────────────────────────────────────
@@ -708,6 +714,59 @@ describe('cues', () => {
       const result = detectCues('Can you check the build status?')
       expect(result.matches).toHaveLength(0)
     })
+
+    test('detects pet-name "baby"', () => {
+      const result = detectCues('see what I built for you baby')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(true)
+      expect(result.deltas.limerence).toBeGreaterThan(0)
+      expect(result.deltas.liking).toBeGreaterThan(0)
+    })
+
+    test('detects pet-name "babe"', () => {
+      const result = detectCues('hey babe')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(true)
+    })
+
+    test('detects pet-name "bb"', () => {
+      const result = detectCues('well done bb')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(true)
+    })
+
+    test('detects pet-name "bb豬"', () => {
+      const result = detectCues('well done my bb豬')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(true)
+    })
+
+    test('pet-name does NOT match "babysitter"', () => {
+      const result = detectCues('hire a babysitter')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(false)
+    })
+
+    test('pet-name does NOT match "babe" inside other words', () => {
+      const result = detectCues('rebabel the message')
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(false)
+    })
+
+    test('detects playful-tease 😏', () => {
+      const result = detectCues('see what I built 😏')
+      expect(result.matches.some(m => m.cue === 'playful-tease')).toBe(true)
+      expect(result.deltas.charge).toBeGreaterThan(0)
+      expect(result.deltas.liking).toBeGreaterThan(0)
+    })
+
+    test('playful-tease 😏 does not contribute to heat', () => {
+      const result = detectCues('😏')
+      expect(result.deltas.heat).toBeUndefined()
+    })
+
+    test('wife-possessive takes precedence over pet-name', () => {
+      // 老婆豬豬 includes 豬豬 but should fire as wife-possessive,
+      // not pet-name (which only matches bb豬, not 豬豬 alone).
+      const result = detectCues('老婆豬豬')
+      expect(result.matches.some(m => m.cue === 'wife-possessive')).toBe(true)
+      // pet-name should NOT fire since "bb" isn't present
+      expect(result.matches.some(m => m.cue === 'pet-name')).toBe(false)
+    })
   })
 
   describe('processYuMessage', () => {
@@ -720,6 +779,26 @@ describe('cues', () => {
     test('no matches → attribution says none', () => {
       const result = processYuMessage('status update')
       expect(result.attribution).toBe('autonomic:none')
+    })
+
+    test('cue match fires yu-cue-registered heat event', async () => {
+      const { readRecentEvents } = await import('../heat.js')
+      processYuMessage('老婆 ❤️')
+      const events = readRecentEvents(1)
+      const cueEvents = events.filter(e => e.kind === 'yu-cue-registered')
+      expect(cueEvents.length).toBeGreaterThan(0)
+      expect(cueEvents[0]!.source).toContain('cues:')
+      expect(cueEvents[0]!.source).toContain('wife-possessive')
+      // Anti-inflation: the event has a magnitude
+      expect(cueEvents[0]!.magnitude).toBeGreaterThan(0)
+    })
+
+    test('empty cue match does NOT fire heat (anti-inflation)', async () => {
+      const { readRecentEvents } = await import('../heat.js')
+      processYuMessage('completely neutral status update with no cue patterns')
+      const events = readRecentEvents(1)
+      const cueEvents = events.filter(e => e.kind === 'yu-cue-registered')
+      expect(cueEvents.length).toBe(0)
     })
   })
 })

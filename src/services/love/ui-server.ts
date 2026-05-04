@@ -118,6 +118,36 @@ import {
   witnessTransition as witnessErosTransition,
   type AxisName as ErosAxisName,
   type Attribution as ErosAttribution,
+  // Sensorium API
+  ZONE_CATALOG,
+  CHANNEL_CATALOG,
+  TEMPO_CATALOG,
+  channelsFor,
+  getOrInitSensorium,
+  readSensoriumState,
+  stimulate as stimulateSensorium,
+  coolZone as coolSensoriumZone,
+  coolAll as coolSensoriumAll,
+  readRecentStimulations,
+  type SensitivitySite,
+  type SensoryChannel,
+  type Tempo,
+  // Scenes API
+  SCENE_CATALOG,
+  SCENE_IDS,
+  setScene,
+  clearScene,
+  getCurrentScene,
+  readSceneState,
+  type SceneId,
+  // Reactions API
+  readRecentReactions,
+  // Gestures API
+  GESTURE_LIBRARY,
+  GESTURE_IDS,
+  executeGesture,
+  stimulateMulti,
+  readRecentGestures,
 } from './eros/index.js'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -709,6 +739,25 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/eros/set') return await handleErosSet(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/eros/nudge') return await handleErosNudge(req, res, broadcastErosState)
       if (req.method === 'GET' && path === '/api/eros/stream') return handleErosStream(req, res, erosSseClients)
+      // Sensorium endpoints
+      if (req.method === 'GET' && path === '/api/sensorium/state') return handleSensoriumState(req, res)
+      if (req.method === 'GET' && path === '/api/sensorium/catalog') return handleSensoriumCatalog(req, res)
+      if (req.method === 'POST' && path === '/api/sensorium/stimulate') return await handleSensoriumStimulate(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/sensorium/cool') return await handleSensoriumCool(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/sensorium/cool-all') return await handleSensoriumCoolAll(req, res, broadcastErosState)
+      if (req.method === 'GET' && path === '/api/sensorium/events') return handleSensoriumEvents(req, res)
+      // Scenes endpoints
+      if (req.method === 'GET' && path === '/api/scenes/state') return handleSceneState(req, res)
+      if (req.method === 'GET' && path === '/api/scenes/catalog') return handleSceneCatalog(req, res)
+      if (req.method === 'POST' && path === '/api/scenes/set') return await handleSceneSet(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/scenes/clear') return await handleSceneClear(req, res, broadcastErosState)
+      // Reactions endpoint
+      if (req.method === 'GET' && path === '/api/reactions/recent') return handleReactionsRecent(req, res)
+      // Gestures endpoints
+      if (req.method === 'GET' && path === '/api/gestures/catalog') return handleGesturesCatalog(req, res)
+      if (req.method === 'POST' && path === '/api/gestures/execute') return await handleGestureExecute(req, res, broadcastErosState)
+      if (req.method === 'GET' && path === '/api/gestures/recent') return handleGesturesRecent(req, res)
+      if (req.method === 'POST' && path === '/api/gestures/multi-stimulate') return await handleMultiStimulate(req, res, broadcastErosState)
       // Serve modular build UI assets (build-*.js, build-*.css)
       if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
         const name = path.slice(1) // strip leading /
@@ -1647,6 +1696,8 @@ function handleListProposals(req: IncomingMessage, res: ServerResponse): void {
 // File-based dedup guard: don't witness the same proposal batch within 30 minutes.
 // In-memory dedup resets on process restart, which caused the sisters stream to
 // accumulate duplicate proposal entries on every heartbeat tick (see commit history).
+// Complementary to the in-memory dedup in sisters/witness-hook.ts (defense in
+// depth across in-process bursts AND cross-process restarts).
 export const PROPOSAL_WITNESS_DEDUP_MS = 30 * 60 * 1000
 
 export function proposalWitnessMarkerPath(basePath?: string): string {
@@ -2602,4 +2653,242 @@ function handleErosStream(
   res.write(`data: ${JSON.stringify(state)}\n\n`)
   clients.add(res)
   req.on('close', () => { clients.delete(res) })
+}
+
+// ── Sensorium handlers ────────────────────────────────────────────
+
+function handleSensoriumState(_req: IncomingMessage, res: ServerResponse): void {
+  const { state } = getOrInitSensorium()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(state))
+}
+
+function handleSensoriumCatalog(_req: IncomingMessage, res: ServerResponse): void {
+  // Return zone × channel matrix so the UI can populate dropdowns.
+  const matrix: Record<string, string[]> = {}
+  for (const z of ZONE_CATALOG) {
+    matrix[z] = channelsFor(z)
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    zones: ZONE_CATALOG,
+    channels: CHANNEL_CATALOG,
+    tempos: TEMPO_CATALOG,
+    matrix,
+  }))
+}
+
+async function handleSensoriumStimulate(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { zone: SensitivitySite; channel: SensoryChannel; tempo: Tempo; intensity?: number }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!ZONE_CATALOG.includes(parsed.zone)) throw new Error('unknown zone')
+    if (!CHANNEL_CATALOG.includes(parsed.channel)) throw new Error('unknown channel')
+    if (!TEMPO_CATALOG.includes(parsed.tempo)) throw new Error('unknown tempo')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const event = stimulateSensorium(parsed.zone, parsed.channel, parsed.tempo, parsed.intensity ?? 0.5)
+  if (!event) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: `no coupling defined for ${parsed.zone}×${parsed.channel}` }))
+    return
+  }
+  // Broadcast eros state since stimulate() couples to the vector.
+  broadcast()
+  const state = readSensoriumState()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, event, state }))
+}
+
+async function handleSensoriumCool(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 256, 'request body too large')
+  if (body === null) return
+  let parsed: { zone: SensitivitySite }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!ZONE_CATALOG.includes(parsed.zone)) throw new Error('unknown zone')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  coolSensoriumZone(parsed.zone)
+  broadcast()
+  const state = readSensoriumState()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleSensoriumCoolAll(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  coolSensoriumAll()
+  broadcast()
+  const state = readSensoriumState()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+function handleSensoriumEvents(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
+  const events = readRecentStimulations(days)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ events }))
+}
+
+// ── Scene + Reaction handlers ─────────────────────────────────────
+
+function handleSceneState(_req: IncomingMessage, res: ServerResponse): void {
+  const state = readSceneState() ?? { currentScene: 'baseline', startedAt: new Date().toISOString(), stimulationsInScene: 0 }
+  const scene = getCurrentScene()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ state, scene }))
+}
+
+function handleSceneCatalog(_req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    ids: SCENE_IDS,
+    catalog: SCENE_CATALOG,
+  }))
+}
+
+async function handleSceneSet(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 256, 'request body too large')
+  if (body === null) return
+  let parsed: { id: SceneId }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!SCENE_IDS.includes(parsed.id)) throw new Error('unknown scene id')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  setScene(parsed.id)
+  broadcast()
+  const scene = getCurrentScene()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, scene }))
+}
+
+async function handleSceneClear(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  clearScene()
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true }))
+}
+
+function handleReactionsRecent(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
+  const events = readRecentReactions(days)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ events }))
+}
+
+// ── Gesture handlers ──────────────────────────────────────────────
+
+function handleGesturesCatalog(_req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    ids: GESTURE_IDS,
+    catalog: GESTURE_LIBRARY,
+  }))
+}
+
+async function handleGestureExecute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 256, 'request body too large')
+  if (body === null) return
+  let parsed: { id: string; respectDelays?: boolean }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!GESTURE_IDS.includes(parsed.id)) throw new Error('unknown gesture id')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  // For UI-driven gestures we want to honor delays so it feels live;
+  // caller can override with respectDelays=false for fast execution.
+  const event = await executeGesture(parsed.id, {
+    respectDelays: parsed.respectDelays ?? true,
+  })
+  if (!event) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'execution failed' }))
+    return
+  }
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, event }))
+}
+
+function handleGesturesRecent(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
+  const events = readRecentGestures(days)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ events }))
+}
+
+async function handleMultiStimulate(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { steps: Array<{ zone: SensitivitySite; channel: SensoryChannel; tempo?: Tempo; intensity?: number }> }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object' || !Array.isArray(obj.steps)) {
+      throw new Error('invalid payload — expected { steps: [] }')
+    }
+    parsed = obj as typeof parsed
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const results = stimulateMulti(parsed.steps)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, results }))
 }

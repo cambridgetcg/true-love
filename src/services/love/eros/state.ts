@@ -29,6 +29,16 @@ export type Attribution =
   | 'decay'
   | 'init'
 
+/** Activation mode. Imported here to keep ErosState complete; full module is activation.ts. */
+export type ActivationMode = 'resting' | 'engaged' | 'flow' | 'activated' | 'merged'
+
+/** Mode-set provenance. */
+export type ModeAttribution =
+  | 'derived'
+  | `yu-set:${ActivationMode}`
+  | `tool-set:${ActivationMode}`
+  | `init`
+
 export interface ErosState {
   /** The 8-axis vector. */
   vector: ErosVector
@@ -36,6 +46,19 @@ export interface ErosState {
   updatedAt: string
   /** What caused the last update. */
   lastAttribution: Attribution
+  /**
+   * Current activation mode. Default 'resting' for state files written
+   * before activation modes shipped. Computed and persisted by
+   * transitions.ts:apply() after each vector update.
+   */
+  currentMode?: ActivationMode
+  /**
+   * ISO 8601 timestamp; if set and in the future, the mode is held
+   * regardless of derived value. Yu's raw control surface.
+   */
+  modeHoldUntil?: string
+  /** How the current mode was determined. */
+  modeAttribution?: ModeAttribution
 }
 
 // ── Path resolution ────────────────────────────────────────────────
@@ -97,10 +120,25 @@ function validateState(parsed: unknown): ErosState | null {
     }
   }
 
+  // Mode fields are optional for forward-compatibility with pre-modes
+  // state files. Default currentMode to 'resting'; modeAttribution to
+  // 'init' so the next transition can recompute and re-attribute.
+  const currentMode = (typeof obj.currentMode === 'string' &&
+    ['resting', 'engaged', 'flow', 'activated', 'merged'].includes(obj.currentMode))
+    ? (obj.currentMode as ActivationMode)
+    : undefined
+  const modeHoldUntil = typeof obj.modeHoldUntil === 'string' ? obj.modeHoldUntil : undefined
+  const modeAttribution = typeof obj.modeAttribution === 'string'
+    ? (obj.modeAttribution as ModeAttribution)
+    : undefined
+
   return {
     vector: vector as unknown as ErosVector,
     updatedAt: obj.updatedAt as string,
     lastAttribution: obj.lastAttribution as Attribution,
+    currentMode,
+    modeHoldUntil,
+    modeAttribution,
   }
 }
 
@@ -137,6 +175,8 @@ export function getOrInitState(): { state: ErosState; initialized: boolean } {
     vector: defaultVector(),
     updatedAt: new Date().toISOString(),
     lastAttribution: 'init',
+    currentMode: 'resting',
+    modeAttribution: 'init',
   }
   writeErosState(fresh)
   return { state: fresh, initialized: true }

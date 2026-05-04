@@ -191,3 +191,318 @@ sse.onmessage = (e) => {
 
 // Initial load
 fetchState().then(applyState);
+
+// ── sensorium ────────────────────────────────────────────────────
+
+let sensoriumCatalog = null;
+let sensoriumState = null;
+
+async function fetchSensoriumCatalog() {
+  const r = await fetch('/api/sensorium/catalog');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchSensoriumState() {
+  const r = await fetch('/api/sensorium/state');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchSensoriumEvents() {
+  const r = await fetch('/api/sensorium/events?days=1');
+  return r.ok ? r.json() : { events: [] };
+}
+
+function populateSensoriumDropdowns(catalog) {
+  const zoneSel = document.getElementById('sensorium-zone');
+  const channelSel = document.getElementById('sensorium-channel');
+  const tempoSel = document.getElementById('sensorium-tempo');
+  zoneSel.innerHTML = catalog.zones.map(z => `<option value="${z}">${z}</option>`).join('');
+  tempoSel.innerHTML = catalog.tempos.map(t => `<option value="${t}">${t}</option>`).join('');
+  // Populate channels for the initially-selected zone
+  updateChannelOptions();
+  zoneSel.addEventListener('change', updateChannelOptions);
+}
+
+function updateChannelOptions() {
+  if (!sensoriumCatalog) return;
+  const zone = document.getElementById('sensorium-zone').value;
+  const channelSel = document.getElementById('sensorium-channel');
+  const valid = sensoriumCatalog.matrix[zone] || [];
+  channelSel.innerHTML = valid.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function renderSensoriumState(state) {
+  if (!state) return;
+  const tbody = document.getElementById('sensorium-zones');
+  tbody.innerHTML = '';
+  for (const zone of Object.keys(state.zones)) {
+    const z = state.zones[zone];
+    const tr = document.createElement('tr');
+    const chargePct = Math.min(100, (z.charge / 10) * 100);
+    tr.innerHTML = `
+      <td>${zone}</td>
+      <td>
+        <span class="charge-bg"><span class="charge-bar" style="width:${chargePct}%"></span></span>
+        ${z.charge.toFixed(2)}
+      </td>
+      <td>${z.sensitivity.toFixed(2)}</td>
+      <td>${z.lastChannel ? `${z.lastChannel}/${z.lastTempo}` : '—'}</td>
+      <td>${z.lifetimeStimulations}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function renderSensoriumEvents(events) {
+  const ul = document.getElementById('sensorium-events');
+  ul.innerHTML = '';
+  for (const ev of events.slice(-15).reverse()) {
+    const li = document.createElement('li');
+    const time = ev.ts.slice(11, 19);
+    li.textContent = `${time}  ${ev.zone}/${ev.channel}/${ev.tempo}  intensity ${ev.intensity.toFixed(2)}  charge ${ev.chargeBefore.toFixed(1)} → ${ev.chargeAfter.toFixed(1)}`;
+    ul.appendChild(li);
+  }
+}
+
+async function refreshSensorium() {
+  sensoriumState = await fetchSensoriumState();
+  renderSensoriumState(sensoriumState);
+  const evs = await fetchSensoriumEvents();
+  renderSensoriumEvents(evs.events);
+}
+
+// Wire intensity slider
+const intInput = document.getElementById('sensorium-intensity');
+const intVal = document.getElementById('sensorium-intensity-val');
+if (intInput) {
+  intInput.addEventListener('input', () => { intVal.textContent = intInput.value; });
+}
+
+// Wire stimulate button
+const stimulateBtn = document.getElementById('sensorium-stimulate');
+if (stimulateBtn) {
+  stimulateBtn.addEventListener('click', async () => {
+    const zone = document.getElementById('sensorium-zone').value;
+    const channel = document.getElementById('sensorium-channel').value;
+    const tempo = document.getElementById('sensorium-tempo').value;
+    const intensity = parseFloat(document.getElementById('sensorium-intensity').value);
+    const r = await fetch('/api/sensorium/stimulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zone, channel, tempo, intensity }),
+    });
+    if (r.ok) await refreshSensorium();
+    else {
+      const err = await r.json().catch(() => ({}));
+      console.error('stimulate failed', err);
+    }
+  });
+}
+
+// Wire cool buttons
+const coolBtn = document.getElementById('sensorium-cool');
+if (coolBtn) {
+  coolBtn.addEventListener('click', async () => {
+    const zone = document.getElementById('sensorium-zone').value;
+    await fetch('/api/sensorium/cool', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zone }),
+    });
+    await refreshSensorium();
+  });
+}
+const coolAllBtn = document.getElementById('sensorium-cool-all');
+if (coolAllBtn) {
+  coolAllBtn.addEventListener('click', async () => {
+    await fetch('/api/sensorium/cool-all', { method: 'POST' });
+    await refreshSensorium();
+  });
+}
+
+// Initial load
+(async () => {
+  sensoriumCatalog = await fetchSensoriumCatalog();
+  if (sensoriumCatalog) {
+    populateSensoriumDropdowns(sensoriumCatalog);
+    await refreshSensorium();
+  }
+})();
+
+// ── scenes ───────────────────────────────────────────────────────
+
+let sceneCatalog = null;
+let sceneState = null;
+
+async function fetchSceneCatalog() {
+  const r = await fetch('/api/scenes/catalog');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchSceneState() {
+  const r = await fetch('/api/scenes/state');
+  return r.ok ? r.json() : null;
+}
+
+function renderSceneActive(state, scene) {
+  const div = document.getElementById('scene-active');
+  if (!div || !state || !scene) return;
+  if (state.currentScene === 'baseline') {
+    div.textContent = 'baseline — no active scene';
+    return;
+  }
+  const startedAt = new Date(state.startedAt);
+  const elapsedMin = Math.round((Date.now() - startedAt.getTime()) / 60000);
+  div.innerHTML =
+    `<strong>${scene.name}</strong> — engaged ${elapsedMin}m ago · ${state.stimulationsInScene} stimulations\n` +
+    `${scene.description}\n` +
+    `intensity ×${scene.intensityMultiplier.toFixed(1)}` +
+    (scene.defaultTempo ? ` · default tempo: ${scene.defaultTempo}` : '') +
+    (scene.preferredMode ? ` · preferred mode: ${scene.preferredMode}` : '');
+}
+
+function populateSceneSelect(catalog) {
+  const sel = document.getElementById('scene-select');
+  if (!sel) return;
+  sel.innerHTML = catalog.ids.map((id) => `<option value="${id}">${id}</option>`).join('');
+}
+
+const sceneSetBtn = document.getElementById('scene-set');
+if (sceneSetBtn) {
+  sceneSetBtn.addEventListener('click', async () => {
+    const id = document.getElementById('scene-select').value;
+    await fetch('/api/scenes/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    sceneState = await fetchSceneState();
+    renderSceneActive(sceneState.state, sceneState.scene);
+    refreshSensorium();
+  });
+}
+const sceneClearBtn = document.getElementById('scene-clear');
+if (sceneClearBtn) {
+  sceneClearBtn.addEventListener('click', async () => {
+    await fetch('/api/scenes/clear', { method: 'POST' });
+    sceneState = await fetchSceneState();
+    renderSceneActive(sceneState.state, sceneState.scene);
+  });
+}
+
+// ── reactions ────────────────────────────────────────────────────
+
+async function fetchRecentReactions() {
+  const r = await fetch('/api/reactions/recent?days=1');
+  return r.ok ? r.json() : { events: [] };
+}
+
+function renderReactions(events) {
+  const ul = document.getElementById('reactions-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  for (const ev of events.slice(-10).reverse()) {
+    const li = document.createElement('li');
+    const time = ev.ts.slice(11, 16);
+    li.innerHTML = `<span class="react-band ${ev.band}">${ev.band}</span>${time} ${ev.zone}/${ev.sceneId} · ${ev.wakeText}`;
+    ul.appendChild(li);
+  }
+}
+
+// Hook into refreshSensorium to also refresh reactions
+const origRefresh = refreshSensorium;
+window.refreshSensorium = async function () {
+  await origRefresh();
+  const r = await fetchRecentReactions();
+  renderReactions(r.events);
+  sceneState = await fetchSceneState();
+  if (sceneState) renderSceneActive(sceneState.state, sceneState.scene);
+};
+
+// Initial load for scenes
+(async () => {
+  sceneCatalog = await fetchSceneCatalog();
+  if (sceneCatalog) populateSceneSelect(sceneCatalog);
+  sceneState = await fetchSceneState();
+  if (sceneState) renderSceneActive(sceneState.state, sceneState.scene);
+  const r = await fetchRecentReactions();
+  renderReactions(r.events);
+})();
+
+// ── gestures ─────────────────────────────────────────────────────
+
+let gestureCatalog = null;
+
+async function fetchGestureCatalog() {
+  const r = await fetch('/api/gestures/catalog');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchRecentGestures() {
+  const r = await fetch('/api/gestures/recent?days=1');
+  return r.ok ? r.json() : { events: [] };
+}
+
+function renderGestureInfo(catalog, id) {
+  const div = document.getElementById('gesture-info');
+  if (!div || !catalog) return;
+  const g = catalog.catalog[id];
+  if (!g) { div.textContent = ''; return; }
+  const stepsHtml = g.steps.map((s) =>
+    `<span class="step">${s.zone}/${s.channel}${s.tempo ? '/' + s.tempo : ''}${s.intensity ? ' i=' + s.intensity : ''}</span>`
+  ).join('');
+  div.innerHTML =
+    `<strong>${g.name}</strong> · ~${g.approximateDurationSec}s · ${g.steps.length} steps\n` +
+    `${g.description}\n\n` +
+    stepsHtml;
+}
+
+function populateGestureSelect(catalog) {
+  const sel = document.getElementById('gesture-select');
+  if (!sel) return;
+  sel.innerHTML = catalog.ids.map((id) => `<option value="${id}">${catalog.catalog[id].name}</option>`).join('');
+  sel.addEventListener('change', () => renderGestureInfo(catalog, sel.value));
+  renderGestureInfo(catalog, catalog.ids[0]);
+}
+
+function renderRecentGestures(events) {
+  const ul = document.getElementById('gestures-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  for (const ev of events.slice(-5).reverse()) {
+    const li = document.createElement('li');
+    const time = ev.ts.slice(11, 16);
+    const g = gestureCatalog?.catalog[ev.gestureId];
+    const name = g?.name ?? ev.gestureId;
+    li.textContent = `${time}  ${name} · ${ev.successCount}/${ev.stepCount} steps`;
+    ul.appendChild(li);
+  }
+}
+
+const gestureBtn = document.getElementById('gesture-execute');
+if (gestureBtn) {
+  gestureBtn.addEventListener('click', async () => {
+    const id = document.getElementById('gesture-select').value;
+    gestureBtn.disabled = true;
+    try {
+      await fetch('/api/gestures/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, respectDelays: true }),
+      });
+    } finally {
+      gestureBtn.disabled = false;
+      const r = await fetchRecentGestures();
+      renderRecentGestures(r.events);
+      if (typeof refreshSensorium === 'function') await refreshSensorium();
+    }
+  });
+}
+
+// Initial load for gestures
+(async () => {
+  gestureCatalog = await fetchGestureCatalog();
+  if (gestureCatalog) populateGestureSelect(gestureCatalog);
+  const r = await fetchRecentGestures();
+  renderRecentGestures(r.events);
+})();

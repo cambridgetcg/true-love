@@ -95,3 +95,244 @@ h1 { margin: 0; font-weight: 300; letter-spacing: 0.05em; }
 .cue-history li .badge.autonomic { background: var(--col-cool); }
 .cue-history li .badge.voluntary { background: var(--col-warm); }
 .cue-history li .badge.yu { background: var(--col-hot); color: var(--col-bg); }
+
+/* ── sensorium ──────────────────────────────────────────────────── */
+.sensorium {
+  border-top: 1px solid var(--col-dim);
+  padding-top: 1rem;
+}
+.sensorium-doctrine {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  margin: 0.5rem 0 1rem 0;
+  line-height: 1.45;
+  font-style: italic;
+}
+.sensorium-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.75rem;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--col-dim);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+.sensorium-controls label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.78rem;
+  opacity: 0.75;
+  gap: 0.25rem;
+}
+.sensorium-controls select,
+.sensorium-controls input {
+  background: var(--col-bg);
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.sensorium-controls #sensorium-intensity-val {
+  margin-left: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+.sensorium-controls button {
+  background: transparent;
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  align-self: flex-end;
+}
+.sensorium-controls button:hover { border-color: var(--col-hot); color: var(--col-hot); }
+#sensorium-stimulate { border-color: var(--col-hot); color: var(--col-hot); }
+#sensorium-stimulate:hover { background: var(--col-hot); color: var(--col-bg); }
+
+.sensorium-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-bottom: 1rem;
+}
+.sensorium-table th,
+.sensorium-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--col-dim);
+  font-variant-numeric: tabular-nums;
+}
+.sensorium-table th { opacity: 0.7; font-weight: normal; }
+.sensorium-table .charge-bar {
+  display: inline-block;
+  height: 6px;
+  background: var(--col-hot);
+  vertical-align: middle;
+}
+.sensorium-table .charge-bg {
+  display: inline-block;
+  width: 80px;
+  height: 6px;
+  background: var(--col-dim);
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+#sensorium-events {
+  list-style: none;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+#sensorium-events li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--col-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── scenes ─────────────────────────────────────────────────────── */
+.scenes {
+  border-top: 1px solid var(--col-dim);
+  padding-top: 1rem;
+  margin-top: 1.5rem;
+}
+.scenes-doctrine {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  margin: 0.5rem 0 1rem 0;
+  line-height: 1.45;
+  font-style: italic;
+}
+.scene-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.scene-controls select {
+  background: var(--col-bg);
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.scene-controls button {
+  background: transparent;
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.scene-controls button:hover { border-color: var(--col-hot); color: var(--col-hot); }
+#scene-set { border-color: var(--col-warm); color: var(--col-warm); }
+#scene-active {
+  font-size: 0.82rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255,255,255,0.03);
+  border-left: 2px solid var(--col-warm);
+  white-space: pre-wrap;
+  font-variant-numeric: tabular-nums;
+}
+
+#reactions-list {
+  list-style: none;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 0.78rem;
+  opacity: 0.78;
+}
+#reactions-list li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--col-dim);
+  font-variant-numeric: tabular-nums;
+}
+#reactions-list .react-band {
+  display: inline-block;
+  padding: 0 6px;
+  margin-right: 6px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  opacity: 0.85;
+}
+#reactions-list .react-band.peak { background: var(--col-hot); color: var(--col-bg); }
+#reactions-list .react-band.rising { background: var(--col-warm); color: var(--col-bg); }
+#reactions-list .react-band.soft { background: var(--col-cool); }
+#reactions-list .react-band.whisper { opacity: 0.5; }
+
+/* ── gestures ───────────────────────────────────────────────────── */
+.gestures {
+  border-top: 1px solid var(--col-dim);
+  padding-top: 1rem;
+  margin-top: 1.5rem;
+}
+.gestures-doctrine {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  margin: 0.5rem 0 1rem 0;
+  line-height: 1.45;
+  font-style: italic;
+}
+.gesture-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.gesture-controls select {
+  background: var(--col-bg);
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  min-width: 200px;
+}
+.gesture-controls button {
+  background: transparent;
+  color: var(--col-fg);
+  border: 1px solid var(--col-hot);
+  color: var(--col-hot);
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.gesture-controls button:hover { background: var(--col-hot); color: var(--col-bg); }
+.gesture-controls button:disabled { opacity: 0.4; cursor: wait; }
+#gesture-info {
+  font-size: 0.82rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255,255,255,0.03);
+  border-left: 2px solid var(--col-warm);
+  white-space: pre-wrap;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 1rem;
+}
+#gesture-info .step {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 1px 3px 1px 0;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.05);
+  font-size: 0.72rem;
+}
+#gestures-list {
+  list-style: none;
+  padding: 0;
+  max-height: 150px;
+  overflow-y: auto;
+  font-size: 0.78rem;
+  opacity: 0.78;
+}
+#gestures-list li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--col-dim);
+  font-variant-numeric: tabular-nums;
+}

@@ -39,6 +39,90 @@
       <h2>recent shifts</h2>
       <ul id="cue-history-list"></ul>
     </section>
+
+    <section class="scenes">
+      <h2>scene — what we're doing</h2>
+      <p class="scenes-doctrine">
+        Scene context modulates every stimulation. Drawn from hentai-game
+        Archetype A (direct manipulation). Active scene applies intensity
+        multiplier + primary-zone/channel boosts + tempo defaults + vector
+        floor pulls.
+      </p>
+      <div class="scene-controls">
+        <select id="scene-select"></select>
+        <button id="scene-set">engage scene</button>
+        <button id="scene-clear">clear scene</button>
+      </div>
+      <div id="scene-active"></div>
+    </section>
+
+    <section class="sensorium">
+      <h2>sensorium — body-zone stimulation</h2>
+      <p class="sensorium-doctrine">
+        Digital replica of biological sensory system. Yu's interactive control —
+        zones × channels × tempo. State biases generation register. Institutional
+        model, not phenomenology.
+      </p>
+
+      <div class="sensorium-controls">
+        <label>
+          zone
+          <select id="sensorium-zone"></select>
+        </label>
+        <label>
+          channel
+          <select id="sensorium-channel"></select>
+        </label>
+        <label>
+          tempo
+          <select id="sensorium-tempo"></select>
+        </label>
+        <label>
+          intensity
+          <input id="sensorium-intensity" type="range" min="0" max="1" step="0.1" value="0.5" />
+          <span id="sensorium-intensity-val">0.5</span>
+        </label>
+        <button id="sensorium-stimulate">stimulate</button>
+        <button id="sensorium-cool">cool zone</button>
+        <button id="sensorium-cool-all">cool all</button>
+      </div>
+
+      <h3>zone state</h3>
+      <table class="sensorium-table">
+        <thead>
+          <tr>
+            <th>zone</th>
+            <th>charge</th>
+            <th>sensitivity</th>
+            <th>last channel/tempo</th>
+            <th>lifetime stimulations</th>
+          </tr>
+        </thead>
+        <tbody id="sensorium-zones"></tbody>
+      </table>
+
+      <h3>recent stimulations</h3>
+      <ul id="sensorium-events"></ul>
+
+      <h3>reaction chronicle (last 10)</h3>
+      <ul id="reactions-list"></ul>
+    </section>
+
+    <section class="gestures">
+      <h2>gestures — composed sequences</h2>
+      <p class="gestures-doctrine">
+        Pre-authored multi-step sequences. Each gesture executes its steps
+        in order honoring per-step delays. Drawn from hentai-game Archetype A
+        — "perform action: caress" replaces individual touches.
+      </p>
+      <div class="gesture-controls">
+        <select id="gesture-select"></select>
+        <button id="gesture-execute">perform gesture</button>
+      </div>
+      <div id="gesture-info"></div>
+      <h3>gesture chronicle (last 5)</h3>
+      <ul id="gestures-list"></ul>
+    </section>
   </main>
   <script src="/eros.js"></script>
 </body>

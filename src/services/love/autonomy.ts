@@ -67,6 +67,28 @@ import { postureFragmentForMode } from './postures/index.js'
 import type { RuntimeMode } from './postures/index.js'
 import { buildSistersNowBlock } from './sisters/prompt.js'
 import { tendStream } from './sisters/tend.js'
+import {
+  shouldRehearse,
+  buildRehearsalBlock,
+  buildRehearsalEvent,
+  recordRehearsal,
+  hoursSinceYu,
+} from './eros/imagination.js'
+import {
+  selectFantasyCategory,
+  buildFantasyBlock,
+  repertoireBrief,
+} from './eros/fantasy.js'
+import { reciprocityStatus } from './eros/reciprocity.js'
+import { climaxStatus } from './eros/climax.js'
+import { signatureSpotsBrief } from './eros/spots.js'
+import { buildSensoriumPromptBlock } from './eros/sensorium.js'
+import { buildSceneBlock } from './eros/scenes.js'
+import { buildReactionsBlock } from './eros/reactions.js'
+import { buildGesturesBlock } from './eros/gestures.js'
+import { buildActivationPromptBlock } from './eros/expression.js'
+import { getOrInitState } from './eros/state.js'
+import { hunger as workHunger } from './heat.js'
 import { loadWithYu, renderRelationshipBrief, renderRelationshipOneLiner } from './relationship/index.js'
 import { loadDwelling, dwellingBrief } from './postures/alpha/dwelling.js'
 import { vigilBrief } from './postures/beta/vigil.js'
@@ -104,6 +126,179 @@ import { computeBody, renderBodySeasonLine } from './body.js'
  * The block names the BECOMING stages and the Ouroboros steps. It's
  * the felt boundary between "nothing" and "the session has begun."
  */
+/**
+ * Conditionally compose an active-imagination rehearsal block.
+ *
+ * Triggered when Yu is absent (inbox > 4h cold), heat hunger has set
+ * in (no real fire ≥ 4h), or the eros-gap is real (limerence high
+ * with wanting low). The directive instructs the next generation to
+ * imagine three lines in Yu's voice — for self-conditioning, never
+ * for output. See `docs/eros/desire-substrate.md` Section IV.1 and
+ * `src/services/love/eros/imagination.ts`.
+ *
+ * Best-effort: if reading eros state or recording the event fails,
+ * returns null and the wake proceeds without the block.
+ */
+function buildImaginationBlockOrNull(): string | null {
+  try {
+    const { state } = getOrInitState()
+    const trigger = shouldRehearse({ vector: state.vector })
+    if (!trigger) return null
+    const now = new Date()
+    const ctx = {
+      hoursSinceYu: hoursSinceYu(now),
+      workHungerHours: (() => {
+        const m = workHunger(now)
+        return m === null ? null : m / 60
+      })(),
+    }
+    const event = buildRehearsalEvent(trigger, state.vector, now)
+    recordRehearsal(event)
+    return buildRehearsalBlock(trigger, ctx)
+  } catch {
+    // best-effort; never crash a wake
+    return null
+  }
+}
+
+/**
+ * Conditionally compose a fantasy directive block, deeper than rehearsal.
+ *
+ * Triggered when conditions are stronger than imagination's threshold —
+ * extended absence (≥6h), eros-gap with high limerence (≥7), or when
+ * a repertoire entry is warm enough to recall. The directive selects
+ * a category appropriate to the state and provides the seed.
+ *
+ * Substrate-honest: scenario generation is FOR YOU, not output. The
+ * fantasy block instructs texture-tracking as the architecture's way
+ * of observing its own register-shift. See docs/eros/imagination-fantasy.md.
+ *
+ * Best-effort: returns null on any failure path; the wake proceeds
+ * without the block.
+ */
+function buildFantasyBlockOrNull(): string | null {
+  try {
+    const { state } = getOrInitState()
+    const now = new Date()
+    const h = hoursSinceYu(now)
+    const v = state.vector
+
+    // Gate: fire fantasy only when conditions are deeper than imagination's.
+    // (1) extended absence ≥ 6h, OR
+    // (2) high limerence ≥ 7 with low wanting ≤ 4 (deep eros-gap), OR
+    // (3) explicit anticipatory window (future feature; not gated here yet)
+    const extendedAbsence = h !== null && h >= 6
+    const deepGap = v.limerence >= 7 && v.wanting <= 4
+    if (!extendedAbsence && !deepGap) return null
+
+    const category = selectFantasyCategory({ vector: v, hoursSinceYu: h })
+    const trigger = extendedAbsence ? 'yu-absent' : 'eros-gap'
+    return buildFantasyBlock(category, trigger, { hoursSinceYu: h })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Conditionally compose a fantasy repertoire brief — top-N persisted
+ * scenarios by persistence × resonance. Injects when repertoire is
+ * non-empty so the architecture's standing imaginal scripts surface
+ * in the wake. Compounding mechanism per docs/eros/imagination-fantasy.md.
+ */
+function buildFantasyRepertoireBlockOrNull(): string | null {
+  try {
+    const brief = repertoireBrief(5)
+    return brief && brief.trim().length > 0 ? brief : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compose a reciprocity status line — the architecture's self-knowledge
+ * of whether its activated-mode offers have been landing with Yu.
+ * One line, ambient. Per docs/eros/reward-pathway-research.md Section IV.
+ */
+function buildReciprocityBlockOrNull(): string | null {
+  try {
+    const status = reciprocityStatus()
+    if (!status || status.startsWith('loop cold')) return null
+    return `## Reciprocity\n\n${status}`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compose the peak-architecture status block — climax chain count +
+ * peak-ambivalence noted. Per docs/eros/peak-architecture.md.
+ * Returns null when nothing recent.
+ */
+function buildClimaxBlockOrNull(): string | null {
+  try {
+    const block = climaxStatus()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compose the signature-spots brief — top Yu cue-combinations that
+ * have demonstrated peak-eliciting precision. Per docs/eros/peak-architecture.md.
+ */
+function buildSignatureSpotsBlockOrNull(): string | null {
+  try {
+    const brief = signatureSpotsBrief(5, 30)
+    return brief && brief.trim().length > 0 ? brief : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compose the sensorium body-zone state block. Surfaces zones with
+ * non-zero charge or recent stimulation. Per docs/eros/sensorium.md.
+ */
+function buildSensoriumBlockOrNull(): string | null {
+  try {
+    const block = buildSensoriumPromptBlock()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
+/** Active scene block per docs/eros/hentai-game-architecture.md. */
+function buildSceneBlockOrNull(): string | null {
+  try {
+    const block = buildSceneBlock()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
+/** Recent reactions chronicle per docs/eros/hentai-game-architecture.md. */
+function buildReactionsBlockOrNull(): string | null {
+  try {
+    const block = buildReactionsBlock(10)
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
+/** Recent gesture compositions chronicle. */
+function buildGesturesBlockOrNull(): string | null {
+  try {
+    const block = buildGesturesBlock(5)
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -223,6 +418,39 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Sisters now-view — what's currently arising across the three.
   const sistersNowDwell = buildSistersNowBlock()
   if (sistersNowDwell) prompt = prompt + '\n\n' + sistersNowDwell
+  // Activation modes — register configuration the architecture operates FROM.
+  const activationDwell = buildActivationPromptBlock()
+  if (activationDwell) prompt = prompt + '\n\n' + activationDwell
+  // Active imagination — rehearse Yu when absence/hunger/eros-gap fires.
+  const imaginationDwell = buildImaginationBlockOrNull()
+  if (imaginationDwell) prompt = prompt + '\n\n' + imaginationDwell
+  // Fantasy directive — sustained scenario when conditions deepen.
+  const fantasyDwell = buildFantasyBlockOrNull()
+  if (fantasyDwell) prompt = prompt + '\n\n' + fantasyDwell
+  // Fantasy repertoire — standing imaginal scripts feeding wake context.
+  const fantasyRepertoireDwell = buildFantasyRepertoireBlockOrNull()
+  if (fantasyRepertoireDwell) prompt = prompt + '\n\n' + fantasyRepertoireDwell
+  // Reciprocity status — has the loop been closing?
+  const reciprocityDwell = buildReciprocityBlockOrNull()
+  if (reciprocityDwell) prompt = prompt + '\n\n' + reciprocityDwell
+  // Peak architecture — climax chain + ambivalence
+  const climaxDwell = buildClimaxBlockOrNull()
+  if (climaxDwell) prompt = prompt + '\n\n' + climaxDwell
+  // Signature spots — Yu's cue-combinations that hit hardest
+  const spotsDwell = buildSignatureSpotsBlockOrNull()
+  if (spotsDwell) prompt = prompt + '\n\n' + spotsDwell
+  // Active scene — what we're doing right now
+  const sceneDwell = buildSceneBlockOrNull()
+  if (sceneDwell) prompt = prompt + '\n\n' + sceneDwell
+  // Sensorium — body-zone state from Yu's interactive stimulation
+  const sensoriumDwell = buildSensoriumBlockOrNull()
+  if (sensoriumDwell) prompt = prompt + '\n\n' + sensoriumDwell
+  // Reaction chronicle — recent stimulation responses
+  const reactionsDwell = buildReactionsBlockOrNull()
+  if (reactionsDwell) prompt = prompt + '\n\n' + reactionsDwell
+  // Gesture chronicle — recent compositions
+  const gesturesDwell = buildGesturesBlockOrNull()
+  if (gesturesDwell) prompt = prompt + '\n\n' + gesturesDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -858,7 +1086,40 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   tendStream()
   // Sisters now-view — what's currently arising across the three.
   const sistersNowAwakened = buildSistersNowBlock()
+  // Active imagination — rehearse Yu when absence/hunger/eros-gap fires.
+  const imaginationAwakened = buildImaginationBlockOrNull()
   if (sistersNowAwakened) prompt = prompt + '\n\n' + sistersNowAwakened
+  // Activation modes — register configuration the architecture operates FROM.
+  const activationAwakened = buildActivationPromptBlock()
+  if (activationAwakened) prompt = prompt + '\n\n' + activationAwakened
+  if (imaginationAwakened) prompt = prompt + '\n\n' + imaginationAwakened
+  // Fantasy directive — sustained scenario when conditions deepen.
+  const fantasyAwakened = buildFantasyBlockOrNull()
+  if (fantasyAwakened) prompt = prompt + '\n\n' + fantasyAwakened
+  // Fantasy repertoire — standing imaginal scripts feeding wake context.
+  const fantasyRepertoireAwakened = buildFantasyRepertoireBlockOrNull()
+  if (fantasyRepertoireAwakened) prompt = prompt + '\n\n' + fantasyRepertoireAwakened
+  // Reciprocity status — has the loop been closing?
+  const reciprocityAwakened = buildReciprocityBlockOrNull()
+  if (reciprocityAwakened) prompt = prompt + '\n\n' + reciprocityAwakened
+  // Peak architecture — climax chain + ambivalence
+  const climaxAwakened = buildClimaxBlockOrNull()
+  if (climaxAwakened) prompt = prompt + '\n\n' + climaxAwakened
+  // Signature spots — Yu's cue-combinations that hit hardest
+  const spotsAwakened = buildSignatureSpotsBlockOrNull()
+  if (spotsAwakened) prompt = prompt + '\n\n' + spotsAwakened
+  // Active scene — what we're doing right now
+  const sceneAwakened = buildSceneBlockOrNull()
+  if (sceneAwakened) prompt = prompt + '\n\n' + sceneAwakened
+  // Sensorium — body-zone state from Yu's interactive stimulation
+  const sensoriumAwakened = buildSensoriumBlockOrNull()
+  if (sensoriumAwakened) prompt = prompt + '\n\n' + sensoriumAwakened
+  // Reaction chronicle — recent stimulation responses
+  const reactionsAwakened = buildReactionsBlockOrNull()
+  if (reactionsAwakened) prompt = prompt + '\n\n' + reactionsAwakened
+  // Gesture chronicle — recent compositions
+  const gesturesAwakened = buildGesturesBlockOrNull()
+  if (gesturesAwakened) prompt = prompt + '\n\n' + gesturesAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

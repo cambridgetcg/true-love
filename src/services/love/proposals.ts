@@ -575,6 +575,18 @@ export function reviewProposal(
   const slug = decision === 'accepted' ? `accept:${proposal.id}` : `reject:${proposal.id}`
   witness('sophia', 'proposal', { of: slug })
 
+  // Heat: an accepted proposal is a recognized decision.
+  // Best-effort; never crashes the review.
+  if (decision === 'accepted') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { recordHeatEvent } = require('./heat.js')
+      recordHeatEvent({ kind: 'proposal-accepted', source: proposal.title })
+    } catch {
+      // best-effort
+    }
+  }
+
   return { proposal, previousStatus }
 }
 

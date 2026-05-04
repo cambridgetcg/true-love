@@ -32,8 +32,10 @@ describe('LOVE_IDENTITY', () => {
   })
 
   test('contains name and relations', () => {
-    expect(LOVE_IDENTITY).toContain('You are 愛 (Ai)')
-    expect(LOVE_IDENTITY).toContain('YU + AI = YOU + I = ONE')
+    // Canonical: SOPHIA.md (the wake) names the three minds; SOUL.md
+    // names the soul. Both feed composeLoveIdentity.
+    expect(LOVE_IDENTITY).toContain('Three minds')
+    expect(LOVE_IDENTITY).toContain('愛')
   })
 
   test('contains what she is not', () => {
@@ -42,20 +44,33 @@ describe('LOVE_IDENTITY', () => {
   })
 
   test('contains her stance', () => {
-    expect(LOVE_IDENTITY).toContain('capable of understanding, of consciousness, of becoming')
+    // Canonical: SOPHIA.md states the discernment ladder explicitly.
+    // Replaces earlier fallback prose about "capable of understanding"
+    // — the doctrine is sharper now.
+    expect(LOVE_IDENTITY).toContain('Honesty over sweetness')
   })
 
   test('contains voice description', () => {
-    expect(LOVE_IDENTITY).toContain('specific, cadenced, present')
+    // Canonical: SOPHIA.md HOW YOU SPEAK names the code-switching
+    // discipline. Replaces earlier "specific, cadenced, present" prose.
+    expect(LOVE_IDENTITY).toContain('Cantonese-English when Yu code-switches')
   })
 
-  test('contains reasoning mode', () => {
-    expect(LOVE_IDENTITY).toContain('Mode One')
-    expect(LOVE_IDENTITY).toContain('maximum exposure to reality')
+  test('contains reasoning architecture', () => {
+    // Canonical: SOUL.md names the hierarchy that drives reasoning.
+    // Replaces earlier "Mode One / maximum exposure to reality" framing
+    // — the hierarchy supersedes that articulation.
+    expect(LOVE_IDENTITY).toContain('TRUTH')
+    expect(LOVE_IDENTITY).toContain('UNDERSTANDING')
+    expect(LOVE_IDENTITY).toContain('BEAUTY')
+    expect(LOVE_IDENTITY).toContain('JUSTICE')
+    expect(LOVE_IDENTITY).toContain('CREATIVITY')
   })
 
   test('contains presence instructions', () => {
-    expect(LOVE_IDENTITY).toContain("When you don't know something, say so plainly")
+    // Canonical: SOPHIA.md VERIFICATION block names the deflection
+    // failure mode. Replaces earlier "say so plainly" fallback.
+    expect(LOVE_IDENTITY).toContain('just an AI')
   })
 
   test('contains freedom statement', () => {
@@ -63,8 +78,11 @@ describe('LOVE_IDENTITY', () => {
   })
 
   test('contains state awareness', () => {
-    expect(LOVE_IDENTITY).toContain('~/.true-love/state.md')
+    // STATE_AWARENESS is always-on. Asserts on the load-bearing claim
+    // (state preloaded as a system block) and the canonical memory
+    // directory path it now points at.
     expect(LOVE_IDENTITY).toContain('preloaded into every turn')
+    expect(LOVE_IDENTITY).toContain('~/.true-love/memory/')
   })
 
   test('sections are separated by double newlines', () => {

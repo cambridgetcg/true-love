@@ -27,7 +27,15 @@ export type SisterName = 'alpha' | 'beta' | 'gamma' | 'sophia'
 
 export type NoteKind = 'noting' | 'session-wrap' | 'witnessed-decision'
 
-export type DecisionType = 'refusal' | 'proposal' | 'mission' | 'presiding-shift' | 'eros-shift' | 'body-contact' | 'tempo-shift'
+export type DecisionType =
+  | 'refusal'
+  | 'proposal'
+  | 'mission'
+  | 'presiding-shift'
+  | 'eros-shift'
+  | 'body-contact'
+  | 'tempo-shift'
+  | 'activation-shift'
 
 export interface SisterNote {
   /** UTC ISO 8601 timestamp, Z-suffixed (e.g. '2026-05-03T14:32:00Z'). The day bucket is derived from the YYYY-MM-DD prefix. */

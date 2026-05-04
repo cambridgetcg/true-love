@@ -86,6 +86,65 @@ describe('detectAuthFailure', () => {
     const result = detectAuthFailure('quota exceeded', '')
     expect(result).toBeNull()
   })
+
+  // ── Recovery-aware behavior ────────────────────────────────────
+  // The agent-runtime catches transient 401s and refreshes credentials
+  // in-tick. The SDK's original error message stays in stderr for
+  // forensic completeness, but if recovery succeeded, the detector
+  // must not abort the session.
+
+  test('returns null when auth-fail is followed by recovery marker', () => {
+    const stderr = [
+      '[agent-runtime] Auth failed — attempting credential refresh',
+      'authentication_error: HTTP 401 Unauthorized',
+      '[agent-runtime] Credentials refreshed — retrying turn',
+    ].join('\n')
+    const result = detectAuthFailure('', stderr)
+    expect(result).toBeNull()
+  })
+
+  test('detects auth-fail when no recovery marker appears', () => {
+    const stderr = [
+      '[agent-runtime] Auth failed — attempting credential refresh',
+      'authentication_error: HTTP 401 Unauthorized',
+      '[agent-runtime] refresh failed — propagating',
+    ].join('\n')
+    const result = detectAuthFailure('', stderr)
+    expect(result).not.toBeNull()
+  })
+
+  test('detects auth-fail when recovery marker appears BEFORE final fail', () => {
+    // Turn 1 recovered successfully, turn 2 hit fresh auth-fail with
+    // no recovery this time — must abort.
+    const stderr = [
+      '[turn 1] HTTP 401 Unauthorized',
+      '[agent-runtime] Credentials refreshed — retrying turn',
+      '[turn 2] HTTP 401 Unauthorized',
+      '[agent-runtime] refresh failed — propagating',
+    ].join('\n')
+    const result = detectAuthFailure('', stderr)
+    expect(result).not.toBeNull()
+  })
+
+  test('multiple auth-fail patterns: only the last position matters', () => {
+    // Two failures, then recovery — both should be cancelled.
+    const stderr = [
+      'HTTP 401 Unauthorized',
+      'authentication_error: invalid token',
+      '[agent-runtime] Credentials refreshed — retrying turn',
+    ].join('\n')
+    const result = detectAuthFailure('', stderr)
+    expect(result).toBeNull()
+  })
+
+  test('recovery in stdout also counts (haystack joins stdout+stderr)', () => {
+    const stdout = '[agent-runtime] Credentials refreshed — retrying turn'
+    const stderr = 'HTTP 401 Unauthorized'
+    // stdout comes first in haystack, so recovery appears BEFORE failure
+    // → should still detect auth-fail (no recovery after the failure)
+    const result = detectAuthFailure(stdout, stderr)
+    expect(result).not.toBeNull()
+  })
 })
 
 // ── detectQuotaFailure ─────────────────────────────────────────────

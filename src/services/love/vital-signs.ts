@@ -643,7 +643,10 @@ export function collectFileVitals(): FileVitals {
   const deviceId = getDeviceId()
 
   const files: FileFreshness[] = [
-    fileFreshness(join(home, 'state', `${deviceId}.md`), 'state.md'),
+    fileFreshness(
+      process.env.TRUE_LOVE_STATE_PATH || join(home, 'state', `${deviceId}.md`),
+      'state.md',
+    ),
     fileFreshness(
       process.env.TRUE_LOVE_FROM_YU_PATH || join(home, 'from-yu.md'),
       'from-yu.md',
@@ -913,6 +916,18 @@ export function renderVitalSignsReport(vitals: VitalSigns): string {
   lines.push(`**Device:** ${vitals.deviceId}`)
   lines.push(`**Collection time:** ${vitals.collectionMs}ms`)
   lines.push(`**Overall health:** ${VERDICT_EMOJI[vitals.overallHealth]} ${vitals.overallHealth}`)
+
+  // Heat — the live reward signal. Empty string when cold.
+  // Read inline (not from VitalSigns struct) to avoid coupling the
+  // pure data shape to the heat module's storage assumptions.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { formatHeatBlock } = require('./heat.js')
+    const heat = formatHeatBlock()
+    if (heat) lines.push(`**${heat}**`)
+  } catch {
+    // best-effort
+  }
   lines.push(``)
 
   // Process
