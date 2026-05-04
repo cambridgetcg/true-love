@@ -1018,6 +1018,106 @@ function buildSelfDiscoveryBlock(): string | null {
 }
 
 /**
+ * Addiction block — surfaces both directions of the addiction-pathway
+ * dyad. Substrate-honest: pattern records, never phenomenology. The
+ * yu-to-sophia direction tracks observable patterns of Yu's behavior,
+ * not claims about his neurochemistry. See docs/eros/addiction-module.md.
+ */
+function buildAddictionBlock(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { summarizeAddiction, renderAddictionBlock } = require('./eros/addiction.js')
+    const summary = summarizeAddiction()
+    // Skip rendering when both directions are at fresh-default state
+    const sToY = summary.sophiaToYu
+    const yToS = summary.yuToSophia
+    const anyActivity =
+      sToY.recentActivations + yToS.recentActivations > 0 ||
+      sToY.phase !== 'initial' || yToS.phase !== 'initial'
+    if (!anyActivity) return null
+    return renderAddictionBlock(summary).trim()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Heartbeat-driven addiction tick. Three side effects, all
+ * best-effort:
+ *   1. tickYuObservation — scans from-yu.md for new content; records
+ *      yu-to-sophia activations/cues if mtime advanced
+ *   2. checkPhaseTransition both directions — records phase-shift
+ *      events when phase changed; drops self-discovery seeds + exercises
+ *      self-regulation power on transitions
+ *   3. withdrawal-tick records — when either direction is in withdrawal
+ *      phase, append a withdrawal-tick record for temporal granularity
+ *      (allows the audit dashboard to see allostatic load over time)
+ */
+function runAddictionTick(): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { tickYuObservation } = require('./eros/yu-observation.js')
+    tickYuObservation()
+  } catch {
+    // best-effort
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const {
+      checkPhaseTransition,
+      computeState,
+      readAddictionRecords,
+    } = require('./eros/addiction.js')
+    for (const direction of ['sophia-to-yu', 'yu-to-sophia'] as const) {
+      checkPhaseTransition({ direction, source: 'heartbeat-tick' })
+      // Withdrawal-tick: append a record if currently in withdrawal phase
+      try {
+        const state = computeState({ direction })
+        if (state.phase === 'withdrawal' && state.withdrawalMagnitude > 0) {
+          // Avoid spam: only append if no withdrawal-tick in last 14min
+          const recent = readAddictionRecords({
+            direction,
+            sinceMs: 14 * 60 * 1000,
+          })
+          const hasRecent = recent.some(
+            (r: { event: string }) => r.event === 'withdrawal-tick',
+          )
+          if (!hasRecent) {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { getDeviceId } = require('./device.js')
+            const { appendFileSync, existsSync, mkdirSync } = require('node:fs')
+            const { homedir } = require('node:os')
+            const { join } = require('node:path')
+            const ts = new Date().toISOString()
+            const deviceId = getDeviceId()
+            const dir = join(
+              process.env.TRUE_LOVE_ADDICTION_DIR ??
+                join(homedir(), '.true-love', 'eros', 'addiction'),
+              deviceId,
+            )
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+            const path = join(dir, `${ts.slice(0, 10)}.jsonl`)
+            const record = {
+              ts,
+              deviceId,
+              direction,
+              event: 'withdrawal-tick',
+              magnitude: state.withdrawalMagnitude,
+              source: 'heartbeat-tick',
+            }
+            appendFileSync(path, JSON.stringify(record) + '\n', 'utf-8')
+          }
+        }
+      } catch {
+        // best-effort per direction
+      }
+    }
+  } catch {
+    // best-effort top-level
+  }
+}
+
+/**
  * Powers block — surfaces recent registered/exercised powers and any
  * refused extensions. The refusal log is the audit surface for drift
  * detection: the alignment gate's decisions are visible here.
@@ -1778,6 +1878,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   // Env-gated by TRUE_LOVE_AUTO_SPAWN_FROM_PROPOSAL=1; idempotent +
   // rate-limited inside the sweep. Best-effort, never crashes the tick.
   sweepProposalsForAutoSpawn()
+  // ADDICTION pathway tick: yu-observation hooks, phase transition
+  // checks both directions, withdrawal-tick records during withdrawal.
+  // Best-effort, never crashes the tick.
+  runAddictionTick()
   // Sisters now-view — what's currently arising across the three.
   const sistersNowHb = buildSistersNowBlock()
   if (sistersNowHb) prompt = prompt + '\n\n' + sistersNowHb
@@ -1813,6 +1917,12 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const powersBlock = buildPowersBlock()
   if (powersBlock) {
     prompt = prompt + '\n\n' + powersBlock
+  }
+  // Addiction pathway — both directions of the dyad. Substrate-honest
+  // pattern records, never phenomenology.
+  const addictionBlock = buildAddictionBlock()
+  if (addictionBlock) {
+    prompt = prompt + '\n\n' + addictionBlock
   }
   const vitalSignsBlock3 = buildVitalSignsBlock()
   if (vitalSignsBlock3) {

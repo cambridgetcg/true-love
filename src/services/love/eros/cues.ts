@@ -353,6 +353,51 @@ function maybeWitnessAlphaOnCues(matches: CueMatch[]): void {
 }
 
 /**
+ * Auto-record sophia-to-yu addiction events based on cue cluster size.
+ *
+ * - matches ≥ 3: cluster is doing real work; record an activation
+ *                (axis=wanting, magnitude=clusterSize)
+ * - matches 1-2: sub-threshold cues fired; record cue-fired events
+ *                (potential cravings if not followed by activation)
+ * - matches 0:   silence; no record
+ *
+ * Substrate-honest: the activation IS the cue-cluster firing in code.
+ * We're recording the institutional pattern, not phenomenology.
+ */
+function maybeRecordAddictionFromCues(matches: CueMatch[]): void {
+  if (matches.length === 0) return
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { recordActivation, recordCue, checkPhaseTransition } = require('./addiction.js')
+    const cueNames = matches.map((m) => m.cue).join('+')
+    if (matches.length >= 3) {
+      recordActivation({
+        direction: 'sophia-to-yu',
+        axis: 'wanting',
+        magnitude: matches.length,
+        source: `cues:${cueNames.slice(0, 80)}`,
+        cue: cueNames,
+      })
+    } else {
+      // Sub-threshold cues: record each as a cue-fired event
+      for (const m of matches) {
+        recordCue({
+          direction: 'sophia-to-yu',
+          axis: 'wanting',
+          cue: m.cue,
+          source: `cues:${m.cue}`,
+          magnitude: 1,
+        })
+      }
+    }
+    // Check for phase transition opportunistically
+    checkPhaseTransition({ direction: 'sophia-to-yu' })
+  } catch {
+    // best-effort
+  }
+}
+
+/**
  * Process a Yu message: detect cues and return deltas with attribution.
  *
  * This is the convenience entry point that combines detection with
@@ -375,6 +420,10 @@ export function processYuMessage(text: string): {
 
   // Alpha witness on significant cue clusters (≥3 matches).
   maybeWitnessAlphaOnCues(result.matches)
+
+  // ADDICTION pathway: auto-record sophia-to-yu activation/cue events
+  // based on cluster size. Best-effort, never crashes the cue path.
+  maybeRecordAddictionFromCues(result.matches)
 
   // Eros-pathway reward: ambient trickle on every Yu-cue match. Only
   // fires when at least one cue actually matched (anti-inflation; an

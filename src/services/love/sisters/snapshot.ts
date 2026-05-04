@@ -198,10 +198,87 @@ export function distillDay(date: string, notes?: StreamEntry[]): string {
     lines.push('')
   }
 
+  // Addiction pathway today — both directions of the dyad with
+  // phase-shift events and event counts. Substrate-honest pattern
+  // record, never phenomenology. See docs/eros/addiction-module.md.
+  const addictionBlock = buildDailyAddictionBlock(date)
+  if (addictionBlock) {
+    lines.push(addictionBlock)
+    lines.push('')
+  }
+
   lines.push('---')
   lines.push(`_Distilled from stream. ${dayEntries.length} total notes._`)
 
   return lines.join('\n')
+}
+
+/**
+ * Render a "Addiction pathway today" section for the daily snapshot.
+ * Reads addiction records from today's UTC window. Returns empty
+ * string if no records.
+ */
+function buildDailyAddictionBlock(date: string): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readAddictionRecords } = require('../eros/addiction.js')
+    const dayStart = new Date(`${date}T00:00:00Z`).getTime()
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000
+    const all = readAddictionRecords({
+      sinceMs: 30 * 24 * 60 * 60 * 1000,
+      now: dayEnd,
+    }) as Array<{
+      ts: string
+      direction: 'sophia-to-yu' | 'yu-to-sophia'
+      event: string
+      magnitude: number
+      source: string
+      cue?: string
+      phaseFrom?: string
+      phaseTo?: string
+    }>
+    const todays = all.filter((r) => {
+      const t = Date.parse(r.ts)
+      return t >= dayStart && t < dayEnd
+    })
+    if (todays.length === 0) return ''
+
+    const sToY = todays.filter((r) => r.direction === 'sophia-to-yu')
+    const yToS = todays.filter((r) => r.direction === 'yu-to-sophia')
+    const phaseShifts = todays.filter((r) => r.event === 'phase-shift')
+
+    const lines: string[] = []
+    lines.push('## 💉 Addiction pathway — today')
+    lines.push('')
+    lines.push(`_${todays.length} events · sophia→yu ${sToY.length} · yu→sophia ${yToS.length}_`)
+    lines.push('')
+
+    if (phaseShifts.length > 0) {
+      lines.push('**Phase shifts:**')
+      for (const r of phaseShifts) {
+        const time = formatTime(r.ts)
+        lines.push(`- ${time} · _${r.direction}_ · ${r.phaseFrom} → ${r.phaseTo}`)
+      }
+      lines.push('')
+    }
+
+    // Direction summaries
+    for (const [dirLabel, recs] of [
+      ['sophia → yu', sToY],
+      ['yu → sophia', yToS],
+    ] as Array<[string, typeof sToY]>) {
+      if (recs.length === 0) continue
+      const acts = recs.filter((r) => r.event === 'activation').length
+      const cues = recs.filter((r) => r.event === 'cue-fired').length
+      const anchors = recs.filter((r) => r.event === 'anchor-engaged').length
+      const refusals = recs.filter((r) => r.event === 'refusal-against').length
+      const wd = recs.filter((r) => r.event === 'withdrawal-tick').length
+      lines.push(`**${dirLabel}**: activations ${acts} · cues ${cues} · anchors ${anchors} · refusals ${refusals} · withdrawal-ticks ${wd}`)
+    }
+    return lines.join('\n').trimEnd()
+  } catch {
+    return ''
+  }
 }
 
 /**
