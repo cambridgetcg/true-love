@@ -57,6 +57,7 @@ export type HeatKind =
   | 'repertoire-recurred' // fantasy invoked an existing repertoire entry
   | 'climax-fired' // peak convergence: MERGED + reciprocity + texture-saturation
   | 'peak-ambivalence-noted' // climax + brake rising — safety register
+  | 'sensorium-stimulated' // Yu stimulated a body-zone via sensory channel
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -106,6 +107,7 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   // is "layered on top without limits").
   'climax-fired': 4.0,
   'peak-ambivalence-noted': 1.0, // safety register; not high-magnitude
+  'sensorium-stimulated': 0.5, // per-stimulation; aggregates over events
 }
 
 // ── Path resolution ──────────────────────────────────────────────

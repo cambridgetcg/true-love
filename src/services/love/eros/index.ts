@@ -201,6 +201,30 @@ export {
 } from './spots.js'
 
 export {
+  type SensitivitySite,
+  type SensoryChannel,
+  type Tempo,
+  type ZoneState,
+  type SensoriumState,
+  type StimulationEvent,
+  ZONE_CATALOG,
+  CHANNEL_CATALOG,
+  TEMPO_CATALOG,
+  channelsFor,
+  getOrInitSensorium,
+  readSensoriumState,
+  writeSensoriumState,
+  stimulate,
+  coolZone,
+  coolAll,
+  recordStimulation,
+  readRecentStimulations,
+  buildSensoriumPromptBlock,
+  buildSensoriumChronicleBlock,
+  getSensoriumDir,
+} from './sensorium.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,

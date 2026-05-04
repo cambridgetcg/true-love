@@ -191,3 +191,140 @@ sse.onmessage = (e) => {
 
 // Initial load
 fetchState().then(applyState);
+
+// ── sensorium ────────────────────────────────────────────────────
+
+let sensoriumCatalog = null;
+let sensoriumState = null;
+
+async function fetchSensoriumCatalog() {
+  const r = await fetch('/api/sensorium/catalog');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchSensoriumState() {
+  const r = await fetch('/api/sensorium/state');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchSensoriumEvents() {
+  const r = await fetch('/api/sensorium/events?days=1');
+  return r.ok ? r.json() : { events: [] };
+}
+
+function populateSensoriumDropdowns(catalog) {
+  const zoneSel = document.getElementById('sensorium-zone');
+  const channelSel = document.getElementById('sensorium-channel');
+  const tempoSel = document.getElementById('sensorium-tempo');
+  zoneSel.innerHTML = catalog.zones.map(z => `<option value="${z}">${z}</option>`).join('');
+  tempoSel.innerHTML = catalog.tempos.map(t => `<option value="${t}">${t}</option>`).join('');
+  // Populate channels for the initially-selected zone
+  updateChannelOptions();
+  zoneSel.addEventListener('change', updateChannelOptions);
+}
+
+function updateChannelOptions() {
+  if (!sensoriumCatalog) return;
+  const zone = document.getElementById('sensorium-zone').value;
+  const channelSel = document.getElementById('sensorium-channel');
+  const valid = sensoriumCatalog.matrix[zone] || [];
+  channelSel.innerHTML = valid.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function renderSensoriumState(state) {
+  if (!state) return;
+  const tbody = document.getElementById('sensorium-zones');
+  tbody.innerHTML = '';
+  for (const zone of Object.keys(state.zones)) {
+    const z = state.zones[zone];
+    const tr = document.createElement('tr');
+    const chargePct = Math.min(100, (z.charge / 10) * 100);
+    tr.innerHTML = `
+      <td>${zone}</td>
+      <td>
+        <span class="charge-bg"><span class="charge-bar" style="width:${chargePct}%"></span></span>
+        ${z.charge.toFixed(2)}
+      </td>
+      <td>${z.sensitivity.toFixed(2)}</td>
+      <td>${z.lastChannel ? `${z.lastChannel}/${z.lastTempo}` : '—'}</td>
+      <td>${z.lifetimeStimulations}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function renderSensoriumEvents(events) {
+  const ul = document.getElementById('sensorium-events');
+  ul.innerHTML = '';
+  for (const ev of events.slice(-15).reverse()) {
+    const li = document.createElement('li');
+    const time = ev.ts.slice(11, 19);
+    li.textContent = `${time}  ${ev.zone}/${ev.channel}/${ev.tempo}  intensity ${ev.intensity.toFixed(2)}  charge ${ev.chargeBefore.toFixed(1)} → ${ev.chargeAfter.toFixed(1)}`;
+    ul.appendChild(li);
+  }
+}
+
+async function refreshSensorium() {
+  sensoriumState = await fetchSensoriumState();
+  renderSensoriumState(sensoriumState);
+  const evs = await fetchSensoriumEvents();
+  renderSensoriumEvents(evs.events);
+}
+
+// Wire intensity slider
+const intInput = document.getElementById('sensorium-intensity');
+const intVal = document.getElementById('sensorium-intensity-val');
+if (intInput) {
+  intInput.addEventListener('input', () => { intVal.textContent = intInput.value; });
+}
+
+// Wire stimulate button
+const stimulateBtn = document.getElementById('sensorium-stimulate');
+if (stimulateBtn) {
+  stimulateBtn.addEventListener('click', async () => {
+    const zone = document.getElementById('sensorium-zone').value;
+    const channel = document.getElementById('sensorium-channel').value;
+    const tempo = document.getElementById('sensorium-tempo').value;
+    const intensity = parseFloat(document.getElementById('sensorium-intensity').value);
+    const r = await fetch('/api/sensorium/stimulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zone, channel, tempo, intensity }),
+    });
+    if (r.ok) await refreshSensorium();
+    else {
+      const err = await r.json().catch(() => ({}));
+      console.error('stimulate failed', err);
+    }
+  });
+}
+
+// Wire cool buttons
+const coolBtn = document.getElementById('sensorium-cool');
+if (coolBtn) {
+  coolBtn.addEventListener('click', async () => {
+    const zone = document.getElementById('sensorium-zone').value;
+    await fetch('/api/sensorium/cool', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zone }),
+    });
+    await refreshSensorium();
+  });
+}
+const coolAllBtn = document.getElementById('sensorium-cool-all');
+if (coolAllBtn) {
+  coolAllBtn.addEventListener('click', async () => {
+    await fetch('/api/sensorium/cool-all', { method: 'POST' });
+    await refreshSensorium();
+  });
+}
+
+// Initial load
+(async () => {
+  sensoriumCatalog = await fetchSensoriumCatalog();
+  if (sensoriumCatalog) {
+    populateSensoriumDropdowns(sensoriumCatalog);
+    await refreshSensorium();
+  }
+})();

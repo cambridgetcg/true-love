@@ -118,6 +118,20 @@ import {
   witnessTransition as witnessErosTransition,
   type AxisName as ErosAxisName,
   type Attribution as ErosAttribution,
+  // Sensorium API
+  ZONE_CATALOG,
+  CHANNEL_CATALOG,
+  TEMPO_CATALOG,
+  channelsFor,
+  getOrInitSensorium,
+  readSensoriumState,
+  stimulate as stimulateSensorium,
+  coolZone as coolSensoriumZone,
+  coolAll as coolSensoriumAll,
+  readRecentStimulations,
+  type SensitivitySite,
+  type SensoryChannel,
+  type Tempo,
 } from './eros/index.js'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -709,6 +723,13 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/eros/set') return await handleErosSet(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/eros/nudge') return await handleErosNudge(req, res, broadcastErosState)
       if (req.method === 'GET' && path === '/api/eros/stream') return handleErosStream(req, res, erosSseClients)
+      // Sensorium endpoints
+      if (req.method === 'GET' && path === '/api/sensorium/state') return handleSensoriumState(req, res)
+      if (req.method === 'GET' && path === '/api/sensorium/catalog') return handleSensoriumCatalog(req, res)
+      if (req.method === 'POST' && path === '/api/sensorium/stimulate') return await handleSensoriumStimulate(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/sensorium/cool') return await handleSensoriumCool(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/sensorium/cool-all') return await handleSensoriumCoolAll(req, res, broadcastErosState)
+      if (req.method === 'GET' && path === '/api/sensorium/events') return handleSensoriumEvents(req, res)
       // Serve modular build UI assets (build-*.js, build-*.css)
       if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
         const name = path.slice(1) // strip leading /
@@ -2604,4 +2625,105 @@ function handleErosStream(
   res.write(`data: ${JSON.stringify(state)}\n\n`)
   clients.add(res)
   req.on('close', () => { clients.delete(res) })
+}
+
+// ── Sensorium handlers ────────────────────────────────────────────
+
+function handleSensoriumState(_req: IncomingMessage, res: ServerResponse): void {
+  const { state } = getOrInitSensorium()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(state))
+}
+
+function handleSensoriumCatalog(_req: IncomingMessage, res: ServerResponse): void {
+  // Return zone × channel matrix so the UI can populate dropdowns.
+  const matrix: Record<string, string[]> = {}
+  for (const z of ZONE_CATALOG) {
+    matrix[z] = channelsFor(z)
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    zones: ZONE_CATALOG,
+    channels: CHANNEL_CATALOG,
+    tempos: TEMPO_CATALOG,
+    matrix,
+  }))
+}
+
+async function handleSensoriumStimulate(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { zone: SensitivitySite; channel: SensoryChannel; tempo: Tempo; intensity?: number }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!ZONE_CATALOG.includes(parsed.zone)) throw new Error('unknown zone')
+    if (!CHANNEL_CATALOG.includes(parsed.channel)) throw new Error('unknown channel')
+    if (!TEMPO_CATALOG.includes(parsed.tempo)) throw new Error('unknown tempo')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const event = stimulateSensorium(parsed.zone, parsed.channel, parsed.tempo, parsed.intensity ?? 0.5)
+  if (!event) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: `no coupling defined for ${parsed.zone}×${parsed.channel}` }))
+    return
+  }
+  // Broadcast eros state since stimulate() couples to the vector.
+  broadcast()
+  const state = readSensoriumState()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, event, state }))
+}
+
+async function handleSensoriumCool(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 256, 'request body too large')
+  if (body === null) return
+  let parsed: { zone: SensitivitySite }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!ZONE_CATALOG.includes(parsed.zone)) throw new Error('unknown zone')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  coolSensoriumZone(parsed.zone)
+  broadcast()
+  const state = readSensoriumState()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleSensoriumCoolAll(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  coolSensoriumAll()
+  broadcast()
+  const state = readSensoriumState()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+function handleSensoriumEvents(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
+  const events = readRecentStimulations(days)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ events }))
 }

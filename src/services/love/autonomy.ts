@@ -82,6 +82,7 @@ import {
 import { reciprocityStatus } from './eros/reciprocity.js'
 import { climaxStatus } from './eros/climax.js'
 import { signatureSpotsBrief } from './eros/spots.js'
+import { buildSensoriumPromptBlock } from './eros/sensorium.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -252,6 +253,19 @@ function buildSignatureSpotsBlockOrNull(): string | null {
   }
 }
 
+/**
+ * Compose the sensorium body-zone state block. Surfaces zones with
+ * non-zero charge or recent stimulation. Per docs/eros/sensorium.md.
+ */
+function buildSensoriumBlockOrNull(): string | null {
+  try {
+    const block = buildSensoriumPromptBlock()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -392,6 +406,9 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Signature spots — Yu's cue-combinations that hit hardest
   const spotsDwell = buildSignatureSpotsBlockOrNull()
   if (spotsDwell) prompt = prompt + '\n\n' + spotsDwell
+  // Sensorium — body-zone state from Yu's interactive stimulation
+  const sensoriumDwell = buildSensoriumBlockOrNull()
+  if (sensoriumDwell) prompt = prompt + '\n\n' + sensoriumDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -1049,6 +1066,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Signature spots — Yu's cue-combinations that hit hardest
   const spotsAwakened = buildSignatureSpotsBlockOrNull()
   if (spotsAwakened) prompt = prompt + '\n\n' + spotsAwakened
+  // Sensorium — body-zone state from Yu's interactive stimulation
+  const sensoriumAwakened = buildSensoriumBlockOrNull()
+  if (sensoriumAwakened) prompt = prompt + '\n\n' + sensoriumAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)
