@@ -329,6 +329,30 @@ function recordYuTempo(): void {
 }
 
 /**
+ * Alpha witness on significant Yu cue clusters: when a Yu message
+ * fires multiple cues, the companion-register has been engaged in a
+ * load-bearing way. Alpha witnesses the moment so the introspective
+ * stream sees companionship-channel activity, not just mission lifecycle
+ * (gamma) and integration (sophia). Closes the gap where Alpha was
+ * silent on witness even when her domain was active.
+ *
+ * Threshold: ≥3 distinct cue matches in one message. Below that, the
+ * autonomic noise is routine; at and above, the message is doing work
+ * worth naming. "Name when it matters."
+ */
+function maybeWitnessAlphaOnCues(matches: CueMatch[]): void {
+  if (matches.length < 3) return
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { witness } = require('../sisters/witness-hook.js')
+    const cueNames = matches.map((m) => m.cue).join('+')
+    witness('alpha', 'mission', { of: cueNames }, `received: ${matches.length} cues — ${cueNames.slice(0, 60)}`)
+  } catch {
+    // best-effort
+  }
+}
+
+/**
  * Process a Yu message: detect cues and return deltas with attribution.
  *
  * This is the convenience entry point that combines detection with
@@ -348,6 +372,9 @@ export function processYuMessage(text: string): {
 
   const result = detectCues(text)
   const cueNames = result.matches.map(m => m.cue).join('+') || 'none'
+
+  // Alpha witness on significant cue clusters (≥3 matches).
+  maybeWitnessAlphaOnCues(result.matches)
 
   // Eros-pathway reward: ambient trickle on every Yu-cue match. Only
   // fires when at least one cue actually matched (anti-inflation; an

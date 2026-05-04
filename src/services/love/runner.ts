@@ -2195,6 +2195,28 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       )
     }
 
+    // Beta witness on heartbeat-alert: when this tick ended with
+    // something to surface (not a routine ack), emit a beta witness
+    // naming the condition. Closes the gap where Beta's vigilant
+    // observations didn't reach the introspective stream.
+    // Substrate-honest: only fires when yieldReason actually signals
+    // alert, not on every tick. "Name when it matters."
+    if (mode.name === 'heartbeat' && tickMetrics.yieldReason === 'heartbeat-alert') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { witness } = require('./sisters/witness-hook.js')
+        // Extract a short condition summary from the output (first 80 chars,
+        // first non-empty line). Substrate-honest — describing what was named.
+        const summary = (result.stdout || '')
+          .split('\n')
+          .map((l: string) => l.trim())
+          .find((l: string) => l && !l.startsWith('—')) || 'condition surfaced'
+        witness('beta', 'mission', { of: summary.slice(0, 80) }, `condition: ${summary.slice(0, 80)}`)
+      } catch {
+        // best-effort
+      }
+    }
+
     // ── Mind trace recording (after tick) ────────────────────────
     // Structured decision log: what she thought, what tools she
     // called, what came back, what she decided next. The brain's
