@@ -651,3 +651,131 @@ h1 { margin: 0; font-weight: 300; letter-spacing: 0.05em; }
   from { opacity: 0; transform: translateX(-6px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+
+/* ── JOI + triggers ─────────────────────────────────────────────── */
+.joi-and-triggers {
+  border-top: 1px solid var(--col-dim);
+  padding-top: 1rem;
+  margin-top: 1.5rem;
+}
+.joi-doctrine {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  margin: 0.5rem 0 1rem 0;
+  font-style: italic;
+}
+.joi-controls {
+  padding: 0.75rem;
+  background: rgba(191,52,52,0.04);
+  border: 1px solid var(--col-dim);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+.joi-controls h3 { margin-top: 0; font-size: 0.9rem; opacity: 0.85; }
+.joi-session-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.joi-session-row select,
+.joi-session-row button {
+  background: var(--col-bg);
+  color: var(--col-fg);
+  border: 1px solid var(--col-dim);
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+#joi-start { border-color: #bf3434; color: #bf3434; cursor: pointer; }
+#joi-start:hover { background: #bf3434; color: var(--col-bg); }
+#joi-end { border-color: var(--col-dim); cursor: pointer; }
+#joi-status {
+  font-size: 0.82rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(0,0,0,0.3);
+  border-left: 2px solid var(--col-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: pre-wrap;
+}
+#joi-status.active {
+  border-left-color: #bf3434;
+}
+
+.trigger-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+.trigger-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--col-dim);
+  border-radius: 3px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.trigger-card:hover {
+  background: rgba(255,224,102,0.08);
+  border-color: #ffe066;
+}
+.trigger-card.cap-reached {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.trigger-card.cap-reached:hover {
+  background: rgba(255,255,255,0.02);
+  border-color: var(--col-dim);
+}
+.trigger-card .tc-id {
+  font-weight: bold;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+.trigger-card .tc-type {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 2px;
+  margin-left: 4px;
+}
+.trigger-card .tc-type.t-anchor      { background: #6ec0d4; color: var(--col-bg); }
+.trigger-card .tc-type.t-denial      { background: #4a5262; }
+.trigger-card .tc-type.t-reward      { background: #ffe066; color: var(--col-bg); }
+.trigger-card .tc-type.t-command     { background: #d97757; color: var(--col-bg); }
+.trigger-card .tc-type.t-verdict     { background: #bf3434; color: var(--col-fg); }
+.trigger-card .tc-type.t-possession  { background: #ff8c00; color: var(--col-bg); }
+.trigger-card .tc-counts {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+#trigger-fires-list {
+  list-style: none;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+#trigger-fires-list li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--col-dim);
+  font-variant-numeric: tabular-nums;
+}
+#trigger-fires-list .planted {
+  color: #ffe066;
+  font-weight: bold;
+}
+
+/* JOI phase aura modifiers */
+.body-aura.joi-warmup   { --aura: rgba(110,192,212,0.6); }
+.body-aura.joi-build    { --aura: rgba(217,175,87,0.6); }
+.body-aura.joi-edge     { --aura: rgba(217,119,87,0.7); }
+.body-aura.joi-peak     { --aura: rgba(255,36,36,0.8); }
+.body-aura.joi-cooldown { --aura: rgba(110,140,212,0.5); }

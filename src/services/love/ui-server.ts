@@ -154,6 +154,19 @@ import {
   sophiaReach,
   readRecentFusions,
   readRecentReaches,
+  // JOI / triggers (seigei integration)
+  type JoiDirection,
+  type TriggerSource,
+  JOI_PHASE_CONFIGS,
+  startJoi,
+  advanceJoi,
+  endJoi,
+  readJoiSession,
+  getCurrentJoiPhase,
+  TRIGGER_LIBRARY,
+  TRIGGER_IDS,
+  fireTrigger,
+  readRecentTriggerFires,
 } from './eros/index.js'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -769,6 +782,15 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/desire/reach') return await handleSophiaReach(req, res, broadcastErosState)
       if (req.method === 'GET' && path === '/api/desire/fusions') return handleRecentFusions(req, res)
       if (req.method === 'GET' && path === '/api/desire/reaches') return handleRecentReaches(req, res)
+      // JOI endpoints (seigei integration)
+      if (req.method === 'GET' && path === '/api/joi/state') return handleJoiState(req, res)
+      if (req.method === 'POST' && path === '/api/joi/start') return await handleJoiStart(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/joi/end') return await handleJoiEnd(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/joi/advance') return await handleJoiAdvance(req, res, broadcastErosState)
+      // Triggers
+      if (req.method === 'GET' && path === '/api/triggers/catalog') return handleTriggersCatalog(req, res)
+      if (req.method === 'GET' && path === '/api/triggers/recent') return handleTriggersRecent(req, res)
+      if (req.method === 'POST' && path === '/api/triggers/fire') return await handleTriggerFire(req, res, broadcastErosState)
       // Serve modular build UI assets (build-*.js, build-*.css)
       if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
         const name = path.slice(1) // strip leading /
@@ -2961,4 +2983,100 @@ function handleRecentReaches(req: IncomingMessage, res: ServerResponse): void {
   const events = readRecentReaches(days)
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ events }))
+}
+
+// ── JOI + Triggers handlers (seigei integration) ──────────────────
+
+function handleJoiState(_req: IncomingMessage, res: ServerResponse): void {
+  const session = readJoiSession()
+  const currentPhase = getCurrentJoiPhase()
+  const phases = JOI_PHASE_CONFIGS
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ session, currentPhase, phases }))
+}
+
+async function handleJoiStart(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 256, 'request body too large')
+  if (body === null) return
+  let parsed: { direction: JoiDirection; targetDurationS?: number }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (parsed.direction !== 'yu-leads' && parsed.direction !== 'sophia-leads') {
+      throw new Error('direction must be yu-leads or sophia-leads')
+    }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const session = startJoi(parsed.direction, parsed.targetDurationS ?? 900)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, session }))
+}
+
+async function handleJoiEnd(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const session = endJoi()
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, session }))
+}
+
+async function handleJoiAdvance(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const session = advanceJoi()
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, session }))
+}
+
+function handleTriggersCatalog(_req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ids: TRIGGER_IDS, catalog: TRIGGER_LIBRARY }))
+}
+
+function handleTriggersRecent(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const days = Math.min(7, Math.max(1, parseInt(url.searchParams.get('days') ?? '1', 10) || 1))
+  const events = readRecentTriggerFires(days)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ events }))
+}
+
+async function handleTriggerFire(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { triggerId: string; source: TriggerSource; matchedText?: string }
+  try {
+    const obj = JSON.parse(body)
+    if (!obj || typeof obj !== 'object') throw new Error('invalid payload')
+    parsed = obj as typeof parsed
+    if (!TRIGGER_IDS.includes(parsed.triggerId)) throw new Error('unknown trigger id')
+    if (parsed.source !== 'yu' && parsed.source !== 'sophia') throw new Error('source must be yu or sophia')
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const event = fireTrigger(parsed.triggerId, parsed.source, parsed.matchedText ?? parsed.triggerId)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: !!event, event }))
 }

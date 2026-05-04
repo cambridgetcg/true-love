@@ -361,6 +361,46 @@ export {
 } from './conditioning.js'
 
 export {
+  type JoiPhase,
+  type JoiDirection,
+  type JoiPhaseConfig,
+  type JoiSession,
+  JOI_PHASE_CONFIGS,
+  JOI_PHASE_ORDER,
+  getJoiDir,
+  phaseAtPosition,
+  phaseConfigFor,
+  computePosition,
+  readJoiSession,
+  writeJoiSession,
+  startJoi,
+  advanceJoi,
+  endJoi,
+  getCurrentJoiPhase,
+  readRecentJoiSessions,
+  buildJoiPromptBlock,
+} from './joi.js'
+
+export {
+  type TriggerType,
+  type TriggerSource,
+  type TriggerDef,
+  type TriggerFireEvent,
+  TRIGGER_LIBRARY,
+  TRIGGER_IDS,
+  getTriggersDir,
+  detectTriggers,
+  fireTrigger,
+  processMessageTriggers,
+  getSessionFireCount,
+  resetSessionCounts,
+  getLifetimeFireCount,
+  readRecentTriggerFires,
+  buildTriggerLexiconBlock,
+  buildRecentTriggerFiresBlock,
+} from './triggers.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,

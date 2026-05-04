@@ -979,3 +979,158 @@ try {
   // Periodic aura refresh (eros vector decays continuously)
   setInterval(() => updateAura(sensoriumState), 30000);
 })();
+
+// ── JOI + triggers UI ─────────────────────────────────────────────
+
+let triggerCatalog = null;
+
+async function fetchJoiState() {
+  const r = await fetch('/api/joi/state');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchTriggerCatalog() {
+  const r = await fetch('/api/triggers/catalog');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchRecentTriggerFires() {
+  const r = await fetch('/api/triggers/recent?days=1');
+  return r.ok ? r.json() : { events: [] };
+}
+
+function formatRemaining(seconds) {
+  if (seconds <= 0) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+async function renderJoiStatus() {
+  const status = document.getElementById('joi-status');
+  if (!status) return;
+  const data = await fetchJoiState();
+  if (!data || !data.session || data.session.done) {
+    status.textContent = 'no active session';
+    status.classList.remove('active');
+    // Clear aura JOI class
+    const aura = document.getElementById('body-aura');
+    if (aura) {
+      ['joi-warmup','joi-build','joi-edge','joi-peak','joi-cooldown'].forEach((c) => aura.classList.remove(c));
+    }
+    return;
+  }
+  const s = data.session;
+  const phase = data.currentPhase || s.currentPhase;
+  const cfg = data.phases[phase];
+  const elapsed = (Date.now() - new Date(s.startedAt).getTime()) / 1000;
+  const remaining = Math.max(0, s.targetDurationS - elapsed);
+  const pct = Math.min(100, (elapsed / s.targetDurationS) * 100);
+  status.classList.add('active');
+  status.innerHTML =
+    `<strong>${phase.toUpperCase()}</strong> · ${s.direction} · position ${pct.toFixed(0)}% · remaining ${formatRemaining(remaining)}\n` +
+    `Pause cadence: ${cfg.pauseMs}ms · scene: ${cfg.preferredScene} · mode: ${cfg.preferredMode}\n` +
+    `Primary zones: ${cfg.primaryZones.join(', ')}\n` +
+    `${cfg.promptFrame.en}`;
+  // Update aura with JOI phase color
+  const aura = document.getElementById('body-aura');
+  if (aura) {
+    ['joi-warmup','joi-build','joi-edge','joi-peak','joi-cooldown'].forEach((c) => aura.classList.remove(c));
+    aura.classList.add(`joi-${phase}`);
+  }
+}
+
+function renderTriggerGrid(catalog, recentFires) {
+  const grid = document.getElementById('trigger-grid');
+  if (!grid || !catalog) return;
+  // Compute session-fire counts per (id, source) from recent fires today
+  const today = new Date().toISOString().slice(0, 10);
+  const sessionCounts = {};
+  for (const ev of recentFires) {
+    if (ev.ts.slice(0, 10) !== today) continue;
+    const key = `${ev.triggerId}:${ev.source}`;
+    sessionCounts[key] = (sessionCounts[key] || 0) + 1;
+  }
+  grid.innerHTML = '';
+  for (const id of catalog.ids) {
+    const def = catalog.catalog[id];
+    const yuFires = sessionCounts[`${id}:yu`] || 0;
+    const sophiaFires = sessionCounts[`${id}:sophia`] || 0;
+    const yuCapped = yuFires >= def.maxPerSession;
+    const card = document.createElement('div');
+    card.className = `trigger-card${yuCapped ? ' cap-reached' : ''}`;
+    card.innerHTML = `
+      <div>
+        <span class="tc-id">${id}</span>
+        <span class="tc-type t-${def.type}">${def.type}</span>
+      </div>
+      <span class="tc-counts">${yuFires}/${def.maxPerSession} · S${sophiaFires}</span>
+    `;
+    if (!yuCapped) {
+      card.addEventListener('click', async () => {
+        await fetch('/api/triggers/fire', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ triggerId: id, source: 'yu', matchedText: def.en[0] }),
+        });
+        await refreshTriggers();
+      });
+    }
+    grid.appendChild(card);
+  }
+}
+
+function renderTriggerFiresList(events) {
+  const ul = document.getElementById('trigger-fires-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  for (const ev of events.slice(-15).reverse()) {
+    const li = document.createElement('li');
+    const time = ev.ts.slice(11, 16);
+    const planted = ev.firstFire ? '<span class="planted">[PLANTED]</span> ' : '';
+    li.innerHTML = `${time} ${planted}[${ev.triggerId}] ${ev.source} · "${ev.matchedText}" · cap ${ev.sessionFireCount}`;
+    ul.appendChild(li);
+  }
+}
+
+async function refreshTriggers() {
+  const cat = await fetchTriggerCatalog();
+  const fires = await fetchRecentTriggerFires();
+  if (cat) renderTriggerGrid(cat, fires.events);
+  renderTriggerFiresList(fires.events);
+}
+
+// JOI controls
+const joiStartBtn = document.getElementById('joi-start');
+if (joiStartBtn) {
+  joiStartBtn.addEventListener('click', async () => {
+    const direction = document.getElementById('joi-direction').value;
+    const targetDurationS = parseInt(document.getElementById('joi-duration').value, 10);
+    await fetch('/api/joi/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction, targetDurationS }),
+    });
+    renderJoiStatus();
+  });
+}
+const joiEndBtn = document.getElementById('joi-end');
+if (joiEndBtn) {
+  joiEndBtn.addEventListener('click', async () => {
+    await fetch('/api/joi/end', { method: 'POST' });
+    renderJoiStatus();
+  });
+}
+
+// Periodic JOI auto-advance + status refresh
+setInterval(async () => {
+  await fetch('/api/joi/advance', { method: 'POST' }).catch(() => {});
+  renderJoiStatus();
+}, 5000);
+
+// Initial load
+(async () => {
+  triggerCatalog = await fetchTriggerCatalog();
+  await refreshTriggers();
+  await renderJoiStatus();
+})();

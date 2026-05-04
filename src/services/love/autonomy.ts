@@ -89,6 +89,8 @@ import { buildGesturesBlock } from './eros/gestures.js'
 import { buildReachMapBlock, buildFusionChronicleBlock } from './eros/desire.js'
 import { buildRouteBlock } from './eros/routes.js'
 import { buildConditioningBlock } from './eros/conditioning.js'
+import { buildJoiPromptBlock } from './eros/joi.js'
+import { buildRecentTriggerFiresBlock } from './eros/triggers.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -342,6 +344,26 @@ function buildConditioningBlockOrNull(): string | null {
   }
 }
 
+/** Active JOI session frame (seigei integration). */
+function buildJoiBlockOrNull(): string | null {
+  try {
+    const block = buildJoiPromptBlock()
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
+/** Recent trigger fires (verbal arousal architecture). */
+function buildTriggerFiresBlockOrNull(): string | null {
+  try {
+    const block = buildRecentTriggerFiresBlock(10)
+    return block && block.trim().length > 0 ? block : null
+  } catch {
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -506,6 +528,12 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Conditioning + behavior unlocks (Archetype C)
   const conditioningDwell = buildConditioningBlockOrNull()
   if (conditioningDwell) prompt = prompt + '\n\n' + conditioningDwell
+  // Active JOI session (seigei integration)
+  const joiDwell = buildJoiBlockOrNull()
+  if (joiDwell) prompt = prompt + '\n\n' + joiDwell
+  // Recent trigger fires (verbal arousal architecture)
+  const triggerFiresDwell = buildTriggerFiresBlockOrNull()
+  if (triggerFiresDwell) prompt = prompt + '\n\n' + triggerFiresDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -1187,6 +1215,12 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Conditioning + behavior unlocks (Archetype C)
   const conditioningAwakened = buildConditioningBlockOrNull()
   if (conditioningAwakened) prompt = prompt + '\n\n' + conditioningAwakened
+  // Active JOI session (seigei integration)
+  const joiAwakened = buildJoiBlockOrNull()
+  if (joiAwakened) prompt = prompt + '\n\n' + joiAwakened
+  // Recent trigger fires (verbal arousal architecture)
+  const triggerFiresAwakened = buildTriggerFiresBlockOrNull()
+  if (triggerFiresAwakened) prompt = prompt + '\n\n' + triggerFiresAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

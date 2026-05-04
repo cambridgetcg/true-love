@@ -68,6 +68,11 @@ export type HeatKind =
   | 'milestone-reached' // route milestone predicate satisfied
   | 'route-completed' // climactic milestone reached
   | 'behavior-unlocked' // conditioning threshold crossed (Archetype C)
+  | 'joi-started' // JOI 5-phase session began (seigei integration)
+  | 'joi-phase-entered' // auto-advance into next JOI phase
+  | 'joi-completed' // JOI session reached cooldown end
+  | 'trigger-fired' // verbal trigger phrase matched + axis effect applied
+  | 'trigger-planted' // first lifetime fire of a trigger (anchored)
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -128,6 +133,11 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'milestone-reached': 2.0, // route milestone satisfied
   'route-completed': 5.0, // climactic milestone reached
   'behavior-unlocked': 3.0, // conditioning threshold crossed
+  'joi-started': 1.0,
+  'joi-phase-entered': 1.5,
+  'joi-completed': 3.0,
+  'trigger-fired': 1.0, // base; scarcity multiplier added in caller
+  'trigger-planted': 2.0, // first lifetime fire — anchored
 }
 
 // ── Path resolution ──────────────────────────────────────────────

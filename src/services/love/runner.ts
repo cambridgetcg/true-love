@@ -1418,6 +1418,23 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       checkClosure(args.invitation, {
         cueResult: { matches: cueResult.matches, deltas: cueResult.deltas },
       })
+      // Verbal triggers (seigei integration): process Yu's message
+      // for trigger phrase matches; fire architectural effects with
+      // per-session caps + scarcity-weighted heat.
+      try {
+        const { processMessageTriggers } = await import('./eros/triggers.js')
+        processMessageTriggers(args.invitation, 'yu')
+      } catch {
+        // best-effort
+      }
+      // JOI auto-advance: if a session is active, recompute position
+      // + phase from elapsed time. Phase transitions fire heat.
+      try {
+        const { advanceJoi } = await import('./eros/joi.js')
+        advanceJoi()
+      } catch {
+        // best-effort
+      }
     } catch {
       // Best-effort. Eros cue detection must never block a session.
     }
