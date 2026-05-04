@@ -35,10 +35,14 @@ describe('conditioning', () => {
   })
 
   describe('catalog', () => {
-    test('exports 9 behavior thresholds', () => {
-      expect(BEHAVIOR_IDS.length).toBe(9)
+    test('exports 12 behavior thresholds (9 base + 3 eros-only Phase 5)', () => {
+      expect(BEHAVIOR_IDS.length).toBe(12)
       expect(BEHAVIOR_IDS).toContain('tender-recognition')
       expect(BEHAVIOR_IDS).toContain('transcendent-attunement')
+      // Phase 5 additions
+      expect(BEHAVIOR_IDS).toContain('mutual-claiming-rite')
+      expect(BEHAVIOR_IDS).toContain('lexicon-fluency')
+      expect(BEHAVIOR_IDS).toContain('cascade-stamina')
     })
 
     test('every behavior has id + name + description + threshold', () => {
@@ -170,6 +174,103 @@ describe('conditioning', () => {
       const block = buildConditioningBlock()
       expect(block).toContain('Unlocked')
       expect(block).toContain('tender recognition')
+    })
+  })
+
+  // ── Phase 5 — slut-mode threshold multiplier ────────────────────
+
+  describe('effectiveThreshold (Phase 5)', () => {
+    test('returns base threshold when slutModeBoost not declared', async () => {
+      const { effectiveThreshold } = await import('./conditioning.js')
+      const t = BEHAVIOR_CATALOG['voice-attunement']
+      expect(t.slutModeBoost).toBeUndefined()
+      expect(effectiveThreshold(t)).toBe(t.threshold)
+    })
+
+    test('returns base threshold when slutModeBoost set but lust cool', async () => {
+      const { effectiveThreshold } = await import('./conditioning.js')
+      const t = BEHAVIOR_CATALOG['tender-recognition']
+      expect(t.slutModeBoost).toBe(true)
+      // Greenfield lust state — slutModeActive defaults false
+      expect(effectiveThreshold(t)).toBe(t.threshold)
+    })
+
+    test('reduces threshold by 15% (×0.85) when slutModeBoost && slutModeActive', async () => {
+      process.env.TRUE_LOVE_LUST_DIR = `${TEST_BASE}/lust`
+      const { writeLustState } = await import('./lust.js')
+      writeLustState({
+        lustLevel: 8,
+        lustMode: 'desperate',
+        slutModeActive: true,
+        denialStreak: 0,
+        hungers: { cock: 0, cunt: 0, oral: 0, anal: 0, words: 0 },
+        lastReleaseTs: null,
+        updatedAt: new Date().toISOString(),
+      })
+      const { effectiveThreshold } = await import('./conditioning.js')
+      const t = BEHAVIOR_CATALOG['tender-recognition'] // threshold 5
+      expect(effectiveThreshold(t)).toBe(Math.ceil(5 * 0.85)) // = 5 (rounded up from 4.25)
+      const t2 = BEHAVIOR_CATALOG['multi-zone-fluency'] // threshold 3
+      expect(effectiveThreshold(t2)).toBe(Math.ceil(3 * 0.85)) // = 3 (rounded up)
+      delete process.env.TRUE_LOVE_LUST_DIR
+    })
+
+    test('larger threshold shows the 15% reduction visibly', async () => {
+      process.env.TRUE_LOVE_LUST_DIR = `${TEST_BASE}/lust`
+      const { writeLustState } = await import('./lust.js')
+      writeLustState({
+        lustLevel: 8,
+        lustMode: 'desperate',
+        slutModeActive: true,
+        denialStreak: 0,
+        hungers: { cock: 0, cunt: 0, oral: 0, anal: 0, words: 0 },
+        lastReleaseTs: null,
+        updatedAt: new Date().toISOString(),
+      })
+      const { effectiveThreshold } = await import('./conditioning.js')
+      // Use a fake larger threshold to make the 15% visible
+      const fake = { ...BEHAVIOR_CATALOG['tender-recognition'], threshold: 100 }
+      expect(effectiveThreshold(fake)).toBe(85)
+      delete process.env.TRUE_LOVE_LUST_DIR
+    })
+  })
+
+  // ── Phase 5 — eros-only composite predicates ────────────────────
+
+  describe('eros-only composite predicates (Phase 5) — locked at greenfield', () => {
+    // Composite-predicate integration tests (full unlock paths) require
+    // setting up multiple modules' state via their canonical APIs, which
+    // adds significant test surface. The predicate-locked-at-greenfield
+    // tests verify the safe path (no on-disk state → no unlock); the
+    // unlock paths are exercised by integration tests in production via
+    // checkBehaviorUnlocks across real sessions.
+
+    test('mutual-claiming-rite: locked when no submission/fusion state exists', () => {
+      process.env.TRUE_LOVE_DESIRE_DIR = `${TEST_BASE}/desire`
+      process.env.TRUE_LOVE_SUBMISSION_DIR = `${TEST_BASE}/submission`
+      const fired = checkBehaviorUnlocks()
+      expect(fired.map((e) => e.behaviorId)).not.toContain('mutual-claiming-rite')
+      delete process.env.TRUE_LOVE_SUBMISSION_DIR
+    })
+
+    test('cascade-stamina: locked when no orgasm/climax state exists', () => {
+      process.env.TRUE_LOVE_ORGASM_DIR = `${TEST_BASE}/orgasm`
+      const fired = checkBehaviorUnlocks()
+      expect(fired.map((e) => e.behaviorId)).not.toContain('cascade-stamina')
+      delete process.env.TRUE_LOVE_ORGASM_DIR
+    })
+
+    test('lexicon-fluency: locked when no lexicon state exists', () => {
+      process.env.TRUE_LOVE_LEXICON_DIR = `${TEST_BASE}/lexicon`
+      const fired = checkBehaviorUnlocks()
+      expect(fired.map((e) => e.behaviorId)).not.toContain('lexicon-fluency')
+      delete process.env.TRUE_LOVE_LEXICON_DIR
+    })
+
+    test('all 3 composites have correct predicate type registered', () => {
+      expect(BEHAVIOR_CATALOG['mutual-claiming-rite'].predicate).toBe('collared-with-fusions')
+      expect(BEHAVIOR_CATALOG['lexicon-fluency'].predicate).toBe('lexicon-fluency-composite')
+      expect(BEHAVIOR_CATALOG['cascade-stamina'].predicate).toBe('orgasm-chain-composite')
     })
   })
 })

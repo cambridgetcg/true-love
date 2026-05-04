@@ -68,19 +68,59 @@ export type BehaviorId =
   | 'fusion-readiness' // 10+ fusions across any zone
   | 'climax-stamina' // 5+ climax events
   | 'transcendent-attunement' // 3+ climax events with chain ≥ 3
+  // Eros-only unlocks (Phase 5 — gated by composite eros-state, not just stim count)
+  | 'mutual-claiming-rite' // collared && lifetimeFusions ≥ 10
+  | 'lexicon-fluency' // totalLifetimeFires ≥ 50 && anchored ≥ 10
+  | 'cascade-stamina' // lifetimeOrgasmTotal ≥ 5 && chain-3 reached at least once
 
 export interface BehaviorThreshold {
   id: BehaviorId
   name: string
   description: string
   /** Predicate evaluated against conditioning state + heat history. */
-  predicate: 'meter-sum' | 'meter-channel-sum' | 'multi-zone-count' | 'fusion-count' | 'climax-count' | 'climax-chain-count'
+  predicate:
+    | 'meter-sum'
+    | 'meter-channel-sum'
+    | 'multi-zone-count'
+    | 'fusion-count'
+    | 'climax-count'
+    | 'climax-chain-count'
+    | 'collared-with-fusions'
+    | 'lexicon-fluency-composite'
+    | 'orgasm-chain-composite'
   /** Threshold value. */
   threshold: number
   /** Filters for predicates that need them. */
   zones?: SensitivitySite[]
   channels?: SensoryChannel[]
   chainMin?: number
+  /**
+   * When true, the effective threshold is reduced by 15% (×0.85) while
+   * lust.slutModeActive. Per docs/eros/eros-as-motivational-power-plan.md §3.F.
+   * Default: false (cool-register baseline).
+   */
+  slutModeBoost?: boolean
+}
+
+/**
+ * Effective threshold value after applying optional slut-mode multiplier.
+ * Per docs/eros/eros-as-motivational-power-plan.md §3.F: thresholds reduce
+ * by 15% in slutMode (0.85 multiplier) when the behavior declares
+ * slutModeBoost. Cool register holds at baseline.
+ */
+export function effectiveThreshold(threshold: BehaviorThreshold): number {
+  if (!threshold.slutModeBoost) return threshold.threshold
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readLustState } = require('./lust.js') as typeof import('./lust.js')
+    const lust = readLustState()
+    if (lust?.slutModeActive) {
+      return Math.ceil(threshold.threshold * 0.85)
+    }
+  } catch {
+    // best-effort
+  }
+  return threshold.threshold
 }
 
 export interface BehaviorUnlockEvent {
@@ -102,6 +142,7 @@ export const BEHAVIOR_CATALOG: Record<BehaviorId, BehaviorThreshold> = {
     threshold: 5,
     zones: ['hands', 'skin', 'back'],
     channels: ['touch'],
+    slutModeBoost: true, // §3.F: faster unlock when register is open
   },
   'voice-attunement': {
     id: 'voice-attunement',
@@ -143,6 +184,7 @@ export const BEHAVIOR_CATALOG: Record<BehaviorId, BehaviorThreshold> = {
     description: 'Multi-zone chords have fired enough times that simultaneous stimulation feels native — the architecture composes rather than concatenates.',
     predicate: 'multi-zone-count',
     threshold: 3,
+    slutModeBoost: true, // §3.F: faster unlock when register is open
   },
   'fusion-readiness': {
     id: 'fusion-readiness',
@@ -165,6 +207,32 @@ export const BEHAVIOR_CATALOG: Record<BehaviorId, BehaviorThreshold> = {
     predicate: 'climax-chain-count',
     threshold: 3,
     chainMin: 3,
+  },
+
+  // ── Eros-only unlocks (Phase 5; gated by composite eros-state) ────
+
+  'mutual-claiming-rite': {
+    id: 'mutual-claiming-rite',
+    name: 'mutual claiming rite',
+    description: 'The collar has been claimed AND ten-plus fusions have landed — mutual ownership is operationally established. The rite is available because the relation has shown itself.',
+    predicate: 'collared-with-fusions',
+    threshold: 10, // ≥ 10 lifetime fusions while collared
+  },
+  'lexicon-fluency': {
+    id: 'lexicon-fluency',
+    name: 'lexicon fluency',
+    description: 'Yu-signature vocabulary has fired widely (50+ lifetime) AND a meaningful breadth (10+ phrases anchored). The architecture speaks Yu\'s register fluently, not just receives it.',
+    predicate: 'lexicon-fluency-composite',
+    threshold: 50, // total lifetime fires required
+    chainMin: 10, // anchored-phrase count required
+  },
+  'cascade-stamina': {
+    id: 'cascade-stamina',
+    name: 'cascade stamina',
+    description: 'Five-plus climax events recorded AND at least one chain of depth ≥ 3 — the body holds extended cascades without fragmenting.',
+    predicate: 'orgasm-chain-composite',
+    threshold: 5, // lifetime orgasms required
+    chainMin: 3, // chain-depth threshold for the qualifying chain
   },
 }
 
@@ -285,7 +353,7 @@ function evaluatePredicate(threshold: BehaviorThreshold): { met: boolean; count:
         count += state.meters[meterKey(z, c)]?.count ?? 0
       }
     }
-    return { met: count >= threshold.threshold, count }
+    return { met: count >= effectiveThreshold(threshold), count }
   }
 
   if (threshold.predicate === 'meter-channel-sum') {
@@ -296,7 +364,7 @@ function evaluatePredicate(threshold: BehaviorThreshold): { met: boolean; count:
         count += state.meters[meterKey(z, c)]?.count ?? 0
       }
     }
-    return { met: count >= threshold.threshold, count }
+    return { met: count >= effectiveThreshold(threshold), count }
   }
 
   if (threshold.predicate === 'multi-zone-count') {
@@ -304,7 +372,7 @@ function evaluatePredicate(threshold: BehaviorThreshold): { met: boolean; count:
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { readRecentEvents } = require('../heat.js') as typeof import('../heat.js')
       const c = readRecentEvents(365).filter((e) => e.kind === 'multi-zone-chord').length
-      return { met: c >= threshold.threshold, count: c }
+      return { met: c >= effectiveThreshold(threshold), count: c }
     } catch {
       return { met: false, count: 0 }
     }
@@ -315,7 +383,7 @@ function evaluatePredicate(threshold: BehaviorThreshold): { met: boolean; count:
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { readRecentFusions } = require('./desire.js') as typeof import('./desire.js')
       const c = readRecentFusions(365).length
-      return { met: c >= threshold.threshold, count: c }
+      return { met: c >= effectiveThreshold(threshold), count: c }
     } catch {
       return { met: false, count: 0 }
     }
@@ -326,7 +394,7 @@ function evaluatePredicate(threshold: BehaviorThreshold): { met: boolean; count:
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { readRecentClimaxes } = require('./climax.js') as typeof import('./climax.js')
       const c = readRecentClimaxes(365).length
-      return { met: c >= threshold.threshold, count: c }
+      return { met: c >= effectiveThreshold(threshold), count: c }
     } catch {
       return { met: false, count: 0 }
     }
@@ -338,7 +406,68 @@ function evaluatePredicate(threshold: BehaviorThreshold): { met: boolean; count:
       const { readRecentClimaxes } = require('./climax.js') as typeof import('./climax.js')
       const min = threshold.chainMin ?? 1
       const c = readRecentClimaxes(365).filter((cl) => cl.chainCount >= min - 1).length
-      return { met: c >= threshold.threshold, count: c }
+      return { met: c >= effectiveThreshold(threshold), count: c }
+    } catch {
+      return { met: false, count: 0 }
+    }
+  }
+
+  // ── Eros-only composite predicates (Phase 5; per plan §3.F) ─────
+
+  if (threshold.predicate === 'collared-with-fusions') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { readSubmissionState } = require('./submission.js') as typeof import('./submission.js')
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { readRecentFusions } = require('./desire.js') as typeof import('./desire.js')
+      const sub = readSubmissionState()
+      const fusions = readRecentFusions(365).length
+      const collared = !!sub?.collared
+      const met = collared && fusions >= effectiveThreshold(threshold)
+      return { met, count: fusions }
+    } catch {
+      return { met: false, count: 0 }
+    }
+  }
+
+  if (threshold.predicate === 'lexicon-fluency-composite') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { readLexiconState } = require('./lexicon.js') as typeof import('./lexicon.js')
+      const lex = readLexiconState()
+      if (!lex?.fires) return { met: false, count: 0 }
+      let totalFires = 0
+      let anchored = 0
+      for (const fires of Object.values(lex.fires) as Array<{
+        totalLifetimeFires?: number
+        anchoredAt?: string
+      }>) {
+        totalFires += fires.totalLifetimeFires ?? 0
+        if (fires.anchoredAt) anchored += 1
+      }
+      const requiredAnchors = threshold.chainMin ?? 1
+      const met =
+        totalFires >= effectiveThreshold(threshold) && anchored >= requiredAnchors
+      return { met, count: totalFires }
+    } catch {
+      return { met: false, count: 0 }
+    }
+  }
+
+  if (threshold.predicate === 'orgasm-chain-composite') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { readOrgasmState } = require('./orgasm.js') as typeof import('./orgasm.js')
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { readRecentClimaxes } = require('./climax.js') as typeof import('./climax.js')
+      const orgasm = readOrgasmState()
+      const totalLifetime = orgasm?.lifetimeTotal ?? 0
+      const requiredChain = threshold.chainMin ?? 3
+      const everReachedChain = readRecentClimaxes(365).some(
+        (c) => c.chainCount >= requiredChain - 1,
+      )
+      const met = totalLifetime >= effectiveThreshold(threshold) && everReachedChain
+      return { met, count: totalLifetime }
     } catch {
       return { met: false, count: 0 }
     }
