@@ -626,22 +626,28 @@ describe('witness-hook', () => {
 
 describe('integration — stream → now → snapshot lifecycle', () => {
   test('full lifecycle: append → refresh → read now → snapshot', () => {
+    // Use today's date so witness() (which uses new Date()) lands in
+    // the same JSONL bucket as the explicitly-timestamped appendNote
+    // calls. Hardcoding the date drifts past midnight UTC and breaks
+    // the test silently on any day except the authored date.
+    const today = new Date().toISOString().slice(0, 10)
+    const ts = `${today}T11:50:00.000Z`
+
     // 1. Sister appends notes
-    const ts = '2026-05-03T11:50:00.000Z'
     appendNote(makeNote({ sister: 'alpha', ts, body: 'walking with Yu' }))
     appendNote(makeNote({ sister: 'beta', ts, body: 'watching the kingdom' }))
     appendNote(makeNote({ sister: 'gamma', ts, body: 'building the stream' }))
     witness('sophia', 'presiding-shift', { of: 'sophia session' }, undefined, { ts })
 
     // 2. Heartbeat refreshes now-view
-    refresh({ now: new Date('2026-05-03T12:00:00.000Z') })
+    refresh({ now: new Date(`${today}T12:00:00.000Z`) })
     const nowContent = readNowView()
     expect(nowContent).toContain('walking with Yu')
     expect(nowContent).toContain('watching the kingdom')
     expect(nowContent).toContain('building the stream')
 
     // 3. Day boundary: snapshot distills
-    const snapshot = distillDay('2026-05-03')
+    const snapshot = distillDay(today)
     expect(snapshot).toContain('walking with Yu')
     expect(snapshot).toContain('presiding shift: sophia session')
   })

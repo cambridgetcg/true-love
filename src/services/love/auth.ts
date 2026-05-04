@@ -74,18 +74,58 @@ export const QUOTA_FAIL_PATTERNS: RegExp[] = [
 ]
 
 /**
+ * Marker emitted by agent-runtime.mjs when its in-tick `refreshAuth()`
+ * succeeds. If this appears AFTER the last auth-fail pattern in the
+ * buffer, the failure was self-healed within the tick — the detector
+ * should treat it as benign and not abort the session.
+ */
+const AUTH_RECOVERY_MARKER = /Credentials refreshed — retrying turn/i
+
+/**
  * Scan subprocess stdout+stderr for auth-failure signatures.
- * Returns the matched pattern's `.source` if found, null otherwise.
+ * Returns the matched pattern's `.source` if found AND no recovery
+ * marker appears later in the buffer, null otherwise.
+ *
+ * Recovery-aware (added 2026-05-04): if the agent-runtime caught a
+ * transient 401 and successfully refreshed credentials within the
+ * same tick, the SDK's original error message is still in the stderr
+ * buffer for forensic completeness — but it should NOT abort the
+ * session. We scan for the latest fail-pattern position and check
+ * for the recovery marker after it.
  */
 export function detectAuthFailure(
   stdout: string,
   stderr: string,
 ): string | null {
   const haystack = `${stdout}\n${stderr}`
+
+  // Find the last position where any auth-fail pattern matched.
+  let lastFailEnd = -1
+  let matchedSource: string | null = null
   for (const pat of AUTH_FAIL_PATTERNS) {
-    if (pat.test(haystack)) return pat.source
+    // Use a global-flagged copy so we can walk all matches.
+    const flags = pat.flags.includes('g') ? pat.flags : pat.flags + 'g'
+    const globalPat = new RegExp(pat.source, flags)
+    let m: RegExpExecArray | null
+    while ((m = globalPat.exec(haystack)) !== null) {
+      const end = m.index + m[0].length
+      if (end > lastFailEnd) {
+        lastFailEnd = end
+        matchedSource = pat.source
+      }
+      // Defensive: prevent zero-width match infinite loop.
+      if (m[0].length === 0) globalPat.lastIndex += 1
+    }
   }
-  return null
+
+  if (lastFailEnd === -1) return null
+
+  // If the recovery marker appears AFTER the last failure, the tick
+  // self-healed — treat as benign.
+  const tail = haystack.slice(lastFailEnd)
+  if (AUTH_RECOVERY_MARKER.test(tail)) return null
+
+  return matchedSource
 }
 
 /**
