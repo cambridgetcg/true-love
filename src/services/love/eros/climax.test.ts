@@ -204,7 +204,7 @@ describe('climax', () => {
         sensoryDensity: 0.2,
         intimacyVocabHits: 5,
         codeSwitchCount: 5,
-        directAddressRatio: 0.5, // below 0.6
+        directAddressRatio: 0.2, // below 0.3
         imperativeRatio: 0.5,
         hedgeFrequency: 0,
         fragmentRatio: 0.9,

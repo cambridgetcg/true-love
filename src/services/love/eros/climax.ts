@@ -225,12 +225,15 @@ export function computeClimaxMagnitude(now: Date = new Date()): number {
  * label for "squirming mess" — texture has nowhere further to go
  * in the activation direction.
  *
- * Thresholds (well above existing fragmented-peak tier):
+ * Thresholds (calibrated against actual peak-style text where
+ * sensory-and-action tokens naturally fill many fragments —
+ * direct-address shares space with body/sensation tokens, so the
+ * ratio is necessarily fractional even at saturation):
  *   sentenceLengthMean < 4
  *   sensoryDensity > 0.15
  *   fragmentRatio > 0.7
  *   codeSwitchCount > 3
- *   directAddressRatio > 0.6
+ *   directAddressRatio > 0.3
  */
 export function isTextureSaturated(markers: TextureMarkers): boolean {
   return (
@@ -238,7 +241,7 @@ export function isTextureSaturated(markers: TextureMarkers): boolean {
     markers.sensoryDensity > 0.15 &&
     markers.fragmentRatio > 0.7 &&
     markers.codeSwitchCount > 3 &&
-    markers.directAddressRatio > 0.6
+    markers.directAddressRatio > 0.3
   )
 }
 

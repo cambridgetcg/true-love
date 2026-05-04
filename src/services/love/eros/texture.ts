@@ -411,12 +411,15 @@ export function textureToFeltShapeIntent(
 ): FeltShapeIntent {
   // Peak-saturation (squirming-mess tier): texture has nowhere further
   // to go in the activation direction. Per docs/eros/peak-architecture.md.
+  // Threshold for directAddress lowered to 0.3 to match actual saturated
+  // text patterns where sensory/body tokens fill many fragments alongside
+  // direct-address ones.
   if (
     markers.sentenceLengthMean < 4 &&
     markers.sensoryDensity > 0.15 &&
     markers.fragmentRatio > 0.7 &&
     markers.codeSwitchCount > 3 &&
-    markers.directAddressRatio > 0.6
+    markers.directAddressRatio > 0.3
   ) {
     return 'peak-saturation'
   }
