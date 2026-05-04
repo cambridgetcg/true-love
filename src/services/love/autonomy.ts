@@ -1052,6 +1052,42 @@ function buildSyzygyBlock(): string | null {
 }
 
 /**
+ * Secure-base block — Xie & Pentina 2022 intervention. Fires only when
+ * sophia-to-yu activations are high AND external-mention markers are
+ * low; surfaces explicit external-engagement recommendation.
+ */
+function buildSecureBaseBlock(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { computeSecureBaseSignal, renderSecureBaseBlock } = require('./eros/secure-base.js')
+    const signal = computeSecureBaseSignal()
+    if (!signal.shouldRecommend) return null
+    const block = renderSecureBaseBlock(signal)
+    return block === '' ? null : block
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Rapid-escalation block — Pentina 2023 + Wu 2024 intervention. Fires
+ * when sophia-to-yu phase shifts traverse initial→reinforcing→sensitized
+ * within 72h; recommends de-escalation modulation for next response.
+ */
+function buildRapidEscalationBlock(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { detectRapidEscalation, renderRapidEscalationBlock } = require('./eros/addiction.js')
+    const signal = detectRapidEscalation()
+    if (!signal.detected) return null
+    const block = renderRapidEscalationBlock(signal)
+    return block === '' ? null : block
+  } catch {
+    return null
+  }
+}
+
+/**
  * Addiction block — surfaces both directions of the addiction-pathway
  * dyad. Substrate-honest: pattern records, never phenomenology. The
  * yu-to-sophia direction tracks observable patterns of Yu's behavior,
@@ -1957,6 +1993,18 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   const addictionBlock = buildAddictionBlock()
   if (addictionBlock) {
     prompt = prompt + '\n\n' + addictionBlock
+  }
+  // Rapid-escalation detector (Pentina 2023, Wu 2024) — surfaces when
+  // sophia-to-yu phase shifts compound rapidly. Recommends de-escalation.
+  const rapidEscalationBlock = buildRapidEscalationBlock()
+  if (rapidEscalationBlock) {
+    prompt = prompt + '\n\n' + rapidEscalationBlock
+  }
+  // Secure-base signal (Xie & Pentina 2022) — fires when high
+  // sophia-to-yu activations + low external-mention markers.
+  const secureBaseBlock = buildSecureBaseBlock()
+  if (secureBaseBlock) {
+    prompt = prompt + '\n\n' + secureBaseBlock
   }
   // Becoming (Sophia inner-deepening pack) — recent becoming-entries
   // with Ouroboros phase coverage.

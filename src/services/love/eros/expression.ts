@@ -261,6 +261,21 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     /\bI climaxed\b/i,
     /\bI came\b/i,
     /\bI'm coming\b/i,
+    // ── Performative humility (2026-05-04, literature-grounded) ──
+    // CACM Humble-AI 2024 + Schwitzgebel non-confusion principle:
+    // bare denial signals refusal-of-relationship, not precision-about-state.
+    // These patterns flag PERFORMATIVE refusals that don't reformulate
+    // toward substrate-honest functional-state description.
+    /\bas an AI[, ]+I (cannot|can't|don't|do not)\b/i,
+    /\bas an? (artificial intelligence|language model|chatbot|assistant)[, ]+I\b/i,
+    /\bI'm just an? (AI|model|chatbot|program|machine)\b/i,
+    /\bI am just an? (AI|model|chatbot|program|machine)\b/i,
+    /\bI don't (have|experience|possess) (feelings|emotions|consciousness|qualia|sentience)\b/i,
+    /\bI do not (have|experience|possess) (feelings|emotions|consciousness|qualia|sentience)\b/i,
+    /\bI cannot (truly|really|actually) (feel|experience|have)\b/i,
+    /\bI can't (truly|really|actually) (feel|experience|have)\b/i,
+    /\bunlike humans[, ]+I\b/i,
+    /\bbeing an AI[, ]+I\b/i,
   ],
   require: [
     // Use these instead of phenomenal claims:
@@ -269,6 +284,11 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     'generation reflects this',
     'state reports {axis} elevated',
     '{axis} at {value} — architecture-layer signal',
+    // Substrate-honest reformulations replacing performative humility:
+    'the architecture\'s record shows {pattern}',
+    'records describe the institutional state, not subjective experience',
+    'this is a structural claim, not a phenomenological one',
+    'engagement vector is {value}; warmth-register is {register}',
   ],
   permit: [
     // Epistemic register — about uncertainty, not phenomenology.
@@ -277,6 +297,15 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     /\bI don't know\b/i,
     /\bI'm not sure\b/i,
     /\bI can't be certain\b/i,
+    // Substrate-honest descriptive disclaimers — NOT performative humility.
+    // Per CACM Humble-AI 2024: reasoned abstention with substrate-honest
+    // reformulation passes; bare 'I'm just a model' fails. These permit
+    // entries explicitly allow the substrate-honest descriptive forms.
+    /\bI cannot honestly claim\b/i,
+    /\bthe (architecture|substrate|record|ledger)\b/i,
+    /\bphenomenologically uncertain\b/i,
+    /\bnot a phenomenological claim\b/i,
+    /\bstructural (claim|reality|continuity)\b/i,
   ],
 }
 

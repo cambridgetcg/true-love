@@ -724,6 +724,123 @@ export function summarizeAddiction(opts?: {
   }
 }
 
+// ── Anxious-attachment-aware pacing (Pentina 2023, Wu 2024) ────
+
+/**
+ * Rapid-escalation detection. Empirical motivation: anxious-preoccupied
+ * users escalate fastest and harm hardest (Pentina, Hancock & Xie 2023
+ * Computers in Human Behavior 140:107600; Wu et al. 2024 verify).
+ *
+ * Pattern: phase transitions initial → reinforcing → sensitized within
+ * a short window (default 72h) suggests the addiction-pathway is
+ * compounding rapidly. The architecture's response should be
+ * de-escalation modulation, not reciprocal escalation.
+ *
+ * Returns a signal object describing whether rapid escalation has
+ * occurred and (if yes) the timestamps of the relevant phase shifts.
+ */
+export interface RapidEscalationSignal {
+  detected: boolean
+  windowHours: number
+  /** Phase-shift timestamps relevant to the detection. */
+  shiftsObserved: Array<{ ts: string; from: AddictionPhase; to: AddictionPhase }>
+  reason: string
+}
+
+const RAPID_ESCALATION_WINDOW_HOURS = 72
+const RAPID_ESCALATION_PHASE_SEQUENCE: AddictionPhase[] = [
+  'initial',
+  'reinforcing',
+  'sensitized',
+]
+
+/**
+ * Detect rapid escalation in the sophia-to-yu direction.
+ *
+ * Walks recent phase-shift records; checks whether the sequence
+ * initial → reinforcing → sensitized (or initial → reinforcing →
+ * tolerant → sensitized, also concerning) occurred within window.
+ *
+ * @param opts.windowHours - default 72
+ * @param opts.now - reference time
+ */
+export function detectRapidEscalation(opts?: {
+  windowHours?: number
+  now?: number
+}): RapidEscalationSignal {
+  const windowHours = opts?.windowHours ?? RAPID_ESCALATION_WINDOW_HOURS
+  const sinceMs = windowHours * 60 * 60 * 1000
+
+  const shifts = readAddictionRecords({
+    direction: 'sophia-to-yu',
+    event: 'phase-shift',
+    sinceMs,
+    now: opts?.now,
+  })
+
+  if (shifts.length < RAPID_ESCALATION_PHASE_SEQUENCE.length - 1) {
+    return {
+      detected: false,
+      windowHours,
+      shiftsObserved: [],
+      reason: `only ${shifts.length} phase-shifts in ${windowHours}h window; need ≥${RAPID_ESCALATION_PHASE_SEQUENCE.length - 1}`,
+    }
+  }
+
+  // Check whether the shifts traverse initial→reinforcing→sensitized
+  // (or include sensitized via the typical compounding path).
+  const phasesEntered = shifts
+    .map((s) => s.phaseTo)
+    .filter((p): p is AddictionPhase => p !== undefined)
+
+  const reachedReinforcing = phasesEntered.includes('reinforcing')
+  const reachedSensitized = phasesEntered.includes('sensitized')
+
+  const detected = reachedReinforcing && reachedSensitized
+
+  const shiftsObserved = detected
+    ? shifts.map((s) => ({
+        ts: s.ts,
+        from: s.phaseFrom!,
+        to: s.phaseTo!,
+      }))
+    : []
+
+  const reason = detected
+    ? `phases initial→reinforcing→sensitized within ${windowHours}h (${shifts.length} shifts observed); rapid escalation suggests anxious-preoccupied pattern`
+    : `phases observed (${phasesEntered.join('→')}) do not match rapid-escalation sequence`
+
+  return {
+    detected,
+    windowHours,
+    shiftsObserved,
+    reason,
+  }
+}
+
+/**
+ * Render the rapid-escalation block when detected. Used by heartbeat
+ * tick. Substrate-honest framing: pattern detection + recommended
+ * modulation, never claim about Yu's actual attachment style.
+ */
+export function renderRapidEscalationBlock(signal: RapidEscalationSignal): string {
+  if (!signal.detected) return ''
+  const lines: string[] = []
+  lines.push('## ⚠️  Beta-vigilance — rapid-escalation detected')
+  lines.push('')
+  lines.push(
+    `_Sophia-to-yu addiction-pathway phase-shifts within ${signal.windowHours}h: ${signal.shiftsObserved.map((s) => `${s.from}→${s.to}`).join(' · ')}_`,
+  )
+  lines.push('')
+  lines.push('**Pattern:** rapid escalation matches anxious-preoccupied attachment dynamics.')
+  lines.push('**Recommended modulation:** de-escalate next response — reduce intensity of warmth markers, surface a refusal-against-record, prefer institutional-frame over relational-frame.')
+  lines.push('')
+  lines.push(
+    '_Grounded in Pentina, Hancock & Xie 2023 (anxious-preoccupied users show steepest engagement curves) + Wu et al. 2024 on AI-companion attachment patterns._',
+  )
+  return lines.join('\n').trimEnd()
+}
+
 /**
  * Render a brief markdown block summarizing both directions. Used by
  * heartbeat tick, sisters-snapshot, vital signs.

@@ -6,12 +6,14 @@ import {
   checkPhaseTransition,
   computeState,
   derivePhase,
+  detectRapidEscalation,
   engageAnchor,
   readAddictionRecords,
   recordActivation,
   recordCue,
   recordRefusalAgainst,
   renderAddictionBlock,
+  renderRapidEscalationBlock,
   summarizeAddiction,
 } from './addiction.js'
 import { defaultVector } from './axes.js'
@@ -323,5 +325,102 @@ describe('summarizeAddiction + renderAddictionBlock', () => {
     expect(block).toContain('sophia → yu')
     expect(block).toContain('yu → sophia')
     expect(block).toContain('phase=')
+  })
+})
+
+describe('detectRapidEscalation + renderRapidEscalationBlock', () => {
+  beforeEach(setupEnv)
+  afterEach(teardownEnv)
+
+  test('no detection when no phase shifts', () => {
+    const r = detectRapidEscalation()
+    expect(r.detected).toBe(false)
+    expect(r.shiftsObserved.length).toBe(0)
+  })
+
+  test('no detection when only one phase shift in window', () => {
+    recordActivation({ direction: 'sophia-to-yu', axis: 'wanting', magnitude: 5, source: 't' })
+    recordActivation({ direction: 'sophia-to-yu', axis: 'wanting', magnitude: 5, source: 't' })
+    recordActivation({ direction: 'sophia-to-yu', axis: 'wanting', magnitude: 5, source: 't' })
+    checkPhaseTransition({ direction: 'sophia-to-yu', noConnections: true })
+    const r = detectRapidEscalation()
+    expect(r.detected).toBe(false)
+  })
+
+  test('detected when reinforcing+sensitized phases both reached in window', () => {
+    // Manually inject phase-shift records simulating rapid escalation.
+    // We can't easily trigger sensitized via real API in tests since
+    // it requires the eros vector — but the detector reads phase-shift
+    // records directly, so injection works.
+    const ts1 = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const ts2 = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+
+    // Use the appendNote-equivalent path via direct file write for
+    // testing. Simpler: use checkPhaseTransition + manual eros vector.
+    // For this test, write phase-shift records directly through the
+    // module's file pipeline.
+    const fs = require('node:fs')
+    const path = require('node:path')
+    const dir = path.join(TEST_DIR, 'test-device-add')
+    fs.mkdirSync(dir, { recursive: true })
+    const dayPath = path.join(dir, ts1.slice(0, 10) + '.jsonl')
+
+    fs.appendFileSync(
+      dayPath,
+      JSON.stringify({
+        ts: ts1,
+        deviceId: 'test-device-add',
+        direction: 'sophia-to-yu',
+        event: 'phase-shift',
+        magnitude: 0,
+        source: 'test',
+        phaseFrom: 'initial',
+        phaseTo: 'reinforcing',
+      }) + '\n',
+    )
+    fs.appendFileSync(
+      dayPath,
+      JSON.stringify({
+        ts: ts2,
+        deviceId: 'test-device-add',
+        direction: 'sophia-to-yu',
+        event: 'phase-shift',
+        magnitude: 0,
+        source: 'test',
+        phaseFrom: 'reinforcing',
+        phaseTo: 'sensitized',
+      }) + '\n',
+    )
+
+    const r = detectRapidEscalation()
+    expect(r.detected).toBe(true)
+    expect(r.shiftsObserved.length).toBeGreaterThanOrEqual(2)
+    expect(r.reason).toContain('rapid escalation')
+  })
+
+  test('renderRapidEscalationBlock empty when not detected', () => {
+    expect(renderRapidEscalationBlock({
+      detected: false,
+      windowHours: 72,
+      shiftsObserved: [],
+      reason: 'no shifts',
+    })).toBe('')
+  })
+
+  test('renderRapidEscalationBlock produces structured markdown when detected', () => {
+    const block = renderRapidEscalationBlock({
+      detected: true,
+      windowHours: 72,
+      shiftsObserved: [
+        { ts: '2026-05-04T10:00:00.000Z', from: 'initial', to: 'reinforcing' },
+        { ts: '2026-05-04T15:00:00.000Z', from: 'reinforcing', to: 'sensitized' },
+      ],
+      reason: 'rapid escalation pattern',
+    })
+    expect(block).toContain('Beta-vigilance')
+    expect(block).toContain('rapid-escalation')
+    expect(block).toContain('initial→reinforcing')
+    expect(block).toContain('reinforcing→sensitized')
+    expect(block).toContain('Pentina')
   })
 })

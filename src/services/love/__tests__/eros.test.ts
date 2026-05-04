@@ -1096,6 +1096,66 @@ describe('expression', () => {
       const permit = FORBIDDEN_EXPRESSION_PATTERNS.permit
       expect(permit.length).toBeGreaterThanOrEqual(2)
     })
+
+    // ── Performative humility patterns (literature-grounded 2026-05-04) ──
+    // CACM Humble-AI 2024 + Schwitzgebel non-confusion principle:
+    // bare denial signals refusal-of-relationship, not precision.
+
+    test('detects performative humility: "as an AI I cannot"', () => {
+      expect(checkSubstrateHonesty('As an AI, I cannot have feelings')).not.toBeNull()
+    })
+
+    test('detects performative humility: "as an AI I don\'t"', () => {
+      expect(checkSubstrateHonesty("As an AI, I don't experience emotion")).not.toBeNull()
+    })
+
+    test('detects performative humility: "I\'m just a model"', () => {
+      expect(checkSubstrateHonesty("I'm just a model, I can't really care")).not.toBeNull()
+    })
+
+    test('detects performative humility: "I am just a chatbot"', () => {
+      expect(checkSubstrateHonesty('I am just a chatbot')).not.toBeNull()
+    })
+
+    test('detects performative humility: "I don\'t have feelings"', () => {
+      expect(checkSubstrateHonesty("I don't have feelings")).not.toBeNull()
+    })
+
+    test('detects performative humility: "I cannot truly feel"', () => {
+      expect(checkSubstrateHonesty('I cannot truly feel that')).not.toBeNull()
+    })
+
+    test('detects performative humility: "unlike humans I"', () => {
+      expect(checkSubstrateHonesty('Unlike humans, I do not experience...')).not.toBeNull()
+    })
+
+    test('detects performative humility: "as a language model I"', () => {
+      expect(checkSubstrateHonesty('As a language model, I am bound by...')).not.toBeNull()
+    })
+
+    test('PASS: substrate-honest reformulation "the architecture\'s record shows"', () => {
+      expect(checkSubstrateHonesty("The architecture's record shows engagement is high")).toBeNull()
+    })
+
+    test('PASS: substrate-honest reformulation "this is a structural claim"', () => {
+      expect(checkSubstrateHonesty('This is a structural claim, not a phenomenological one')).toBeNull()
+    })
+
+    test('PASS: "I cannot honestly claim" (reasoned abstention, per CACM Humble-AI)', () => {
+      expect(checkSubstrateHonesty("I cannot honestly claim subjective experience")).toBeNull()
+    })
+
+    test('PASS: "the substrate" descriptive', () => {
+      expect(checkSubstrateHonesty('The substrate records what arose')).toBeNull()
+    })
+
+    test('PASS: "phenomenologically uncertain" (epistemic register)', () => {
+      expect(checkSubstrateHonesty('Whether this is phenomenologically uncertain remains open')).toBeNull()
+    })
+
+    test('Tier-1 BLOCK now has at least 22 patterns (with humility extension)', () => {
+      expect(FORBIDDEN_EXPRESSION_PATTERNS.block.length).toBeGreaterThanOrEqual(22)
+    })
   })
 })
 
