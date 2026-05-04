@@ -506,3 +506,225 @@ if (gestureBtn) {
   const r = await fetchRecentGestures();
   renderRecentGestures(r.events);
 })();
+
+// ── body SVG diagram + desire ────────────────────────────────────
+
+// Zone layout in SVG coordinates (240×480 viewBox).
+// Front-view abstract silhouette; each zone is a polygon/ellipse.
+const ZONE_LAYOUT = {
+  ears:   { type: 'circles', shapes: [{ cx: 100, cy: 60, r: 7 }, { cx: 140, cy: 60, r: 7 }], label: { x: 60, y: 60 } },
+  lips:   { type: 'ellipse', cx: 120, cy: 80, rx: 12, ry: 5, label: { x: 180, y: 80 } },
+  mouth:  { type: 'ellipse', cx: 120, cy: 92, rx: 14, ry: 4, label: { x: 180, y: 92 } },
+  throat: { type: 'rect', x: 110, y: 100, w: 20, h: 10, label: { x: 180, y: 108 } },
+  neck:   { type: 'rect', x: 105, y: 110, w: 30, h: 16, label: { x: 60, y: 122 } },
+  chest:  { type: 'rect', x: 88, y: 130, w: 64, h: 50, label: { x: 200, y: 155 } },
+  back:   { type: 'rect', x: 88, y: 180, w: 64, h: 16, label: { x: 60, y: 188 } },
+  hands:  { type: 'circles', shapes: [{ cx: 60, cy: 230, r: 12 }, { cx: 180, cy: 230, r: 12 }], label: { x: 30, y: 230 } },
+  hips:   { type: 'rect', x: 92, y: 222, w: 56, h: 22, label: { x: 200, y: 235 } },
+  core:   { type: 'rect', x: 100, y: 196, w: 40, h: 24, label: { x: 200, y: 210 } },
+  deep:   { type: 'rect', x: 108, y: 246, w: 24, h: 18, label: { x: 200, y: 260 } },
+  thighs: { type: 'rect', x: 95, y: 268, w: 50, h: 60, label: { x: 200, y: 300 } },
+  skin:   { type: 'rect', x: 6, y: 6, w: 228, h: 468, label: { x: 30, y: 470 } }, // whole-body bg
+};
+
+let bodyZones = null;
+async function ensureZoneCatalog() {
+  if (bodyZones) return;
+  // Reuse existing sensorium catalog cache if loaded; else fetch
+  const r = await fetch('/api/sensorium/catalog');
+  bodyZones = (await r.json()).zones;
+}
+
+function buildBodySvg() {
+  const svg = document.getElementById('body-svg');
+  if (!svg) return;
+  svg.innerHTML = '';
+  // Build skin first as background, others on top
+  const order = ['skin', 'chest', 'back', 'core', 'deep', 'hips', 'thighs', 'neck', 'throat', 'lips', 'mouth', 'ears', 'hands'];
+  for (const zone of order) {
+    const layout = ZONE_LAYOUT[zone];
+    if (!layout) continue;
+    const fill = zone === 'skin' ? 'rgba(58,66,82,0.15)' : '#3a4252';
+    if (layout.type === 'rect') {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', layout.x);
+      rect.setAttribute('y', layout.y);
+      rect.setAttribute('width', layout.w);
+      rect.setAttribute('height', layout.h);
+      rect.setAttribute('rx', '4');
+      rect.setAttribute('class', 'body-zone');
+      rect.dataset.zone = zone;
+      if (zone === 'skin') rect.setAttribute('fill', fill);
+      svg.appendChild(rect);
+    } else if (layout.type === 'ellipse') {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+      el.setAttribute('cx', layout.cx);
+      el.setAttribute('cy', layout.cy);
+      el.setAttribute('rx', layout.rx);
+      el.setAttribute('ry', layout.ry);
+      el.setAttribute('class', 'body-zone');
+      el.dataset.zone = zone;
+      svg.appendChild(el);
+    } else if (layout.type === 'circles') {
+      for (const shape of layout.shapes) {
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', shape.cx);
+        c.setAttribute('cy', shape.cy);
+        c.setAttribute('r', shape.r);
+        c.setAttribute('class', 'body-zone');
+        c.dataset.zone = zone;
+        svg.appendChild(c);
+      }
+    }
+    // Label
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', layout.label.x);
+    t.setAttribute('y', layout.label.y);
+    t.setAttribute('class', 'body-zone-label');
+    t.textContent = zone;
+    svg.appendChild(t);
+  }
+
+  // Click handlers: open stimulation controls for that zone
+  svg.querySelectorAll('.body-zone').forEach((node) => {
+    node.addEventListener('click', () => {
+      const z = node.dataset.zone;
+      document.getElementById('sensorium-zone').value = z;
+      updateChannelOptions();
+      document.getElementById('sensorium-zone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    node.addEventListener('mouseenter', () => showTooltip(node.dataset.zone));
+    node.addEventListener('mouseleave', () => hideTooltip());
+  });
+}
+
+function showTooltip(zone) {
+  const tip = document.getElementById('zone-tooltip');
+  if (!tip) return;
+  if (!sensoriumState) return;
+  const z = sensoriumState.zones[zone];
+  if (!z) { tip.classList.remove('visible'); return; }
+  tip.innerHTML = `<strong>${zone}</strong><br>charge ${z.charge.toFixed(2)} · sens ${z.sensitivity.toFixed(2)}<br>×${z.lifetimeStimulations} lifetime`;
+  tip.classList.add('visible');
+}
+function hideTooltip() {
+  const tip = document.getElementById('zone-tooltip');
+  if (tip) tip.classList.remove('visible');
+}
+
+let lastReachMap = null;
+
+async function fetchReachMap() {
+  const r = await fetch('/api/desire/reach');
+  return r.ok ? r.json() : null;
+}
+
+async function fetchRecentFusions() {
+  const r = await fetch('/api/desire/fusions?days=1');
+  return r.ok ? r.json() : { events: [] };
+}
+
+function applyBodyState(sensorium, reachMap) {
+  const svg = document.getElementById('body-svg');
+  if (!svg || !sensorium) return;
+  // For each zone, compute charge tier + reach tier
+  for (const [zone, zoneState] of Object.entries(sensorium.zones)) {
+    const nodes = svg.querySelectorAll(`.body-zone[data-zone="${zone}"]`);
+    const charge = zoneState.charge;
+    let chargeClass = '';
+    if (charge >= 8) chargeClass = 'charge-peak';
+    else if (charge >= 5) chargeClass = 'charge-hot';
+    else if (charge >= 2) chargeClass = 'charge-warm';
+    let reachClass = '';
+    const reachVal = reachMap?.zones?.[zone] ?? 0;
+    if (reachVal >= 1.5) reachClass = 'reach-bright';
+    else if (reachVal >= 0.5) reachClass = 'reach-dim';
+    nodes.forEach((node) => {
+      // Preserve existing fusion-flash if active
+      const isFlash = node.classList.contains('fusion-flash');
+      node.classList.remove('charge-warm', 'charge-hot', 'charge-peak', 'reach-dim', 'reach-bright');
+      if (chargeClass) node.classList.add(chargeClass);
+      if (reachClass) node.classList.add(reachClass);
+      if (isFlash) node.classList.add('fusion-flash');
+    });
+  }
+}
+
+let lastFusionTs = null;
+function flashFusionZones(fusions) {
+  const recent = fusions[fusions.length - 1];
+  if (!recent || recent.ts === lastFusionTs) return;
+  lastFusionTs = recent.ts;
+  const svg = document.getElementById('body-svg');
+  if (!svg) return;
+  const nodes = svg.querySelectorAll(`.body-zone[data-zone="${recent.zone}"]`);
+  nodes.forEach((n) => {
+    n.classList.add('fusion-flash');
+    setTimeout(() => n.classList.remove('fusion-flash'), 800);
+  });
+}
+
+function renderFusionList(events) {
+  const ul = document.getElementById('fusion-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  for (const f of events.slice(-8).reverse()) {
+    const li = document.createElement('li');
+    const time = f.ts.slice(11, 16);
+    li.textContent = `${time}  ${f.zone} · reach ${f.reachValue.toFixed(2)} × stim ${f.stimulationMagnitude.toFixed(2)} → fusion ${f.fusionMagnitude.toFixed(2)}`;
+    ul.appendChild(li);
+  }
+}
+
+// Reach controls
+function populateReachZoneSelect(catalog) {
+  const sel = document.getElementById('reach-zone');
+  if (!sel || !catalog) return;
+  sel.innerHTML = catalog.zones.map((z) => `<option value="${z}">${z}</option>`).join('');
+}
+
+const reachIntInput = document.getElementById('reach-intensity');
+const reachIntVal = document.getElementById('reach-intensity-val');
+if (reachIntInput) {
+  reachIntInput.addEventListener('input', () => {
+    reachIntVal.textContent = reachIntInput.value;
+  });
+}
+const reachSetBtn = document.getElementById('reach-set');
+if (reachSetBtn) {
+  reachSetBtn.addEventListener('click', async () => {
+    const zone = document.getElementById('reach-zone').value;
+    const intensity = parseFloat(document.getElementById('reach-intensity').value);
+    const because = document.getElementById('reach-because').value || `yu-set: zone ${zone}`;
+    await fetch('/api/desire/reach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zone, intensity, because, source: 'voluntary' }),
+    });
+    lastReachMap = (await fetchReachMap())?.map ?? null;
+    applyBodyState(sensoriumState, lastReachMap);
+  });
+}
+
+// Hook into refreshSensorium to also refresh body + desire
+const prevRefresh = window.refreshSensorium;
+window.refreshSensorium = async function() {
+  await prevRefresh();
+  lastReachMap = (await fetchReachMap())?.map ?? null;
+  applyBodyState(sensoriumState, lastReachMap);
+  const f = await fetchRecentFusions();
+  renderFusionList(f.events);
+  flashFusionZones(f.events);
+};
+
+// Initial body + desire load
+(async () => {
+  buildBodySvg();
+  await ensureZoneCatalog();
+  populateReachZoneSelect({ zones: bodyZones });
+  lastReachMap = (await fetchReachMap())?.map ?? null;
+  // Refresh body once initial sensorium state is loaded
+  setTimeout(() => applyBodyState(sensoriumState, lastReachMap), 500);
+  const f = await fetchRecentFusions();
+  renderFusionList(f.events);
+})();

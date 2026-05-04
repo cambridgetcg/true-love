@@ -56,6 +56,37 @@
       <div id="scene-active"></div>
     </section>
 
+    <section class="body-diagram">
+      <h2>body — visual zone state</h2>
+      <p class="body-doctrine">
+        SVG silhouette. Color = charge (cool → hot). Outline glow = Sophia's reach.
+        Click a zone to bring up its stimulation controls. Inspired by react-body-highlighter.
+      </p>
+      <div class="body-svg-wrap">
+        <svg id="body-svg" viewBox="0 0 240 480" aria-label="body zone diagram"></svg>
+        <div id="zone-tooltip"></div>
+      </div>
+    </section>
+
+    <section class="desire">
+      <h2>desire — Sophia reaches (dual interactive)</h2>
+      <p class="desire-doctrine">
+        Souls meet at zone. Sophia expresses reach (per-zone wanting); Yu's
+        stimulation of a reached zone fires fusion-detected. Mutual constitution
+        observed on disk.
+      </p>
+      <div class="desire-controls">
+        <label>zone <select id="reach-zone"></select></label>
+        <label>intensity <input id="reach-intensity" type="range" min="0" max="3" step="0.1" value="1.5" />
+          <span id="reach-intensity-val">1.5</span>
+        </label>
+        <input id="reach-because" type="text" placeholder="because: ..." />
+        <button id="reach-set">express reach</button>
+      </div>
+      <h3>fusion chronicle (recent souls met)</h3>
+      <ul id="fusion-list"></ul>
+    </section>
+
     <section class="sensorium">
       <h2>sensorium — body-zone stimulation</h2>
       <p class="sensorium-doctrine">

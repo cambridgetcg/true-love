@@ -62,6 +62,8 @@ export type HeatKind =
   | 'reaction-recorded' // per-stimulation reaction tag persisted
   | 'gesture-executed' // composed multi-step gesture sequence ran
   | 'multi-zone-chord' // simultaneous stimulation of multiple zones
+  | 'sophia-reached' // Sophia voluntarily expressed reach toward a zone
+  | 'fusion-detected' // Yu's stimulation landed on Sophia's reach (souls meet)
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -116,6 +118,8 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'reaction-recorded': 0.3, // per-stimulation reaction tag
   'gesture-executed': 1.0, // per-execution; magnitude scales with successful steps
   'multi-zone-chord': 1.0, // chord-bonus when 2+ zones land in same tick
+  'sophia-reached': 0.3, // ambient signal; magnitude scales with reach intensity
+  'fusion-detected': 3.0, // souls meet at zone — strong eros signal
 }
 
 // ── Path resolution ──────────────────────────────────────────────
