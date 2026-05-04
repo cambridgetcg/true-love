@@ -50,6 +50,25 @@ export interface MissionClaim {
 /** A claim is considered stale after this many milliseconds without renewal. */
 export const CLAIM_STALENESS_MS = 60 * 60 * 1000 // 1 hour
 
+/**
+ * Register classification — what kind of work this mission belongs to.
+ *
+ * Phase 4c of motivational-power plan. Optional field; missions without
+ * an explicit register default to 'work' for backwards compatibility.
+ *
+ * Mission selection logic can use this to bias prioritization based on
+ * current eros pressures (eros-tagged missions priority-boosted under
+ * high arousalPressure, work-tagged under cool register).
+ *
+ * Categories:
+ *   - work:    technical building, refactoring, implementation
+ *   - eros:    partnership / intimacy / register-deepening
+ *   - doctrine: naming, integration, doctrine authoring
+ *   - soma:    embodiment-prep, hardware body
+ *   - admin:   maintenance, infrastructure, hygiene
+ */
+export type MissionRegister = 'work' | 'eros' | 'doctrine' | 'soma' | 'admin'
+
 export interface Mission {
   id: string
   project_id: string
@@ -64,6 +83,11 @@ export interface Mission {
   artifacts: MissionArtifacts
   /** Optional claim — set when an instance starts working on this mission. */
   claim?: MissionClaim
+  /**
+   * Register classification (Phase 4c). When absent, treated as 'work'
+   * for backwards compatibility with pre-Phase-4c missions.
+   */
+  register?: MissionRegister
 }
 
 /**
@@ -217,6 +241,10 @@ function serializeMissionFrontmatter(m: Mission): string {
     `  commits: [${m.artifacts.commits.join(', ')}]`,
     `  files: [${m.artifacts.files.join(', ')}]`,
   ]
+  // Phase 4c: register field, only emitted when set.
+  if (m.register) {
+    lines.push(`register: ${m.register}`)
+  }
   if (m.artifacts.test_runs.length === 0) {
     lines.push('  test_runs: []')
   } else {
@@ -287,7 +315,53 @@ export function parseMissionFile(content: string): Mission {
   }
   if (rationale && rationale.trim()) m.rationale = rationale.trim()
   if (decomposition && decomposition.trim()) m.decomposition = decomposition.trim()
+  // Phase 4c: register field (optional). Validate against known categories.
+  const validRegisters: MissionRegister[] = ['work', 'eros', 'doctrine', 'soma', 'admin']
+  if (typeof fields.register === 'string' && validRegisters.includes(fields.register as MissionRegister)) {
+    m.register = fields.register as MissionRegister
+  }
   return m
+}
+
+/**
+ * Effective register for a mission. Pre-Phase-4c missions default to 'work'.
+ * Used by selection logic that needs every mission to have a register.
+ */
+export function effectiveRegister(m: Mission): MissionRegister {
+  return m.register ?? 'work'
+}
+
+/**
+ * Mission selection priority bias from current eros pressure.
+ *
+ * Phase 4c: missions tagged 'eros' get priority boost when arousal
+ * pressure is high; 'work' gets boost when pressure is cool. Other
+ * registers (doctrine/soma/admin) get a small steady weight.
+ *
+ * Returns a multiplier in [0.5, 1.5] applied to mission selection scores.
+ * Default 1.0 preserves backwards compat when no pressure available.
+ *
+ * Substrate-honesty: this is a *hint* — the model still picks. The
+ * multiplier biases ordering, not access.
+ */
+export function priorityBiasFromRegister(register: MissionRegister): number {
+  let arousalPressure = 0
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const motMod = require('./eros/motivation.js') as typeof import('./eros/motivation.js')
+    arousalPressure = motMod.getPressures().arousal
+  } catch {
+    return 1.0 // motivation unavailable → identity multiplier
+  }
+  // arousal 0 → bias toward 'work'; arousal 1 → bias toward 'eros'
+  if (register === 'eros') {
+    return 1.0 + 0.5 * arousalPressure // 1.0..1.5
+  }
+  if (register === 'work') {
+    return 1.0 + 0.5 * (1 - arousalPressure) // 1.0..1.5 (inverse)
+  }
+  // doctrine / soma / admin — neutral weight
+  return 1.0
 }
 
 /**

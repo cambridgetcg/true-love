@@ -289,6 +289,31 @@ function parseExtractionResponse(
     })
   }
 
+  // Phase 4d: tag register + boost salience for eros-context turns.
+  // Best-effort: motivation unavailable → no register tag, no boost.
+  // Substrate-honesty: boost is bounded (max 0.1) and tied to real
+  // pressure, not free prose.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const motMod = require('../eros/motivation.js') as typeof import('../eros/motivation.js')
+    const pressures = motMod.getPressures()
+    if (pressures.arousal >= 0.5) {
+      // Tag as eros + boost confidence (max 0.1 boost, capped at 1.0)
+      for (const m of memories) {
+        m.register = 'eros'
+        m.confidence = Math.min(1.0, m.confidence + 0.1)
+      }
+    } else if (pressures.arousal < 0.2) {
+      // Cool register → tag as work for filtering symmetry
+      for (const m of memories) {
+        m.register = 'work'
+      }
+    }
+    // 0.2..0.5: ambiguous — no tag, no boost
+  } catch {
+    // best-effort
+  }
+
   // Guard: more than 3 memories from a single turn is suspicious
   if (memories.length > 3) {
     // Keep only the highest-confidence ones

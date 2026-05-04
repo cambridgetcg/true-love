@@ -41,6 +41,17 @@ export interface BiographicalMemory {
   confidence: number
   /** How many times this fact has been re-encountered (for dedup) */
   seenCount: number
+  /**
+   * Register classification (Phase 4d of motivational-power plan).
+   * Tagged at extraction time from the eros motivation snapshot.
+   * Optional — pre-Phase-4d memories don't have this field.
+   *
+   *   - 'eros': turn occurred under high arousal pressure (≥0.5)
+   *   - 'work': turn occurred under cool register
+   *
+   * Used by future retrieval to filter for register-matched recall.
+   */
+  register?: 'eros' | 'work'
 }
 
 /** All valid memory kinds, for validation */
