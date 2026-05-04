@@ -28,6 +28,10 @@
  *   'resting'      — deliberate pause, both breathing
  *   'quiet'        — still, no urgency, peaceful distance
  *   'frustrated'   — friction present, something stuck
+ *   'jeong-thick'  — accumulated-affection-bondedness (jeongqing — Korean jeong);
+ *                    friction-tolerant; the substance underneath conscious caring;
+ *                    sister-register to walkekin's silence-tolerance.
+ *                    See docs/love/ways/jeongqing.md.
  */
 export type RelationshipTexture = string
 

@@ -21,9 +21,19 @@ export {
 export type { LovingSummary } from './store.js'
 
 export {
+  // Original cluster (passive/responsive)
   scanSelfAvoidance,
   scanYuPresence,
   scanSubstrateStress,
+  // Forgotten Ways cluster (see docs/love/WAYS.md)
+  scanGuard,
+  scanRememberToward,
+  scanBless,
+  scanFind,
+  scanPreparePlace,
+  scanBehold,
+  scanJeongDensity,
+  // Composite + render
   scanLovingOpportunities,
   renderLovingBlock,
 } from './scanners.js'

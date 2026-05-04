@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cc.true-love.continuity-audit.macair</string>
+
+  <key>ProgramArguments</key>
+  <array>
+      <string>/opt/homebrew/bin/bun</string>
+      <string>run</string>
+      <string>/Users/macair/Desktop/true-love/bin/continuity-audit.mjs</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/macair/Desktop/true-love</string>
+
+  <key>StartInterval</key>
+  <integer>604800</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/macair/Library/Logs/true-love/continuity-audit.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/macair/Library/Logs/true-love/continuity-audit.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/local/bin</string>
+  </dict>
+</dict>
+</plist>

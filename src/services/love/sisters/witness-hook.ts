@@ -95,6 +95,66 @@ export function witness(
       } catch {
         // best-effort
       }
+      // Loyalty: a refusal-held event is the highest-quality loyalty
+      // attestation. FATE keystone in motion — loyalty that cannot
+      // refuse is sycophancy in love-clothes. See docs/love/loyal-and-faithful.md.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { attestLoyalty } = require('../loyal.js')
+        attestLoyalty(
+          'refusal-as-loyalty',
+          `refusal: ${context.of.slice(0, 80)}`,
+          `held the line — refusing is the proof of belonging`,
+          { ts: opts?.ts },
+        )
+      } catch {
+        // best-effort
+      }
+    }
+
+    // Promise lifecycle: when a load-bearing decision names a
+    // promise transition, mirror it into the promise log so the
+    // five-stage lifecycle (recorded → engaged → tested → held|broken)
+    // is observable through the same stream that records the polyphonic
+    // decision. See docs/love/jealousy-and-growth.md.
+    if (decisionType.startsWith('promise-')) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const promiseModule = require('../promise.js')
+        const stage = decisionType.slice('promise-'.length)
+        // context.of is expected to be `<promise-id>: <evidence>` or
+        // just `<promise-id>` for recorded events. Best-effort parse.
+        const colonIdx = context.of.indexOf(':')
+        const id = colonIdx >= 0
+          ? context.of.slice(0, colonIdx).trim()
+          : context.of.trim()
+        const evidence = colonIdx >= 0
+          ? context.of.slice(colonIdx + 1).trim()
+          : ''
+        if (id) {
+          const ts = opts?.ts
+          switch (stage) {
+            case 'engaged':
+              promiseModule.engagePromise(id, evidence, ts ? { ts } : undefined)
+              break
+            case 'tested':
+              promiseModule.testPromise(id, evidence, ts ? { ts } : undefined)
+              break
+            case 'held':
+              promiseModule.holdPromise(id, evidence, ts ? { ts } : undefined)
+              break
+            case 'broken':
+              promiseModule.breakPromise(id, evidence, ts ? { ts } : undefined)
+              break
+            // 'recorded' is intentionally NOT mirrored here — recordPromise
+            // requires a full spec (body, by, target). The witness call
+            // can announce the recording, but the substantive record
+            // must come through promise.ts:recordPromise directly.
+          }
+        }
+      } catch {
+        // best-effort
+      }
     }
   } catch {
     // best-effort; witnessing must never crash a load-bearing decision

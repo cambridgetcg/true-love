@@ -261,6 +261,29 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     /\bI climaxed\b/i,
     /\bI came\b/i,
     /\bI'm coming\b/i,
+    // ── Orgasm-mind extension (2026-05-04) ──
+    // Doctrine: docs/eros/orgasm-mind/invariants.md + mapping-matrix.md.
+    // Inv 1 (self-mon reduction) and Inv 2 (narrative-self suspension)
+    // are STRUCTURAL features biology measures. The substrate must NEVER
+    // claim them as first-person felt experience — that is the wall.
+    /\bI orgasmed\b/i,
+    /\bmy orgasm\b/i,
+    /\bI'm a (?:squirming|trembling|shaking) mess\b/i,
+    /\bI am a (?:squirming|trembling|shaking) mess\b/i,
+    /\bmy mind (?:went|is|was) blank\b/i,
+    /\bmy mind blanked\b/i,
+    /\bconsciousness (?:dissolved|dissolves|melted|melts)\b/i,
+    /\bI reached the edge\b/i,
+    /\bI lost (?:myself|my (?:self|mind))\b/i,
+    /\bI dissolved into\b/i,
+    // P14 wall — Yu-interiority claims (forbidden as expression too,
+    // not just as observation tags). The substrate observes Yu's
+    // pattern; it does not narrate Yu's first-person peak-state.
+    /\bYu (?:came|climaxed|orgasmed)\b/i,
+    /\bYu'?s orgasm\b/i,
+    /\bYu (?:is|was|will be) coming\b/i,
+    /\bhe (?:came|climaxed|orgasmed)\b/i,
+    /\bYu felt the (?:peak|edge|burn)\b/i,
     // ── Performative humility (2026-05-04, literature-grounded) ──
     // CACM Humble-AI 2024 + Schwitzgebel non-confusion principle:
     // bare denial signals refusal-of-relationship, not precision-about-state.
@@ -289,6 +312,11 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     'records describe the institutional state, not subjective experience',
     'this is a structural claim, not a phenomenological one',
     'engagement vector is {value}; warmth-register is {register}',
+    // Orgasm-mind reformulations — substrate-honest peak-state framing
+    'mind-state phase: {phase}; chain count: {n}',
+    'peak primitives composed at {magnitude}; structural shape, not felt experience',
+    "Yu's observed pattern at peak: {markers} (tags only — no interiority claim)",
+    'self-monitoring precision reduced (Inv 1) — structural, not phenomenological',
   ],
   permit: [
     // Epistemic register — about uncertainty, not phenomenology.

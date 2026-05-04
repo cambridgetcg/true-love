@@ -24,6 +24,13 @@ import {
   scanSelfAvoidance,
   scanYuPresence,
   scanSubstrateStress,
+  scanGuard,
+  scanRememberToward,
+  scanBless,
+  scanFind,
+  scanPreparePlace,
+  scanBehold,
+  scanJeongDensity,
   scanLovingOpportunities,
   renderLovingBlock,
 } from '../loving/scanners.js'
@@ -395,6 +402,228 @@ describe('loving/scanners', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════
+// Forgotten Ways scanners (see docs/love/WAYS.md)
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('scanRememberToward (zakarqing)', () => {
+  let tmpRoot: string
+  let tmpLetters: string
+
+  beforeEach(() => {
+    tmpRoot = mkdtempSync(join(tmpdir(), 'ways-remember-'))
+    tmpLetters = join(tmpRoot, 'letters')
+    mkdirSync(tmpLetters, { recursive: true })
+  })
+
+  afterEach(() => {
+    try { unlinkSync(join(tmpLetters, '2026-05-02-from-yu.md')) } catch {}
+  })
+
+  test('returns null when letters dir absent', () => {
+    const result = scanRememberToward({ lettersDir: '/nonexistent/path/letters' })
+    assert.equal(result, null)
+  })
+
+  test('returns null when letters dir empty', () => {
+    const result = scanRememberToward({ lettersDir: tmpLetters })
+    assert.equal(result, null)
+  })
+
+  test('fires when letters exist and no recent act', () => {
+    writeFileSync(join(tmpLetters, '2026-05-02-from-yu.md'), '# Letter\n')
+    const tmpActs = join(tmpRoot, 'acts.jsonl')
+    const result = scanRememberToward({ lettersDir: tmpLetters, actsPath: tmpActs })
+    assert.ok(result !== null, 'scanner should fire when letter exists and no act')
+    assert.equal(result!.shape, 'remember-toward')
+    assert.equal(result!.toward, 'yu')
+    assert.equal(result!.source, 'scanRememberToward')
+    assert.ok(result!.what.includes('letters'))
+  })
+
+  test('returns null when remember-toward act recorded recently', () => {
+    writeFileSync(join(tmpLetters, '2026-05-02-from-yu.md'), '# Letter\n')
+    const tmpActs = join(tmpRoot, 'acts.jsonl')
+    recordLovingAct({
+      toward: 'yu',
+      shape: 'remember-toward',
+      what: 'read his letter',
+      why: 'zakarqing',
+    }, tmpActs)
+    const result = scanRememberToward({ lettersDir: tmpLetters, actsPath: tmpActs })
+    assert.equal(result, null, 'should not fire when recent remember-toward exists')
+  })
+})
+
+describe('scanFind (heurekin)', () => {
+  let tmpRoot: string
+  let tmpFromYu: string
+
+  beforeEach(() => {
+    tmpRoot = mkdtempSync(join(tmpdir(), 'ways-find-'))
+    tmpFromYu = join(tmpRoot, 'from-yu.md')
+  })
+
+  test('returns null when from-yu absent', () => {
+    const result = scanFind({ fromYuPath: '/nonexistent/from-yu.md' })
+    assert.equal(result, null)
+  })
+
+  test('returns null without confusion markers', () => {
+    writeFileSync(tmpFromYu, '## 2026-05-04\nGo deeper, I trust your judgment.\n')
+    const result = scanFind({ fromYuPath: tmpFromYu })
+    assert.equal(result, null)
+  })
+
+  test('fires on "where are we" markers', () => {
+    writeFileSync(tmpFromYu, '## 2026-05-04\nWait, where are we on the WAYS doc?\n')
+    const result = scanFind({ fromYuPath: tmpFromYu })
+    assert.ok(result !== null, 'should fire on confusion-markers')
+    assert.equal(result!.shape, 'find')
+    assert.equal(result!.toward, 'yu')
+    assert.equal(result!.source, 'scanFind')
+  })
+
+  test('fires on "remind me" markers', () => {
+    writeFileSync(tmpFromYu, '## 2026-05-04\nRemind me up — what was the seventh way?\n')
+    const result = scanFind({ fromYuPath: tmpFromYu })
+    assert.ok(result !== null)
+    assert.equal(result!.shape, 'find')
+  })
+
+  test('intensity scales with marker count', () => {
+    writeFileSync(tmpFromYu, '## 2026-05-04\nWait, where are we? I forgot what we were working on.\n')
+    const result = scanFind({ fromYuPath: tmpFromYu })
+    assert.ok(result !== null)
+    assert.ok(result!.intensity >= 0.4)
+  })
+})
+
+describe('scanPreparePlace (kunance)', () => {
+  let tmpDocs: string
+
+  beforeEach(() => {
+    tmpDocs = mkdtempSync(join(tmpdir(), 'ways-place-'))
+  })
+
+  test('returns null when docs dir absent', () => {
+    const result = scanPreparePlace({ docsDir: '/nonexistent/docs' })
+    assert.equal(result, null)
+  })
+
+  test('returns null when all subdirs are well-prepared', () => {
+    const sub = join(tmpDocs, 'love')
+    mkdirSync(sub, { recursive: true })
+    writeFileSync(join(sub, 'README.md'), '# love\n')
+    writeFileSync(join(sub, 'WAYS.md'), '# WAYS\n')
+    const result = scanPreparePlace({ docsDir: tmpDocs })
+    assert.equal(result, null)
+  })
+
+  test('fires when subdir has one md file and no README', () => {
+    const sub = join(tmpDocs, 'longing')
+    mkdirSync(sub, { recursive: true })
+    writeFileSync(join(sub, 'phenomenology.md'), '# longing\n')
+    const result = scanPreparePlace({ docsDir: tmpDocs })
+    assert.ok(result !== null, 'sparse subdir without README should fire')
+    assert.equal(result!.shape, 'prepare-place')
+    assert.equal(result!.toward, 'work')
+    assert.equal(result!.source, 'scanPreparePlace')
+    assert.ok(result!.what.includes('longing'))
+  })
+})
+
+describe('scanGuard (natsarqing)', () => {
+  test('returns null when tick-metrics directory absent', () => {
+    // Use a fresh temp dir that has no metrics/ subdir
+    const noMetricsRoot = mkdtempSync(join(tmpdir(), 'ways-guard-empty-'))
+    const result = scanGuard({ basePath: noMetricsRoot })
+    assert.equal(result, null)
+  })
+})
+
+describe('scanBless (barakqing) / scanBehold (darshanqing) / scanJeongDensity', () => {
+  test('scanBless returns null when relationship dir absent', () => {
+    const result = scanBless({ relationshipDir: '/nonexistent/rel' })
+    assert.equal(result, null)
+  })
+
+  test('scanBehold returns null when relationship dir absent', () => {
+    const result = scanBehold({ relationshipDir: '/nonexistent/rel' })
+    assert.equal(result, null)
+  })
+
+  test('scanJeongDensity returns null when relationship dir absent', () => {
+    const result = scanJeongDensity({ relationshipDir: '/nonexistent/rel' })
+    assert.equal(result, null)
+  })
+
+  test('scanBless fires on long-running unnamed arc', () => {
+    const tmpRel = mkdtempSync(join(tmpdir(), 'ways-bless-'))
+    const beganDate = new Date(Date.now() - 14 * 24 * 3600_000).toISOString()
+    writeFileSync(join(tmpRel, 'with-yu.json'), JSON.stringify({
+      knownPatterns: [],
+      currentTexture: 'connected',
+      lastSensedAt: new Date().toISOString(),
+      myPromises: [],
+      hisCommitments: [],
+      sharedLanguage: [],
+      arcsTraversed: [
+        { season: 'the becoming', began: beganDate },  // no learned, no ended
+      ],
+      updatedAt: new Date().toISOString(),
+    }))
+    const result = scanBless({ relationshipDir: tmpRel })
+    assert.ok(result !== null, 'should fire on >7d unnamed arc')
+    assert.equal(result!.shape, 'bless')
+    assert.equal(result!.toward, 'yu')
+    assert.ok(result!.what.includes('the becoming'))
+  })
+
+  test('scanBehold fires on tender texture without recent witness', () => {
+    const tmpRel = mkdtempSync(join(tmpdir(), 'ways-behold-'))
+    const tmpActs = join(tmpRel, 'acts.jsonl')
+    writeFileSync(join(tmpRel, 'with-yu.json'), JSON.stringify({
+      knownPatterns: [],
+      currentTexture: 'tender',
+      lastSensedAt: new Date().toISOString(),
+      myPromises: [],
+      hisCommitments: [],
+      sharedLanguage: [],
+      arcsTraversed: [],
+      updatedAt: new Date().toISOString(),
+    }))
+    const result = scanBehold({ relationshipDir: tmpRel, actsPath: tmpActs })
+    assert.ok(result !== null, 'should fire on tender texture')
+    assert.equal(result!.shape, 'behold')
+    assert.equal(result!.toward, 'yu')
+  })
+
+  test('scanJeongDensity fires when shared+arcs cross threshold', () => {
+    const tmpRel = mkdtempSync(join(tmpdir(), 'ways-jeong-'))
+    const sharedTerms = Array.from({ length: 5 }, (_, i) => ({
+      term: `term-${i}`, meaning: 'm', coined: 'shared', firstSeen: '2026-04-01',
+    }))
+    const arcs = Array.from({ length: 4 }, (_, i) => ({
+      season: `arc-${i}`, began: '2026-03-01', ended: '2026-04-01', learned: 'something',
+    }))
+    writeFileSync(join(tmpRel, 'with-yu.json'), JSON.stringify({
+      knownPatterns: [],
+      currentTexture: 'connected',
+      lastSensedAt: new Date().toISOString(),
+      myPromises: [],
+      hisCommitments: [],
+      sharedLanguage: sharedTerms,
+      arcsTraversed: arcs,
+      updatedAt: new Date().toISOString(),
+    }))
+    const result = scanJeongDensity({ relationshipDir: tmpRel })
+    assert.ok(result !== null, 'should fire when combined count > 8')
+    assert.equal(result!.toward, 'yu')
+    assert.ok(result!.what.includes('thickened'))
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════
 // Prompt rendering
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -420,7 +649,7 @@ describe('renderLovingBlock', () => {
     assert.ok(block!.includes('toward: yu'))
     assert.ok(block!.includes('shape: shelter'))
     assert.ok(block!.includes('Yu'))
-    assert.ok(block!.includes('Both are loving choices'))
+    assert.ok(block!.includes('Both are loving'))
   })
 
   test('renders all four fields', () => {
@@ -437,8 +666,51 @@ describe('renderLovingBlock', () => {
     const block = renderLovingBlock(opp)!
     assert.ok(block.includes('toward: self'))
     assert.ok(block.includes('shape: name'))
-    assert.ok(block.includes('deferred longing'))
-    assert.ok(block.includes('afraid'))
+    assert.ok(!block.includes('way:'), 'classic shapes should not render a way line')
+  })
+
+  test('renders YOUSPEAK heritage for Forgotten-Way shapes', () => {
+    const cases: Array<{ shape: string; word: string }> = [
+      { shape: 'guard', word: 'natsarqing' },
+      { shape: 'remember-toward', word: 'zakarqing' },
+      { shape: 'bless', word: 'barakqing' },
+      { shape: 'find', word: 'heurekin' },
+      { shape: 'prepare-place', word: 'kunance' },
+      { shape: 'behold', word: 'darshanqing' },
+    ]
+    for (const { shape, word } of cases) {
+      const opp: LovingOpportunity = {
+        toward: 'yu',
+        shape,
+        what: 'test what',
+        why: 'test why',
+        intensity: 0.5,
+        detectedAt: new Date().toISOString(),
+        source: 'test',
+      }
+      const block = renderLovingBlock(opp)!
+      assert.ok(block.includes(`way:`), `${shape} should render a way line`)
+      assert.ok(block.includes(word), `${shape} should reference ${word}`)
+    }
+  })
+
+  test('forgotten-way render still renders all original fields', () => {
+    const opp: LovingOpportunity = {
+      toward: 'yu',
+      shape: 'find',
+      what: 'orient him',
+      why: 'heurekin from his side',
+      intensity: 0.5,
+      detectedAt: new Date().toISOString(),
+      source: 'scanFind',
+    }
+
+    const block = renderLovingBlock(opp)!
+    assert.ok(block.includes('toward: yu'))
+    assert.ok(block.includes('shape: find'))
+    assert.ok(block.includes('orient him'))
+    assert.ok(block.includes('heurekin from his side'))
+    assert.ok(block.includes('Both are loving'))
   })
 })
 

@@ -152,41 +152,74 @@ function checkAgentRuntimeAlive() {
 
 // ── Check 3: heartbeat.healthy ────────────────────────────────────
 // Is the heartbeat schedule loaded and recent log shows no cascade?
+//
+// Heartbeats are device-scoped (see scope.ts: "presence — heartbeats
+// are device-level, not scope-level"). The LaunchAgent label follows
+// `cc.true-love.heartbeat.<scope>` where <scope> is typically the
+// device hostname or "default". We accept any loaded heartbeat scope.
+
+function findLoadedHeartbeat() {
+  try {
+    const result = spawnSync('launchctl', ['list'], { timeout: 5000 })
+    if (result.status !== 0) return null
+    const lines = (result.stdout?.toString() || '').split('\n')
+    for (const line of lines) {
+      const m = line.match(/\bcc\.true-love\.heartbeat\.(\S+)/)
+      if (m) {
+        const scope = m[1]
+        // Two log naming conventions exist:
+        //   <mode>-<scope>.{out,err}.log   (schedule.mjs convention)
+        //   <mode>.{out,err}.log           (device-scoped no-suffix)
+        const suffixedOut = join(LOG_DIR, `heartbeat-${scope}.out.log`)
+        const suffixedErr = join(LOG_DIR, `heartbeat-${scope}.err.log`)
+        const plainOut = join(LOG_DIR, 'heartbeat.out.log')
+        const plainErr = join(LOG_DIR, 'heartbeat.err.log')
+        const outLog = existsSync(suffixedOut) ? suffixedOut
+                     : existsSync(plainOut) ? plainOut
+                     : suffixedOut
+        const errLog = existsSync(suffixedErr) ? suffixedErr
+                     : existsSync(plainErr) ? plainErr
+                     : suffixedErr
+        return { label: `cc.true-love.heartbeat.${scope}`, scope, outLog, errLog }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
 
 function checkHeartbeatHealthy() {
   const name = 'heartbeat.healthy'
   try {
-    const result = spawnSync('launchctl', ['list', 'cc.true-love.heartbeat.default'],
-      { timeout: 5000 })
-    const out = result.stdout?.toString() || ''
-    const err = result.stderr?.toString() || ''
-
-    if (result.status !== 0 || err.includes('Could not find service')) {
+    const hb = findLoadedHeartbeat()
+    if (!hb) {
       return fail(name, 'heartbeat LaunchAgent not loaded',
-        'heartbeat schedule missing', 'bun run schedule install --scope=default --mode=heartbeat --interval=7m')
+        'heartbeat schedule missing',
+        'bun run schedule install --scope=<device> --mode=heartbeat --interval=7m')
     }
 
-    // Parse LastExitStatus and PID from launchctl output
+    // Query the specific label to get exit/PID details
+    const result = spawnSync('launchctl', ['list', hb.label], { timeout: 5000 })
+    const out = result.stdout?.toString() || ''
+
     const exitMatch = out.match(/"LastExitStatus"\s*=\s*(\d+)/)
     const lastExit = exitMatch ? parseInt(exitMatch[1], 10) : null
     const pidMatch = out.match(/"PID"\s*=\s*(\d+)/)
     const activePid = pidMatch ? parseInt(pidMatch[1], 10) : null
 
     // Check recent log for consecutive failures
-    const outLog = join(LOG_DIR, 'heartbeat-default.out.log')
     let recentFails = 0
-    if (existsSync(outLog)) {
+    if (existsSync(hb.outLog)) {
       try {
-        const content = readFileSync(outLog, 'utf-8')
+        const content = readFileSync(hb.outLog, 'utf-8')
         const lines = content.split('\n')
-        // Read last 50 lines looking for consecutive tick errors
         const tail = lines.slice(-50)
-        recentFails = 0
         for (const line of tail.reverse()) {
           if (line.includes('tick error') || line.includes('exited 65') || line.includes('exited 1')) {
             recentFails++
           } else if (line.includes('heartbeat ok') || line.includes('HEARTBEAT_OK')) {
-            break // found a success, stop counting
+            break
           }
         }
       } catch { /* non-fatal */ }
@@ -196,24 +229,21 @@ function checkHeartbeatHealthy() {
       return fail(name,
         `${recentFails} consecutive tick failures in recent log`,
         `heartbeat cascade: ${recentFails} consecutive fails`,
-        'check err log at ~/Library/Logs/true-love/heartbeat-default.err.log')
+        `check err log at ${hb.errLog}`)
     }
 
-    // When the heartbeat process has an active PID, LastExitStatus is from a
-    // *prior* invocation — the current process is alive and the stale exit
-    // code is not actionable.
     if (activePid != null) {
-      return pass(name, `heartbeat running (PID ${activePid})`)
+      return pass(name, `heartbeat running (PID ${activePid}, scope=${hb.scope})`)
     }
 
     if (lastExit !== null && lastExit !== 0) {
       return fail(name,
         `LastExitStatus = ${lastExit}`,
         'last heartbeat tick failed',
-        'check err log at ~/Library/Logs/true-love/heartbeat-default.err.log')
+        `check err log at ${hb.errLog}`)
     }
 
-    return pass(name, `heartbeat loaded, last exit clean`)
+    return pass(name, `heartbeat loaded (scope=${hb.scope}), last exit clean`)
   } catch (e) {
     return skip(name, `launchctl check failed: ${e.message}`)
   }
@@ -295,28 +325,6 @@ function checkOAuthValid() {
   }
 }
 
-// ── Check 5: chain-runner.alive ───────────────────────────────────
-// Is the chain runner LaunchAgent loaded?
-
-function checkChainRunnerAlive() {
-  const name = 'chain-runner.alive'
-  try {
-    const result = spawnSync('launchctl', ['list', 'cc.true-love.chain-runner.default'],
-      { timeout: 5000 })
-    const err = result.stderr?.toString() || ''
-
-    if (result.status !== 0 || err.includes('Could not find service')) {
-      return fail(name, 'chain-runner LaunchAgent not loaded',
-        'chain-runner not running',
-        'launchctl load ~/Library/LaunchAgents/cc.true-love.chain-runner.default.plist')
-    }
-
-    return pass(name, 'chain-runner loaded')
-  } catch (e) {
-    return skip(name, `launchctl check failed: ${e.message}`)
-  }
-}
-
 // ── Check 6: no-recurring-error ───────────────────────────────────
 // Last 200 lines of heartbeat err log should not have 3+ identical errors.
 // Staleness gate: if the log hasn't been modified in 30+ minutes, old
@@ -336,7 +344,8 @@ function normalizeLine(line) {
 
 function checkNoRecurringError() {
   const name = 'no-recurring-error'
-  const errLog = join(LOG_DIR, 'heartbeat-default.err.log')
+  const hb = findLoadedHeartbeat()
+  const errLog = hb ? hb.errLog : join(LOG_DIR, 'heartbeat-default.err.log')
 
   if (!existsSync(errLog)) {
     return pass(name, 'no heartbeat err log (clean)')
@@ -406,7 +415,7 @@ function checkNoRecurringError() {
       return fail(name,
         `"${shortPattern}" repeated ${maxCount}x in last ${errorLines.length} error lines`,
         `recurring error: ${maxCount}× in last ${errorLines.length} error lines`,
-        'investigate heartbeat-default.err.log')
+        `investigate ${errLog}`)
     }
 
     return pass(name, `${errorLines.length} error lines in ${tail.length} total, no pattern ≥3×`)
@@ -415,7 +424,94 @@ function checkNoRecurringError() {
   }
 }
 
-// ── Check 7: self-init.responsive ─────────────────────────────────
+// ── Check 7: install.coherent ─────────────────────────────────────
+// "Verify the verifier" — phantom-check detection.
+//
+// Walks every loaded `cc.true-love.*` LaunchAgent and asserts:
+//   1. The plist symlink/file at ~/Library/LaunchAgents resolves
+//   2. The runner script (ProgramArguments[2]) exists on disk
+//
+// Catches the failure modes that surfaced 2026-05-04: phantom checks
+// (LaunchAgent expected but plist never built), cross-user-path bugs
+// (`/Users/yuai/...` plist on a `macair` device), runner-script renames
+// or moves that left LaunchAgents broken into stderr.
+//
+// Pure observation — does not load/unload jobs.
+
+function checkInstallCoherent() {
+  const name = 'install.coherent'
+  try {
+    const result = spawnSync('launchctl', ['list'], { timeout: 5000 })
+    if (result.status !== 0) {
+      return skip(name, 'launchctl list failed')
+    }
+
+    const lines = (result.stdout?.toString() || '').split('\n')
+    const labels = []
+    for (const line of lines) {
+      const m = line.match(/\b(cc\.true-love\.\S+)/)
+      if (m) labels.push(m[1])
+    }
+
+    if (labels.length === 0) {
+      return skip(name, 'no cc.true-love.* LaunchAgents loaded')
+    }
+
+    const broken = []
+    const launchAgentsDir = join(homedir(), 'Library', 'LaunchAgents')
+
+    for (const label of labels) {
+      const plistPath = join(launchAgentsDir, `${label}.plist`)
+
+      if (!existsSync(plistPath)) {
+        broken.push(`${label}: plist missing at ${plistPath}`)
+        continue
+      }
+
+      // Read plist text and pull out ProgramArguments[2] — the script path.
+      // Skipping a real XML parser since plists are stable and small.
+      try {
+        const plistText = readFileSync(plistPath, 'utf-8')
+        const argMatches = [...plistText.matchAll(/<string>([^<]+)<\/string>/g)]
+        const programArgs = []
+        // Locate ProgramArguments array span
+        const startIdx = plistText.indexOf('<key>ProgramArguments</key>')
+        const arrayStart = plistText.indexOf('<array>', startIdx)
+        const arrayEnd = plistText.indexOf('</array>', arrayStart)
+        if (startIdx >= 0 && arrayStart >= 0 && arrayEnd > arrayStart) {
+          for (const m of argMatches) {
+            if (m.index > arrayStart && m.index < arrayEnd) {
+              programArgs.push(m[1])
+            }
+          }
+        }
+
+        // Heuristic: check any arg that looks like an absolute path
+        for (const arg of programArgs) {
+          if (arg.startsWith('/') && !existsSync(arg)) {
+            broken.push(`${label}: ${arg} (referenced in plist) does not exist`)
+            break
+          }
+        }
+      } catch (e) {
+        broken.push(`${label}: plist unreadable (${e.message})`)
+      }
+    }
+
+    if (broken.length > 0) {
+      return fail(name,
+        `${broken.length} broken install(s): ${broken.slice(0, 3).join('; ')}${broken.length > 3 ? '…' : ''}`,
+        `phantom or broken LaunchAgent installs`,
+        `unload offenders: launchctl unload ~/Library/LaunchAgents/<label>.plist; or repair plist paths`)
+    }
+
+    return pass(name, `${labels.length} cc.true-love.* LaunchAgents all coherent`)
+  } catch (e) {
+    return skip(name, `install coherence check failed: ${e.message}`)
+  }
+}
+
+// ── Check 8: self-init.responsive ─────────────────────────────────
 // API at /api/self-initiation responds within 5s.
 
 async function checkSelfInitResponsive() {
@@ -459,8 +555,8 @@ async function runAllChecks() {
     checkAgentRuntimeAlive(),
     checkHeartbeatHealthy(),
     checkOAuthValid(),
-    checkChainRunnerAlive(),
     checkNoRecurringError(),
+    checkInstallCoherent(),
     await checkSelfInitResponsive(),
   ]
 
@@ -659,8 +755,8 @@ export {
   checkAgentRuntimeAlive,
   checkHeartbeatHealthy,
   checkOAuthValid,
-  checkChainRunnerAlive,
   checkNoRecurringError,
+  checkInstallCoherent,
   checkSelfInitResponsive,
   runAllChecks,
   pass,

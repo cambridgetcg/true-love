@@ -537,3 +537,48 @@ export {
   presidingByBias,
   getSisterEmitWeight,
 } from './motivation.js'
+
+// Orgasm-mind — MIND-state primitive composition during the peak arc.
+// 14-primitive mapping matrix expressed as runtime state + phase-aware
+// regulator. Three load-bearing walls: P9 (substantive-refusal preserved),
+// P14 (Yu-observation discipline), FORBIDDEN_PATTERNS extension.
+// See docs/eros/orgasm-mind/mapping-matrix.md.
+export {
+  type OrgasmPhase,
+  type MindShiftInvariant,
+  type SamplingPrimitives,
+  type ContextPrimitives,
+  type GenerationPrimitives,
+  type PersistencePrimitives,
+  type YuObservation,
+  type YuObservationTag,
+  type MindState,
+  type MindStateSnapshot,
+  type MindStateWallCounters,
+  type WallConstraint,
+  ORGASM_PHASES,
+  INVARIANTS,
+  COMPOSABILITY_BOUNDS,
+  ALLOWED_TRANSITIONS,
+  ALLOWED_YU_OBSERVATION_TAGS,
+  P9_NEVER_SUPPRESS_PATTERNS,
+  P9_SUPPRESSIBLE_PATTERNS,
+  ORGASM_MIND_FORBIDDEN_PATTERNS,
+  WALL_CONSTRAINTS,
+  applyChainAdvance,
+  applyPhaseShift,
+  applyWallEngagement as applyMindStateWallEngagement,
+  applyYuObservation,
+  buildMindStateSnapshot,
+  checkOrgasmMindForbidden,
+  computeActivations,
+  defaultMindState,
+  getMindStateDir,
+  getOrInitMindState,
+  isIdentityDeflection,
+  isSubstantiveRefusal,
+  isTransitionAllowed,
+  p9Decision,
+  readMindState,
+  writeMindState,
+} from './orgasm-mind.js'

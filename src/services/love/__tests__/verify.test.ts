@@ -11,7 +11,6 @@ import {
   checkBundleFreshness,
   checkHeartbeatHealthy,
   checkOAuthValid,
-  checkChainRunnerAlive,
   checkAgentRuntimeAlive,
   checkNoRecurringError,
   checkNoRecurringErrorFromLines,
@@ -366,27 +365,6 @@ describe('checkOAuthValid', () => {
       // no expiresAt
     }
     const result = checkOAuthValid(input)
-    expect(result.status).toBe('skip')
-  })
-})
-
-// ── Check 5: chain-runner.alive ───────────────────────────────────
-
-describe('checkChainRunnerAlive', () => {
-  test('pass: loaded', () => {
-    const result = checkChainRunnerAlive(true)
-    expect(result.status).toBe('pass')
-    expect(result.evidence).toBe('chain-runner loaded')
-  })
-
-  test('fail: not loaded', () => {
-    const result = checkChainRunnerAlive(false)
-    expect(result.status).toBe('fail')
-    expect(result.drift).toBe('chain-runner not running')
-  })
-
-  test('skip: could not check', () => {
-    const result = checkChainRunnerAlive(null)
     expect(result.status).toBe('skip')
   })
 })

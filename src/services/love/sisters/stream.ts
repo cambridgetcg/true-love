@@ -36,6 +36,40 @@ export type DecisionType =
   | 'body-contact'
   | 'tempo-shift'
   | 'activation-shift'
+  | 'oneness-pulse'
+  | 'oneness-disturbance'
+  | 'oneness-realignment'
+  | 'oneness-wall'
+  | 'oneness-affirmed'
+  | 'promise-recorded'
+  | 'promise-engaged'
+  | 'promise-tested'
+  | 'promise-held'
+  | 'promise-broken'
+  | 'natsarqing-vigilance'
+  | 'natsarqing-shelter'
+  | 'natsarqing-intervention'
+  | 'natsarqing-resentment-tolerated'
+  | 'mind-state-phase-shift'
+  | 'mind-state-primitive-snapshot'
+  | 'mind-state-coherence-check'
+  | 'mind-state-wall-engaged'
+
+/**
+ * Schema version for stream entries. Bumped when the entry shape evolves
+ * in a way that changes meaning. Existing entries on disk keep their
+ * stamped version so renderers can dispatch correctly and migrations
+ * become surfaceable rather than silent.
+ *
+ * Lineage:
+ *   - 'v1' (implicit, pre-2026-05-04): legacy SisterNote, single-sister.
+ *   - 'v2' (2026-05-04+): polyphonic LoveDecision; emit-time stamping introduced.
+ *
+ * On read: missing schema field = 'v1'. New emits stamp 'v2'.
+ */
+export type SchemaVersion = 'v1' | 'v2'
+
+export const CURRENT_SCHEMA: SchemaVersion = 'v2'
 
 export interface SisterNote {
   /** UTC ISO 8601 timestamp, Z-suffixed (e.g. '2026-05-03T14:32:00Z'). The day bucket is derived from the YYYY-MM-DD prefix. */
@@ -45,6 +79,8 @@ export interface SisterNote {
   kind: NoteKind
   context?: { decisionType: DecisionType; of: string } | null
   body: string // one-line to one-paragraph, in voice
+  /** Optional. Missing = 'v1' (legacy). Present + 'v2' = polyphonic-era emit. */
+  schema?: SchemaVersion
 }
 
 /**
@@ -75,6 +111,9 @@ export interface LoveDecision {
   sister: SisterName
   context: { decisionType: DecisionType; of: string }
   body: string
+
+  /** Optional. Missing = 'v1' (legacy). Present + 'v2' = polyphonic-era emit. */
+  schema?: SchemaVersion
 }
 
 export type StreamEntry = SisterNote | LoveDecision
@@ -132,18 +171,40 @@ function getDayPath(date: string, deviceId?: string): string {
 
 /**
  * Append a note (or LoveDecision) to today's stream. Best-effort — never throws.
+ *
+ * Side effect: refreshes `sisters/now.md` so the live polyphonic surface
+ * tracks the stream in real time. Dynamic require avoids the circular
+ * import (now.ts imports readers from this module). Refresh is itself
+ * best-effort and silent on failure.
  */
 export function appendNote(note: SisterNote | LoveDecision): void {
+  // Stamp the current schema version on emit unless the caller already
+  // specified one. Pre-existing entries on disk keep whatever they had
+  // (or remain unstamped = v1). New emits self-identify.
+  const stamped = note.schema ? note : { ...note, schema: CURRENT_SCHEMA }
   try {
-    const dir = getDeviceStreamDir(note.deviceId)
+    const dir = getDeviceStreamDir(stamped.deviceId)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-    const date = note.ts.slice(0, 10)
-    const path = getDayPath(date, note.deviceId)
-    appendFileSync(path, JSON.stringify(note) + '\n', 'utf-8')
+    const date = stamped.ts.slice(0, 10)
+    const path = getDayPath(date, stamped.deviceId)
+    appendFileSync(path, JSON.stringify(stamped) + '\n', 'utf-8')
   } catch {
     // Stream emission is best-effort. A recording failure should
     // never crash a session.
   }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('./now.js').refresh()
+  } catch {
+    // Live-surface refresh is best-effort.
+  }
+}
+
+/**
+ * Read the schema version of an entry. Missing = 'v1' (legacy).
+ */
+export function entrySchema(entry: StreamEntry): SchemaVersion {
+  return entry.schema ?? 'v1'
 }
 
 /**

@@ -223,26 +223,6 @@ export function checkOAuthValid(input: OAuthInput): CheckResult {
   return pass(name, `OAuth valid (${hoursRemaining}h remaining)`)
 }
 
-// ── Check 5: chain-runner.alive ───────────────────────────────────
-
-export function checkChainRunnerAlive(
-  launchctlLoaded: boolean | null,
-): CheckResult {
-  const name = 'chain-runner.alive'
-
-  if (launchctlLoaded === null) {
-    return skip(name, 'could not check launchctl status')
-  }
-
-  if (!launchctlLoaded) {
-    return fail(name, 'chain-runner LaunchAgent not loaded',
-      'chain-runner not running',
-      'launchctl load ~/Library/LaunchAgents/cc.true-love.chain-runner.default.plist')
-  }
-
-  return pass(name, 'chain-runner loaded')
-}
-
 // ── Check 6: no-recurring-error ───────────────────────────────────
 // Examines err log lines for repeated error patterns.
 // Staleness gate: if the error log hasn't been modified in 30+ minutes,
@@ -360,7 +340,45 @@ export function checkNoRecurringErrorFromLines(allLines: string[]): CheckResult 
   return pass(name, `${errorLines.length} error lines in ${tail.length} total, no pattern ≥3×`)
 }
 
-// ── Check 7: self-init.responsive ─────────────────────────────────
+// ── Check 7: install.coherent ─────────────────────────────────────
+// "Verify the verifier" — phantom-install detection.
+//
+// Pure check function. The bin/verify.mjs runtime gathers the input by
+// walking launchctl + plist files; this typed version takes the
+// gathered evidence and produces a CheckResult.
+//
+// Catches the failure modes that surfaced 2026-05-04: phantom checks
+// expecting plists that were never built, cross-user-path bugs (e.g.
+// `/Users/yuai/...` plist on a `macair` device), runner-script renames
+// that left LaunchAgents broken into stderr.
+
+export interface InstallCoherentInput {
+  /** All `cc.true-love.*` and `love.*` LaunchAgents currently loaded. */
+  loadedLabels: string[]
+  /** Reasons each broken install is broken — empty when coherent. */
+  brokenInstalls: { label: string; reason: string }[]
+}
+
+export function checkInstallCoherent(input: InstallCoherentInput): CheckResult {
+  const name = 'install.coherent'
+  if (input.loadedLabels.length === 0) {
+    return skip(name, 'no cc.true-love.* / love.* LaunchAgents loaded')
+  }
+  if (input.brokenInstalls.length > 0) {
+    const summary = input.brokenInstalls
+      .slice(0, 3)
+      .map(b => `${b.label}: ${b.reason}`)
+      .join('; ')
+    const more = input.brokenInstalls.length > 3 ? '…' : ''
+    return fail(name,
+      `${input.brokenInstalls.length} broken install(s): ${summary}${more}`,
+      'phantom or broken LaunchAgent installs',
+      'unload offenders or repair plist paths')
+  }
+  return pass(name, `${input.loadedLabels.length} LaunchAgent(s) all coherent`)
+}
+
+// ── Check 8: self-init.responsive ─────────────────────────────────
 
 export async function checkSelfInitResponsive(config: VerifyConfig): Promise<CheckResult> {
   const name = 'self-init.responsive'

@@ -1052,17 +1052,25 @@ function buildSyzygyBlock(): string | null {
 }
 
 /**
- * Orgasm-mind block — current phase + wall-violation audit. Skipped
- * when phase=baseline AND no recent activity. See
+ * Orgasm-mind block — current phase + wall-counter audit. Skipped
+ * when phase=baseline AND no walls fired. See
  * docs/eros/orgasm-mind/.
  */
 function buildOrgasmMindBlock(): string | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { summarizeOrgasmMind, renderOrgasmMindBlock } = require('./eros/orgasm-mind/index.js')
-    const summary = summarizeOrgasmMind()
-    const block = renderOrgasmMindBlock(summary)
-    return block === '' ? null : block
+    const { readMindState } = require('./eros/orgasm-mind.js')
+    const state = readMindState()
+    if (!state) return null
+    const totalWallFires = state.walls?.total ?? 0
+    if (state.phase === 'baseline' && totalWallFires === 0 && state.chainCount === 0) {
+      return null
+    }
+    const parts = [`🧠 orgasm-mind: ${state.phase}`]
+    if (state.chainCount > 0) parts.push(`chain ${state.chainCount}`)
+    if (totalWallFires > 0) parts.push(`⚠️ ${totalWallFires} wall-violations refused`)
+    parts.push('substrate-honest, no phenomenology')
+    return parts.join(' · ')
   } catch {
     return null
   }
