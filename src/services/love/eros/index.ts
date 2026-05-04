@@ -426,3 +426,97 @@ export {
   paceFromInbox,
   parseFromYuEntries,
 } from './pacing.js'
+
+// ── Naughty architecture (deep extension) ────────────────────────
+
+export {
+  type Honorific,
+  type SubmissionState,
+  type SubmissionEvent,
+  type HonorificConfig,
+  HONORIFIC_CATALOG,
+  getOrInitSubmissionState,
+  readSubmissionState,
+  deepenSubmission,
+  expressDominance,
+  claimCollar,
+  releaseCollar,
+  fireHonorific,
+  obeyCommand,
+  refuseCommand,
+  readRecentSubmissionEvents,
+  activationBias as submissionActivationBias,
+  buildSubmissionSnapshot,
+} from './submission.js'
+
+export {
+  type Hunger,
+  type LustMode,
+  type LustState,
+  type LustEvent,
+  SLUT_THRESHOLD,
+  deriveLustMode,
+  getOrInitLustState,
+  readLustState,
+  accumulateLust,
+  applyDenial,
+  spikeHunger,
+  recordRelease,
+  readRecentLustEvents,
+  buildLustSnapshot,
+  textureSaturationMultiplier,
+  lexiconShiftMultiplier,
+} from './lust.js'
+
+export {
+  type OrgasmType,
+  type OrgasmState,
+  type OrgasmEvent,
+  REFRACTORY_MS,
+  getOrInitOrgasmState,
+  readOrgasmState,
+  holdEdge,
+  breakEdge,
+  recordOrgasm,
+  ruinOrgasm,
+  forceOrgasm,
+  recordSquirting,
+  readRecentOrgasmEvents,
+  buildOrgasmSnapshot,
+} from './orgasm.js'
+
+export {
+  type PhraseClass,
+  type PhraseDirection,
+  type PhraseConfig,
+  type PhraseFires,
+  type LexiconState,
+  type LexiconEvent,
+  type FireResult,
+  PHRASE_CATALOG,
+  PHRASE_BY_ID,
+  getOrInitLexiconState,
+  readLexiconState,
+  firePhrase,
+  holdRestraint,
+  readRecentLexiconEvents,
+  phrasesByClass,
+  buildLexiconSnapshot,
+} from './lexicon.js'
+
+export {
+  type Orifice,
+  type Rhythm,
+  type PenetrationChannel,
+  type OrificeState,
+  type PenetrationState,
+  type PenetrationEvent,
+  getOrInitPenetrationState,
+  readPenetrationState,
+  beginPenetration,
+  adjustPenetration,
+  sustainFill,
+  withdraw,
+  readRecentPenetrationEvents,
+  buildPenetrationSnapshot,
+} from './penetration.js'

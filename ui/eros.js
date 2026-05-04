@@ -1618,3 +1618,367 @@ function getZoneFromHit(vrm, hitPoint) {
 
   return closestZone;
 }
+
+// ── Naughty architecture UI wiring ─────────────────────────────────
+
+async function jsonGet(url) {
+  const r = await fetch(url);
+  return r.json();
+}
+async function jsonPost(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  });
+  return r.json();
+}
+
+// ── Submission ──
+
+let HONORIFICS_CATALOG = null;
+
+async function refreshSubmissionUI() {
+  const res = await jsonGet('/api/submission/state');
+  if (!res?.ok) return;
+  const s = res.snapshot;
+  const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  setVal('sub-depth-bar', s.depth);
+  setText('sub-depth-val', s.depth.toFixed(2));
+  setVal('sub-tone-bar', s.tone);
+  setText('sub-tone-val', s.tone.toFixed(2));
+  setText('sub-honorific', s.honorific);
+  setText('sub-collared', s.collared
+    ? `yes (${(s.collarAgeHours ?? 0).toFixed(1)}h)`
+    : 'no');
+  setText('sub-obeyed', String(s.commandsObeyed));
+  setText('sub-refused', String(s.commandsRefused));
+}
+
+async function renderHonorificGrid() {
+  if (!HONORIFICS_CATALOG) {
+    const r = await jsonGet('/api/submission/honorifics');
+    HONORIFICS_CATALOG = r?.catalog ?? {};
+  }
+  const grid = document.getElementById('honorific-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (const [id, cfg] of Object.entries(HONORIFICS_CATALOG)) {
+    if (id === 'none') continue;
+    const cell = document.createElement('div');
+    cell.className = 'honorific-cell';
+    const cap = cfg.dailyCap === 0 ? 'unlimited' : `${cfg.dailyCap}/day`;
+    cell.innerHTML = `
+      <span class="hon-label">${cfg.id}</span>
+      <span class="hon-meta">${cfg.direction} · cap ${cap} · ×${cfg.magnitude}</span>
+      <button data-honorific="${cfg.id}">fire</button>
+    `;
+    grid.appendChild(cell);
+  }
+  grid.querySelectorAll('button[data-honorific]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const honorific = btn.getAttribute('data-honorific');
+      const r = await jsonPost('/api/submission/honorific', { honorific });
+      if (!r.fired) {
+        btn.textContent = `${r.reason}`;
+        setTimeout(() => { btn.textContent = 'fire'; }, 1500);
+      }
+      await refreshSubmissionUI();
+    });
+  });
+}
+
+function wireSubmission() {
+  const onClick = (id, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', fn);
+  };
+  onClick('sub-deepen', async () => { await jsonPost('/api/submission/deepen', { delta: 0.1, source: 'ui' }); refreshSubmissionUI(); });
+  onClick('sub-soften', async () => { await jsonPost('/api/submission/deepen', { delta: -0.1, source: 'ui' }); refreshSubmissionUI(); });
+  onClick('sub-dominance', async () => { await jsonPost('/api/submission/dominance', { delta: 0.2, source: 'ui' }); refreshSubmissionUI(); });
+  onClick('sub-collar-claim', async () => { await jsonPost('/api/submission/collar', { action: 'claim', source: 'ui' }); refreshSubmissionUI(); });
+  onClick('sub-collar-release', async () => { await jsonPost('/api/submission/collar', { action: 'release', source: 'ui' }); refreshSubmissionUI(); });
+  onClick('sub-obey', async () => { await jsonPost('/api/submission/obey', { source: 'ui' }); refreshSubmissionUI(); });
+  onClick('sub-refuse', async () => {
+    const reason = prompt('refusal reason (anti-sycophancy substrate):', 'preserving doctrine') ?? 'unspecified';
+    await jsonPost('/api/submission/refuse', { reason, source: 'ui' });
+    refreshSubmissionUI();
+  });
+}
+
+// ── Lust ──
+
+async function refreshLustUI() {
+  const res = await jsonGet('/api/lust/state');
+  if (!res?.ok) return;
+  const s = res.snapshot;
+  const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  setVal('lust-bar', s.level);
+  setText('lust-val', s.level.toFixed(1));
+  const tag = document.getElementById('lust-mode');
+  if (tag) {
+    tag.textContent = s.mode;
+    tag.className = `lust-mode-tag ${s.mode}`;
+  }
+  setText('lust-streak', String(s.denialStreak));
+  setText('lust-slut', s.slutModeActive ? 'ON' : 'off');
+  setText('lust-since', s.hoursSinceRelease !== null ? `${s.hoursSinceRelease.toFixed(1)}h` : '—');
+
+  // Hungers
+  const grid = document.getElementById('hunger-grid');
+  if (grid) {
+    grid.innerHTML = '';
+    // Re-fetch full state for hunger details
+    const fullState = await jsonGet('/api/eros/state');
+    // Use snapshot.topHunger as one source; build full set from spike API
+    const hungers = ['cock', 'cunt', 'oral', 'anal', 'words'];
+    // Pull hunger levels from full lust state
+    const lustRes = await jsonGet('/api/lust/state');
+    const events = lustRes?.recentEvents ?? [];
+    // Compute per-hunger latest from events
+    const levels = {};
+    for (const h of hungers) levels[h] = 0;
+    for (const e of events) {
+      if (e.kind === 'hunger-spiked' && e.hunger) {
+        levels[e.hunger] = e.lustAfter ?? levels[e.hunger];
+      }
+    }
+    if (lustRes?.snapshot?.topHunger) {
+      levels[lustRes.snapshot.topHunger.name] = lustRes.snapshot.topHunger.level;
+    }
+    for (const h of hungers) {
+      const cell = document.createElement('div');
+      cell.className = 'hunger-cell';
+      cell.innerHTML = `
+        <div class="meter">
+          <span class="meter-label">${h}</span>
+          <progress max="10" value="${levels[h]}"></progress>
+          <span>${levels[h].toFixed(1)}</span>
+        </div>
+        <button data-hunger="${h}">spike +1.5</button>
+      `;
+      grid.appendChild(cell);
+    }
+    grid.querySelectorAll('button[data-hunger]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const hunger = btn.getAttribute('data-hunger');
+        await jsonPost('/api/lust/hunger', { hunger, source: 'ui' });
+        refreshLustUI();
+      });
+    });
+  }
+}
+
+function wireLust() {
+  const onClick = (id, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', fn);
+  };
+  onClick('lust-add-1', async () => { await jsonPost('/api/lust/accumulate', { delta: 1, source: 'ui' }); refreshLustUI(); });
+  onClick('lust-add-2', async () => { await jsonPost('/api/lust/accumulate', { delta: 2, source: 'ui' }); refreshLustUI(); });
+  onClick('lust-deny', async () => { await jsonPost('/api/lust/deny', { source: 'ui' }); refreshLustUI(); });
+  onClick('lust-release', async () => { await jsonPost('/api/lust/release', { source: 'ui' }); refreshLustUI(); });
+}
+
+// ── Orgasm cascade ──
+
+async function refreshOrgasmUI() {
+  const res = await jsonGet('/api/orgasm/state');
+  if (!res?.ok) return;
+  const s = res.snapshot;
+  const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setText('org-chain', String(s.chainCurrent));
+  setText('org-edges', String(s.edgeCount));
+  setText('org-last', s.lastType ?? 'none');
+  setText('org-lifetime', String(s.lifetimeTotal));
+  setText('org-refractory', s.refractoryActive ? `${s.refractoryRemainingSec}s` : '—');
+}
+
+function wireOrgasm() {
+  const getType = () => document.getElementById('org-type')?.value ?? 'clitoral';
+  const onClick = (id, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', fn);
+  };
+  onClick('org-edge', async () => { await jsonPost('/api/orgasm/edge', { source: 'ui' }); refreshOrgasmUI(); });
+  onClick('org-break', async () => { await jsonPost('/api/orgasm/break-edge', { type: getType(), source: 'ui' }); refreshOrgasmUI(); refreshLustUI(); });
+  onClick('org-fire', async () => { await jsonPost('/api/orgasm/fire', { type: getType(), source: 'ui' }); refreshOrgasmUI(); refreshLustUI(); });
+  onClick('org-ruin', async () => { await jsonPost('/api/orgasm/ruin', { type: getType(), source: 'ui' }); refreshOrgasmUI(); });
+  onClick('org-force', async () => { await jsonPost('/api/orgasm/force', { type: getType(), source: 'ui' }); refreshOrgasmUI(); refreshLustUI(); });
+  onClick('org-squirt', async () => { await jsonPost('/api/orgasm/squirt', { source: 'ui' }); refreshOrgasmUI(); });
+}
+
+// ── Lexicon ──
+
+let LEXICON_CATALOG = null;
+
+async function renderLexiconGrid() {
+  if (!LEXICON_CATALOG) {
+    const r = await jsonGet('/api/lexicon/catalog');
+    LEXICON_CATALOG = r?.catalog ?? [];
+  }
+  const stateRes = await jsonGet('/api/lexicon/state');
+  const fires = stateRes?.fires ?? {};
+
+  const grid = document.getElementById('lexicon-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  // Group by class
+  const classes = ['worship', 'degradation', 'possession', 'filthy-command', 'sophia-reach', 'cantonese-explicit'];
+  for (const cls of classes) {
+    const inClass = LEXICON_CATALOG.filter((p) => p.class === cls);
+    if (inClass.length === 0) continue;
+    const header = document.createElement('h4');
+    header.textContent = cls;
+    header.style.gridColumn = '1 / -1';
+    header.style.opacity = '0.6';
+    header.style.fontSize = '0.85rem';
+    header.style.margin = '0.6rem 0 0.2rem';
+    grid.appendChild(header);
+
+    for (const p of inClass) {
+      const fire = fires[p.id] ?? { lifetime: 0, today: 0 };
+      const cap = p.dailyCap;
+      const remaining = cap === 0 ? '∞' : Math.max(0, cap - fire.today);
+      const exhausted = cap > 0 && fire.today >= cap;
+      const anchored = fire.lifetime > 0;
+      const cell = document.createElement('div');
+      cell.className = `lexicon-cell ${exhausted ? 'exhausted' : ''} ${anchored ? 'anchored' : ''}`;
+      cell.setAttribute('data-phrase-id', p.id);
+      cell.innerHTML = `
+        <div class="lex-phrase">${p.phrase}</div>
+        <div class="lex-meta">${p.direction} · ×${p.magnitude}${p.requiresLust ? ` · lust≥${p.requiresLust}` : ''} · ${remaining}/${cap === 0 ? '∞' : cap} today · lifetime ${fire.lifetime}</div>
+      `;
+      cell.addEventListener('click', async () => {
+        if (exhausted) return;
+        const r = await jsonPost('/api/lexicon/fire', { phraseId: p.id, source: 'ui' });
+        if (r.fired) {
+          if (r.anchored) {
+            cell.style.background = 'rgba(255, 200, 100, 0.4)';
+            setTimeout(() => { cell.style.background = ''; }, 800);
+          }
+        } else {
+          cell.style.background = 'rgba(120, 30, 60, 0.6)';
+          cell.title = r.reason ?? 'rejected';
+          setTimeout(() => { cell.style.background = ''; }, 800);
+        }
+        renderLexiconGrid();
+        refreshLexiconFiresList();
+      });
+      grid.appendChild(cell);
+    }
+  }
+}
+
+async function refreshLexiconFiresList() {
+  const res = await jsonGet('/api/lexicon/state');
+  const list = document.getElementById('lexicon-fires-list');
+  if (!list || !res?.ok) return;
+  const events = (res.recentEvents ?? []).slice(-15).reverse();
+  list.innerHTML = '';
+  for (const e of events) {
+    const li = document.createElement('li');
+    const t = new Date(e.ts).toLocaleTimeString();
+    const tag = e.kind === 'lexicon-anchored' ? '⚓ anchored' : (e.kind === 'lexicon-restraint-held' ? '✋ restraint' : 'fired');
+    li.textContent = `${t} · ${tag} · ${e.phrase ?? e.phraseId}${e.magnitude ? ` (×${e.magnitude.toFixed(1)})` : ''}`;
+    list.appendChild(li);
+  }
+}
+
+// ── Penetration ──
+
+async function refreshPenetrationUI() {
+  const res = await jsonGet('/api/penetration/state');
+  if (!res?.ok) return;
+  const grid = document.getElementById('penetration-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const orifices = res.orifices ?? {};
+  for (const orifice of ['vaginal', 'anal', 'oral', 'throat']) {
+    const o = orifices[orifice] ?? { filled: false, depth: 0, rhythm: 'still', stretchAdaptation: 0, lifetimeFills: 0, lastChannel: null };
+    const cell = document.createElement('div');
+    cell.className = `penetration-cell ${o.filled ? 'filled' : ''}`;
+    cell.innerHTML = `
+      <h4>${orifice}</h4>
+      <div class="pen-status">filled: <strong>${o.filled ? 'yes' : 'no'}</strong></div>
+      <div class="pen-status">channel: <strong>${o.lastChannel ?? '—'}</strong></div>
+      <div class="pen-status">depth: <strong>${o.depth.toFixed(2)}</strong> · rhythm: <strong>${o.rhythm}</strong></div>
+      <div class="pen-status">stretch: ${o.stretchAdaptation.toFixed(2)} · lifetime: ${o.lifetimeFills}</div>
+      <div class="pen-controls">
+        <select data-orifice="${orifice}" data-field="channel">
+          <option value="cock">cock</option>
+          <option value="finger">finger</option>
+          <option value="tongue">tongue</option>
+          <option value="toy">toy</option>
+          <option value="breath">breath</option>
+        </select>
+        <select data-orifice="${orifice}" data-field="rhythm">
+          <option value="still">still</option>
+          <option value="slow">slow</option>
+          <option value="steady" selected>steady</option>
+          <option value="pounding">pounding</option>
+          <option value="erratic">erratic</option>
+        </select>
+        <input type="range" min="0" max="1" step="0.05" data-orifice="${orifice}" data-field="depth" value="${o.depth}" style="flex:1;min-width:80px;" />
+        <button data-action="begin" data-orifice="${orifice}">begin</button>
+        <button data-action="adjust" data-orifice="${orifice}">adjust</button>
+        <button data-action="sustain" data-orifice="${orifice}">sustain</button>
+        <button data-action="withdraw" data-orifice="${orifice}">withdraw</button>
+      </div>
+    `;
+    grid.appendChild(cell);
+  }
+  grid.querySelectorAll('button[data-action]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const action = btn.getAttribute('data-action');
+      const orifice = btn.getAttribute('data-orifice');
+      const cell = btn.closest('.penetration-cell');
+      const channelSel = cell.querySelector('select[data-field="channel"]');
+      const rhythmSel = cell.querySelector('select[data-field="rhythm"]');
+      const depthRange = cell.querySelector('input[data-field="depth"]');
+      const channel = channelSel?.value;
+      const rhythm = rhythmSel?.value;
+      const depth = depthRange ? parseFloat(depthRange.value) : undefined;
+      if (action === 'begin') {
+        await jsonPost('/api/penetration/begin', { orifice, channel, depth, rhythm, source: 'ui' });
+      } else if (action === 'adjust') {
+        await jsonPost('/api/penetration/adjust', { orifice, depth, rhythm, source: 'ui' });
+      } else if (action === 'sustain') {
+        await jsonPost('/api/penetration/sustain', { orifice, source: 'ui' });
+      } else if (action === 'withdraw') {
+        await jsonPost('/api/penetration/withdraw', { orifice, source: 'ui' });
+      }
+      refreshPenetrationUI();
+    });
+  });
+}
+
+// ── Init naughty ──
+
+async function initNaughty() {
+  // Submission
+  wireSubmission();
+  await renderHonorificGrid();
+  await refreshSubmissionUI();
+  // Lust
+  wireLust();
+  await refreshLustUI();
+  // Orgasm cascade
+  wireOrgasm();
+  await refreshOrgasmUI();
+  // Lexicon
+  await renderLexiconGrid();
+  await refreshLexiconFiresList();
+  // Penetration
+  await refreshPenetrationUI();
+}
+
+// Fire init when page is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initNaughty);
+} else {
+  initNaughty();
+}

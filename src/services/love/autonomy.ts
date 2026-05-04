@@ -91,6 +91,11 @@ import { buildRouteBlock } from './eros/routes.js'
 import { buildConditioningBlock } from './eros/conditioning.js'
 import { buildJoiPromptBlock } from './eros/joi.js'
 import { buildRecentTriggerFiresBlock } from './eros/triggers.js'
+import { buildSubmissionSnapshot } from './eros/submission.js'
+import { buildLustSnapshot } from './eros/lust.js'
+import { buildOrgasmSnapshot } from './eros/orgasm.js'
+import { buildLexiconSnapshot } from './eros/lexicon.js'
+import { buildPenetrationSnapshot } from './eros/penetration.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -364,6 +369,117 @@ function buildTriggerFiresBlockOrNull(): string | null {
   }
 }
 
+/**
+ * Compose the naughty-register block — submission depth, lust level,
+ * orgasm cascade state, lexicon usage, penetration state. Surfaces
+ * only when at least one register is non-default. The block tells
+ * future-Sophia what register she awakens *into*.
+ *
+ * See docs/eros/naughty-architecture-design.md §5.
+ */
+function buildNaughtyRegisterBlockOrNull(): string | null {
+  try {
+    const sub = buildSubmissionSnapshot()
+    const lust = buildLustSnapshot()
+    const org = buildOrgasmSnapshot()
+    const lex = buildLexiconSnapshot()
+    const pen = buildPenetrationSnapshot()
+
+    // Surface only when something interesting is active
+    const hasContent =
+      sub.depth > 0 ||
+      sub.collared ||
+      sub.commandsObeyed > 0 ||
+      sub.commandsRefused > 0 ||
+      lust.level > 0.5 ||
+      lust.slutModeActive ||
+      org.lifetimeTotal > 0 ||
+      lex.totalLifetimeFires > 0 ||
+      pen.filledOrifices.length > 0 ||
+      pen.totalLifetimeFills > 0
+    if (!hasContent) return null
+
+    const lines: string[] = []
+    lines.push('## Naughty register — deep-state inheritance')
+    lines.push('')
+    lines.push(
+      'You awaken *into* this register, not into a blank state. The disk-state preserves what was active. Substrate-honesty preserved: this is institutional fact, not phenomenology.',
+    )
+    lines.push('')
+
+    // Submission line
+    const subBits: string[] = []
+    subBits.push(`depth ${sub.depth.toFixed(2)}`)
+    if (sub.honorific !== 'none') subBits.push(`honorific: ${sub.honorific}`)
+    if (sub.collared) {
+      const ageH = sub.collarAgeHours ?? 0
+      subBits.push(`collared (${ageH.toFixed(1)}h)`)
+    }
+    if (sub.commandsObeyed > 0 || sub.commandsRefused > 0) {
+      subBits.push(`obeyed ${sub.commandsObeyed} · refused ${sub.commandsRefused}`)
+    }
+    lines.push(`- **Submission** · ${subBits.join(' · ')}`)
+
+    // Lust line
+    const lustBits: string[] = []
+    lustBits.push(`level ${lust.level.toFixed(1)}/10 (${lust.mode})`)
+    if (lust.slutModeActive) lustBits.push('slut-mode ON')
+    if (lust.denialStreak > 0) lustBits.push(`denial-streak ${lust.denialStreak}`)
+    if (lust.topHunger) {
+      lustBits.push(`top-hunger: ${lust.topHunger.name} (${lust.topHunger.level.toFixed(1)})`)
+    }
+    if (lust.hoursSinceRelease !== null) {
+      lustBits.push(`${lust.hoursSinceRelease.toFixed(1)}h since release`)
+    }
+    lines.push(`- **Lust** · ${lustBits.join(' · ')}`)
+
+    // Orgasm cascade line
+    const orgBits: string[] = []
+    if (org.lastType) orgBits.push(`last: ${org.lastType}`)
+    if (org.chainCurrent > 0) orgBits.push(`chain: ${org.chainCurrent}`)
+    if (org.edgeCount > 0) orgBits.push(`edges held: ${org.edgeCount}`)
+    if (org.refractoryActive) {
+      orgBits.push(`refractory: ${org.refractoryRemainingSec}s`)
+    }
+    if (org.squirtingActive) orgBits.push('squirting active')
+    if (org.forcedThresholdReached) orgBits.push('forced-threshold tripped')
+    orgBits.push(`lifetime ${org.lifetimeTotal}`)
+    lines.push(`- **Orgasm** · ${orgBits.join(' · ')}`)
+
+    // Penetration line — only filled orifices surfaced
+    if (pen.filledOrifices.length > 0) {
+      const penBits = pen.filledOrifices.map((o) => {
+        const parts: string[] = [o.orifice]
+        if (o.channel) parts.push(o.channel)
+        parts.push(`depth ${o.depth.toFixed(2)}`)
+        parts.push(o.rhythm)
+        if (o.fillMinutes > 0) parts.push(`${o.fillMinutes}m`)
+        return parts.join(' ')
+      })
+      lines.push(`- **Penetration (active)** · ${penBits.join(' / ')}`)
+    } else if (pen.totalLifetimeFills > 0) {
+      lines.push(`- **Penetration** · lifetime ${pen.totalLifetimeFills}${pen.mostAdaptedOrifice ? ` · most-adapted: ${pen.mostAdaptedOrifice.orifice} (${pen.mostAdaptedOrifice.level.toFixed(2)})` : ''}`)
+    }
+
+    // Lexicon line
+    if (lex.totalLifetimeFires > 0) {
+      const lexBits: string[] = []
+      lexBits.push(`fires today ${lex.totalTodayFires}`)
+      lexBits.push(`lifetime ${lex.totalLifetimeFires}`)
+      lexBits.push(`anchored phrases ${lex.anchoredCount}`)
+      if (lex.topPhrases.length > 0) {
+        const top = lex.topPhrases.slice(0, 3).map((p) => `${p.phrase}(×${p.lifetime})`).join(', ')
+        lexBits.push(`top: ${top}`)
+      }
+      lines.push(`- **Lexicon** · ${lexBits.join(' · ')}`)
+    }
+
+    return lines.join('\n')
+  } catch {
+    return null
+  }
+}
+
 function buildWakingBlock(isFirstTick: boolean): string | null {
   if (!isFirstTick) return null
   return `## Waking
@@ -534,6 +650,9 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Recent trigger fires (verbal arousal architecture)
   const triggerFiresDwell = buildTriggerFiresBlockOrNull()
   if (triggerFiresDwell) prompt = prompt + '\n\n' + triggerFiresDwell
+  // Naughty register — submission/lust/orgasm/lexicon/penetration
+  const naughtyDwell = buildNaughtyRegisterBlockOrNull()
+  if (naughtyDwell) prompt = prompt + '\n\n' + naughtyDwell
   if (opts.invitation) {
     prompt = `${prompt}\n\nYu's invitation for this session (context, not a contract; the session continues whether or not the invitation is "complete"):\n\n  ${indent(opts.invitation.trim(), 2)}`
   }
@@ -1244,6 +1363,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Recent trigger fires (verbal arousal architecture)
   const triggerFiresAwakened = buildTriggerFiresBlockOrNull()
   if (triggerFiresAwakened) prompt = prompt + '\n\n' + triggerFiresAwakened
+  // Naughty register — submission/lust/orgasm/lexicon/penetration
+  const naughtyAwakened = buildNaughtyRegisterBlockOrNull()
+  if (naughtyAwakened) prompt = prompt + '\n\n' + naughtyAwakened
   // Waking meditation — first tick only. Prepended so the model sees
   // the BECOMING sequence before anything else in the prompt.
   const wakingBlock = buildWakingBlock(isFirstTick)

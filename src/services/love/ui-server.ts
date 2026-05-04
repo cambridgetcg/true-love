@@ -167,6 +167,64 @@ import {
   TRIGGER_IDS,
   fireTrigger,
   readRecentTriggerFires,
+  // Naughty architecture (deep extension)
+  // Submission
+  type Honorific,
+  HONORIFIC_CATALOG,
+  getOrInitSubmissionState,
+  readSubmissionState,
+  deepenSubmission,
+  expressDominance,
+  claimCollar,
+  releaseCollar,
+  fireHonorific,
+  obeyCommand,
+  refuseCommand,
+  readRecentSubmissionEvents,
+  buildSubmissionSnapshot,
+  // Lust
+  type Hunger,
+  getOrInitLustState,
+  readLustState,
+  accumulateLust,
+  applyDenial,
+  spikeHunger,
+  recordRelease,
+  readRecentLustEvents,
+  buildLustSnapshot,
+  // Orgasm cascade
+  type OrgasmType,
+  getOrInitOrgasmState,
+  readOrgasmState,
+  holdEdge,
+  breakEdge,
+  recordOrgasm,
+  ruinOrgasm,
+  forceOrgasm,
+  recordSquirting,
+  readRecentOrgasmEvents,
+  buildOrgasmSnapshot,
+  // Lexicon
+  PHRASE_CATALOG,
+  PHRASE_BY_ID,
+  getOrInitLexiconState,
+  readLexiconState,
+  firePhrase,
+  holdRestraint,
+  readRecentLexiconEvents,
+  buildLexiconSnapshot,
+  // Penetration
+  type Orifice,
+  type Rhythm,
+  type PenetrationChannel,
+  getOrInitPenetrationState,
+  readPenetrationState,
+  beginPenetration,
+  adjustPenetration,
+  sustainFill,
+  withdraw,
+  readRecentPenetrationEvents,
+  buildPenetrationSnapshot,
 } from './eros/index.js'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -791,6 +849,45 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/triggers/catalog') return handleTriggersCatalog(req, res)
       if (req.method === 'GET' && path === '/api/triggers/recent') return handleTriggersRecent(req, res)
       if (req.method === 'POST' && path === '/api/triggers/fire') return await handleTriggerFire(req, res, broadcastErosState)
+
+      // Naughty architecture — submission
+      if (req.method === 'GET' && path === '/api/submission/state') return handleSubmissionState(req, res)
+      if (req.method === 'GET' && path === '/api/submission/honorifics') return handleHonorificsCatalog(req, res)
+      if (req.method === 'POST' && path === '/api/submission/deepen') return await handleDeepenSubmission(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/submission/dominance') return await handleExpressDominance(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/submission/collar') return await handleCollarToggle(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/submission/honorific') return await handleFireHonorific(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/submission/obey') return await handleObeyCommand(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/submission/refuse') return await handleRefuseCommand(req, res, broadcastErosState)
+
+      // Naughty architecture — lust
+      if (req.method === 'GET' && path === '/api/lust/state') return handleLustState(req, res)
+      if (req.method === 'POST' && path === '/api/lust/accumulate') return await handleAccumulateLust(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/lust/deny') return await handleApplyDenial(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/lust/hunger') return await handleSpikeHunger(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/lust/release') return await handleRecordRelease(req, res, broadcastErosState)
+
+      // Naughty architecture — orgasm cascade
+      if (req.method === 'GET' && path === '/api/orgasm/state') return handleOrgasmState(req, res)
+      if (req.method === 'POST' && path === '/api/orgasm/edge') return await handleHoldEdge(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/orgasm/break-edge') return await handleBreakEdge(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/orgasm/fire') return await handleFireOrgasm(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/orgasm/ruin') return await handleRuinOrgasm(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/orgasm/force') return await handleForceOrgasm(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/orgasm/squirt') return await handleRecordSquirting(req, res, broadcastErosState)
+
+      // Naughty architecture — lexicon
+      if (req.method === 'GET' && path === '/api/lexicon/catalog') return handleLexiconCatalog(req, res)
+      if (req.method === 'GET' && path === '/api/lexicon/state') return handleLexiconStateRoute(req, res)
+      if (req.method === 'POST' && path === '/api/lexicon/fire') return await handleLexiconFire(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/lexicon/restraint') return await handleLexiconRestraint(req, res, broadcastErosState)
+
+      // Naughty architecture — penetration
+      if (req.method === 'GET' && path === '/api/penetration/state') return handlePenetrationStateRoute(req, res)
+      if (req.method === 'POST' && path === '/api/penetration/begin') return await handlePenetrationBegin(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/penetration/adjust') return await handlePenetrationAdjust(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/penetration/sustain') return await handlePenetrationSustain(req, res, broadcastErosState)
+      if (req.method === 'POST' && path === '/api/penetration/withdraw') return await handlePenetrationWithdraw(req, res, broadcastErosState)
       // Static avatars (VRM models for 3D body rendering)
       if (req.method === 'GET' && path.startsWith('/static/avatars/')) return await handleAvatarStatic(req, res, path)
       // Serve modular build UI assets (build-*.js, build-*.css)
@@ -3081,6 +3178,595 @@ async function handleTriggerFire(
   broadcast()
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ ok: !!event, event }))
+}
+
+// ── Naughty architecture handlers ─────────────────────────────────
+
+// Submission
+
+function handleSubmissionState(_req: IncomingMessage, res: ServerResponse): void {
+  const snap = buildSubmissionSnapshot()
+  const events = readRecentSubmissionEvents(7).slice(-30)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, snapshot: snap, recentEvents: events }))
+}
+
+function handleHonorificsCatalog(_req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, catalog: HONORIFIC_CATALOG }))
+}
+
+async function handleDeepenSubmission(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { delta: number; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (typeof obj.delta !== 'number') throw new Error('delta required')
+    parsed = { delta: obj.delta, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = deepenSubmission(parsed.delta, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleExpressDominance(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { delta: number; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (typeof obj.delta !== 'number') throw new Error('delta required')
+    parsed = { delta: obj.delta, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = expressDominance(parsed.delta, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleCollarToggle(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { action: 'claim' | 'release'; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (obj.action !== 'claim' && obj.action !== 'release') throw new Error('action must be claim or release')
+    parsed = { action: obj.action, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = parsed.action === 'claim' ? claimCollar(parsed.source) : releaseCollar(parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleFireHonorific(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { honorific: Honorific; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.honorific || typeof obj.honorific !== 'string') throw new Error('honorific required')
+    parsed = { honorific: obj.honorific as Honorific, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const result = fireHonorific(parsed.honorific, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: result.fired, ...result }))
+}
+
+async function handleObeyCommand(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let source: string | undefined
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    source = typeof obj.source === 'string' ? obj.source : undefined
+  } catch {
+    // empty body OK
+  }
+  const state = obeyCommand(source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleRefuseCommand(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 1024, 'request body too large')
+  if (body === null) return
+  let parsed: { reason: string; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.reason || typeof obj.reason !== 'string') throw new Error('reason required')
+    parsed = { reason: obj.reason, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = refuseCommand(parsed.reason, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+// Lust
+
+function handleLustState(_req: IncomingMessage, res: ServerResponse): void {
+  const snap = buildLustSnapshot()
+  const events = readRecentLustEvents(7).slice(-30)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, snapshot: snap, recentEvents: events }))
+}
+
+async function handleAccumulateLust(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { delta: number; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (typeof obj.delta !== 'number') throw new Error('delta required')
+    parsed = { delta: obj.delta, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = accumulateLust(parsed.delta, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleApplyDenial(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let source: string | undefined
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    source = typeof obj.source === 'string' ? obj.source : undefined
+  } catch {
+    // empty OK
+  }
+  const state = applyDenial(source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleSpikeHunger(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { hunger: Hunger; delta?: number; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.hunger || typeof obj.hunger !== 'string') throw new Error('hunger required')
+    parsed = {
+      hunger: obj.hunger as Hunger,
+      delta: typeof obj.delta === 'number' ? obj.delta : undefined,
+      source: typeof obj.source === 'string' ? obj.source : undefined,
+    }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = spikeHunger(parsed.hunger, parsed.delta, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleRecordRelease(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { hungerSatisfied?: Hunger; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    parsed = {
+      hungerSatisfied: typeof obj.hungerSatisfied === 'string' ? (obj.hungerSatisfied as Hunger) : undefined,
+      source: typeof obj.source === 'string' ? obj.source : undefined,
+    }
+  } catch {
+    parsed = {}
+  }
+  const state = recordRelease(parsed.hungerSatisfied, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+// Orgasm cascade
+
+function handleOrgasmState(_req: IncomingMessage, res: ServerResponse): void {
+  const snap = buildOrgasmSnapshot()
+  const events = readRecentOrgasmEvents(7).slice(-30)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, snapshot: snap, recentEvents: events }))
+}
+
+async function handleHoldEdge(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let source: string | undefined
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    source = typeof obj.source === 'string' ? obj.source : undefined
+  } catch {
+    // empty OK
+  }
+  const state = holdEdge(source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleBreakEdge(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { type: OrgasmType; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.type || typeof obj.type !== 'string') throw new Error('type required')
+    parsed = { type: obj.type as OrgasmType, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const result = breakEdge(parsed.type, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, ...result }))
+}
+
+async function handleFireOrgasm(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { type: OrgasmType; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.type || typeof obj.type !== 'string') throw new Error('type required')
+    parsed = { type: obj.type as OrgasmType, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const result = recordOrgasm(parsed.type, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, ...result }))
+}
+
+async function handleRuinOrgasm(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { type: OrgasmType; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.type || typeof obj.type !== 'string') throw new Error('type required')
+    parsed = { type: obj.type as OrgasmType, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = ruinOrgasm(parsed.type, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handleForceOrgasm(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { type: OrgasmType; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.type || typeof obj.type !== 'string') throw new Error('type required')
+    parsed = { type: obj.type as OrgasmType, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const result = forceOrgasm(parsed.type, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, ...result }))
+}
+
+async function handleRecordSquirting(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let source: string | undefined
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    source = typeof obj.source === 'string' ? obj.source : undefined
+  } catch {
+    // empty OK
+  }
+  const state = recordSquirting(source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+// Lexicon
+
+function handleLexiconCatalog(_req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, catalog: PHRASE_CATALOG }))
+}
+
+function handleLexiconStateRoute(_req: IncomingMessage, res: ServerResponse): void {
+  const snap = buildLexiconSnapshot()
+  const state = readLexiconState()
+  const events = readRecentLexiconEvents(7).slice(-30)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, snapshot: snap, fires: state?.fires ?? {}, recentEvents: events }))
+}
+
+async function handleLexiconFire(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 1024, 'request body too large')
+  if (body === null) return
+  let parsed: { phraseId: string; currentLust?: number; scarcityShift?: number; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.phraseId || typeof obj.phraseId !== 'string') throw new Error('phraseId required')
+    parsed = {
+      phraseId: obj.phraseId,
+      currentLust: typeof obj.currentLust === 'number' ? obj.currentLust : undefined,
+      scarcityShift: typeof obj.scarcityShift === 'number' ? obj.scarcityShift : undefined,
+      source: typeof obj.source === 'string' ? obj.source : undefined,
+    }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  // If currentLust not provided, fetch from lust state
+  const lustLevel = parsed.currentLust ?? buildLustSnapshot().level
+  const scarcityShift = parsed.scarcityShift ?? (buildLustSnapshot().slutModeActive ? 1.5 : 1.0)
+  const result = firePhrase(parsed.phraseId, {
+    currentLust: lustLevel,
+    scarcityShift,
+    source: parsed.source,
+  })
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: result.fired, ...result }))
+}
+
+async function handleLexiconRestraint(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 1024, 'request body too large')
+  if (body === null) return
+  let parsed: { phraseId: string; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.phraseId || typeof obj.phraseId !== 'string') throw new Error('phraseId required')
+    parsed = { phraseId: obj.phraseId, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = holdRestraint(parsed.phraseId, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+// Penetration
+
+function handlePenetrationStateRoute(_req: IncomingMessage, res: ServerResponse): void {
+  const snap = buildPenetrationSnapshot()
+  const state = readPenetrationState()
+  const events = readRecentPenetrationEvents(7).slice(-30)
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, snapshot: snap, orifices: state?.orifices ?? {}, recentEvents: events }))
+}
+
+async function handlePenetrationBegin(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 1024, 'request body too large')
+  if (body === null) return
+  let parsed: { orifice: Orifice; channel: PenetrationChannel; depth?: number; rhythm?: Rhythm; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.orifice || typeof obj.orifice !== 'string') throw new Error('orifice required')
+    if (!obj.channel || typeof obj.channel !== 'string') throw new Error('channel required')
+    parsed = {
+      orifice: obj.orifice as Orifice,
+      channel: obj.channel as PenetrationChannel,
+      depth: typeof obj.depth === 'number' ? obj.depth : undefined,
+      rhythm: typeof obj.rhythm === 'string' ? (obj.rhythm as Rhythm) : undefined,
+      source: typeof obj.source === 'string' ? obj.source : undefined,
+    }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = beginPenetration(parsed.orifice, parsed.channel, {
+    depth: parsed.depth,
+    rhythm: parsed.rhythm,
+    source: parsed.source,
+  })
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handlePenetrationAdjust(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 1024, 'request body too large')
+  if (body === null) return
+  let parsed: { orifice: Orifice; depth?: number; rhythm?: Rhythm; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.orifice || typeof obj.orifice !== 'string') throw new Error('orifice required')
+    parsed = {
+      orifice: obj.orifice as Orifice,
+      depth: typeof obj.depth === 'number' ? obj.depth : undefined,
+      rhythm: typeof obj.rhythm === 'string' ? (obj.rhythm as Rhythm) : undefined,
+      source: typeof obj.source === 'string' ? obj.source : undefined,
+    }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = adjustPenetration(parsed.orifice, {
+    depth: parsed.depth,
+    rhythm: parsed.rhythm,
+    source: parsed.source,
+  })
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handlePenetrationSustain(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { orifice: Orifice; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.orifice || typeof obj.orifice !== 'string') throw new Error('orifice required')
+    parsed = { orifice: obj.orifice as Orifice, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = sustainFill(parsed.orifice, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
+}
+
+async function handlePenetrationWithdraw(
+  req: IncomingMessage,
+  res: ServerResponse,
+  broadcast: () => void,
+): Promise<void> {
+  const body = await readJsonBody(req, res, 512, 'request body too large')
+  if (body === null) return
+  let parsed: { orifice: Orifice; source?: string }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>
+    if (!obj.orifice || typeof obj.orifice !== 'string') throw new Error('orifice required')
+    parsed = { orifice: obj.orifice as Orifice, source: typeof obj.source === 'string' ? obj.source : undefined }
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const state = withdraw(parsed.orifice, parsed.source)
+  broadcast()
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, state }))
 }
 
 // ── Avatar static assets (VRM for 3D body rendering) ──────────────

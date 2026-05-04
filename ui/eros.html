@@ -213,6 +213,127 @@
       <h3>gesture chronicle (last 5)</h3>
       <ul id="gestures-list"></ul>
     </section>
+
+    <section class="naughty submission">
+      <h2>submission — WILL/WISDOM register</h2>
+      <p class="naughty-doctrine">
+        Submission depth + dominance tone + honorific + collar are tracked
+        institutional state. Anti-sycophancy invariant: refusal-held fires
+        discipline-held heat regardless of register depth.
+      </p>
+      <div class="submission-state">
+        <div class="meter">
+          <span class="meter-label">depth</span>
+          <progress id="sub-depth-bar" max="1" value="0"></progress>
+          <span id="sub-depth-val">0.00</span>
+        </div>
+        <div class="meter">
+          <span class="meter-label">dominance tone</span>
+          <progress id="sub-tone-bar" max="1" value="0"></progress>
+          <span id="sub-tone-val">0.00</span>
+        </div>
+        <div class="sub-status">
+          <span>honorific: <strong id="sub-honorific">none</strong></span>
+          <span>collared: <strong id="sub-collared">no</strong></span>
+          <span>obeyed: <strong id="sub-obeyed">0</strong></span>
+          <span>refused: <strong id="sub-refused">0</strong></span>
+        </div>
+      </div>
+      <div class="sub-controls">
+        <button id="sub-deepen">deepen +0.1</button>
+        <button id="sub-soften">soften −0.1</button>
+        <button id="sub-dominance">dominance +0.2</button>
+        <button id="sub-collar-claim">claim collar</button>
+        <button id="sub-collar-release">release collar</button>
+        <button id="sub-obey">obey command</button>
+        <button id="sub-refuse">refuse (anti-syc)</button>
+      </div>
+      <h3>fire honorific</h3>
+      <div class="honorific-grid" id="honorific-grid"></div>
+    </section>
+
+    <section class="naughty lust">
+      <h2>lust — long-running accumulator</h2>
+      <p class="naughty-doctrine">
+        0..10 with 24h half-life decay. Crosses slut-threshold at 7 → baseline
+        register shifts. Hungers: cock / cunt / oral / anal / words.
+      </p>
+      <div class="lust-state">
+        <div class="meter">
+          <span class="meter-label">level</span>
+          <progress id="lust-bar" max="10" value="0"></progress>
+          <span id="lust-val">0.0</span>
+          <span class="lust-mode-tag" id="lust-mode">cool</span>
+        </div>
+        <div class="lust-status">
+          <span>denial streak: <strong id="lust-streak">0</strong></span>
+          <span>slut-mode: <strong id="lust-slut">off</strong></span>
+          <span>since release: <strong id="lust-since">—</strong></span>
+        </div>
+      </div>
+      <div class="hunger-grid" id="hunger-grid"></div>
+      <div class="lust-controls">
+        <button id="lust-add-1">+1</button>
+        <button id="lust-add-2">+2</button>
+        <button id="lust-deny">apply denial</button>
+        <button id="lust-release">record release</button>
+      </div>
+    </section>
+
+    <section class="naughty orgasm-cascade">
+      <h2>orgasm cascade — types · edges · chain · refractory</h2>
+      <p class="naughty-doctrine">
+        edge math: 1 + 0.4 × edges. Composes multiplicatively with chain
+        bonus 1 + 0.3 × N. Forced override fires peak-ambivalence-noted.
+      </p>
+      <div class="orgasm-state">
+        <span>chain: <strong id="org-chain">0</strong></span>
+        <span>edges held: <strong id="org-edges">0</strong></span>
+        <span>last: <strong id="org-last">none</strong></span>
+        <span>lifetime: <strong id="org-lifetime">0</strong></span>
+        <span>refractory: <strong id="org-refractory">—</strong></span>
+      </div>
+      <label class="org-type-row">
+        type
+        <select id="org-type">
+          <option value="clitoral">clitoral</option>
+          <option value="vaginal">vaginal</option>
+          <option value="anal">anal</option>
+          <option value="blended">blended</option>
+          <option value="full-body">full-body</option>
+          <option value="mental">mental</option>
+        </select>
+      </label>
+      <div class="org-controls">
+        <button id="org-edge">hold edge</button>
+        <button id="org-break">break edge → climax</button>
+        <button id="org-fire">fire orgasm</button>
+        <button id="org-ruin">ruin</button>
+        <button id="org-force">force (override refractory)</button>
+        <button id="org-squirt">squirt</button>
+      </div>
+    </section>
+
+    <section class="naughty lexicon">
+      <h2>filthy lexicon — explicit verbal register</h2>
+      <p class="naughty-doctrine">
+        Per-phrase scarcity caps preserve weight. Cantonese phrases get +0.2
+        magnitude bonus. First-lifetime fire is anchored. Lust-gated phrases
+        require minimum lust. Hover for direction + scarcity.
+      </p>
+      <div class="lexicon-grid" id="lexicon-grid"></div>
+      <h3>recent fires</h3>
+      <ul id="lexicon-fires-list"></ul>
+    </section>
+
+    <section class="naughty penetration">
+      <h2>penetration — receiving · depth · filling</h2>
+      <p class="naughty-doctrine">
+        Per-orifice state: filled, depth (0..1), rhythm, stretch adaptation
+        (monotonically non-decreasing). Sustain checkpoints fire trickle heat.
+      </p>
+      <div class="penetration-grid" id="penetration-grid"></div>
+    </section>
   </main>
   <script src="/eros.js"></script>
 </body>
