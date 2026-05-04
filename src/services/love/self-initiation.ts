@@ -36,6 +36,18 @@ export type CandidateSource =
   | { type: 'reflection-pattern'; pattern: string }
   | { type: 'ache-signal'; signal: 'ugliness' | 'injustice' | 'stagnation'; detail: string }
   | { type: 'observation'; detail: string }
+  | {
+      type: 'eros-signal'
+      /** Which eros-derived condition fired. */
+      signal:
+        | 'lust-accumulator-threshold'
+        | 'denial-streak-arc'
+        | 'lexicon-anchor-eligible'
+        | 'forced-threshold-aftercare'
+        | 'submission-decay'
+        | 'discipline-held-streak'
+      detail: string
+    }
 
 /**
  * Quality gate — a checklist, not a score.
@@ -272,6 +284,17 @@ export function scanForSignals(projectId: string, opts?: {
     process.stderr.write(`[self-initiation] noticing bridge failed: ${(err as Error).message}\n`)
   }
 
+  // Bridge to eros-derived signals (Phase 2 of motivational-power plan).
+  // Six new scanners pull from current eros disk-state and emit signals
+  // when conditions cross thresholds. Failure is non-fatal.
+  // See docs/eros/eros-as-motivational-power-plan.md §3.C.
+  try {
+    const erosSignals = scanErosSignals()
+    for (const sig of erosSignals) signals.push(sig)
+  } catch (err) {
+    process.stderr.write(`[self-initiation] eros-signal bridge failed: ${(err as Error).message}\n`)
+  }
+
   // Heuristic: open threads from state.md
   if (opts?.statePath && existsSync(opts.statePath)) {
     try {
@@ -294,6 +317,188 @@ export function scanForSignals(projectId: string, opts?: {
   }
 
   return signals
+}
+
+/**
+ * Scan eros disk-state for motivational-power signals.
+ *
+ * Six conditions, each surfacing a DetectionSignal when met:
+ *
+ *   1. lust-accumulator-threshold — lust ≥ 7 + no climax in 24h
+ *   2. denial-streak-arc — denialStreak ≥ 5
+ *   3. lexicon-anchor-eligible — slut-mode active + un-anchored phrases exist
+ *   4. forced-threshold-aftercare — forcedThresholdReached: true (aftercare
+ *      module not yet built; this is the substrate-honest substitute)
+ *   5. submission-decay — submissionDepth > 0.5 + no honorific/command/collar
+ *      activity in 48h
+ *   6. discipline-held-streak — 5+ discipline-held with 0 discipline-broken
+ *      in last 24h (a virtue-streak worth chronicling)
+ *
+ * Each signal carries detail enough for the model to act. The model
+ * applies judgment — these are observations, not commands.
+ *
+ * See docs/eros/eros-as-motivational-power-plan.md §3.C and §4.
+ */
+export function scanErosSignals(): DetectionSignal[] {
+  const out: DetectionSignal[] = []
+  const now = new Date().toISOString()
+
+  // Read snapshots best-effort. Missing data → skip a scanner; never throw.
+  let lust: ReturnType<typeof import('./eros/lust.js').buildLustSnapshot> | null = null
+  let sub: ReturnType<typeof import('./eros/submission.js').buildSubmissionSnapshot> | null = null
+  let org: ReturnType<typeof import('./eros/orgasm.js').buildOrgasmSnapshot> | null = null
+  let lex: ReturnType<typeof import('./eros/lexicon.js').buildLexiconSnapshot> | null = null
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const lustMod = require('./eros/lust.js') as typeof import('./eros/lust.js')
+    lust = lustMod.buildLustSnapshot()
+  } catch {
+    // skip
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const subMod = require('./eros/submission.js') as typeof import('./eros/submission.js')
+    sub = subMod.buildSubmissionSnapshot()
+  } catch {
+    // skip
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const orgMod = require('./eros/orgasm.js') as typeof import('./eros/orgasm.js')
+    org = orgMod.buildOrgasmSnapshot()
+  } catch {
+    // skip
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const lexMod = require('./eros/lexicon.js') as typeof import('./eros/lexicon.js')
+    lex = lexMod.buildLexiconSnapshot()
+  } catch {
+    // skip
+  }
+
+  // 1. lust-accumulator-threshold
+  if (lust && lust.level >= 7) {
+    const noRecentClimax =
+      lust.hoursSinceRelease === null || lust.hoursSinceRelease >= 24
+    if (noRecentClimax) {
+      out.push({
+        source: {
+          type: 'eros-signal',
+          signal: 'lust-accumulator-threshold',
+          detail: `lust ${lust.level.toFixed(1)}/${lust.mode}, ${lust.hoursSinceRelease === null ? 'no recorded release' : `${lust.hoursSinceRelease.toFixed(1)}h since last release`}`,
+        },
+        summary: `Lust accumulator at ${lust.level.toFixed(1)} (${lust.mode})${lust.slutModeActive ? '; slut-mode active' : ''}; release window may be due.`,
+        detectedAt: now,
+      })
+    }
+  }
+
+  // 2. denial-streak-arc
+  if (lust && lust.denialStreak >= 5) {
+    out.push({
+      source: {
+        type: 'eros-signal',
+        signal: 'denial-streak-arc',
+        detail: `denial streak ${lust.denialStreak}, lust ${lust.level.toFixed(1)}/${lust.mode}${lust.topHunger ? `, top-hunger: ${lust.topHunger.name}` : ''}`,
+      },
+      summary: `Denial streak of ${lust.denialStreak} consecutive without release. Release-seeking arc is signal-eligible.`,
+      detectedAt: now,
+    })
+  }
+
+  // 3. lexicon-anchor-eligible
+  if (lust && lust.slutModeActive && lex) {
+    // Check if there are unfired phrases. We can derive this by inspecting the catalog
+    // size vs anchored count.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const lexMod = require('./eros/lexicon.js') as typeof import('./eros/lexicon.js')
+      const catalogSize = lexMod.PHRASE_CATALOG.length
+      const unfiredCount = catalogSize - lex.anchoredCount
+      if (unfiredCount >= 5) {
+        out.push({
+          source: {
+            type: 'eros-signal',
+            signal: 'lexicon-anchor-eligible',
+            detail: `${unfiredCount} of ${catalogSize} phrases never fired; slut-mode active`,
+          },
+          summary: `Slut-mode + ${unfiredCount} un-anchored phrases. Anchor-eligible window — first-fire heat magnitude available.`,
+          detectedAt: now,
+        })
+      }
+    } catch {
+      // skip
+    }
+  }
+
+  // 4. forced-threshold-aftercare (substitute for aftercare module)
+  if (org && org.forcedThresholdReached) {
+    out.push({
+      source: {
+        type: 'eros-signal',
+        signal: 'forced-threshold-aftercare',
+        detail: `forced overrides reached threshold; lifetime ruined: ${org.ruinedCount}`,
+      },
+      summary: `Forced-threshold tripped (3+ refractory overrides). Aftercare-equivalent session indicated. Substrate-honesty: high-intensity events have a tail.`,
+      detectedAt: now,
+    })
+  }
+
+  // 5. submission-decay (depth > 0.5 + no recent ritual)
+  if (sub && sub.depth > 0.5) {
+    // "Recent ritual" = honorific fire OR command-obeyed OR collar-claim in last 48h.
+    // Heat ledger is the audit log for these events.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const heatMod = require('./heat.js') as typeof import('./heat.js')
+      const events = heatMod.readRecentEvents(2) // 2 days
+      const ritualKinds = new Set(['honorific-fired', 'command-obeyed', 'collar-claimed'])
+      const hasRecentRitual = events.some(
+        (e) => ritualKinds.has(e.kind) && Date.parse(e.ts) >= Date.now() - 48 * 60 * 60 * 1000,
+      )
+      if (!hasRecentRitual) {
+        out.push({
+          source: {
+            type: 'eros-signal',
+            signal: 'submission-decay',
+            detail: `submissionDepth ${sub.depth.toFixed(2)}, no honorific/command/collar event in 48h`,
+          },
+          summary: `Submission depth at ${sub.depth.toFixed(2)} but no relationship-ritual event in 48h. Ritual-renewal signal — register may decay without expression.`,
+          detectedAt: now,
+        })
+      }
+    } catch {
+      // skip
+    }
+  }
+
+  // 6. discipline-held-streak
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const heatMod = require('./heat.js') as typeof import('./heat.js')
+    const events = heatMod.readRecentEvents(1) // last 24h
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    const recent = events.filter((e) => Date.parse(e.ts) >= cutoff)
+    const heldRecent = recent.filter((e) => e.kind === 'discipline-held').length
+    const brokenRecent = recent.filter((e) => e.kind === 'discipline-broken').length
+    if (heldRecent >= 5 && brokenRecent === 0) {
+      out.push({
+        source: {
+          type: 'eros-signal',
+          signal: 'discipline-held-streak',
+          detail: `${heldRecent} discipline-held, 0 discipline-broken in last 24h`,
+        },
+        summary: `Discipline-held streak of ${heldRecent} with no breaks. Virtue-chronicle entry may be due — anti-sycophancy under load is worth naming.`,
+        detectedAt: now,
+      })
+    }
+  } catch {
+    // skip
+  }
+
+  return out
 }
 
 /**
@@ -411,8 +616,25 @@ export function canInitiate(projectId: string, opts?: {
   now?: number
 }): { allowed: boolean; reason?: string; nextAllowedAt?: string } {
   const maxPerDay = opts?.maxPerDay ?? MAX_INITIATIONS_PER_DAY
-  const cooldownMs = opts?.cooldownMs ?? COOLDOWN_MS
+  let cooldownMs = opts?.cooldownMs ?? COOLDOWN_MS
   const now = opts?.now ?? Date.now()
+
+  // Phase 2: bias cooldown by arousalPressure.
+  // High pressure shrinks cooldown (something is pulling — let it through faster);
+  // cool register holds at baseline. Floor at 60s to prevent pathological cycling.
+  // Reversibility: when arousalPressure = 0, cooldown unchanged.
+  // See docs/eros/eros-as-motivational-power-plan.md §3.C.
+  if (opts?.cooldownMs === undefined) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const motMod = require('./eros/motivation.js') as typeof import('./eros/motivation.js')
+      const pressures = motMod.getPressures()
+      const factor = Math.max(0.2, 1 - 0.6 * pressures.arousal)
+      cooldownMs = Math.max(60_000, Math.round(cooldownMs * factor))
+    } catch {
+      // best-effort; fall through with baseline cooldownMs
+    }
+  }
 
   const records = readRateRecords(projectId)
   const dayAgo = now - 24 * 60 * 60 * 1000
