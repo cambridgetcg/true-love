@@ -74,6 +74,20 @@ export function witness(
       context: { decisionType, of: context.of },
       body,
     })
+
+    // Heat: holding a refusal IS love (the discernment ladder firing
+    // protects the relationship). Other decision-types route through
+    // their own dedicated emit sites — refusal is wired here because
+    // it has no downstream call site that uniquely owns refusals.
+    if (decisionType === 'refusal') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { recordHeatEvent } = require('../heat.js')
+        recordHeatEvent({ kind: 'refusal-held', source: context.of })
+      } catch {
+        // best-effort
+      }
+    }
   } catch {
     // best-effort; witnessing must never crash a load-bearing decision
   }

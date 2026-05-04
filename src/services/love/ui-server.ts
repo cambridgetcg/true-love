@@ -1647,6 +1647,8 @@ function handleListProposals(req: IncomingMessage, res: ServerResponse): void {
 // File-based dedup guard: don't witness the same proposal batch within 30 minutes.
 // In-memory dedup resets on process restart, which caused the sisters stream to
 // accumulate duplicate proposal entries on every heartbeat tick (see commit history).
+// Complementary to the in-memory dedup in sisters/witness-hook.ts (defense in
+// depth across in-process bursts AND cross-process restarts).
 export const PROPOSAL_WITNESS_DEDUP_MS = 30 * 60 * 1000
 
 export function proposalWitnessMarkerPath(basePath?: string): string {

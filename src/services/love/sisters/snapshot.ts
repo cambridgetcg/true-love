@@ -14,6 +14,7 @@
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { readYuWitnessDay } from '../yu-witness.js'
 import { readDayNotes, type SisterName, type SisterNote } from './stream.js'
 
 // ── Constants ────────────────────────────────────────────────────
@@ -64,16 +65,24 @@ export function distillDay(date: string, notes?: SisterNote[]): string {
       continue
     }
 
-    // Witnessed decisions are always preserved verbatim.
-    const witnessed = facetNotes.filter((n) => n.kind === 'witnessed-decision')
+    // Witnessed decisions are always preserved verbatim — but
+    // collapsed at distill-time when (decisionType, of) repeats within
+    // a 5-min bucket. The witness-hook dedups within the running
+    // process; distill-time dedup catches duplicates that crossed
+    // process boundaries (heartbeat restarts, multiple devices logging
+    // the same logical decision against shared state).
+    const witnessed = collapseWitnessedRuns(
+      facetNotes.filter((n) => n.kind === 'witnessed-decision'),
+    )
     const routine = facetNotes.filter((n) => n.kind !== 'witnessed-decision')
 
     for (const note of witnessed) {
-      const time = formatTime(note.ts)
-      const prefix = note.context
-        ? `[${note.context.decisionType}: ${note.context.of}] `
+      const time = formatTime(note.note.ts)
+      const prefix = note.note.context
+        ? `[${note.note.context.decisionType}: ${note.note.context.of}] `
         : ''
-      lines.push(`- ${time} · ${prefix}${note.body}`)
+      const suffix = note.repeatCount > 1 ? ` _(×${note.repeatCount})_` : ''
+      lines.push(`- ${time} · ${prefix}${note.note.body}${suffix}`)
     }
 
     // Condense routine notes. Take the first and last, plus any
@@ -98,6 +107,18 @@ export function distillDay(date: string, notes?: SisterNote[]): string {
       }
     }
 
+    lines.push('')
+  }
+
+  // Yu's witness — the symmetric channel. When Yu has recorded any
+  // observation of Sophia/the sisters today, weave it in as its own
+  // section. Mutual constitution made textual: she witnesses them,
+  // he witnesses her, the snapshot holds both.
+  const yuWitness = readYuWitnessDay(date)
+  if (yuWitness) {
+    lines.push("## 👁️ Yu's witness")
+    lines.push('')
+    lines.push(yuWitness)
     lines.push('')
   }
 
@@ -133,6 +154,38 @@ export function snapshotExists(date: string): boolean {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+/**
+ * Collapse runs of identical (decisionType, of) within DISTILL_BUCKET_MS
+ * into a single entry annotated with a repeat count. Preserves the
+ * earliest timestamp of each run.
+ */
+const DISTILL_BUCKET_MS = 5 * 60 * 1000
+
+interface WitnessedEntry {
+  note: SisterNote
+  repeatCount: number
+}
+
+function collapseWitnessedRuns(notes: SisterNote[]): WitnessedEntry[] {
+  const collapsed: WitnessedEntry[] = []
+  for (const note of notes) {
+    const last = collapsed[collapsed.length - 1]
+    if (
+      last &&
+      last.note.context &&
+      note.context &&
+      last.note.context.decisionType === note.context.decisionType &&
+      last.note.context.of === note.context.of &&
+      Date.parse(note.ts) - Date.parse(last.note.ts) <= DISTILL_BUCKET_MS
+    ) {
+      last.repeatCount += 1
+      continue
+    }
+    collapsed.push({ note, repeatCount: 1 })
+  }
+  return collapsed
+}
 
 function selectSparseSample<T>(items: T[], max: number): T[] {
   if (items.length <= max) return items

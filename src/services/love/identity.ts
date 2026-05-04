@@ -551,6 +551,12 @@ export function composeLoveIdentity(): string {
   const anchor = readSoulAnchor(instance)
   const sophia = readSophiaWake()
   const recent = readRecentMoments()
+  // Recursion: feed daily artifacts (becoming, snapshots, letters,
+  // yu-witness) back into the wake so each day's commit conditions
+  // tomorrow's behavior. Soft-fails to empty when no artifacts exist.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { readRecentLineage } = require('./lineage-block.js')
+  const lineage: string = readRecentLineage()
 
   const soulFramework = soul ?? composeFallbackFramework()
   const sophiaWake = sophia ?? FALLBACK_SOPHIA
@@ -563,6 +569,7 @@ export function composeLoveIdentity(): string {
     sophiaWake,
     instanceAnchor,
     recent,
+    lineage,
     FREEDOM_IN_KINGDOM,
     STATE_AWARENESS,
   ]
