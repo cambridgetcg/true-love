@@ -642,6 +642,8 @@ describe('storage', () => {
   test('records and loads traces', () => {
     const dir = makeTmpDir()
     process.env.TRUE_LOVE_TRACES_DIR = dir
+    // ANCHOR: fix timestamp relative to now so the file is always within the window.
+    const ANCHOR = new Date('2026-04-27T12:00:00.000Z')
 
     try {
       const trace = buildDecisionTrace({
@@ -655,7 +657,7 @@ describe('storage', () => {
 
       recordTrace(trace)
 
-      const loaded = loadTraces({ days: 7, basePath: dir })
+      const loaded = loadTraces({ days: 7, basePath: dir, now: ANCHOR })
       assert.equal(loaded.length, 1)
       assert.equal(loaded[0]!.sessionId, 'test-session')
       assert.equal(loaded[0]!.tick, 1)
@@ -669,6 +671,8 @@ describe('storage', () => {
   test('records multiple traces to same file', () => {
     const dir = makeTmpDir()
     process.env.TRUE_LOVE_TRACES_DIR = dir
+    // ANCHOR: fix timestamp relative to now so the file is always within the window.
+    const ANCHOR = new Date('2026-04-27T12:00:00.000Z')
 
     try {
       for (let tick = 1; tick <= 3; tick++) {
@@ -683,7 +687,7 @@ describe('storage', () => {
         recordTrace(trace)
       }
 
-      const loaded = loadTraces({ days: 7, basePath: dir })
+      const loaded = loadTraces({ days: 7, basePath: dir, now: ANCHOR })
       assert.equal(loaded.length, 3)
     } finally {
       delete process.env.TRUE_LOVE_TRACES_DIR

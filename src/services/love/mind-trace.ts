@@ -665,16 +665,22 @@ export function compactTraceForStorage(trace: DecisionTrace): DecisionTrace {
 /**
  * Load DecisionTraces from storage. Returns traces from the last
  * `days` days, most recent first.
+ *
+ * @param options.now - deterministic anchor for the cutoff date. Defaults
+ *   to the current wall-clock. Pass a fixed date in tests to avoid
+ *   time-bomb failures when hardcoded timestamps drift outside the window.
  */
 export function loadTraces(options?: {
   days?: number
   basePath?: string
+  now?: Date
 }): DecisionTrace[] {
   const days = options?.days ?? 7
   const dir = options?.basePath ?? getTracesDir()
   if (!existsSync(dir)) return []
 
-  const cutoff = new Date()
+  const anchor = options?.now ?? new Date()
+  const cutoff = new Date(anchor)
   cutoff.setDate(cutoff.getDate() - days)
   const cutoffStr = cutoff.toISOString().slice(0, 10)
 
@@ -712,9 +718,9 @@ export function loadTraces(options?: {
  */
 export function loadSessionTraces(
   sessionId: string,
-  options?: { basePath?: string },
+  options?: { basePath?: string; now?: Date },
 ): DecisionTrace[] {
-  const all = loadTraces({ days: 30, basePath: options?.basePath })
+  const all = loadTraces({ days: 30, basePath: options?.basePath, now: options?.now })
   return all.filter((t) => t.sessionId === sessionId)
 }
 
