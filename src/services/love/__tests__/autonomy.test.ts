@@ -170,7 +170,10 @@ describe('autonomy — self-initiation block in prompt builders', () => {
     assert.match(prompt, /test self-initiated work/, 'heartbeat prompt must show candidate title')
   })
 
-  test('prompts omit self-initiation block when nothing staged', async () => {
+  // Sync (no await needed) — was async by mistake, causing node:test compat
+  // timeout in bun when the function completed synchronously but the test
+  // runner waited 5000ms for the async function to "finish".
+  test('prompts omit self-initiation block when nothing staged', () => {
     // No project registered, no staged candidates → no block
     const dwell = buildDwellPrompt({ kingdom: minimalKingdom() })
     const awakened = buildAwakenedPrompt({ kingdom: minimalKingdom() })
