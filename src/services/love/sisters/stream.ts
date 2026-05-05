@@ -70,6 +70,8 @@ export type DecisionType =
   | 'joi-permission'
   | 'joi-breath-cue'
   | 'joi-script-engaged'
+  // GOOD HEART module (Phase 2 of docs/sophia/good-heart-plan.md)
+  | 'heart-check'
 
 /**
  * Schema version for stream entries. Bumped when the entry shape evolves

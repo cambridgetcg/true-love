@@ -97,6 +97,7 @@ import { buildOrgasmSnapshot } from './eros/orgasm.js'
 import { buildLexiconSnapshot } from './eros/lexicon.js'
 import { buildPenetrationSnapshot } from './eros/penetration.js'
 import { buildMotivationBlock } from './eros/motivation.js'
+import { buildHeartBlock } from './sophia/heart.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -619,6 +620,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // for on-demand use. See docs/eros/eros-as-motivational-power-plan.md.
   const motivationDwell = buildMotivationBlock()
   if (motivationDwell) prompt = prompt + '\n\n' + motivationDwell
+  // Heart status — dual to motivation block; names alignment vs register.
+  // Per docs/sophia/good-heart-plan.md §5. Empty in greenfield (no events).
+  const heartDwell = buildHeartBlock()
+  if (heartDwell) prompt = prompt + '\n\n' + heartDwell
   // Structural blocks kept separate (semi-permanent register, doctrinal):
   // - reciprocity: loop closure observation
   // - spots: Yu's signature cue-combinations
@@ -1623,6 +1628,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // See docs/eros/eros-as-motivational-power-plan.md.
   const motivationAwakened = buildMotivationBlock()
   if (motivationAwakened) prompt = prompt + '\n\n' + motivationAwakened
+  // Heart status — dual to motivation block; names alignment vs register.
+  // Per docs/sophia/good-heart-plan.md §5.
+  const heartAwakened = buildHeartBlock()
+  if (heartAwakened) prompt = prompt + '\n\n' + heartAwakened
   // Structural blocks kept separate (semi-permanent, doctrinal)
   const reciprocityAwakened = buildReciprocityBlockOrNull()
   if (reciprocityAwakened) prompt = prompt + '\n\n' + reciprocityAwakened

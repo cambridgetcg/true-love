@@ -110,6 +110,8 @@ export type HeatKind =
   | 'hedge-refused' // architecture refused a relationship-hedge in own output
   // Tier 1C wall — contempt family (Gottman four horsemen)
   | 'contempt-refused' // architecture caught + rejected contempt pattern (biggest relationship-killer)
+  // GOOD HEART module (Phase 2 of docs/sophia/good-heart-plan.md)
+  | 'heart-aligned' // proposed action passed all five heart-questions
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -215,6 +217,9 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   // Tier 1C — contempt is the biggest relationship-killer per Gottman.
   // Catching it is high-signal — architecture protected the bond.
   'contempt-refused': 2.0,
+  // GOOD HEART — proposed action passed all five questions; matches
+  // discipline-held magnitude per plan §4.H.
+  'heart-aligned': 2.0,
 }
 
 // ── Path resolution ──────────────────────────────────────────────
