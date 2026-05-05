@@ -892,6 +892,14 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
 
       // Naughty architecture — orgasm cascade
       if (req.method === 'GET' && path === '/api/orgasm/state') return handleOrgasmState(req, res)
+      // JOI surface — script picker + live phase progress.
+      if (req.method === 'GET' && path === '/api/joi/scripts') return await handleJoiScripts(req, res)
+      if (req.method === 'GET' && path === '/api/joi/state') return await handleJoiState(req, res)
+      if (req.method === 'POST' && path === '/api/joi/start') return await handleJoiStart(req, res)
+      if (req.method === 'POST' && path === '/api/joi/end') return await handleJoiEnd(req, res)
+      if (req.method === 'POST' && path === '/api/joi/script') return await handleJoiRunScript(req, res)
+      if (req.method === 'POST' && path === '/api/joi/countdown') return await handleJoiCountdown(req, res)
+      if (req.method === 'POST' && path === '/api/joi/fractionate') return await handleJoiFractionate(req, res)
       if (req.method === 'POST' && path === '/api/orgasm/edge') return await handleHoldEdge(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/orgasm/break-edge') return await handleBreakEdge(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/orgasm/fire') return await handleFireOrgasm(req, res, broadcastErosState)
@@ -2738,6 +2746,181 @@ function handleErosState(_req: IncomingMessage, res: ServerResponse): void {
   const { state } = getOrInitErosState()
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(state))
+}
+
+// ── JOI handlers — script picker + live phase progress ──────────
+
+async function handleJoiScripts(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const mod = await import('./eros/joi.js')
+    const scripts = mod.listJoiScripts()
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ scripts }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: String(e) }))
+  }
+}
+
+async function handleJoiState(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const mod = await import('./eros/joi.js')
+    const session = mod.readJoiSession()
+    if (!session) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ active: false }))
+      return
+    }
+    // Compute live position + phase
+    const position = mod.computePosition(session)
+    const phase = mod.phaseAtPosition(position)
+    const cfg = mod.phaseConfigFor(phase)
+    const elapsedS = (Date.now() - Date.parse(session.startedAt)) / 1000
+    const remainingS = Math.max(0, session.targetDurationS - elapsedS)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      active: !session.done,
+      session: {
+        id: session.id,
+        direction: session.direction,
+        startedAt: session.startedAt,
+        targetDurationS: session.targetDurationS,
+        position,
+        currentPhase: phase,
+        elapsedS: Math.floor(elapsedS),
+        remainingS: Math.floor(remainingS),
+        phaseConfig: {
+          phase: cfg.phase,
+          rangeStart: cfg.rangeStart,
+          rangeEnd: cfg.rangeEnd,
+          pauseMs: cfg.pauseMs,
+          preferredScene: cfg.preferredScene,
+          preferredMode: cfg.preferredMode,
+          primaryZones: cfg.primaryZones,
+          pacing: cfg.pacing,
+        },
+        done: session.done,
+        endedAt: session.endedAt,
+        activeAnchors: session.activeAnchors ?? [],
+      },
+    }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: String(e) }))
+  }
+}
+
+async function handleJoiStart(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { direction?: string; targetDurationS?: number }
+  try {
+    parsed = JSON.parse(body)
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const direction = (parsed.direction === 'sophia-leads' ? 'sophia-leads' : 'yu-leads') as 'yu-leads' | 'sophia-leads'
+  const duration = typeof parsed.targetDurationS === 'number' && parsed.targetDurationS > 0 && parsed.targetDurationS < 86400
+    ? parsed.targetDurationS
+    : 900
+  try {
+    const mod = await import('./eros/joi.js')
+    const session = mod.startJoi(direction, duration)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, session }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+  }
+}
+
+async function handleJoiEnd(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const mod = await import('./eros/joi.js')
+    const session = mod.endJoi()
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, session }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+  }
+}
+
+async function handleJoiRunScript(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req, res, 4096, 'request body too large')
+  if (body === null) return
+  let parsed: { scriptId?: string }
+  try {
+    parsed = JSON.parse(body)
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  if (!parsed.scriptId || typeof parsed.scriptId !== 'string') {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: 'scriptId required' }))
+    return
+  }
+  try {
+    const mod = await import('./eros/joi.js')
+    const fired = mod.runJoiScript(parsed.scriptId)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, scriptId: parsed.scriptId, beatsFired: fired }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+  }
+}
+
+async function handleJoiCountdown(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req, res, 1024, 'request body too large')
+  if (body === null) return
+  let parsed: { from?: number; target?: string }
+  try {
+    parsed = JSON.parse(body)
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const from = typeof parsed.from === 'number' && parsed.from >= 1 && parsed.from <= 100 ? parsed.from : 5
+  const allowed = ['release', 'hold', 'edge', 'breath']
+  const target = (parsed.target && allowed.includes(parsed.target) ? parsed.target : 'release') as 'release' | 'hold' | 'edge' | 'breath'
+  try {
+    const mod = await import('./eros/joi.js')
+    const beats = mod.joiCountdown(from, target)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, beats: beats.length, target, from }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+  }
+}
+
+async function handleJoiFractionate(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req, res, 1024, 'request body too large')
+  if (body === null) return
+  let parsed: { cycles?: number }
+  try {
+    parsed = JSON.parse(body)
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+    return
+  }
+  const cycles = typeof parsed.cycles === 'number' && parsed.cycles >= 1 && parsed.cycles <= 20 ? parsed.cycles : 3
+  try {
+    const mod = await import('./eros/joi.js')
+    const records = mod.joiFractionate(cycles)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, cyclesFired: cycles, eventsFired: records.length }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+  }
 }
 
 async function handleErosSet(

@@ -51,6 +51,74 @@
       </ul>
     </section>
 
+    <section class="joi-dashboard" id="joi-dashboard">
+      <div class="joi-header">
+        <h2>JOI choreography</h2>
+        <div class="joi-session-controls">
+          <select id="joi-direction">
+            <option value="yu-leads">yu-leads</option>
+            <option value="sophia-leads">sophia-leads</option>
+          </select>
+          <input id="joi-duration-s" type="number" min="60" max="7200" value="900" />
+          <button id="joi-start-btn">start session</button>
+          <button id="joi-end-btn">end session</button>
+        </div>
+      </div>
+      <p class="joi-doctrine">
+        Shibbydex-grade structural choreography. Each script is data — a sequence
+        of phase shifts, countdowns, fractionations, teases, denials, permissions,
+        pauses, breaths. The runner emits each beat as a feedback event; walls vet
+        every line; substrate-honesty preserved.
+      </p>
+
+      <div class="joi-active" id="joi-active" style="display:none;">
+        <div class="joi-active-meta">
+          <span class="joi-pill" id="joi-direction-pill">—</span>
+          <span class="joi-pill joi-phase-pill" id="joi-phase-pill" data-phase="warmup">warmup</span>
+          <span class="joi-time" id="joi-time">—</span>
+        </div>
+        <div class="joi-progress-track">
+          <div class="joi-progress-fill" id="joi-progress-fill"></div>
+          <div class="joi-progress-marker" id="joi-progress-marker-warmup" style="left:20%"></div>
+          <div class="joi-progress-marker" id="joi-progress-marker-build" style="left:50%"></div>
+          <div class="joi-progress-marker" id="joi-progress-marker-edge" style="left:80%"></div>
+          <div class="joi-progress-marker" id="joi-progress-marker-peak" style="left:95%"></div>
+        </div>
+        <div class="joi-progress-labels">
+          <span class="joi-phase-label" data-phase="warmup">warmup</span>
+          <span class="joi-phase-label" data-phase="build">build</span>
+          <span class="joi-phase-label" data-phase="edge">edge</span>
+          <span class="joi-phase-label" data-phase="peak">peak</span>
+          <span class="joi-phase-label" data-phase="cooldown">cooldown</span>
+        </div>
+        <div class="joi-pacing" id="joi-pacing">
+          <div class="joi-pacing-layer">
+            <span class="joi-pacing-label">breath</span>
+            <span class="joi-pacing-value" id="joi-pacing-breath">—</span>
+          </div>
+          <div class="joi-pacing-layer">
+            <span class="joi-pacing-label">attention</span>
+            <span class="joi-pacing-value" id="joi-pacing-attention">—</span>
+          </div>
+          <div class="joi-pacing-layer">
+            <span class="joi-pacing-label">sensation</span>
+            <span class="joi-pacing-value" id="joi-pacing-sensation">—</span>
+          </div>
+        </div>
+        <div class="joi-zones" id="joi-zones"></div>
+      </div>
+
+      <div class="joi-quick-actions">
+        <button id="joi-countdown-btn">countdown 5 → release</button>
+        <button id="joi-fractionate-btn">fractionate × 3</button>
+      </div>
+
+      <h3 class="joi-catalog-title">named scripts</h3>
+      <div class="joi-script-grid" id="joi-script-grid">
+        <span class="joi-script-loading">loading scripts…</span>
+      </div>
+    </section>
+
     <section class="radar-wrap">
       <svg id="radar" viewBox="-150 -150 300 300" aria-label="eros 7-axis radar"></svg>
     </section>

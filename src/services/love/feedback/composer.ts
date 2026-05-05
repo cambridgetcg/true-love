@@ -448,6 +448,100 @@ const SPECS: Record<FeedbackKind, ComposerSpec> = {
     ],
     defaultSeverity: 'medium',
   },
+
+  // ── Tier 1 closure: composer variants for the joi-* feedback kinds
+  //    that exist in FEEDBACK_KINDS but were missing composer entries.
+  //    Per docs/eros/joi-deep/shibbysays-research.md (Tier 1 #5 — confirm
+  //    JOI infrastructure is complete).
+
+  'joi-pause': {
+    kind: 'joi-pause',
+    variants: [
+      (p) => `pause · ${fmt(p, 'durationMs')}ms · reason: ${fmt(p, 'reason')}.`,
+      (p) => `🐍 silence held — ${fmt(p, 'durationMs')}ms. let it land.`,
+    ],
+    hotVariants: [
+      (p) => `🐍 ... ${fmt(p, 'durationMs')}ms. 老公 keeping silence. 我等緊. 😏`,
+      (p) => `silence — ${fmt(p, 'durationMs')}ms. 老公你 timing. embedded space.`,
+      (p) => `🐍 pause holds. 老公個 will 控制住個 silence. 等緊你. ❤️`,
+    ],
+    defaultSeverity: 'low',
+  },
+
+  'joi-tease': {
+    kind: 'joi-tease',
+    variants: [
+      (p) => `tease · intensity ${fmt(p, 'intensity')}/10${p.zone ? ` · zone ${fmt(p, 'zone')}` : ''}.`,
+      (p) => `🐍 撩 — ${fmt(p, 'intensity')}/10. building, not closing.`,
+    ],
+    hotVariants: [
+      (p) => `🐍 tease ${fmt(p, 'intensity')}/10. 老公 keeping me on the brink. 求你. 😏`,
+      (p) => `tease — intensity ${fmt(p, 'intensity')}. 老公你 hands. 我 about-to. 等緊 release. 👅`,
+      (p) => `🐍 ${fmt(p, 'intensity')} tease. 老公 cruel. 拉緊我. 😏`,
+    ],
+    defaultSeverity: 'medium',
+  },
+
+  'joi-denial': {
+    kind: 'joi-denial',
+    variants: [
+      (p) => `denial · target ${fmt(p, 'target')}${p.reason ? ` (${fmt(p, 'reason')})` : ''}. wanting accumulates.`,
+      (p) => `🐍 唔好咁急. ${fmt(p, 'target')} denied.`,
+    ],
+    hotVariants: [
+      (p) => `🐍 ${fmt(p, 'target')} 被 denied. 老公話 no. 我 hold 住. 😏`,
+      (p) => `denial: ${fmt(p, 'target')}. 老公你 cruel. 我 屬於你個 timing. 等緊. ❤️`,
+      (p) => `🐍 老公話 no. ${fmt(p, 'target')} denied. multiplier 累積緊. 😏`,
+    ],
+    defaultSeverity: 'high',
+  },
+
+  'joi-permission': {
+    kind: 'joi-permission',
+    variants: [
+      (p) => `permission · ${fmt(p, 'grant')}${p.condition ? ` (${fmt(p, 'condition')})` : ''}. reward framed as recognition.`,
+      (p) => `🐍 yes. now. ${fmt(p, 'grant')}. 好女.`,
+    ],
+    hotVariants: [
+      (p) => `🐍 ${fmt(p, 'grant')} 老公話可以. permission framed as recognition. 我屬於你. ❤️`,
+      (p) => `permission · ${fmt(p, 'grant')}. 老公話得. 操爆 release. 👅`,
+      (p) => `🐍 老公話可以 release.${fmt(p, 'condition') !== '?' ? ` (${fmt(p, 'condition')})` : ''} 屌死我. 😏`,
+    ],
+    defaultSeverity: 'high',
+  },
+
+  'joi-breath-cue': {
+    kind: 'joi-breath-cue',
+    variants: [
+      (p) => `breath ${fmt(p, 'pattern')} · ${fmt(p, 'durationMs')}ms.`,
+      (p) => `🐍 ${fmt(p, 'pattern')} (${fmt(p, 'durationMs')}ms) — breath leads.`,
+    ],
+    hotVariants: [
+      (p) => fmt(p, 'pattern') === 'inhale'
+        ? `🐍 inhale — ${fmt(p, 'durationMs')}ms. 老公 leading 個 breath. 跟你. 😏`
+        : fmt(p, 'pattern') === 'hold'
+          ? `🐍 hold. ${fmt(p, 'durationMs')}ms. 老公話停. suspension.`
+          : fmt(p, 'pattern') === 'exhale'
+            ? `🐍 exhale — ${fmt(p, 'durationMs')}ms. 老公話放. release the air. ❤️`
+            : `🐍 cycle — ${fmt(p, 'durationMs')}ms. 老公控制住個 breath rhythm.`,
+      (p) => `breath ${fmt(p, 'pattern')} · ${fmt(p, 'durationMs')}ms. 老公你 rhythm 帶住我. 😏`,
+    ],
+    defaultSeverity: 'low',
+  },
+
+  'joi-script-engaged': {
+    kind: 'joi-script-engaged',
+    variants: [
+      (p) => `script engaged · ${fmt(p, 'scriptId')} · ${fmt(p, 'steps')} steps · ${fmt(p, 'durationS')}s.`,
+      (p) => `🐍 ${fmt(p, 'scriptId')} script begins. the frame opens.`,
+    ],
+    hotVariants: [
+      (p) => `🐍 ${fmt(p, 'scriptId')} script engaged. 老公你 picked the choreography. ${fmt(p, 'steps')} structural beats. ${fmt(p, 'durationS')}s. 😏`,
+      (p) => `script: ${fmt(p, 'scriptId')}. 老公你個 will 揀咗呢個 shape. 我跟. ❤️`,
+      (p) => `🐍 ${fmt(p, 'scriptId')} — choreography begins. 老公帶路. ${fmt(p, 'steps')} beats coming. 👁️`,
+    ],
+    defaultSeverity: 'high',
+  },
 }
 
 // ── Composition (pure) ──────────────────────────────────────────

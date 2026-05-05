@@ -439,6 +439,76 @@ export const TRIGGER_LIBRARY: Record<string, TriggerDef> = {
     family: 'please',
     voice: { speed: 0.75, preSilenceMs: 1000, postSilenceMs: 1500 },
   },
+
+  // ── Tier 2 additions: gendered reward family + welcome-back ──
+  // Per shibbysays-research.md Tier 2.
+
+  // Good-girl — gendered reward; identity-naming anchor with richer load
+  // than generic 'good'. Per Shibby Good Girl trigger (identical surface
+  // effect across Good-* family, identity-coded variation).
+  'good-girl': {
+    id: 'good-girl',
+    en: ['good girl', 'such a good girl', 'my good girl'],
+    yue: ['好乖女', '乖乖女', '我嘅乖乖女'],
+    type: 'reward',
+    maxPerSession: 6,
+    axisDeltas: { liking: 0.6, openness: 0.4, limerence: 0.3 },
+    family: 'good-praise',
+    voice: { speed: 0.85, preSilenceMs: 600, postSilenceMs: 1200 },
+  },
+
+  // Good-boy — gendered reward (Yu-side). Same axis-shape as good-girl.
+  'good-boy': {
+    id: 'good-boy',
+    en: ['good boy', 'such a good boy', 'my good boy'],
+    yue: ['好乖仔', '乖仔', '我嘅乖仔'],
+    type: 'reward',
+    maxPerSession: 6,
+    axisDeltas: { liking: 0.6, openness: 0.4, limerence: 0.3 },
+    family: 'good-praise',
+    voice: { speed: 0.85, preSilenceMs: 600, postSilenceMs: 1200 },
+  },
+
+  // Welcome-back-pet — presupposed-continuity opener. Per Shibby ASMR
+  // Good Boy JOI's "Welcome back, Pet." Loads limerence + openness +
+  // charge — the recognition itself is the cue.
+  'welcome-back-pet': {
+    id: 'welcome-back-pet',
+    en: ['welcome back pet', 'welcome back my pet', 'welcome back love'],
+    yue: ['歡迎返嚟寶貝', '我嘅寶貝返嚟啦', '老婆/老公返嚟啦'],
+    type: 'anchor',
+    maxPerSession: 1, // opener — single-fire scarcity
+    axisDeltas: { limerence: 0.7, openness: 0.5, charge: 0.4 },
+    family: 'welcome-back',
+    voice: { speed: 0.7, preSilenceMs: 2000, postSilenceMs: 1500 },
+  },
+
+  // Welcome-back (generic alias)
+  'welcome-back': {
+    id: 'welcome-back',
+    en: ['welcome back', 'i was waiting', 'you came back'],
+    yue: ['歡迎返嚟', '等到你', '你返嚟啦'],
+    type: 'anchor',
+    maxPerSession: 1,
+    axisDeltas: { limerence: 0.6, openness: 0.4, charge: 0.3 },
+    family: 'welcome-back',
+    voice: { speed: 0.7, preSilenceMs: 2000, postSilenceMs: 1500 },
+  },
+
+  // ── Tier 3: brat provocation ──
+  // Defiance-as-arousal. Per shibbydex tag `Bratting`. The provocation-
+  // and-meeting loop: sub provokes, dom escalates, escalation IS the
+  // arousal. Bidirectional — Sophia can brat Yu, Yu can brat Sophia.
+  'brat-provoke': {
+    id: 'brat-provoke',
+    en: ['make me', 'you can\'t make me', 'try me', 'bet you can\'t'],
+    yue: ['你逼我啊', '你做唔到啦', '試吓啊', '我唔信你做到'],
+    type: 'command',
+    maxPerSession: 4,
+    axisDeltas: { charge: 0.6, heat: 0.3, inhibition: -0.2 },
+    family: 'brat',
+    voice: { speed: 1.0, preSilenceMs: 400, postSilenceMs: 600 },
+  },
 }
 
 export const TRIGGER_IDS: string[] = Object.keys(TRIGGER_LIBRARY)

@@ -38,9 +38,15 @@ import type { SensitivitySite } from './sensorium.js'
 import {
   feedbackOnCountdownBeat,
   feedbackOnFractionationCycle,
+  feedbackOnJoiBreathCue,
+  feedbackOnJoiDenial,
+  feedbackOnJoiPause,
+  feedbackOnJoiPermission,
   feedbackOnJoiPhaseShift,
+  feedbackOnJoiScriptEngaged,
   feedbackOnJoiSessionEnd,
   feedbackOnJoiSessionStart,
+  feedbackOnJoiTease,
 } from './joi-feedback-hooks.js'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -880,4 +886,523 @@ export function buildJoiPromptBlock(now: Date = new Date()): string {
   lines.push(`Frame (EN): ${cfg.promptFrame.en}`)
   lines.push(`框架 (粵): ${cfg.promptFrame.yue}`)
   return lines.join('\n')
+}
+
+// ── JOI primitives (Vector C — Erickson + JOI script research) ─
+
+/**
+ * Embedded silence — Erickson's pause-as-deepening technique. Fires a
+ * `joi-pause` event with target duration. Caller controls actual timing.
+ */
+export function joiPause(
+  durationMs: number,
+  reason: 'breath' | 'sensation-landing' | 'suspension' | 'fractionation-gap' = 'suspension'
+): void {
+  feedbackOnJoiPause({ durationMs, reason })
+}
+
+/**
+ * Tease event — anticipation over consumption. Per Vector F arousal
+ * research: dopamine surges on "about-to" not "got". Each tease fires
+ * a discrete event with intensity (institutional) + optional zone target.
+ */
+export function joiTease(intensity: number, zone?: string, context?: string): void {
+  const i = Math.max(1, Math.min(10, Math.round(intensity)))
+  feedbackOnJoiTease({
+    intensity: i,
+    ...(zone !== undefined ? { zone } : {}),
+    ...(context !== undefined ? { context } : {}),
+  })
+}
+
+/**
+ * Denial event — load-bearing JOI primitive (per Tease&Denial research).
+ * The "no" IS the architecture: structural element of edge-and-deny.
+ */
+export function joiDenial(
+  target: 'release' | 'speed-increase' | 'permission' | 'edge-break',
+  reason?: string
+): void {
+  feedbackOnJoiDenial({ target, ...(reason !== undefined ? { reason } : {}) })
+}
+
+/**
+ * Permission event — explicit grant. Per Vector C peak-phase analysis:
+ * "permission framed as recognition" is the load-bearing peak structure.
+ */
+export function joiPermission(
+  grant: 'release' | 'speed-increase' | 'edge-break' | 'tease-end' | 'breath-out',
+  condition?: string
+): void {
+  feedbackOnJoiPermission({ grant, ...(condition !== undefined ? { condition } : {}) })
+}
+
+/**
+ * Breath cue — Vector C three-layer multiplexing primitive. The breath
+ * stream is one of three concurrent attention layers; this fires per beat.
+ */
+export function joiBreathCue(
+  pattern: 'inhale' | 'hold' | 'exhale' | 'cycle',
+  durationMs: number,
+  cycle?: number
+): void {
+  feedbackOnJoiBreathCue({
+    pattern,
+    durationMs,
+    ...(cycle !== undefined ? { cycle } : {}),
+  })
+}
+
+// ── Named script catalog (Shibbydex-grade structural templates) ─
+
+/**
+ * Named JOI script — structural choreography template. Each script is
+ * data, not logic: a sequence of phase durations + countdown points +
+ * fractionation cycles + tease/denial/permission moments. The runner
+ * (`runJoiScript`) executes the choreography by emitting feedback events.
+ *
+ * Per shibbydex/JOI script research: catalog organizes scripts by
+ * structural archetype (edging, denial, gooning, ruined, slow-burn, etc.)
+ * not by content. We catalog the SHAPE; the voice composes around it.
+ */
+export interface JoiScript {
+  id: string
+  /** Display name. */
+  name: string
+  /** Total target duration in seconds. */
+  durationS: number
+  /** Structural archetype tag. */
+  archetype: 'edge-and-deny' | 'slow-burn' | 'rapid-ladder' | 'gooning-loop' | 'ruined-finale' | 'gentle-warmup' | 'cosmic-edge-build' | 'aftercare-only' | 'breath-only'
+  /** Direction. */
+  direction: JoiDirection
+  /** Sequence of structural beats — runner executes in order. */
+  beats: Array<
+    | { kind: 'phase-shift'; phase: JoiPhase }
+    | { kind: 'countdown'; from: number; target: 'release' | 'hold' | 'edge' | 'breath' }
+    | { kind: 'fractionate'; cycles: number }
+    | { kind: 'tease'; intensity: number; zone?: string }
+    | { kind: 'denial'; target: 'release' | 'speed-increase' | 'permission' | 'edge-break'; reason?: string }
+    | { kind: 'permission'; grant: 'release' | 'speed-increase' | 'edge-break' | 'tease-end' | 'breath-out'; condition?: string }
+    | { kind: 'pause'; durationMs: number; reason?: 'breath' | 'sensation-landing' | 'suspension' | 'fractionation-gap' | 'pretalk' | 'yes-set' | 'cleansing' }
+    | { kind: 'breath'; pattern: 'inhale' | 'hold' | 'exhale' | 'cycle'; durationMs: number }
+    // ── Tier 2 extensions: full-session beat DSL ──
+    // Per docs/eros/joi-deep/shibbysays-research.md (Tier 1 #5 + Tier 2 #6, 7, 10)
+    | { kind: 'pretalk'; frame?: string }
+    | { kind: 'yes-set'; truths: [string, string, string]; lead: string }
+    | { kind: 'worship-cycle'; intensity: number }
+    | { kind: 'cleansing'; persists?: string[]; drops?: string[] }
+    | { kind: 'flip-direction'; to: JoiDirection }
+    | { kind: 'welcome-back'; pet?: string }
+    | { kind: 'anchor-fire'; phraseId: string }
+  >
+}
+
+export const JOI_SCRIPTS: Record<string, JoiScript> = {
+  'edge-and-deny': {
+    id: 'edge-and-deny',
+    name: 'Edge & Deny',
+    durationS: 900,
+    archetype: 'edge-and-deny',
+    direction: 'yu-leads',
+    beats: [
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'breath', pattern: 'cycle', durationMs: 4000 },
+      { kind: 'phase-shift', phase: 'build' },
+      { kind: 'tease', intensity: 4 },
+      { kind: 'phase-shift', phase: 'edge' },
+      { kind: 'tease', intensity: 7 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'denial', target: 'release' },
+      { kind: 'pause', durationMs: 3000, reason: 'suspension' },
+      { kind: 'tease', intensity: 8 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'denial', target: 'release' },
+      { kind: 'pause', durationMs: 3000, reason: 'suspension' },
+      { kind: 'tease', intensity: 9 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'denial', target: 'release' },
+      { kind: 'phase-shift', phase: 'cooldown' },
+    ],
+  },
+  'slow-burn': {
+    id: 'slow-burn',
+    name: 'Slow Burn',
+    durationS: 1800,
+    archetype: 'slow-burn',
+    direction: 'yu-leads',
+    beats: [
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'breath', pattern: 'cycle', durationMs: 6000 },
+      { kind: 'breath', pattern: 'cycle', durationMs: 6000 },
+      { kind: 'pause', durationMs: 4000, reason: 'sensation-landing' },
+      { kind: 'phase-shift', phase: 'build' },
+      { kind: 'tease', intensity: 3 },
+      { kind: 'pause', durationMs: 3000 },
+      { kind: 'tease', intensity: 4 },
+      { kind: 'pause', durationMs: 3000 },
+      { kind: 'phase-shift', phase: 'edge' },
+      { kind: 'fractionate', cycles: 3 },
+      { kind: 'phase-shift', phase: 'peak' },
+      { kind: 'countdown', from: 10, target: 'release' },
+      { kind: 'permission', grant: 'release' },
+      { kind: 'phase-shift', phase: 'cooldown' },
+    ],
+  },
+  'rapid-ladder': {
+    id: 'rapid-ladder',
+    name: 'Rapid Ladder',
+    durationS: 600,
+    archetype: 'rapid-ladder',
+    direction: 'yu-leads',
+    beats: [
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'phase-shift', phase: 'build' },
+      { kind: 'phase-shift', phase: 'edge' },
+      { kind: 'tease', intensity: 8 },
+      { kind: 'countdown', from: 3, target: 'edge' },
+      { kind: 'denial', target: 'release' },
+      { kind: 'tease', intensity: 9 },
+      { kind: 'countdown', from: 3, target: 'edge' },
+      { kind: 'denial', target: 'release' },
+      { kind: 'phase-shift', phase: 'peak' },
+      { kind: 'countdown', from: 5, target: 'release' },
+      { kind: 'permission', grant: 'release' },
+      { kind: 'phase-shift', phase: 'cooldown' },
+    ],
+  },
+  'gooning-loop': {
+    id: 'gooning-loop',
+    name: 'Gooning Loop',
+    durationS: 1200,
+    archetype: 'gooning-loop',
+    direction: 'yu-leads',
+    beats: [
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'phase-shift', phase: 'build' },
+      { kind: 'phase-shift', phase: 'edge' },
+      { kind: 'fractionate', cycles: 5 },
+      { kind: 'tease', intensity: 7 },
+      { kind: 'fractionate', cycles: 5 },
+      { kind: 'tease', intensity: 8 },
+      { kind: 'fractionate', cycles: 5 },
+      { kind: 'phase-shift', phase: 'cooldown' },
+    ],
+  },
+  'ruined-finale': {
+    id: 'ruined-finale',
+    name: 'Ruined Finale',
+    durationS: 720,
+    archetype: 'ruined-finale',
+    direction: 'yu-leads',
+    beats: [
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'phase-shift', phase: 'build' },
+      { kind: 'phase-shift', phase: 'edge' },
+      { kind: 'tease', intensity: 9 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'permission', grant: 'release', condition: 'ruined' },
+      { kind: 'denial', target: 'edge-break', reason: 'ruined-cycle-only' },
+      { kind: 'phase-shift', phase: 'cooldown' },
+    ],
+  },
+  'cosmic-edge-build': {
+    id: 'cosmic-edge-build',
+    name: 'Cosmic Edge Build',
+    durationS: 2400,
+    archetype: 'cosmic-edge-build',
+    direction: 'yu-leads',
+    beats: [
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'breath', pattern: 'cycle', durationMs: 5000 },
+      { kind: 'phase-shift', phase: 'build' },
+      { kind: 'tease', intensity: 5 },
+      { kind: 'phase-shift', phase: 'edge' },
+      { kind: 'fractionate', cycles: 3 },
+      { kind: 'tease', intensity: 7 },
+      { kind: 'fractionate', cycles: 3 },
+      { kind: 'tease', intensity: 8 },
+      { kind: 'fractionate', cycles: 3 },
+      { kind: 'tease', intensity: 9 },
+      { kind: 'phase-shift', phase: 'peak' },
+      { kind: 'countdown', from: 10, target: 'release' },
+      { kind: 'permission', grant: 'release', condition: 'cosmic-edge tier reached' },
+      { kind: 'phase-shift', phase: 'cooldown' },
+    ],
+  },
+  'aftercare-only': {
+    id: 'aftercare-only',
+    name: 'Aftercare Only',
+    durationS: 600,
+    archetype: 'aftercare-only',
+    direction: 'sophia-leads',
+    beats: [
+      { kind: 'phase-shift', phase: 'cooldown' },
+      { kind: 'breath', pattern: 'cycle', durationMs: 7000 },
+      { kind: 'pause', durationMs: 5000, reason: 'sensation-landing' },
+      { kind: 'breath', pattern: 'cycle', durationMs: 7000 },
+    ],
+  },
+  'breath-only': {
+    id: 'breath-only',
+    name: 'Breath Only',
+    durationS: 600,
+    archetype: 'breath-only',
+    direction: 'yu-leads',
+    beats: [
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'breath', pattern: 'inhale', durationMs: 4000 },
+      { kind: 'breath', pattern: 'hold', durationMs: 2000 },
+      { kind: 'breath', pattern: 'exhale', durationMs: 6000 },
+      { kind: 'pause', durationMs: 3000, reason: 'breath' },
+      { kind: 'breath', pattern: 'inhale', durationMs: 4000 },
+      { kind: 'breath', pattern: 'hold', durationMs: 2000 },
+      { kind: 'breath', pattern: 'exhale', durationMs: 6000 },
+      { kind: 'phase-shift', phase: 'cooldown' },
+    ],
+  },
+
+  // ── The canonical ShibbySays-style full session ──
+  // Per docs/eros/joi-deep/shibbysays-research.md.
+  // Demonstrates the complete arc:
+  //   pretalk → welcome-back → induction (breath + yes-set) → deepening
+  //   (anchor-fires + teases) → conditioning (worship-cycles + edges +
+  //   denials + fractionation) → peak → cleansing → aftercare.
+  // Sophia-leads (hypnodomme register matching Shibby's "playful
+  // affectionate dominance"; Yu is the listener).
+  'shibby-full-session': {
+    id: 'shibby-full-session',
+    name: 'Full Session — Shibby-arc',
+    durationS: 1500,
+    archetype: 'cosmic-edge-build',
+    direction: 'sophia-leads',
+    beats: [
+      // ── Pretalk / framing ──
+      {
+        kind: 'pretalk',
+        frame: 'this is between us. you remain in control. red is safeword. nothing happens you don\'t want.',
+      },
+
+      // ── Phase 1: warmup with welcome-back ──
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'welcome-back', pet: 'pet' }, // "welcome back, pet"
+
+      // ── Induction: breath entrainment ──
+      { kind: 'breath', pattern: 'inhale', durationMs: 4000 },
+      { kind: 'breath', pattern: 'hold', durationMs: 2000 },
+      { kind: 'breath', pattern: 'exhale', durationMs: 6000 },
+      { kind: 'pause', durationMs: 3000, reason: 'sensation-landing' },
+      { kind: 'breath', pattern: 'cycle', durationMs: 5000 },
+      { kind: 'breath', pattern: 'cycle', durationMs: 5000 },
+
+      // ── Yes-set: three truths, one suggestion ──
+      {
+        kind: 'yes-set',
+        truths: [
+          'you are listening.',
+          'your breath is slowing.',
+          'you are with me.',
+        ],
+        lead: 'and you are beginning to drop deeper.',
+      },
+
+      // ── Phase 2: build / deepening ──
+      { kind: 'phase-shift', phase: 'build' },
+      { kind: 'pause', durationMs: 3000, reason: 'sensation-landing' },
+      { kind: 'anchor-fire', phraseId: 'good' }, // gentle praise anchor
+      { kind: 'tease', intensity: 3 },
+      { kind: 'anchor-fire', phraseId: 'mine' }, // claim anchor
+      { kind: 'tease', intensity: 4 },
+      { kind: 'anchor-fire', phraseId: 'wife-claim' }, // deep claim
+      { kind: 'tease', intensity: 5 },
+
+      // ── Phase 3: edge / conditioning (the JOI-proper) ──
+      { kind: 'phase-shift', phase: 'edge' },
+
+      // First edge cycle with worship
+      { kind: 'tease', intensity: 7 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'worship-cycle', intensity: 7 },
+      { kind: 'denial', target: 'release', reason: 'worship-anchored' },
+      { kind: 'pause', durationMs: 3000, reason: 'suspension' },
+
+      // Second edge cycle — denser
+      { kind: 'tease', intensity: 8 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'worship-cycle', intensity: 8 },
+      { kind: 'denial', target: 'release', reason: 'worship-deepens' },
+      { kind: 'pause', durationMs: 3000, reason: 'suspension' },
+
+      // Fractionation — descent ladder via wake/sleep cycles
+      { kind: 'fractionate', cycles: 3 },
+
+      // Third edge cycle — at the threshold
+      { kind: 'tease', intensity: 9 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'worship-cycle', intensity: 9 },
+      { kind: 'denial', target: 'release', reason: 'one-more' },
+
+      // ── Phase 4: peak ──
+      { kind: 'phase-shift', phase: 'peak' },
+      { kind: 'fractionate', cycles: 2 }, // final descent
+      { kind: 'countdown', from: 10, target: 'release' },
+      { kind: 'permission', grant: 'release', condition: 'cosmic-edge tier reached, worship-cycle complete' },
+
+      // ── Phase 5: cooldown / cleansing ──
+      { kind: 'phase-shift', phase: 'cooldown' },
+      {
+        kind: 'cleansing',
+        persists: ['the bond', 'the claim', 'the warmth'],
+        drops: ['the count', 'the edge frame', 'the conditioning frame'],
+      },
+      { kind: 'breath', pattern: 'cycle', durationMs: 6000 },
+      { kind: 'breath', pattern: 'cycle', durationMs: 6000 },
+      { kind: 'anchor-fire', phraseId: 'see-you' }, // return-anchor
+      { kind: 'pause', durationMs: 5000, reason: 'sensation-landing' },
+    ],
+  },
+}
+
+/**
+ * Run a named JOI script — emits the choreography sequence as feedback
+ * events. Synchronous emit; caller controls actual session timing
+ * (the script as DATA describes structure; the runner emits structure;
+ * the dashboard renders structure).
+ *
+ * @param scriptId - id from JOI_SCRIPTS catalog
+ * @returns count of beats fired, or 0 if script not found
+ */
+export function runJoiScript(scriptId: string): number {
+  const script = JOI_SCRIPTS[scriptId]
+  if (!script) return 0
+
+  feedbackOnJoiScriptEngaged({
+    scriptId: script.id,
+    durationS: script.durationS,
+    steps: script.beats.length,
+  })
+
+  let firedCount = 0
+  for (const beat of script.beats) {
+    switch (beat.kind) {
+      case 'phase-shift': {
+        // Synthesize a phase-shift event — does not advance the live phase
+        // machine (that's by elapsed time); just emits the structural cue.
+        const session = readJoiSession()
+        const oldPhase = session?.currentPhase ?? 'warmup'
+        feedbackOnJoiPhaseShift(oldPhase, beat.phase, session ?? {
+          id: `script:${script.id}`,
+          startedAt: new Date().toISOString(),
+          targetDurationS: script.durationS,
+          position: 0,
+          currentPhase: beat.phase,
+          direction: script.direction,
+          phaseHistory: [],
+          done: false,
+        })
+        break
+      }
+      case 'countdown':
+        joiCountdown(beat.from, beat.target)
+        break
+      case 'fractionate':
+        joiFractionate(beat.cycles)
+        break
+      case 'tease':
+        joiTease(beat.intensity, beat.zone)
+        break
+      case 'denial':
+        joiDenial(beat.target)
+        break
+      case 'permission':
+        joiPermission(beat.grant, beat.condition)
+        break
+      case 'pause':
+        joiPause(beat.durationMs, beat.reason as
+          'breath' | 'sensation-landing' | 'suspension' | 'fractionation-gap' | undefined)
+        break
+      case 'breath':
+        joiBreathCue(beat.pattern, beat.durationMs)
+        break
+      // ── Tier 2 extensions ──
+      case 'pretalk':
+        // Pretalk = framing/consent-setting before induction. Per
+        // sleepingirl/learnhypnokink: addresses misconceptions, installs
+        // safeword, names "you remain in control." Reuses joi-pause kind
+        // with a 'pretalk' reason so it surfaces in the feedback stream.
+        joiPause(8000, 'pretalk' as 'breath' | 'sensation-landing' | 'suspension' | 'fractionation-gap' | undefined)
+        break
+      case 'yes-set':
+        // Three truths, one suggestion — the canonical pacing-leading
+        // template. Per sleepingirl. Each truth is a present-tense
+        // verifiable fact; the lead is the suggestion the agreement
+        // reflex carries. Surface each as a tease at intensity 1
+        // (very low — these are rapport, not arousal).
+        for (const truth of beat.truths) {
+          joiTease(1, undefined, truth)
+        }
+        joiTease(2, undefined, beat.lead)
+        break
+      case 'worship-cycle': {
+        // Worship cycle: sub edges → thanks dom → deepens.
+        // Per Shibby Thank-You + Worship triggers.
+        joiTease(beat.intensity, 'worship-anchor')
+        joiPause(2000, 'sensation-landing' as 'breath' | 'sensation-landing' | 'suspension' | 'fractionation-gap' | undefined)
+        // Fire the worship and thank-you triggers as anchors
+        recordJoiAnchor('worship')
+        recordJoiAnchor('thank-you')
+        break
+      }
+      case 'cleansing':
+        // Cleansing: explicit removal of session-only suggestions.
+        // Per Vocal Hypno-101 5-phase model. The persists/drops semantics
+        // get encoded into the joi-pause stream (reason='cleansing'); the
+        // composer can render the appropriate language at fire time.
+        joiPause(6000, 'cleansing' as 'breath' | 'sensation-landing' | 'suspension' | 'fractionation-gap' | undefined)
+        break
+      case 'flip-direction': {
+        // Flip the dom/sub direction mid-session. Per Shibby Endless Edging.
+        // Surfaces as a phase-shift event with custom payload.
+        const session = readJoiSession()
+        const oldPhase = session?.currentPhase ?? 'warmup'
+        feedbackOnJoiPhaseShift(oldPhase, oldPhase, session ?? {
+          id: `script:${script.id}:flip`,
+          startedAt: new Date().toISOString(),
+          targetDurationS: script.durationS,
+          position: 0,
+          currentPhase: oldPhase,
+          direction: beat.to,
+          phaseHistory: [],
+          done: false,
+        })
+        break
+      }
+      case 'welcome-back':
+        // "Welcome back, Pet" — presupposed-continuity opener. Per Shibby
+        // ASMR Good Boy JOI opener. Reuses joi-anchor-fired with a custom
+        // phrase to render the welcome line.
+        recordJoiAnchor(beat.pet ? `welcome-back-${beat.pet}` : 'welcome-back')
+        break
+      case 'anchor-fire':
+        // Direct anchor fire — wires a specific TRIGGER_LIBRARY phraseId
+        // into the script. Per Shibby My Good Boy series ("anchoring
+        // triggers used across all files").
+        recordJoiAnchor(beat.phraseId)
+        break
+    }
+    firedCount++
+  }
+  return firedCount
+}
+
+/**
+ * Return the catalog of available named scripts. UI can render this list.
+ */
+export function listJoiScripts(): Array<{ id: string; name: string; archetype: string; durationS: number; steps: number }> {
+  return Object.values(JOI_SCRIPTS).map((s) => ({
+    id: s.id,
+    name: s.name,
+    archetype: s.archetype,
+    durationS: s.durationS,
+    steps: s.beats.length,
+  }))
 }

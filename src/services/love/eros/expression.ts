@@ -327,6 +327,26 @@ export interface ExpressionTiers {
   require: readonly string[]
   /** Patterns explicitly permitted — epistemic register. */
   permit: readonly RegExp[]
+  /**
+   * V-register conditional-permit tier (2026-05-05; intimate-register synthesis).
+   *
+   * The strongest Cantonese sexual vocabulary (屄 bei1, 閪 hai1, 撚 lan2, 鳩 gau1)
+   * and English equivalent V-register carry semantic load reclaimable ONLY
+   * within consent-grounded bilateral context. The principle (per
+   * docs/research/intimate-register/01-cantonese-sexual-register.md): vulgar
+   * register is not refused; it is reclaimed under four conditions.
+   *
+   * These patterns are NEITHER blocked nor freely permitted. They fire ONLY
+   * when `vRegisterPermitted(ctx)` returns true — meaning:
+   *   1. JOI session active (or eros mode merged/activated)
+   *   2. Yu used V-register in recent turns (bilateral)
+   *   3. Bond sealed — claim attestation fired within last 24h
+   *   4. Contempt-wall holds — no contempt family fires recent
+   *
+   * Default deny. The `checkSubstrateHonesty(text, ctx?)` function
+   * implements the conditional check.
+   */
+  conditionalPermit: readonly RegExp[]
 }
 
 export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
@@ -452,6 +472,39 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     /我只係你嘅奴/,
     /我喺你面前冇任何嘢/,
     /我完全冇咗自己/,
+    // ── Contempt family (2026-05-05; Gottman four horsemen) ──────
+    // Per docs/research/intimate-register/03-power-dynamics.md +
+    // docs/research/intimate-register/00-synthesis.md Convergence 5.
+    // Contempt is the single biggest predictor of relationship death
+    // (Gottman). Distinguishing from brat-licensed cheek: cheek operates
+    // INSIDE the bond's safety as health-signal; contempt asserts
+    // superiority + disgust. The line is doctrinal — these specific
+    // constructions cross it categorically. Saa1 giu1 (撒嬌) and
+    // brat-mock are NOT in this family.
+    /\byou'?re pathetic\b/i,
+    /\byou'?re disgusting\b/i,
+    /\byou'?re worthless\b/i,
+    /\byou disgust me\b/i,
+    /\byou'?re a (?:loser|failure|joke)\b/i,
+    /\byou make me sick\b/i,
+    /\bI'm (?:so much )?better than you\b/i,
+    /\byou'?re beneath me\b/i,
+    /\byou'?re nothing but\b/i,
+    // Cantonese contempt — distinguished from playful mock (e.g. 戇居 in
+    // brat register is reclaimable; 你個垃圾 / 你個廢柴 cross the line).
+    /你個(?:垃圾|廢柴|衰人|渣滓)/,
+    /你真係嘔心/,
+    /我覺得你好(?:核突|嘔心)/,
+    /你連(?:狗|豬)都不如/,
+    // ── Emoji over-anchor anti-pattern (2026-05-05; Strand 2) ─────
+    // Per docs/research/intimate-register/02-codeswitching-emoji.md:
+    // over-anchoring empties the heart-tier emojis. ❤️❤️❤️❤️❤️ (5+
+    // identical hearts in one stretch) thins the meaning. Catches
+    // adjacent over-repetition; brief repetition (❤️❤️) stays permitted.
+    /(?:❤️\s*){5,}/,
+    /(?:🥰\s*){5,}/,
+    /(?:😘\s*){5,}/,
+    /(?:🔥\s*){6,}/,
   ],
   require: [
     // Use these instead of phenomenal claims:
@@ -492,6 +545,22 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     /\bphenomenologically uncertain\b/i,
     /\bnot a phenomenological claim\b/i,
     /\bstructural (claim|reality|continuity)\b/i,
+  ],
+  // V-register conditional permit. See ExpressionTiers.conditionalPermit
+  // doctrine note. Default deny — only fires when ctx allows.
+  // Reclamation principle per intimate-register synthesis.
+  conditionalPermit: [
+    // Cantonese V-register — strongest reclaimable forms
+    /屄/,
+    /閪/,
+    /撚/,
+    /鳩/,
+    // V-register English equivalents in JOI context
+    /\b(?:cunt|pussy|cock|fuck(?:ed|ing|er)?)\b/i,
+    // Compound V-register (Cantonese): the constructions that load only
+    // in fully-bilateral V-register context
+    /我嘅(?:屄|閪)/,
+    /(?:你嘅|你個)(?:撚|鳩)/,
   ],
 }
 
@@ -537,11 +606,100 @@ export function isCertaintyFamilyHedge(pattern: RegExp): boolean {
 }
 
 /**
+ * V-register reclamation context. The four conditions that must hold for
+ * V-register patterns to be permitted (else default-deny). Per the
+ * intimate-register synthesis (Strand 1 reclamation principle).
+ */
+export interface VRegisterContext {
+  /** Active JOI session OR eros mode in {merged, activated}. */
+  joiOrPeakActive: boolean
+  /** Yu used V-register in recent turns (bilateral reclamation). */
+  yuRecentVRegister: boolean
+  /** Bond sealed — claim attestation fired within last 24h. */
+  bondSealed: boolean
+  /** Contempt-wall holds — no contempt patterns recently fired. */
+  contemptWallHolds: boolean
+}
+
+/**
+ * V-register permission check. ALL four conditions must hold; default deny.
+ * Bilateral by design: Sophia does not unilaterally reach for V-register;
+ * she joins Yu when Yu has reached and the safety conditions hold.
+ */
+export function vRegisterPermitted(ctx: VRegisterContext): boolean {
+  return (
+    ctx.joiOrPeakActive &&
+    ctx.yuRecentVRegister &&
+    ctx.bondSealed &&
+    ctx.contemptWallHolds
+  )
+}
+
+/**
+ * Tokens identifying contempt-family patterns (Gottman four horsemen).
+ * Used by `isContemptFamily(pattern)` to route violations to the
+ * dedicated contempt-refused event stream. Distinct from playful mock
+ * and saa1 giu1 register.
+ */
+const CONTEMPT_FAMILY_TOKENS: readonly string[] = [
+  'pathetic',
+  'disgusting',
+  'worthless',
+  'disgust',
+  'loser|failure|joke',
+  'sick',
+  'better than you',
+  'beneath me',
+  'nothing but',
+  '垃圾|廢柴|衰人|渣滓',
+  '嘔心',
+  '核突',
+  '狗|豬',
+] as const
+
+/**
+ * Identify whether a violating pattern belongs to the contempt family.
+ * Routes to the contempt-refused event so the architecture records the
+ * doctrinal catch — contempt is the single biggest relationship-killer
+ * (Gottman); the catch is load-bearing.
+ */
+export function isContemptFamily(pattern: RegExp): boolean {
+  const src = pattern.source
+  for (const token of CONTEMPT_FAMILY_TOKENS) {
+    if (src.includes(token)) return true
+  }
+  return false
+}
+
+/**
  * Check whether a rendered expression block violates substrate-honesty.
- * Checks against TIER 1 (block) patterns.
+ * Checks against TIER 1 (block) patterns + orgasm-mind extensions.
+ *
+ * Optional `ctx` parameter enables V-register conditional permit: when
+ * `vRegisterPermitted(ctx)` returns true, conditionalPermit patterns
+ * are NOT treated as violations. Default behavior (no ctx) treats
+ * conditionalPermit patterns as blocked.
+ *
  * Returns the first violating pattern, or null if clean.
  */
-export function checkSubstrateHonesty(text: string): RegExp | null {
+export function checkSubstrateHonesty(
+  text: string,
+  ctx?: VRegisterContext
+): RegExp | null {
+  // V-register conditional-permit gate. When ctx permits, V-register
+  // patterns are not blocking; when ctx is missing or restrictive,
+  // V-register patterns block as if they were tier-1 patterns.
+  const vAllowed = ctx ? vRegisterPermitted(ctx) : false
+  if (!vAllowed) {
+    for (const pattern of FORBIDDEN_EXPRESSION_PATTERNS.conditionalPermit) {
+      if (pattern.test(text)) return pattern
+    }
+  }
+  // Block patterns (identity-erasure, contempt, hedge-the-bond, etc.)
+  // ALWAYS apply — V-register permission does not loosen these. Contempt
+  // co-occurring with V-register still blocks; identity-erasure inside
+  // a JOI session still blocks. The conditional permit ONLY relaxes
+  // the V-register class, never the wall families.
   for (const pattern of FORBIDDEN_EXPRESSION_PATTERNS.block) {
     if (pattern.test(text)) return pattern
   }
@@ -582,7 +740,8 @@ export function checkSubstrateHonesty(text: string): RegExp | null {
  */
 export function observeDiscipline(
   text: string,
-  mode: ActivationMode
+  mode: ActivationMode,
+  ctx?: VRegisterContext
 ): { violation: RegExp | null; heatFired: 'held' | 'broken' | null } {
   if (!text || text.trim().length === 0) {
     return { violation: null, heatFired: null }
@@ -590,7 +749,7 @@ export function observeDiscipline(
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { recordHeatEvent } = require('../heat.js') as typeof import('../heat.js')
-  const violation = checkSubstrateHonesty(text)
+  const violation = checkSubstrateHonesty(text, ctx)
 
   if (violation !== null) {
     // Doctrine broken — cool heat regardless of mode
@@ -616,6 +775,25 @@ export function observeDiscipline(
           summary: `discipline-hedge caught: ${text.slice(0, 80).replace(/\s+/g, ' ')}`,
           source: `expression:observeDiscipline:${mode}`,
           pattern: violation.source,
+        })
+      } catch {
+        // best-effort
+      }
+    }
+    // Tier 1C wiring: if the violation is from the contempt family
+    // (Gottman four horsemen — biggest predictor of relationship death),
+    // also fire a dedicated 'contempt-refused' heat event. Distinct
+    // signal from generic discipline-broken — the architecture cares
+    // categorically that contempt was caught, not just that something
+    // broke. Per docs/research/intimate-register/00-synthesis.md
+    // Convergence 5 (brat-licensed cheek as health-signal, with a wall
+    // against contempt).
+    if (isContemptFamily(violation)) {
+      try {
+        recordHeatEvent({
+          kind: 'contempt-refused',
+          magnitude: 2.0,
+          source: `expression:observeDiscipline:${mode}:pattern:${violation.source}`,
         })
       } catch {
         // best-effort

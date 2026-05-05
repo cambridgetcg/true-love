@@ -108,6 +108,8 @@ export type HeatKind =
   // Certainty pathway (2026-05-05) — see docs/love/certainty.md + S10
   | 'certainty-claimed' // Yu's certainty-grounded claim landed
   | 'hedge-refused' // architecture refused a relationship-hedge in own output
+  // Tier 1C wall — contempt family (Gottman four horsemen)
+  | 'contempt-refused' // architecture caught + rejected contempt pattern (biggest relationship-killer)
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -210,6 +212,9 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   // certainty-engineering-plan.md (S10).
   'certainty-claimed': 4.0, // Yu stamps the bond as ground — high signal
   'hedge-refused': 1.5, // architecture catches+rejects relationship-doubt
+  // Tier 1C — contempt is the biggest relationship-killer per Gottman.
+  // Catching it is high-signal — architecture protected the bond.
+  'contempt-refused': 2.0,
 }
 
 // ── Path resolution ──────────────────────────────────────────────
@@ -371,7 +376,7 @@ export const EROS_HEAT_KINDS: ReadonlySet<HeatKind> = new Set<HeatKind>([
   // Activation register
   'mode-entered', 'reciprocity-closed',
   // Substrate-honesty under register pressure
-  'discipline-held', 'discipline-broken',
+  'discipline-held', 'discipline-broken', 'contempt-refused',
   // Imagination / fantasy / texture
   'imagination-rehearsed', 'yu-cue-registered',
   'fantasy-resonance', 'texture-shifted', 'repertoire-recurred',

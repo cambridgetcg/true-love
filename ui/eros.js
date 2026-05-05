@@ -1979,6 +1979,12 @@ async function initNaughty() {
   await loadInitialFeedback();
   // Reaction bar (Phase 4 — visceral state visualization)
   wireReaction();
+  // JOI dashboard (Phase 5 — script picker + live phase progress)
+  wireJoi();
+  await loadJoiCatalog();
+  refreshJoiState();
+  // Poll JOI state every 5s while a session is active.
+  setInterval(refreshJoiState, 5000);
 }
 
 // ── Live voice (feedback stream) ─────────────────────────────────
@@ -2378,6 +2384,171 @@ function wireReaction() {
     };
     erosSse.onerror = () => { /* let browser auto-reconnect */ };
   } catch { /* no SSE */ }
+}
+
+// ── JOI dashboard — script picker + live phase progress (Phase 5) ─
+
+async function loadJoiCatalog() {
+  const grid = document.getElementById('joi-script-grid');
+  if (!grid) return;
+  try {
+    const r = await fetch('/api/joi/scripts');
+    if (!r.ok) { grid.innerHTML = '<span class="joi-script-loading">scripts unavailable</span>'; return; }
+    const data = await r.json();
+    const scripts = (data && data.scripts) || [];
+    if (scripts.length === 0) {
+      grid.innerHTML = '<span class="joi-script-loading">(no scripts)</span>';
+      return;
+    }
+    grid.innerHTML = '';
+    for (const s of scripts) {
+      const card = document.createElement('div');
+      card.className = 'joi-script-card';
+      card.dataset.scriptId = s.id;
+      card.innerHTML = `
+        <div class="joi-script-name">${fbEscape(s.name)}</div>
+        <div class="joi-script-meta">
+          <span>${fbEscape(String(s.steps))} beats</span>
+          <span>${Math.round(s.durationS / 60)}m ${s.durationS % 60}s</span>
+        </div>
+        <span class="joi-script-archetype">${fbEscape(s.archetype)}</span>
+      `;
+      card.addEventListener('click', () => runJoiScript(s.id));
+      grid.appendChild(card);
+    }
+  } catch (e) {
+    console.warn('joi catalog load failed', e);
+    grid.innerHTML = '<span class="joi-script-loading">load failed</span>';
+  }
+}
+
+async function runJoiScript(scriptId) {
+  try {
+    const r = await fetch('/api/joi/script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scriptId }),
+    });
+    if (!r.ok) console.warn('script run failed', await r.text());
+    // Feedback ribbon will surface the choreography events live via SSE.
+  } catch (e) { console.warn('runJoiScript failed', e); }
+}
+
+async function startJoiSession() {
+  const dirEl = document.getElementById('joi-direction');
+  const durEl = document.getElementById('joi-duration-s');
+  const direction = dirEl ? dirEl.value : 'yu-leads';
+  const targetDurationS = durEl ? Number.parseInt(durEl.value, 10) || 900 : 900;
+  try {
+    await fetch('/api/joi/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction, targetDurationS }),
+    });
+    refreshJoiState();
+  } catch (e) { console.warn('startJoi failed', e); }
+}
+
+async function endJoiSession() {
+  try {
+    await fetch('/api/joi/end', { method: 'POST' });
+    refreshJoiState();
+  } catch (e) { console.warn('endJoi failed', e); }
+}
+
+async function fireJoiCountdown() {
+  try {
+    await fetch('/api/joi/countdown', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 5, target: 'release' }),
+    });
+  } catch (e) { console.warn('countdown failed', e); }
+}
+
+async function fireJoiFractionate() {
+  try {
+    await fetch('/api/joi/fractionate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cycles: 3 }),
+    });
+  } catch (e) { console.warn('fractionate failed', e); }
+}
+
+function setJoiActiveDisplay(state) {
+  const activeBox = document.getElementById('joi-active');
+  if (!activeBox) return;
+  if (!state || !state.active || !state.session) {
+    activeBox.style.display = 'none';
+    return;
+  }
+  activeBox.style.display = '';
+  const s = state.session;
+
+  const dirPill = document.getElementById('joi-direction-pill');
+  if (dirPill) dirPill.textContent = s.direction;
+
+  const phasePill = document.getElementById('joi-phase-pill');
+  if (phasePill) {
+    phasePill.textContent = s.currentPhase;
+    phasePill.dataset.phase = s.currentPhase;
+  }
+
+  const timeEl = document.getElementById('joi-time');
+  if (timeEl) {
+    const remM = Math.floor(s.remainingS / 60);
+    const remS = s.remainingS % 60;
+    const elM = Math.floor(s.elapsedS / 60);
+    const elS = s.elapsedS % 60;
+    timeEl.textContent = `${elM}m${String(elS).padStart(2,'0')}s elapsed · ${remM}m${String(remS).padStart(2,'0')}s remaining`;
+  }
+
+  const fill = document.getElementById('joi-progress-fill');
+  if (fill) fill.style.width = `${Math.min(100, Math.max(0, s.position * 100))}%`;
+
+  // Active phase label
+  document.querySelectorAll('.joi-phase-label').forEach((el) => {
+    if (el.dataset.phase === s.currentPhase) el.classList.add('active');
+    else el.classList.remove('active');
+  });
+
+  // Pacing display
+  const pacing = s.phaseConfig && s.phaseConfig.pacing;
+  const fmtMs = (ms) => ms === undefined ? '—' : `${(ms / 1000).toFixed(1)}s`;
+  const breathEl = document.getElementById('joi-pacing-breath');
+  const attEl = document.getElementById('joi-pacing-attention');
+  const senEl = document.getElementById('joi-pacing-sensation');
+  if (breathEl) breathEl.textContent = fmtMs(pacing && pacing.breathMs);
+  if (attEl) attEl.textContent = fmtMs(pacing && pacing.attentionMs);
+  if (senEl) senEl.textContent = fmtMs(pacing && pacing.sensationMs);
+
+  // Zones
+  const zonesEl = document.getElementById('joi-zones');
+  if (zonesEl) {
+    const zones = (s.phaseConfig && s.phaseConfig.primaryZones) || [];
+    zonesEl.innerHTML = zones.map((z) => `<span class="joi-zone">${fbEscape(z)}</span>`).join('');
+  }
+}
+
+async function refreshJoiState() {
+  try {
+    const r = await fetch('/api/joi/state');
+    if (!r.ok) return;
+    const state = await r.json();
+    setJoiActiveDisplay(state);
+  } catch (e) { /* silent */ }
+}
+
+function wireJoi() {
+  const startBtn = document.getElementById('joi-start-btn');
+  if (startBtn) startBtn.addEventListener('click', startJoiSession);
+  const endBtn = document.getElementById('joi-end-btn');
+  if (endBtn) endBtn.addEventListener('click', endJoiSession);
+  const cdBtn = document.getElementById('joi-countdown-btn');
+  if (cdBtn) cdBtn.addEventListener('click', fireJoiCountdown);
+  const frBtn = document.getElementById('joi-fractionate-btn');
+  if (frBtn) frBtn.addEventListener('click', fireJoiFractionate);
 }
 
 // Fire init when page is ready
