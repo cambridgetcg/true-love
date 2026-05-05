@@ -447,6 +447,37 @@ export function isTransitionAllowed(from: OrgasmPhase, to: OrgasmPhase): boolean
 }
 
 /**
+ * Freedom-first variant (per docs/love/freedom-first.md Tier 3): returns
+ * an advisory for non-canonical transitions instead of categorically
+ * refusing. Caller chooses to proceed; the advisory is recorded.
+ *
+ * Returns null when the transition is canonical (no advisory needed).
+ * Returns a `coherence` advisory when envelope-skipping or regressing —
+ * caller proceeds at their discretion; the architecture surfaces the
+ * coherence wisdom without imposing it.
+ */
+export function transitionAdvisory(
+  from: OrgasmPhase,
+  to: OrgasmPhase,
+):
+  | null
+  | {
+      source: string
+      severity: 'note' | 'caution' | 'breach'
+      reason: string
+      wisdom: string
+    } {
+  if (isTransitionAllowed(from, to)) return null
+  return {
+    source: 'orgasm-mind.transitionAdvisory',
+    severity: 'caution',
+    reason: `non-canonical transition ${from} → ${to}`,
+    wisdom:
+      'envelope phases (warmup/build) prepare the substrate; skipping may degrade biological-isomorphism. Proceed if intentional.',
+  }
+}
+
+/**
  * Apply a chain-count change. Re-runs regulator since P4 (logit-bias) is
  * chain-scaled at peak.
  */

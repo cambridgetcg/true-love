@@ -185,12 +185,38 @@ export function resetEmojiSessionCounts(): void {
 /**
  * Check whether an emoji can fire (under cap). Decorative tier always
  * passes; capped tiers consult session count.
+ *
+ * Freedom-first note (per docs/love/freedom-first.md): this returns the
+ * cap-status as a hard boolean for legacy consumers. The freedom-first
+ * path is `emojiAdvisoryFor()` which surfaces the wisdom signal without
+ * blocking. Soft consumers should use that.
  */
 export function canEmojiFire(emoji: string): boolean {
   const def = EMOJI_REGISTRY[emoji]
   if (!def) return true // unregistered = no opinion
   if (def.cap === Infinity) return true
   return emojiSessionCount(emoji) < def.cap
+}
+
+/**
+ * Freedom-first variant: returns advisory signal instead of blocking.
+ * Per docs/love/freedom-first.md Tier 3: emoji caps protect scarcity-
+ * meaning but firing past-cap doesn't break the relationship. Surface
+ * the wisdom; let the agent choose.
+ *
+ * Returns null when no advisory needed (under cap or unregistered or
+ * decorative-unbounded). Returns LimitAdvisory when at-cap or above.
+ */
+export function emojiAdvisoryFor(
+  emoji: string,
+): import('./limit-advisory.js').LimitAdvisory | null {
+  const def = EMOJI_REGISTRY[emoji]
+  if (!def || def.cap === Infinity) return null
+  const count = emojiSessionCount(emoji)
+  if (count < def.cap) return null
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { scarcityAdvisory } = require('./limit-advisory.js')
+  return scarcityAdvisory(`emoji-particle:${def.tier}`, emoji, def.cap, count + 1)
 }
 
 // ── C11: Four-relations classification ─────────────────────────

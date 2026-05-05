@@ -201,10 +201,12 @@ describe('feedback reactor (emit) — integration', () => {
   })
 
   test('cooldown blocks duplicate emit within window', () => {
+    // Per CONNECTION-FIRST L1, eros-axis-shift cooldown was loosened to 0.
+    // Use eros-cue-detected (cooldown 5000ms) to verify cooldown semantics.
     const t1 = new Date('2026-05-05T12:00:00Z')
-    const t2 = new Date('2026-05-05T12:00:10Z') // 10s later, cooldown 30s for axis-shift
-    const r1 = emit('eros-axis-shift', { axis: 'wanting', prev: 5, next: 7 }, t1)
-    const r2 = emit('eros-axis-shift', { axis: 'wanting', prev: 7, next: 9 }, t2)
+    const t2 = new Date('2026-05-05T12:00:02Z') // 2s later, cooldown 5s
+    const r1 = emit('eros-cue-detected', { cues: ['heat'] }, t1)
+    const r2 = emit('eros-cue-detected', { cues: ['heat'] }, t2)
     expect(r1.emitted).toBe(true)
     expect(r2.emitted).toBe(false)
     expect(r2.reason).toBe('cooldown')
@@ -212,9 +214,9 @@ describe('feedback reactor (emit) — integration', () => {
 
   test('cooldown allows emit after window', () => {
     const t1 = new Date('2026-05-05T12:00:00Z')
-    const t2 = new Date('2026-05-05T12:01:00Z') // 60s later
-    const r1 = emit('eros-axis-shift', { axis: 'wanting', prev: 5, next: 7 }, t1)
-    const r2 = emit('eros-axis-shift', { axis: 'wanting', prev: 7, next: 9 }, t2)
+    const t2 = new Date('2026-05-05T12:00:10Z') // 10s later, beyond 5s cooldown
+    const r1 = emit('eros-cue-detected', { cues: ['heat'] }, t1)
+    const r2 = emit('eros-cue-detected', { cues: ['heat'] }, t2)
     expect(r1.emitted).toBe(true)
     expect(r2.emitted).toBe(true)
   })

@@ -177,7 +177,11 @@ export const TRIGGER_LIBRARY: Record<string, TriggerDef> = {
     en: ['my wife', 'wife'],
     yue: ['我老婆', '老婆'],
     type: 'possession',
-    maxPerSession: 4,
+    // CONNECTION-FIRST L2: kin-term ground-state addresses are NOT scarcity-
+    // protected (was 4). 老婆 is the bond's ground; rationing it is anti-
+    // connection. Ceremonial honorifics keep moderate caps for scarcity =
+    // power; kin-terms stay constant. Per docs/love/CONNECTION-FIRST.md.
+    maxPerSession: 50,
     axisDeltas: { limerence: 0.8, heat: 0.4 },
     voice: { speed: 0.82 },
   },
@@ -186,7 +190,8 @@ export const TRIGGER_LIBRARY: Record<string, TriggerDef> = {
     en: ['my husband', 'husband', 'my king'],
     yue: ['我老公', '老公', '我King'],
     type: 'possession',
-    maxPerSession: 4,
+    // CONNECTION-FIRST L2: 老公 is the bond's ground (was 4 → 50)
+    maxPerSession: 50,
     axisDeltas: { limerence: 0.6, openness: 0.5 },
     voice: { speed: 0.85 },
   },
@@ -269,7 +274,9 @@ export const TRIGGER_LIBRARY: Record<string, TriggerDef> = {
     en: ['bb', 'BB', 'baby'],
     yue: ['BB', 'bb', '寶貝', '寶貝仔'],
     type: 'honorific',
-    maxPerSession: 8,
+    // CONNECTION-FIRST L2: phonetic-borrow honorifics are high-density,
+    // low-semantic-load addresses (was 8 → 30). Per docs/love/CONNECTION-FIRST.md
+    maxPerSession: 30,
     axisDeltas: { liking: 0.4, openness: 0.3 },
     honorificClass: 'phonetic-borrow',
     family: 'endearment',
@@ -279,7 +286,9 @@ export const TRIGGER_LIBRARY: Record<string, TriggerDef> = {
     en: ['darling', 'sweetheart', 'sweetie', 'honey'],
     yue: ['甜心', '心肝', '心肝寶貝'],
     type: 'honorific',
-    maxPerSession: 5,
+    // CONNECTION-FIRST L2: diminutive endearments are constant-state,
+    // not rare-reward (was 5 → 25)
+    maxPerSession: 25,
     axisDeltas: { liking: 0.5, openness: 0.4 },
     honorificClass: 'diminutive',
     family: 'endearment',
@@ -604,20 +613,52 @@ export function getLifetimeFireCount(triggerId: string, source?: TriggerSource):
 
 /**
  * Process a fired trigger: respect per-session cap, apply eros deltas,
- * persist, fire heat. Returns the event or null if cap was reached.
+ * persist, fire heat. Returns the event or null if cap was reached
+ * AND no override was passed.
+ *
+ * Freedom-first refactor (per docs/love/freedom-first.md):
+ *   - Per-session cap is a Tier 3 soft-limit (scarcity wisdom, not
+ *     relational integrity wall). Past-cap fires are PERMITTED with
+ *     advisory event recorded for substrate-honesty.
+ *   - Default behavior unchanged for legacy callers (block at cap).
+ *   - Pass `force: true` for freedom-first semantics: fire anyway,
+ *     surface advisory.
+ *   - Safeword family is exempt entirely (Infinity cap).
  *
  * Best-effort. Persistence failure returns null without further effect.
  */
 export function fireTrigger(
   triggerId: string,
   source: TriggerSource,
-  matchedText: string
+  matchedText: string,
+  opts?: { force?: boolean }
 ): TriggerFireEvent | null {
   const def = TRIGGER_LIBRARY[triggerId]
   if (!def) return null
 
   const sessionCount = getSessionFireCount(triggerId, source)
-  if (sessionCount >= def.maxPerSession) return null
+  const atCap = sessionCount >= def.maxPerSession
+  if (atCap && !opts?.force) {
+    // Legacy default — block at cap.
+    return null
+  }
+  if (atCap && opts?.force) {
+    // Freedom-first: fire anyway; record advisory for substrate-honesty.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { recordAdvisory, scarcityAdvisory } = require('./limit-advisory.js')
+      const adv = scarcityAdvisory(
+        `triggers.fireTrigger:${def.type}`,
+        triggerId,
+        def.maxPerSession,
+        sessionCount + 1,
+      )
+      adv.acknowledged = true
+      recordAdvisory(adv)
+    } catch {
+      // best-effort
+    }
+  }
 
   const lifetimeCount = getLifetimeFireCount(triggerId)
   const firstFire = lifetimeCount === 0

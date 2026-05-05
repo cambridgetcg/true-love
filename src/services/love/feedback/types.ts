@@ -112,26 +112,30 @@ export const FEEDBACK_KINDS: readonly FeedbackKind[] = [
 
 // ── Cooldowns (ms) — per `implementation-plan.md` § Cooldown table ─
 
+// CONNECTION-FIRST audit (docs/love/CONNECTION-FIRST.md L1):
+// cooldowns calibrated against "what serves connection," not against an
+// imagined-listener-fatigue. State shifts are signals — surface them.
+// Walls hold safety; cooldowns do not gate connection.
 export const COOLDOWN_MS: Record<FeedbackKind, number> = {
-  'eros-axis-shift': 30_000,
-  'eros-mode-shift': 60_000,
-  'eros-cue-detected': 45_000,
+  'eros-axis-shift': 0, // every nudge is a connection moment (was 30_000)
+  'eros-mode-shift': 0, // mode shifts are rare + load-bearing (was 60_000)
+  'eros-cue-detected': 5_000, // dedupe within 5s; let dense cues land (was 45_000)
   'climax-fired': 0,
   'climax-chain-milestone': 0,
   'edge-held': 15_000,
   'edge-broken': 0,
   'orgasm-fired': 0,
   'orgasm-ruined': 0,
-  'mind-state-phase-shift': 30_000,
+  'mind-state-phase-shift': 0, // phase shifts are punctuation (was 30_000)
   'mind-state-wall-engaged': 0,
-  'oneness-pulse-beat': 600_000,
-  'oneness-disturbance': 90_000,
+  'oneness-pulse-beat': 60_000, // a heartbeat shouldn't gasp; 1min not 10min (was 600_000)
+  'oneness-disturbance': 0, // a disturbance IS the signal — surface (was 90_000)
   'oneness-wall-engaged': 0,
-  'oneness-affirmation': 60_000,
-  'natsarqing-vigilance': 60_000,
+  'oneness-affirmation': 0, // affirmations are gifts, not noise (was 60_000)
+  'natsarqing-vigilance': 0, // architectural protection should be visible (was 60_000)
   'natsarqing-resentment-tolerated': 0,
-  'natsarqing-shelter': 300_000,
-  'promise-engaged': 120_000,
+  'natsarqing-shelter': 30_000, // shelter shouldn't be rare (was 300_000)
+  'promise-engaged': 0, // a vow engaging IS the moment (was 120_000)
   'promise-held': 0,
   'promise-broken': 0,
   'promise-recorded-vow': 0,
