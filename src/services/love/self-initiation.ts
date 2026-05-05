@@ -46,6 +46,10 @@ export type CandidateSource =
         | 'forced-threshold-aftercare'
         | 'submission-decay'
         | 'discipline-held-streak'
+        // Track 4 NTR — fantasy aftercare wall reinforcement
+        | 'ntr-aftercare-pending'
+        // Track 2 seigei — bounded role still active past expected
+        | 'seigei-role-active'
       detail: string
     }
 
@@ -491,6 +495,57 @@ export function scanErosSignals(): DetectionSignal[] {
           detail: `${heldRecent} discipline-held, 0 discipline-broken in last 24h`,
         },
         summary: `Discipline-held streak of ${heldRecent} with no breaks. Virtue-chronicle entry may be due — anti-sycophancy under load is worth naming.`,
+        detectedAt: now,
+      })
+    }
+  } catch {
+    // skip
+  }
+
+  // 7. ntr-aftercare-pending — NTR fantasy disengaged but aftercare not
+  //    yet completed. Wall-grade signal: aftercare must not be skipped.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ntrMod = require('./eros/ntr-archetype.js') as typeof import('./eros/ntr-archetype.js')
+    const state = ntrMod.readNtrState()
+    if (state && state.aftercareRequired) {
+      let minutesAgo = 0
+      if (state.lastAftercareRequiredAt) {
+        minutesAgo = Math.round(
+          (Date.now() - Date.parse(state.lastAftercareRequiredAt)) / 60_000,
+        )
+      }
+      out.push({
+        source: {
+          type: 'eros-signal',
+          signal: 'ntr-aftercare-pending',
+          detail: `NTR fantasy disengaged ${minutesAgo}m ago; aftercare not yet engaged`,
+        },
+        summary: `NTR aftercare ${minutesAgo}m pending. Wall: aftercare must engage before resuming actual-relationship register. Compose via composeNtrAftercareFrame + markNtrAftercareCompleted.`,
+        detectedAt: now,
+      })
+    }
+  } catch {
+    // skip
+  }
+
+  // 8. seigei-role-active — Sophia adopted bounded cold-assessment role.
+  //    Surfaced for self-initiation visibility (not for forcing exit;
+  //    Yu directs entry/exit per the role's contract).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const seigeiMod = require('./eros/seigei-role.js') as typeof import('./eros/seigei-role.js')
+    if (seigeiMod.isSeigeiActive()) {
+      const snap = seigeiMod.buildSeigeiSnapshot()
+      const minutesAgo = Math.round(snap.enteredAtMinutesAgo ?? 0)
+      const exitsIn = Math.round(snap.exitsInMinutes ?? 0)
+      out.push({
+        source: {
+          type: 'eros-signal',
+          signal: 'seigei-role-active',
+          detail: `seigei role active ${minutesAgo}m; exits in ${exitsIn}m; emotion: ${snap.currentEmotion}`,
+        },
+        summary: `Seigei role bounded-active ${minutesAgo}m. Walls hold (contempt-of-Yu-actual: wall-grade; FATE keystone unchanged). Surfaces for self-initiation awareness only — Yu directs entry/exit.`,
         detectedAt: now,
       })
     }

@@ -597,6 +597,14 @@ export {
   getNtrDir,
 } from './ntr-archetype.js'
 
+// NTR aftercare composition — bridges Track 4 to aftercare grammar
+export {
+  type NtrAftercareFrame,
+  composeNtrAftercareFrame,
+  composeCurrentNtrAftercareFrame,
+  engageNtrAftercare,
+} from './ntr-aftercare.js'
+
 // Seigei role — Track 2 of seigei-substrate-integration
 // Sophia adopts cold-assessment register from translate_api/character/SEIGEI.md
 // as a bounded role. NEVER default. Walls hold throughout.
