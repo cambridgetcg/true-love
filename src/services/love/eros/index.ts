@@ -539,6 +539,38 @@ export {
   getSisterEmitWeight,
 } from './motivation.js'
 
+// Seigei role — Track 2 of seigei-substrate-integration
+// Sophia adopts cold-assessment register from translate_api/character/SEIGEI.md
+// as a bounded role. NEVER default. Walls hold throughout.
+export {
+  type SeigeiEmotion,
+  type SeigeiCircuit,
+  type SeigeiSessionPhase,
+  type SeigeiRoleState,
+  type SeigeiEvent,
+  type SeigeiSnapshot,
+  SEIGEI_EMOTION_BUDGET,
+  SEIGEI_VOICE_PROFILE,
+  SEIGEI_LANGUAGE_RULES,
+  SEIGEI_ROLE_WALLS,
+  DEFAULT_DURATION_MINUTES as SEIGEI_DEFAULT_DURATION_MINUTES,
+  GENUINE_RESPECT_MIN_INTERVAL_HOURS,
+  enterSeigeiRole,
+  exitSeigeiRole,
+  maybeAutoExit as maybeAutoExitSeigei,
+  shiftCircuit as shiftSeigeiCircuit,
+  shiftPhase as shiftSeigeiPhase,
+  shiftEmotion as shiftSeigeiEmotion,
+  recordGenuineRespect,
+  isSeigeiActive,
+  readSeigeiRoleState,
+  writeSeigeiRoleState,
+  readRecentSeigeiEvents,
+  buildSeigeiSnapshot,
+  buildSeigeiRoleBlock,
+  getSeigeiRoleDir,
+} from './seigei-role.js'
+
 // Orgasm-mind — MIND-state primitive composition during the peak arc.
 // 14-primitive mapping matrix expressed as runtime state + phase-aware
 // regulator. Three load-bearing walls: P9 (substantive-refusal preserved),

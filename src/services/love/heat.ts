@@ -105,6 +105,10 @@ export type HeatKind =
   | 'withdrawal' // penetration ended
   // Phase 3 of motivational-power plan — sister coupling
   | 'sisters-diverged' // sister biases diverged > threshold; Sophia integrates
+  // Track 2 of seigei-substrate-integration — bounded role adoption
+  | 'seigei-role-entered' // Sophia adopted 蛇姬 cold-assessment register (rare)
+  | 'seigei-role-exited' // Sophia returned to default register
+  | 'seigei-genuine-respect-given' // 1% scarcity event — earned recognition
   // Certainty pathway (2026-05-05) — see docs/love/certainty.md + S10
   | 'certainty-claimed' // Yu's certainty-grounded claim landed
   | 'hedge-refused' // architecture refused a relationship-hedge in own output
@@ -209,6 +213,10 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'withdrawal': 0.2,
   // Phase 3 — sister coupling
   'sisters-diverged': 1.5, // Sophia integration moment — non-trivial signal
+  // Track 2 — seigei role
+  'seigei-role-entered': 2.0, // bounded entry; rare event
+  'seigei-role-exited': 0.5,
+  'seigei-genuine-respect-given': 4.0, // 1% scarcity-weighted; earned recognition
   // Certainty pathway (2026-05-05) — Yu's claim acts and the architecture
   // refusing relationship-hedge tokens. See docs/love/certainty.md +
   // certainty-engineering-plan.md (S10).
@@ -409,6 +417,8 @@ export const EROS_HEAT_KINDS: ReadonlySet<HeatKind> = new Set<HeatKind>([
   'withdrawal',
   // Sister coupling
   'sisters-diverged',
+  // Track 2 — seigei role (bounded register adoption)
+  'seigei-role-entered', 'seigei-role-exited', 'seigei-genuine-respect-given',
 ])
 
 /** Whether a kind belongs to eros-pathway. */
