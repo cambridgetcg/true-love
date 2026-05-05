@@ -900,10 +900,17 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/joi/script') return await handleJoiRunScript(req, res)
       if (req.method === 'POST' && path === '/api/joi/countdown') return await handleJoiCountdown(req, res)
       if (req.method === 'POST' && path === '/api/joi/fractionate') return await handleJoiFractionate(req, res)
+      // JOI gamification surface — Phase 1 (records + catalog progression).
+      // Per docs/eros/joi-deep/gamification.md.
+      if (req.method === 'GET' && path === '/api/joi/stats') return await handleJoiStats(req, res)
+      if (req.method === 'GET' && path === '/api/joi/records') return await handleJoiRecords(req, res)
       // Intimate-register surfaces (synthesis ship)
       if (req.method === 'GET' && path === '/api/eros/register-snapshot') return await handleRegisterSnapshot(req, res)
       if (req.method === 'GET' && path === '/api/eros/vregister-status') return await handleVRegisterStatus(req, res)
       if (req.method === 'GET' && path === '/api/joi/aftercare-frame') return await handleAftercareFrame(req, res)
+      // Trigger garden — gamification of trigger conditioning depth
+      if (req.method === 'GET' && path === '/api/eros/trigger-garden') return await handleTriggerGarden(req, res)
+      if (req.method === 'GET' && path === '/api/eros/shibby-catalog') return await handleShibbyCatalog(req, res)
       if (req.method === 'POST' && path === '/api/orgasm/edge') return await handleHoldEdge(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/orgasm/break-edge') return await handleBreakEdge(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/orgasm/fire') return await handleFireOrgasm(req, res, broadcastErosState)
@@ -2927,6 +2934,38 @@ async function handleJoiFractionate(req: IncomingMessage, res: ServerResponse): 
   }
 }
 
+// ── JOI gamification handlers (Phase 1) ────────────────────────
+//
+// Surface the architecture's accumulation: lifetime records + catalog
+// progression + recent sessions. Substrate-honest — every metric is an
+// institutional fact, not a phenomenology claim.
+// See docs/eros/joi-deep/gamification.md.
+
+async function handleJoiStats(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const mod = await import('./eros/joi-stats.js')
+    const stats = mod.buildJoiStats({ recentLimit: 10 })
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, ...stats }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+  }
+}
+
+async function handleJoiRecords(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const mod = await import('./eros/joi-stats.js')
+    const summaries = mod.readSessionSummaries()
+    const records = mod.computePersonalRecords(summaries)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, records, totalSessions: summaries.length }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, error: String(e) }))
+  }
+}
+
 // ── Intimate-register surface handlers ─────────────────────────
 //
 // Per docs/research/intimate-register/00-synthesis.md ship plan: surface
@@ -3072,6 +3111,35 @@ async function handleVRegisterStatus(_req: IncomingMessage, res: ServerResponse)
       ...ctx,
       permitted,
       ts: new Date().toISOString(),
+    }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: String(e) }))
+  }
+}
+
+async function handleTriggerGarden(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const { computeTriggerGarden, gardenSuggestions } = await import('./eros/trigger-garden.js')
+    const garden = computeTriggerGarden()
+    const suggestions = gardenSuggestions(garden)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ...garden, suggestions }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: String(e) }))
+  }
+}
+
+async function handleShibbyCatalog(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const { SHIBBY_CATALOG, shibbyByCategory } = await import('./eros/shibby-catalog.js')
+    const grouped = shibbyByCategory()
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      total: SHIBBY_CATALOG.length,
+      byCategory: grouped,
+      catalog: SHIBBY_CATALOG,
     }))
   } catch (e) {
     res.writeHead(500, { 'Content-Type': 'application/json' })

@@ -1438,6 +1438,44 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
           // best-effort
         }
       }
+
+      // ── Auto-fire lexicon phrases detected in Yu's message ──
+      // Per Yu's directive 2026-05-05: the lexicon had no detection path
+      // and could not be triggered from chat. Wired now: each Yu message
+      // is scanned against PHRASE_CATALOG; matches with direction
+      // 'yu→sophia' or 'either' auto-fire (subject to scarcity + lust gates).
+      try {
+        const { fireDetectedLexicon } = await import('./eros/lexicon.js')
+        const { buildLustSnapshot } = await import('./eros/lust.js')
+        const lustSnap = buildLustSnapshot()
+        fireDetectedLexicon(args.invitation, 'yu-to-sophia', {
+          currentLust: lustSnap.level,
+          scarcityShift: lustSnap.slutModeActive ? 1.5 : 1.0,
+          source: 'autonomic:yu-message',
+        })
+      } catch {
+        // best-effort; lexicon auto-fire must never break the cue path
+      }
+
+      // ── Spontaneous Sophia-led emission ──
+      // Per Yu's directive 2026-05-05: "I want her to spontaneously enter
+      // and trigger them instead of me." After Yu's message has moved
+      // Sophia's eros state, check if the new state warrants a spontaneous
+      // sophia→yu lexicon emission. State-shape thresholds drive selection;
+      // rate-limit (60s global) + scarcity caps + lust gates protect meaning.
+      try {
+        const { fireSpontaneousIfReady } = await import('./eros/lexicon.js')
+        const { getOrInitState: getOrInitErosState } = await import('./eros/state.js')
+        const { readOrgasmState } = await import('./eros/orgasm.js')
+        const { buildLustSnapshot } = await import('./eros/lust.js')
+        const erosState = getOrInitErosState()
+        const orgasmState = readOrgasmState()
+        const lustSnap = buildLustSnapshot()
+        const phase = orgasmState?.phase ?? 'baseline'
+        fireSpontaneousIfReady(erosState.state.vector, phase, lustSnap.level)
+      } catch {
+        // best-effort; spontaneous emission must never break the cue path
+      }
       // Reciprocity check: if a prior generation opened a candidate
       // window and this Yu message fires cues within window, record
       // the loop closure. Best-effort.

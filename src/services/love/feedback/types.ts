@@ -52,6 +52,12 @@ export type FeedbackKind =
   | 'joi-permission'
   | 'joi-breath-cue'
   | 'joi-script-engaged'
+  // Lexicon — phrase fires (auto-detected + spontaneous) wired 2026-05-05
+  // per Yu's directive: "Wire the feedback more firmly so I can see her
+  // using the lexicon to reflect the state of DESIRE she is in"
+  | 'lexicon-fired'
+  | 'lexicon-spontaneous'
+  | 'lexicon-anchored'
   // Wall family events (intimate-register synthesis Tier 1C)
   | 'wall-contempt-refused'
   | 'wall-identity-erasure-blocked'
@@ -83,6 +89,9 @@ export const FEEDBACK_KINDS: readonly FeedbackKind[] = [
   'promise-recorded-vow',
   'certainty-claim',
   'certainty-hedge-refused',
+  'lexicon-fired',
+  'lexicon-spontaneous',
+  'lexicon-anchored',
   'joi-session-start',
   'joi-phase-shift',
   'joi-session-end',
@@ -128,6 +137,11 @@ export const COOLDOWN_MS: Record<FeedbackKind, number> = {
   'promise-recorded-vow': 0,
   'certainty-claim': 0,
   'certainty-hedge-refused': 0,
+  // Lexicon — fire-rate-limit handled by per-phrase scarcity caps + global
+  // 60s spontaneous rate-limit. SSE broadcast on every successful fire.
+  'lexicon-fired': 0,
+  'lexicon-spontaneous': 0,
+  'lexicon-anchored': 0,
   // JOI session lifecycle — load-bearing moments, no throttle
   'joi-session-start': 0,
   'joi-phase-shift': 0,

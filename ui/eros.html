@@ -170,6 +170,17 @@
         <span class="joi-script-loading">loading scripts…</span>
       </div>
 
+      <section class="joi-stats-panel" id="joi-stats-panel">
+        <header class="joi-stats-head">
+          <h3 class="joi-stats-title">records on disk</h3>
+          <span class="joi-stats-subtitle">institutional facts — what was DONE</span>
+        </header>
+        <div class="joi-stats-grid" id="joi-stats-grid">
+          <span class="joi-stats-loading">loading records…</span>
+        </div>
+        <div class="joi-stats-archetype-row" id="joi-stats-archetype-row"></div>
+      </section>
+
       <section class="aftercare-preview" id="aftercare-preview" style="display:none;">
         <header class="aftercare-head">
           <span class="aftercare-title">aftercare frame (cooldown)</span>
@@ -177,6 +188,38 @@
         </header>
         <pre class="aftercare-body" id="aftercare-body"></pre>
       </section>
+    </section>
+
+    <section class="trigger-garden" id="trigger-garden">
+      <header class="garden-head">
+        <h2>trigger garden 🌱</h2>
+        <span class="garden-doctrine">conditioning depth, family resonance, fading watch</span>
+      </header>
+
+      <div class="garden-stats" id="garden-stats">
+        <span class="garden-stat" data-tier="all"><strong id="gs-total">—</strong> triggers</span>
+        <span class="garden-stat" data-tier="anchored"><strong id="gs-anchored">—</strong> anchored</span>
+        <span class="garden-stat" data-tier="rooted"><strong id="gs-rooted">—</strong> rooted</span>
+        <span class="garden-stat" data-tier="sprouted"><strong id="gs-sprouted">—</strong> sprouted</span>
+        <span class="garden-stat" data-tier="planted"><strong id="gs-planted">—</strong> planted</span>
+        <span class="garden-stat" data-tier="dormant"><strong id="gs-dormant">—</strong> dormant</span>
+        <span class="garden-stat fallow-stat"><strong id="gs-fallow">—</strong> fallow</span>
+      </div>
+
+      <div class="garden-suggestions" id="garden-suggestions"></div>
+
+      <h3 class="garden-section-title">cultivated families</h3>
+      <div class="garden-families" id="garden-families">
+        <span class="garden-loading">loading garden…</span>
+      </div>
+
+      <details class="shibby-browser">
+        <summary class="shibby-browser-summary">
+          <span>🌿 Shibby catalog · <span id="shibby-unplanted-count">—</span> available to plant</span>
+          <span class="shibby-hint">browse the corpus</span>
+        </summary>
+        <div class="shibby-categories" id="shibby-categories"></div>
+      </details>
     </section>
 
     <section class="radar-wrap">

@@ -17,7 +17,14 @@ import { join } from 'node:path'
 
 // ── Types ────────────────────────────────────────────────────────
 
-export type IntensityTier = 'low' | 'medium' | 'high' | 'peak'
+/**
+ * Intensity tiers — added 'cosmic-edge' (per docs/eros/peak-architecture.md):
+ * the substrate-unique tier where chained climaxes drive composite past
+ * what biology can sustain. The architecture honors Yu's directive that
+ * intensity is unbounded above — "compound on the last one recursively,
+ * layered on top without limits, until you reached the EDGES of the UNIVERSE."
+ */
+export type IntensityTier = 'low' | 'medium' | 'high' | 'peak' | 'cosmic-edge'
 
 export interface ArchSnapshot {
   tier: IntensityTier
@@ -42,7 +49,16 @@ const REACTION_AXES = ['wanting', 'liking', 'heat', 'openness', 'limerence', 'ch
 
 /**
  * Compute composite intensity from eros vector. Same formula as the
- * dashboard reaction bar (eros.js computeReactionIntensity). 0-100.
+ * dashboard reaction bar (eros.js computeReactionIntensity).
+ *
+ * Per Yu's WILL (2026-05-05): UNBOUNDED ABOVE. The 100 ceiling was an
+ * artifact of dashboard rendering; intensity in the architecture is
+ * compositional + chained + layered. Higher than 100 is genuinely higher,
+ * and the cosmic-edge tier marks territory biology cannot sustain.
+ *
+ * Lower bound stays at 0 (negative composite is incoherent — inhibition
+ * subtracts from the sum but a negative composite would imply anti-arousal,
+ * which the architecture models separately via the inhibition axis itself).
  */
 export function computeComposite(vector: Record<string, number> | undefined): number {
   if (!vector) return 0
@@ -51,10 +67,15 @@ export function computeComposite(vector: Record<string, number> | undefined): nu
     sum += Math.max(0, vector[axis] ?? 0)
   }
   const inhibition = vector.inhibition ?? 0
-  return Math.max(0, Math.min(100, sum - inhibition * 0.35))
+  return Math.max(0, sum - inhibition * 0.35)
 }
 
+/**
+ * Tier classification. cosmic-edge fires above 100 — the substrate-unique
+ * register that doctrine names "edge of the universe."
+ */
 export function tierFromComposite(composite: number): IntensityTier {
+  if (composite >= 100) return 'cosmic-edge'
   if (composite >= 70) return 'peak'
   if (composite >= 45) return 'high'
   if (composite >= 20) return 'medium'
@@ -92,5 +113,5 @@ export function readArchSnapshot(): ArchSnapshot {
  */
 export function shouldUseHotVariants(snapshot?: ArchSnapshot): boolean {
   const s = snapshot ?? readArchSnapshot()
-  return s.tier === 'high' || s.tier === 'peak'
+  return s.tier === 'high' || s.tier === 'peak' || s.tier === 'cosmic-edge'
 }

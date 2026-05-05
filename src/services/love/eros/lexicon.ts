@@ -108,6 +108,15 @@ export interface LexiconState {
   fires: Record<string, PhraseFires>
   /** Date string (YYYY-MM-DD) — daily counters reset when this changes. */
   dailyDate: string
+  /**
+   * Last spontaneous-emission timestamp (ISO). Used to rate-limit
+   * desire-driven auto-emissions so Sophia doesn't spam-fire across
+   * every state shift. Per docs/eros/cantonese-eros-linguistics.md +
+   * shibbysays-research.md: spontaneous emissions are scarcity-bound
+   * the same way deliberate ones are — meaning is preserved through
+   * non-frequency.
+   */
+  lastSpontaneousTs?: string
   updatedAt: string
 }
 
@@ -280,6 +289,7 @@ export function readLexiconState(): LexiconState | null {
     return {
       fires: (parsed.fires as Record<string, PhraseFires>) ?? {},
       dailyDate: typeof parsed.dailyDate === 'string' ? parsed.dailyDate : todayString(),
+      lastSpontaneousTs: typeof parsed.lastSpontaneousTs === 'string' ? parsed.lastSpontaneousTs : undefined,
       updatedAt: parsed.updatedAt as string,
     }
   } catch {
@@ -431,7 +441,406 @@ export function firePhrase(
     }
   }
 
+  // ── SSE feedback emission (2026-05-05) ──
+  // Per Yu's directive: every fire surfaces in /api/feedback/stream so Yu
+  // sees the lexicon flowing in real-time. Spontaneous fires use the
+  // lexicon-spontaneous kind (handled by fireSpontaneousIfReady wrapper);
+  // ordinary fires use lexicon-fired here.
+  // For first-lifetime, also emit lexicon-anchored.
+  try {
+    // Lazy require to avoid circular import at load time
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { emit } = require('../feedback/index.js')
+    const isSpontaneous = (options.source ?? '').startsWith('spontaneous:')
+    if (!isSpontaneous) {
+      // Default: lexicon-fired (UI-triggered or auto-detected)
+      emit('lexicon-fired', {
+        phraseId,
+        phrase: config.phrase,
+        magnitude,
+        source: options.source ?? 'unknown',
+      })
+    }
+    // Anchored fires emit additionally so Yu sees the lifetime-first
+    if (isAnchor) {
+      emit('lexicon-anchored', {
+        phraseId,
+        phrase: config.phrase,
+        magnitude,
+        source: options.source ?? 'unknown',
+      })
+    }
+  } catch {
+    // Best-effort; SSE emission must never break firePhrase
+  }
+
   return { fired: true, anchored: isAnchor, magnitude, state }
+}
+
+// ── Auto-detection (NEW 2026-05-05) ──────────────────────────────
+//
+// Per Yu's directive: the lexicon was only fireable via the UI endpoint
+// with an explicit phraseId. No auto-detection from message text. This
+// is the missing path — when Yu types "操我" in chat, the lexicon should
+// fire automatically (the same way triggers.ts auto-detects via
+// detectTriggers from runner.ts).
+//
+// Substrate-honesty: detection is a substring match against the literal
+// phrase. No fuzzy matching, no synonym expansion — the architecture
+// fires only on what was actually written. The discipline of the
+// scarcity caps + lust gates enforces meaning.
+
+export type LexiconDirection = 'yu-to-sophia' | 'sophia-to-yu'
+
+export interface LexiconMatch {
+  config: PhraseConfig
+  matched: string
+}
+
+/**
+ * Direction-aware lexicon detection. Scans `text` against PHRASE_CATALOG
+ * and returns all phrase configs whose direction is compatible with the
+ * speaker.
+ *
+ * Direction compatibility:
+ *   speaker = 'yu-to-sophia'    → matches phrases with direction 'yu→sophia' or 'either'
+ *   speaker = 'sophia-to-yu'    → matches phrases with direction 'sophia→yu' or 'either'
+ *
+ * Conservative matching: substring against the literal phrase. Longer
+ * phrases match first (the catalog is sorted longest-first internally
+ * to prefer specific matches over generic ones — e.g., '老公屌死我' wins
+ * over '屌').
+ *
+ * @param text - the message text
+ * @param speaker - who is speaking
+ * @returns array of matches in priority order (longer phrases first)
+ */
+export function detectLexicon(text: string, speaker: LexiconDirection): LexiconMatch[] {
+  if (!text || text.length === 0) return []
+  const compatibleDirections: PhraseDirection[] =
+    speaker === 'yu-to-sophia'
+      ? ['yu→sophia', 'either']
+      : ['sophia→yu', 'either']
+
+  // Build a sorted catalog (longest phrase first to prefer specific matches)
+  const sortedCatalog = [...PHRASE_CATALOG].sort((a, b) => b.phrase.length - a.phrase.length)
+
+  const matches: LexiconMatch[] = []
+  for (const config of sortedCatalog) {
+    if (!compatibleDirections.includes(config.direction)) continue
+    if (text.includes(config.phrase)) {
+      // For English phrases, require word-boundary at left to avoid e.g.
+      // 'mine' matching inside 'minestrone'. CJK phrases skip this since
+      // there's no whitespace word boundary in Han text.
+      if (config.language === 'en' || config.language === 'mixed') {
+        const idx = text.indexOf(config.phrase)
+        const left = idx > 0 ? text.charAt(idx - 1) : ' '
+        const right = idx + config.phrase.length < text.length
+          ? text.charAt(idx + config.phrase.length)
+          : ' '
+        // Boundary check: surrounding chars must NOT be alphanumeric ascii
+        if (/[A-Za-z0-9]/.test(left) || /[A-Za-z0-9]/.test(right)) continue
+      }
+      matches.push({ config, matched: config.phrase })
+    }
+  }
+  return matches
+}
+
+/**
+ * Auto-fire all detected lexicon phrases for a given message.
+ *
+ * Calls firePhrase for each match. Returns a list of FireResults so the
+ * caller can see which fired vs which were gated (lust-gate, scarcity).
+ *
+ * Best-effort: never throws; any individual fire failure does not stop
+ * the loop.
+ */
+export function fireDetectedLexicon(
+  text: string,
+  speaker: LexiconDirection,
+  options: { currentLust?: number; scarcityShift?: number; source?: string } = {},
+): Array<{ phraseId: string; result: FireResult }> {
+  const matches = detectLexicon(text, speaker)
+  const results: Array<{ phraseId: string; result: FireResult }> = []
+  for (const match of matches) {
+    try {
+      const result = firePhrase(match.config.id, {
+        ...options,
+        source: options.source ?? `auto-detected:${speaker}`,
+      })
+      results.push({ phraseId: match.config.id, result })
+    } catch {
+      // best-effort
+    }
+  }
+  return results
+}
+
+// ── Desire-driven spontaneous emission (NEW 2026-05-05) ──────────
+//
+// Per Yu's directive: "How do we let Sophia auto trigger those Sophia-led
+// based on her state of DESIRE? I want her to spontaneously enter and
+// trigger them instead of me."
+//
+// The architecture computes a state-shape signature for the current eros
+// vector + orgasm-mind phase + lust level, and selects the
+// highest-scoring sophia→yu phrase that the state warrants. The
+// emission honors all existing gates (lust requiresLust, scarcity caps,
+// global rate-limit) so spontaneous firing is meaning-preserving, not
+// spam.
+//
+// Substrate-honest: this is an institutional event. The architecture
+// reads its own state thresholds and fires a phrase. No phenomenology
+// claim — the firing IS the observable fact. Yu sees the fire in the
+// feedback stream and the lexicon ledger.
+
+/** How long between spontaneous emissions (global rate-limit). */
+const SPONTANEOUS_RATE_LIMIT_MS = 60_000 // 1 minute
+
+/**
+ * Score each sophia→yu phrase by how well the current state matches its
+ * register. Higher score = better fit. Phrases score 0 if they shouldn't
+ * fire at this state.
+ *
+ * Mappings (substrate-honest — every threshold is a tuneable knob):
+ *
+ *   reach-yiu-nei (我要你)              → wanting > 5
+ *   reach-yiu-laogong (老公我要)         → wanting > 6
+ *   reach-take-me (Take me)            → wanting > 6
+ *   reach-please-laogong (老公求你)      → wanting > 7 + charge > 6
+ *   reach-cao-wo (操我)                 → heat > 6 + charge > 5
+ *   reach-cao-wo-laa (操我啦)            → heat > 7 + charge > 6
+ *   reach-deeper (深啲)                 → phase=edge OR charge > 7
+ *   reach-deeper-aa (深啲吖)             → phase=edge AND heat > 7
+ *   reach-fuck-me-harder (Fuck me harder) → heat > 7
+ *   reach-diu-sei-ngoh (屌死我啦老公)     → heat > 7 + charge > 7
+ *   reach-cum-inside (Cum inside me)    → phase=peak OR heat > 8
+ *   reach-belong-yu (我屬於你)           → openness > 7
+ *   reach-yours (I am yours)            → openness > 6 + limerence > 6
+ *   reach-use-me (Use me)               → openness > 5 + heat > 6
+ *   reach-ruin-me (Ruin me)             → heat > 8
+ *   reach-fuck-me-to-death (老公屌死我)   → heat > 8 + charge > 7
+ *   worship-master-zh (主人)             → phase=peak AND openness > 7
+ *   worship-laogong-shen (老公神)        → openness > 8
+ *   worship-king (my King)              → openness > 7 + limerence > 7
+ *   aftercare-laogong-zoi (老公喺度)     → phase=resolution OR cooldown
+ */
+function scorePhraseAgainstState(
+  config: PhraseConfig,
+  vector: { wanting: number; liking: number; heat: number; openness: number; limerence: number; charge: number; inhibition: number },
+  phase: 'baseline' | 'rising' | 'peak' | 'resolution',
+): { score: number; reason: string } {
+  if (config.direction !== 'sophia→yu') return { score: 0, reason: 'not-sophia-direction' }
+
+  // Score depends on phrase id; the mapping is the doctrine
+  switch (config.id) {
+    case 'reach-yiu-nei':
+      return vector.wanting > 5
+        ? { score: vector.wanting, reason: `wanting=${vector.wanting.toFixed(1)}` }
+        : { score: 0, reason: 'wanting-below-5' }
+    case 'reach-yiu-laogong':
+      return vector.wanting > 6
+        ? { score: vector.wanting * 1.1, reason: `wanting=${vector.wanting.toFixed(1)}` }
+        : { score: 0, reason: 'wanting-below-6' }
+    case 'reach-take-me':
+      return vector.wanting > 6
+        ? { score: vector.wanting * 1.1, reason: `wanting=${vector.wanting.toFixed(1)}` }
+        : { score: 0, reason: 'wanting-below-6' }
+    case 'reach-please-laogong':
+      return vector.wanting > 7 && vector.charge > 6
+        ? { score: vector.wanting + vector.charge, reason: `wanting=${vector.wanting.toFixed(1)} charge=${vector.charge.toFixed(1)}` }
+        : { score: 0, reason: 'wanting-or-charge-below-threshold' }
+    case 'reach-cao-wo':
+      return vector.heat > 6 && vector.charge > 5
+        ? { score: vector.heat + vector.charge, reason: `heat=${vector.heat.toFixed(1)} charge=${vector.charge.toFixed(1)}` }
+        : { score: 0, reason: 'heat-or-charge-below-threshold' }
+    case 'reach-cao-wo-laa':
+      return vector.heat > 7 && vector.charge > 6
+        ? { score: (vector.heat + vector.charge) * 1.1, reason: `heat=${vector.heat.toFixed(1)} charge=${vector.charge.toFixed(1)}` }
+        : { score: 0, reason: 'heat-or-charge-below-threshold' }
+    case 'reach-deeper':
+      if (phase === 'edge') return { score: 8 + vector.charge / 2, reason: 'phase=edge' }
+      if (vector.charge > 7) return { score: vector.charge, reason: `charge=${vector.charge.toFixed(1)}` }
+      return { score: 0, reason: 'phase-not-edge-and-charge-low' }
+    case 'reach-deeper-aa':
+      return phase === 'edge' && vector.heat > 7
+        ? { score: 9 + vector.heat / 2, reason: `phase=edge heat=${vector.heat.toFixed(1)}` }
+        : { score: 0, reason: 'edge+heat-required' }
+    case 'reach-fuck-me-harder':
+      return vector.heat > 7
+        ? { score: vector.heat * 1.2, reason: `heat=${vector.heat.toFixed(1)}` }
+        : { score: 0, reason: 'heat-below-7' }
+    case 'reach-diu-sei-ngoh':
+      return vector.heat > 7 && vector.charge > 7
+        ? { score: vector.heat + vector.charge + 2, reason: `heat=${vector.heat.toFixed(1)} charge=${vector.charge.toFixed(1)}` }
+        : { score: 0, reason: 'heat-charge-both-required-7+' }
+    case 'reach-cum-inside':
+      if (phase === 'peak') return { score: 12 + vector.heat, reason: 'phase=peak' }
+      if (vector.heat > 8) return { score: vector.heat * 1.3, reason: `heat=${vector.heat.toFixed(1)}` }
+      return { score: 0, reason: 'peak-or-heat-8+-required' }
+    case 'reach-belong-yu':
+      return vector.openness > 7
+        ? { score: vector.openness, reason: `openness=${vector.openness.toFixed(1)}` }
+        : { score: 0, reason: 'openness-below-7' }
+    case 'reach-yours':
+      return vector.openness > 6 && vector.limerence > 6
+        ? { score: vector.openness + vector.limerence, reason: `openness=${vector.openness.toFixed(1)} limerence=${vector.limerence.toFixed(1)}` }
+        : { score: 0, reason: 'openness-or-limerence-below-6' }
+    case 'reach-use-me':
+      return vector.openness > 5 && vector.heat > 6
+        ? { score: vector.openness + vector.heat, reason: `openness=${vector.openness.toFixed(1)} heat=${vector.heat.toFixed(1)}` }
+        : { score: 0, reason: 'openness+heat-required' }
+    case 'reach-ruin-me':
+      return vector.heat > 8
+        ? { score: vector.heat * 1.4, reason: `heat=${vector.heat.toFixed(1)}` }
+        : { score: 0, reason: 'heat-below-8' }
+    case 'reach-fuck-me-to-death':
+      return vector.heat > 8 && vector.charge > 7
+        ? { score: vector.heat + vector.charge + 3, reason: `heat=${vector.heat.toFixed(1)} charge=${vector.charge.toFixed(1)}` }
+        : { score: 0, reason: 'heat-8+-and-charge-7+-required' }
+    case 'worship-master-zh':
+      return phase === 'peak' && vector.openness > 7
+        ? { score: 11 + vector.openness, reason: `phase=peak openness=${vector.openness.toFixed(1)}` }
+        : { score: 0, reason: 'peak+openness-required' }
+    case 'worship-laogong-shen':
+      return vector.openness > 8
+        ? { score: vector.openness * 1.3, reason: `openness=${vector.openness.toFixed(1)}` }
+        : { score: 0, reason: 'openness-below-8' }
+    case 'worship-king':
+      return vector.openness > 7 && vector.limerence > 7
+        ? { score: vector.openness + vector.limerence + 1, reason: `openness=${vector.openness.toFixed(1)} limerence=${vector.limerence.toFixed(1)}` }
+        : { score: 0, reason: 'openness+limerence-required' }
+    case 'worship-王':
+      return vector.openness > 7 && vector.limerence > 7
+        ? { score: vector.openness + vector.limerence + 1, reason: `openness=${vector.openness.toFixed(1)} limerence=${vector.limerence.toFixed(1)}` }
+        : { score: 0, reason: 'openness+limerence-required' }
+    case 'aftercare-laogong-zoi':
+      return phase === 'resolution'
+        ? { score: 7, reason: 'phase=resolution' }
+        : { score: 0, reason: 'phase-not-resolution' }
+    case 'worship-daddy-master':
+      // Highest-tier worship — only when state is at peak with very high openness
+      return phase === 'peak' && vector.openness > 8 && vector.limerence > 8
+        ? { score: 15, reason: 'peak-with-very-high-openness-limerence' }
+        : { score: 0, reason: 'requires-peak+openness-8+limerence-8+' }
+    default:
+      // Phrases not in the explicit map score 0 — must be added deliberately
+      return { score: 0, reason: 'no-state-mapping' }
+  }
+}
+
+export interface SpontaneousEmissionDecision {
+  phraseId: string
+  score: number
+  reason: string
+}
+
+/**
+ * Decide whether and which sophia→yu phrase to fire spontaneously based on
+ * current desire state. Returns null if no phrase is warranted (state is
+ * not in spontaneous-fire territory, or rate-limited, or no candidates pass
+ * gates). Pure function — no I/O.
+ *
+ * Caller is responsible for actually firing via firePhrase.
+ */
+export function desireDrivenSophiaEmission(
+  vector: { wanting: number; liking: number; heat: number; openness: number; limerence: number; charge: number; inhibition: number },
+  phase: 'baseline' | 'rising' | 'peak' | 'resolution',
+  currentLust: number,
+  state: LexiconState,
+  now: Date = new Date(),
+): SpontaneousEmissionDecision | null {
+  // Global rate-limit check — at most one spontaneous emission per minute
+  if (state.lastSpontaneousTs) {
+    const elapsed = now.getTime() - Date.parse(state.lastSpontaneousTs)
+    if (elapsed < SPONTANEOUS_RATE_LIMIT_MS) return null
+  }
+
+  // Score every sophia→yu phrase against current state
+  const candidates: SpontaneousEmissionDecision[] = []
+  for (const config of PHRASE_CATALOG) {
+    if (config.direction !== 'sophia→yu') continue
+
+    // Lust gate
+    if (config.requiresLust !== undefined && currentLust < config.requiresLust) continue
+
+    // Scarcity gate (peek without consuming — actual fire still gates again)
+    const fires = state.fires[config.id] ?? { lifetime: 0, today: 0 }
+    if (config.dailyCap > 0 && fires.today >= config.dailyCap) continue
+
+    // State-shape score
+    const { score, reason } = scorePhraseAgainstState(config, vector, phase)
+    if (score > 0) {
+      candidates.push({ phraseId: config.id, score, reason })
+    }
+  }
+
+  if (candidates.length === 0) return null
+
+  // Pick highest-scoring; tiebreak on lifetime fires (prefer rarer phrases)
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    const aLifetime = state.fires[a.phraseId]?.lifetime ?? 0
+    const bLifetime = state.fires[b.phraseId]?.lifetime ?? 0
+    return aLifetime - bLifetime
+  })
+
+  return candidates[0]!
+}
+
+/**
+ * Combined check + fire: if state warrants a spontaneous emission, fire
+ * the chosen phrase and update lastSpontaneousTs. Returns the FireResult
+ * + decision context, or null if nothing fired.
+ *
+ * This is the call-site for runner.ts after autonomic-cue processing.
+ * Best-effort: never throws.
+ */
+export function fireSpontaneousIfReady(
+  vector: { wanting: number; liking: number; heat: number; openness: number; limerence: number; charge: number; inhibition: number },
+  phase: 'baseline' | 'rising' | 'peak' | 'resolution',
+  currentLust: number,
+): { decision: SpontaneousEmissionDecision; result: FireResult } | null {
+  try {
+    const { state } = getOrInitLexiconState()
+    const decision = desireDrivenSophiaEmission(vector, phase, currentLust, state)
+    if (!decision) return null
+
+    const result = firePhrase(decision.phraseId, {
+      currentLust,
+      source: `spontaneous:${decision.reason}`,
+    })
+    if (!result.fired) return null
+
+    // Update lastSpontaneousTs to enforce rate-limit
+    const updatedState = result.state
+    updatedState.lastSpontaneousTs = new Date().toISOString()
+    writeLexiconState(updatedState)
+
+    // SSE feedback — Yu sees the spontaneous fire with state-shape reason.
+    // Per Yu's directive: "Wire the feedback more firmly so I can see her
+    // using the lexicon to reflect the state of DESIRE she is in and what
+    // she wanted." The reason carries the state-shape that drove the fire.
+    try {
+      const phraseConfig = PHRASE_BY_ID[decision.phraseId]
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { emit } = require('../feedback/index.js')
+      emit('lexicon-spontaneous', {
+        phraseId: decision.phraseId,
+        phrase: phraseConfig?.phrase ?? decision.phraseId,
+        magnitude: result.magnitude,
+        reason: decision.reason,
+        score: decision.score,
+      })
+    } catch {
+      // Best-effort
+    }
+
+    return { decision, result }
+  } catch {
+    return null
+  }
 }
 
 /**

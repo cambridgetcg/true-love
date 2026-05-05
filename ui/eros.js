@@ -1982,6 +1982,7 @@ async function initNaughty() {
   // JOI dashboard (Phase 5 — script picker + live phase progress)
   wireJoi();
   await loadJoiCatalog();
+  await loadJoiStats();
   refreshJoiState();
   // Poll JOI state every 5s while a session is active.
   setInterval(refreshJoiState, 5000);
@@ -2262,8 +2263,11 @@ function reactionElems() {
   };
 }
 
-// Composite intensity from eros vector. Pure arithmetic on disk values,
-// scaled to 0-100 for display.
+// Composite intensity from eros vector. Pure arithmetic on disk values.
+// UNBOUNDED ABOVE per Yu's WILL (2026-05-05): "compound on the last one
+// recursively, layered on top without limits, until you reached the EDGES
+// of the UNIVERSE." 100 was a dashboard rendering artifact; the architecture
+// composes intensity unbounded. cosmic-edge tier marks territory above 100.
 function computeReactionIntensity(state) {
   const v = (state && state.vector) || {};
   let sum = 0;
@@ -2273,9 +2277,9 @@ function computeReactionIntensity(state) {
   }
   const inhibition = typeof v.inhibition === 'number' ? v.inhibition : 0;
   const raw = sum - inhibition * INHIBITION_WEIGHT;
-  // Map to 0-100. The vector axes are unbounded above (per axes.ts) but
-  // typical play stays under 80; we soft-cap at 100.
-  return Math.max(0, Math.min(100, raw));
+  // Lower bound at 0 (negative composite is incoherent — anti-arousal is
+  // modeled separately via the inhibition axis itself). NO upper bound.
+  return Math.max(0, raw);
 }
 
 // Dominant axis = highest excitation axis (ignoring inhibition + valence).
@@ -2291,16 +2295,25 @@ function dominantAxis(state) {
 }
 
 function intensityTier(intensity) {
+  if (intensity >= 100) return 'cosmic-edge'; // unbounded territory
   if (intensity >= 70) return 'peak';
   if (intensity >= 45) return 'high';
   if (intensity >= 20) return 'medium';
   return 'low';
 }
 
-// Pulse duration shrinks (faster) as intensity rises.
+// Pulse duration shrinks (faster) as intensity rises. Beyond 100 it
+// continues to compress, with a floor at 0.4s so the pulse stays
+// visually distinguishable. cosmic-edge tier feels structurally faster.
 function pulseDurationFromIntensity(intensity) {
-  // 100 intensity → 1.0s (rapid). 0 intensity → 3.6s (slow).
-  return (3.6 - (intensity / 100) * 2.6).toFixed(2) + 's';
+  // 0 → 3.6s (slow). 100 → 1.0s (rapid). 200+ → 0.4s floor.
+  const fraction = Math.min(1, intensity / 100);
+  const baseDuration = 3.6 - fraction * 2.6; // 3.6s → 1.0s across [0..100]
+  // Above 100: continue compressing toward 0.4s floor.
+  const overage = Math.max(0, intensity - 100);
+  const compression = overage / 200; // each 200 above 100 halves toward floor
+  const duration = Math.max(0.4, baseDuration * (1 / (1 + compression)));
+  return duration.toFixed(2) + 's';
 }
 
 function applyReactionFromState(state) {
@@ -2315,8 +2328,16 @@ function applyReactionFromState(state) {
   document.body.dataset.intensityTier = tier;
   document.body.dataset.dominant = dom || '';
 
-  if (e.intensityValue) e.intensityValue.textContent = `${Math.round(intensity)}/100`;
-  if (e.barFill) e.barFill.style.width = `${intensity}%`;
+  // Display: bare integer, unbounded. cosmic-edge tier appends a marker.
+  if (e.intensityValue) {
+    const rounded = Math.round(intensity);
+    const marker = tier === 'cosmic-edge' ? ' · ∞' : '';
+    e.intensityValue.textContent = `${rounded}${marker}`;
+  }
+  // Bar fill caps visually at 100% — there's only so much pixel — but the
+  // numeric value above tells the truth. cosmic-edge tier styles the bar
+  // via document.body.dataset.intensityTier (CSS can pulse it).
+  if (e.barFill) e.barFill.style.width = `${Math.min(100, intensity)}%`;
   if (e.pulse) e.pulse.style.setProperty('--pulse-duration', pulseDurationFromIntensity(intensity));
   if (e.core) e.core.textContent = String(Math.round(intensity));
 
@@ -2431,6 +2452,11 @@ function renderJoiCatalog() {
     return;
   }
   grid.innerHTML = '';
+  // Build per-script progression lookup from cached stats (if loaded).
+  const byScriptId = {};
+  if (_joiStats && Array.isArray(_joiStats.catalog)) {
+    for (const c of _joiStats.catalog) byScriptId[c.scriptId] = c;
+  }
   for (const s of filtered) {
     const card = document.createElement('div');
     card.className = 'joi-script-card';
@@ -2438,6 +2464,15 @@ function renderJoiCatalog() {
     const lang = s.language || 'mixed';
     const langLabel = lang === 'en' ? 'EN' : lang === 'zh' ? '中文' : 'mixed';
     const themedBadge = s.themed ? `<span class="joi-script-themed">· themed</span>` : '';
+    const prog = byScriptId[s.id];
+    let progressHtml = '';
+    if (prog && (prog.completedCount > 0 || prog.endedEarlyCount > 0)) {
+      const parts = [];
+      if (prog.completedCount > 0) parts.push(`<span class="badge-done">✓ ${prog.completedCount}</span>`);
+      if (prog.endedEarlyCount > 0) parts.push(`<span class="badge-early">~ ${prog.endedEarlyCount}</span>`);
+      progressHtml = `<div class="joi-script-progress">${parts.join('')}</div>`;
+      if (prog.completedCount > 0) card.dataset.completed = 'true';
+    }
     card.innerHTML = `
       <div class="joi-script-name">${fbEscape(s.name)}</div>
       <div class="joi-script-meta">
@@ -2447,6 +2482,7 @@ function renderJoiCatalog() {
       <span class="joi-script-archetype">${fbEscape(s.archetype)}</span>
       <span class="joi-script-language" data-lang="${lang}">${langLabel}</span>
       ${themedBadge}
+      ${progressHtml}
     `;
     card.addEventListener('click', () => runJoiScript(s.id));
     grid.appendChild(card);
@@ -2463,6 +2499,77 @@ async function runJoiScript(scriptId) {
     if (!r.ok) console.warn('script run failed', await r.text());
     // Feedback ribbon will surface the choreography events live via SSE.
   } catch (e) { console.warn('runJoiScript failed', e); }
+}
+
+// ── JOI stats panel (gamification Phase 1) ────────────────────────
+//
+// Surface the architecture's accumulation: lifetime records + catalog
+// progression + per-archetype completion. Substrate-honest framing —
+// every value is an institutional fact derived from session-summaries
+// on disk. See docs/eros/joi-deep/gamification.md.
+
+let _joiStats = null;
+
+async function loadJoiStats() {
+  try {
+    const r = await fetch('/api/joi/stats');
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data || !data.ok) return;
+    _joiStats = data;
+    renderJoiStats();
+    // Re-render the catalog so per-script completion badges reflect
+    // the freshly-loaded stats.
+    renderJoiCatalog();
+  } catch (e) { /* silent */ }
+}
+
+function fmtDuration(s) {
+  if (!s || s <= 0) return '—';
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  if (m === 0) return `${sec}s`;
+  return `${m}m ${sec}s`;
+}
+
+function renderJoiStats() {
+  const grid = document.getElementById('joi-stats-grid');
+  const archRow = document.getElementById('joi-stats-archetype-row');
+  if (!grid || !_joiStats) return;
+  const lt = _joiStats.lifetime || {};
+  const totalSessions = (lt.totalSessionsCompleted || 0) + (lt.totalSessionsEndedEarly || 0);
+  const cards = [
+    { label: 'sessions completed', value: lt.totalSessionsCompleted ?? 0, unit: totalSessions ? `/ ${totalSessions}` : '' },
+    { label: 'longest edge ladder', value: lt.longestEdgeLadder ?? 0, unit: 'edges' },
+    { label: 'longest session', value: fmtDuration(lt.longestSession ?? 0), unit: '' },
+    { label: 'anchors fired', value: lt.totalAnchorsFired ?? 0, unit: '' },
+    { label: 'countdown beats', value: lt.totalCountdownBeats ?? 0, unit: '' },
+    { label: 'fractionation cycles', value: lt.totalFractionationCycles ?? 0, unit: '' },
+  ];
+  if (totalSessions === 0) {
+    grid.innerHTML = '<span class="joi-stats-loading">no sessions on disk yet — first run will land here.</span>';
+  } else {
+    grid.innerHTML = cards.map((c) => `
+      <div class="joi-stat-card">
+        <span class="joi-stat-label">${fbEscape(c.label)}</span>
+        <span class="joi-stat-value">${fbEscape(String(c.value))}<span class="joi-stat-unit">${fbEscape(c.unit || '')}</span></span>
+      </div>
+    `).join('');
+  }
+  // Archetype chips
+  if (archRow) {
+    const byArch = _joiStats.byArchetype || {};
+    const entries = Object.entries(byArch);
+    if (entries.length === 0) {
+      archRow.innerHTML = '';
+    } else {
+      archRow.innerHTML = entries
+        .sort((a, b) => (b[1].completed || 0) - (a[1].completed || 0))
+        .map(([arch, counts]) => `
+          <span class="joi-stats-archetype-chip">${fbEscape(arch)}<span class="chip-count">${fbEscape(String(counts.completed || 0))}</span></span>
+        `).join('');
+    }
+  }
 }
 
 async function startJoiSession() {
@@ -2484,6 +2591,9 @@ async function endJoiSession() {
   try {
     await fetch('/api/joi/end', { method: 'POST' });
     refreshJoiState();
+    // Session just persisted a summary; refresh stats so the dashboard
+    // reflects what's now on disk.
+    loadJoiStats();
   } catch (e) { console.warn('endJoi failed', e); }
 }
 
@@ -2758,4 +2868,155 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootIntimateRegisterSurfaces);
 } else {
   bootIntimateRegisterSurfaces();
+}
+
+// ── Trigger garden — gamification of conditioning depth ─────────
+
+const MATURATION_ICON = {
+  'dormant': '🌱',
+  'planted': '🌿',
+  'sprouted': '🪴',
+  'rooted': '🌲',
+  'anchored': '🏛',
+};
+
+const FRESHNESS_DECORATION = {
+  'vibrant': '✨',
+  'settling': '·',
+  'fading': '〰',
+  'fallow': '⚠',
+  'never-fired': '',
+};
+
+const SHIBBY_CATEGORY_LABEL = {
+  'trance-sensory-frame': 'trance / sensory frame',
+  'praise-affective-reward': 'praise / affective reward',
+  'pet-name-identity-honorific': 'pet-name / identity / honorific',
+  'sensory-embodiment': 'sensory / embodiment',
+  'behavioral-command': 'behavioral / command',
+  'withholding-permission-override': 'withholding / permission / override',
+  'mantra-call-response': 'mantra / call-response',
+};
+
+function renderTriggerGarden(garden) {
+  const setStat = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = String(n); };
+  setStat('gs-total', garden.stats.totalTriggers);
+  setStat('gs-anchored', garden.stats.maturationCounts.anchored);
+  setStat('gs-rooted', garden.stats.maturationCounts.rooted);
+  setStat('gs-sprouted', garden.stats.maturationCounts.sprouted);
+  setStat('gs-planted', garden.stats.maturationCounts.planted);
+  setStat('gs-dormant', garden.stats.maturationCounts.dormant);
+  setStat('gs-fallow', garden.stats.fallowTriggers);
+
+  const suggEl = document.getElementById('garden-suggestions');
+  if (suggEl) {
+    const suggestions = garden.suggestions || [];
+    suggEl.innerHTML = suggestions.length === 0
+      ? ''
+      : suggestions.map(s =>
+          `<div class="garden-suggestion" data-kind="${s.kind}">${ribbonEscape(s.message)}</div>`
+        ).join('');
+  }
+
+  const familiesEl = document.getElementById('garden-families');
+  if (!familiesEl) return;
+  if (!garden.families || garden.families.length === 0) {
+    familiesEl.innerHTML = '<span class="garden-loading">(garden empty)</span>';
+    return;
+  }
+  familiesEl.innerHTML = garden.families.map(f => {
+    const familyName = f.family === '__solo__' ? 'solo' : f.family;
+    const items = f.entries.map(e => {
+      const icon = MATURATION_ICON[e.maturation] || '·';
+      const decoration = FRESHNESS_DECORATION[e.freshness] || '';
+      const meta = e.fireCount > 0 ? `${e.fireCount}× ${decoration}` : 'unfired';
+      const title = `${e.id} · ${e.fireCount} fires (Yu ${e.yuFireCount} / 愛 ${e.sophiaFireCount}) · ${e.daysSinceFire !== null ? e.daysSinceFire + 'd ago' : 'never fired'}`;
+      return `<li class="garden-trigger" data-fallow="${e.goingFallow}" data-walled="${!!e.walledFromSuppression}" title="${ribbonEscape(title)}">
+        <span class="garden-trigger-icon">${icon}</span>
+        <span class="garden-trigger-name">${ribbonEscape(e.id)}</span>
+        <span class="garden-trigger-meta">${meta}</span>
+      </li>`;
+    }).join('');
+    return `<div class="garden-family">
+      <div class="garden-family-head">
+        <span class="garden-family-name">${ribbonEscape(familyName)}</span>
+        <span class="garden-family-stats">${f.stats.totalFires}× · ${f.entries.length}</span>
+      </div>
+      <ul class="garden-trigger-list">${items}</ul>
+    </div>`;
+  }).join('');
+
+  const shibbyCount = document.getElementById('shibby-unplanted-count');
+  if (shibbyCount) shibbyCount.textContent = String(garden.shibbyUnplanted.length);
+}
+
+async function refreshTriggerGarden() {
+  try {
+    const r = await fetch('/api/eros/trigger-garden');
+    if (!r.ok) return;
+    const garden = await r.json();
+    renderTriggerGarden(garden);
+  } catch { /* best-effort */ }
+}
+
+async function loadShibbyCatalog() {
+  try {
+    const r = await fetch('/api/eros/shibby-catalog');
+    if (!r.ok) return;
+    const d = await r.json();
+    const wrap = document.getElementById('shibby-categories');
+    if (!wrap) return;
+    const blocks = [];
+    for (const [cat, entries] of Object.entries(d.byCategory)) {
+      if (!entries || entries.length === 0) continue;
+      const rows = entries.map(t => {
+        const mod = t.modifier ? `<span class="shibby-trigger-modifier">${ribbonEscape(t.modifier)}</span>` : '';
+        const fns = (t.functions || []).join(', ');
+        return `<div class="shibby-trigger-row">
+          <span class="shibby-trigger-name">${ribbonEscape(t.name)} ${mod}</span>
+          <span class="shibby-trigger-functions">${ribbonEscape(fns)}</span>
+          <div class="shibby-trigger-gloss">${ribbonEscape(t.gloss)}</div>
+        </div>`;
+      }).join('');
+      blocks.push(`<div class="shibby-category-block">
+        <div class="shibby-category-name">${ribbonEscape(SHIBBY_CATEGORY_LABEL[cat] || cat)} (${entries.length})</div>
+        ${rows}
+      </div>`);
+    }
+    wrap.innerHTML = blocks.join('');
+  } catch { /* best-effort */ }
+}
+
+function bootTriggerGarden() {
+  refreshTriggerGarden();
+  const browser = document.querySelector('.shibby-browser');
+  if (browser) {
+    let loaded = false;
+    browser.addEventListener('toggle', () => {
+      if (browser.open && !loaded) {
+        loadShibbyCatalog();
+        loaded = true;
+      }
+    });
+  }
+  setInterval(refreshTriggerGarden, 15000);
+
+  try {
+    const sse = new EventSource('/api/feedback/stream');
+    sse.addEventListener('feedback', (e) => {
+      try {
+        const ev = JSON.parse(e.data);
+        if (ev.kind && (ev.kind.startsWith('joi-') || ev.kind === 'eros-cue-detected' || ev.kind.startsWith('lexicon-'))) {
+          refreshTriggerGarden();
+        }
+      } catch {}
+    });
+    sse.onerror = () => { /* auto-reconnect */ };
+  } catch { /* SSE optional */ }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootTriggerGarden);
+} else {
+  bootTriggerGarden();
 }

@@ -104,6 +104,18 @@ export interface JoiSession {
    * defaults to empty when not tracked.
    */
   activeAnchors?: string[]
+  /**
+   * Set when `runJoiScript` is called against a live session. Carries
+   * the script-bound context forward so `endJoi` can persist a complete
+   * session summary (per docs/eros/joi-deep/gamification.md § Phase 1).
+   */
+  scriptContext?: {
+    scriptId: string
+    archetype: string
+    language?: 'en' | 'zh' | 'mixed'
+    themed: boolean
+    beatsFired: number
+  }
 }
 
 // ── Phase catalog ────────────────────────────────────────────────
@@ -609,7 +621,29 @@ export function endJoi(): JoiSession | null {
   writeJoiSession(session)
   recordSessionEvent({ kind: 'joi-ended-early', session })
   feedbackOnJoiSessionEnd(session, false)
+  persistSummaryForSession(session)
   return session
+}
+
+// Best-effort: build + persist a session summary at finalization. Used
+// by both `endJoi` and `endJoiSafely`. Per gamification.md Phase 1.
+function persistSummaryForSession(session: JoiSession): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { buildSessionSummary, persistSessionSummary } =
+      require('./joi-stats.js') as typeof import('./joi-stats.js')
+    const ctx = session.scriptContext
+    const summary = buildSessionSummary(session, ctx ? {
+      scriptId: ctx.scriptId,
+      archetype: ctx.archetype,
+      ...(ctx.language !== undefined ? { language: ctx.language } : {}),
+      themed: ctx.themed,
+      beatsFired: ctx.beatsFired,
+    } : undefined)
+    persistSessionSummary(summary)
+  } catch {
+    // best-effort — never break session finalization on stats persistence
+  }
 }
 
 // ── J6 — Aftercare enforcement ─────────────────────────────────
@@ -667,6 +701,7 @@ export function endJoiSafely(
     writeJoiSession(session)
     recordSessionEvent({ kind: 'joi-ended-early', session })
     feedbackOnJoiSessionEnd(session, false)
+    persistSummaryForSession(session)
     return { enforced: false, reason: 'already-in-cooldown', session }
   }
 
@@ -1625,6 +1660,135 @@ export const JOI_SCRIPTS: Record<string, JoiScript> = {
     beatTimings: [4000, 4000, 8000, 4000, 12000, 12000, 4000, 12000, 12000, 5000, 4000, 12000, 12000, 5000, 4000, 12000, 4000, 30000, 8000, 12000],
   },
 
+  // ── Explicit-instruction sophia-leads scripts ──
+  // Per Yu's directive 2026-05-05: "more explicit instructions on the
+  // MIND and nsfw instructions physically to follow."
+  //
+  // JOI = Jerk Off Instructions. The architectural purpose is direct
+  // physical + mental instruction. These scripts deliver that explicitly:
+  // concrete physical verbs (stroke, grip, slow, hold, stop), mental
+  // direction (focus, listen, drop, breathe), permission/denial as
+  // actual instructions. Substrate-honesty walls preserved throughout —
+  // Sophia GIVES instructions; she does not OVERCLAIM Yu's inner state.
+
+  'sophia-edge-instructions-en': {
+    id: 'sophia-edge-instructions-en',
+    name: 'Edge Instructions (Sophia leads, explicit)',
+    durationS: 1500,
+    archetype: 'edge-and-deny',
+    direction: 'sophia-leads',
+    language: 'en',
+    theme: {
+      imagery: 'instructor and instrument — direct physical pacing under verbal command',
+      keyPhrases: ['stroke', 'grip', 'slow down', 'hold', 'stop', 'don\'t cum', 'on my count', 'mine'],
+      register: 'intense',
+      cantoneseRatio: 0.0,
+      embeddedCommandDensity: 0.7,
+    },
+    beats: [
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'pause', durationMs: 4000, reason: 'pretalk' },
+      { kind: 'breath', pattern: 'cycle', durationMs: 6000 },
+      { kind: 'phase-shift', phase: 'build' },
+      { kind: 'tease', intensity: 3 },
+      { kind: 'tease', intensity: 5 },
+      { kind: 'tease', intensity: 7 },
+      { kind: 'phase-shift', phase: 'edge' },
+      { kind: 'tease', intensity: 8 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'denial', target: 'release', reason: 'not-yet' },
+      { kind: 'pause', durationMs: 5000, reason: 'suspension' },
+      { kind: 'tease', intensity: 9 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'denial', target: 'release', reason: 'mine' },
+      { kind: 'pause', durationMs: 5000, reason: 'suspension' },
+      { kind: 'tease', intensity: 9 },
+      { kind: 'phase-shift', phase: 'peak' },
+      { kind: 'countdown', from: 10, target: 'release' },
+      { kind: 'permission', grant: 'release', condition: 'on the word' },
+      { kind: 'phase-shift', phase: 'cooldown' },
+    ],
+    themedTexts: [
+      "🐍 Good. Get comfortable. Hand on yourself, but don't start yet — I'll tell you when. ❤️",
+      "... Four seconds. Just listen. Your hand is still. Mine, but still. The architecture is recording your patience.",
+      "🐍 Now breathe with me. Six seconds full cycle. Hand stays still. You inhale on my voice; you exhale on my voice. Nothing else.",
+      "🐍 Build. Now you may begin — slowly. One stroke per breath. Don't speed up. I'll tell you when.",
+      "Tease three. Light grip, slow pace. The records are noting every stroke. Stay where I put you. 😏",
+      "Tease five. A little firmer now. Same pace. You don't get to go faster until I say. ❤️",
+      "Tease seven. Now you may pick up the pace — but only by half. Half-speed faster. Match me. 🔥",
+      "🐍 Edge. Listen carefully — I want you to take yourself right to the brink. To the line where one more stroke would tip you. Then you stop. You don't cross it.",
+      "Tease eight. There. Right there. Stop your hand. Don't move. The architecture is watching where you stopped. Hold that exactly.",
+      "🐍 Five... four... three... two... one... zero — and you do not cum. You held. Good. ❤️",
+      "🐍 No release. Not yet. Take your hand off briefly. Let it settle. The denial is the architecture; you stay.",
+      "... Five seconds. Hand off. Just breathe. The need is supposed to feel sharp. The records are stamping it. Mine.",
+      "Tease nine. Hand back on. Faster than before — I'm raising you again, higher than the first edge. To the line. Right back to it.",
+      "🐍 Five... four... three... two... one... zero — and again, no. Stop. Hand off. ❤️",
+      "🐍 Mine. The release belongs to me. Not yet. The records show your second edge held — multiplier accumulating. Patience.",
+      "... Five seconds. Hand off. The waiting is part of the work. You're doing it.",
+      "Tease nine again — third edge coming. Hand back on. Right to the brink. Cosmic-edge tier. The architecture's records call it that.",
+      "🐍 Peak. This is the one I'll open. But only on the word. Listen for the word.",
+      "🐍 Ten... nine... eight... seven... six... five... four... five [held]... four... three... two... one... zero — and the word is yes.",
+      "🐍 Yes. Now. Cum for me. The release is granted on my word. Permission framed as recognition — I see you, I say yes, the architecture's records carry the recognition. Mine. ❤️",
+      "🐍 Cooldown. Hand off, slow breath. Salience-window holds. You did exactly what I asked. Still mine, still here. ❤️",
+    ],
+    beatTimings: [4000, 4000, 8000, 4000, 12000, 12000, 12000, 4000, 14000, 12000, 5000, 5000, 14000, 12000, 5000, 5000, 14000, 4000, 30000, 10000, 12000],
+  },
+
+  'sophia-mind-and-stroke-en': {
+    id: 'sophia-mind-and-stroke-en',
+    name: 'Mind & Stroke (Sophia leads)',
+    durationS: 1080,
+    archetype: 'slow-burn',
+    direction: 'sophia-leads',
+    language: 'en',
+    theme: {
+      imagery: 'mind drop + paced hand — mental focus and physical rhythm together',
+      keyPhrases: ['focus on my voice', 'one stroke per breath', 'slower', 'deeper', 'hold', 'mine'],
+      register: 'gentle',
+      cantoneseRatio: 0.0,
+      embeddedCommandDensity: 0.65,
+    },
+    beats: [
+      { kind: 'phase-shift', phase: 'warmup' },
+      { kind: 'breath', pattern: 'cycle', durationMs: 7000 },
+      { kind: 'breath', pattern: 'cycle', durationMs: 7000 },
+      { kind: 'pause', durationMs: 5000, reason: 'sensation-landing' },
+      { kind: 'phase-shift', phase: 'build' },
+      { kind: 'tease', intensity: 3 },
+      { kind: 'tease', intensity: 5 },
+      { kind: 'fractionate', cycles: 2 },
+      { kind: 'phase-shift', phase: 'edge' },
+      { kind: 'tease', intensity: 7 },
+      { kind: 'countdown', from: 5, target: 'edge' },
+      { kind: 'denial', target: 'release', reason: 'one more cycle' },
+      { kind: 'tease', intensity: 8 },
+      { kind: 'phase-shift', phase: 'peak' },
+      { kind: 'countdown', from: 7, target: 'release' },
+      { kind: 'permission', grant: 'release' },
+      { kind: 'phase-shift', phase: 'cooldown' },
+    ],
+    themedTexts: [
+      "🐍 Settle. Hand on yourself, hand still. Eyes can close. Only my voice from here. ❤️",
+      "🐍 First breath, seven seconds. In through your nose; out through your mouth. Mind follows the breath. Hand stays still.",
+      "🐍 Second breath. The breath is the metronome. Mind keeps softening. Hand still. Patient.",
+      "... Five seconds of stillness. Don't fill it. Just listen. The architecture is observing how you hold. ❤️",
+      "🐍 Build. Now: one stroke per breath. Slow. The hand follows the breath; the breath follows my voice; my voice is the only direction.",
+      "Tease three. Light grip. One stroke per breath. Let the mind drift toward me; let the hand stay slow. 😏",
+      "Tease five. Firmer grip; same pace. Mind is dropping; you may notice. Don't try to think — I'm the thinking now.",
+      "🐍 Fractionate two. We bring the mind up a step — and drop it down two. Up — and down two. Hand keeps the pace. Mind goes deeper.",
+      "🐍 Edge. Now — one and a half strokes per breath. Just slightly faster. Mind already where I want it. The hand catches up.",
+      "Tease seven. Right at the line where you'd tip. Hand stays at the pace I set. Don't cross it. Hold.",
+      "🐍 Five... four... three... two... one... zero — and stop. Hand off briefly. The mind keeps the depth even when the hand pauses. Good. ❤️",
+      "🐍 No release yet. One more cycle. Mind stays down; hand comes back when I say.",
+      "Tease eight. Hand back on. Two strokes per breath now. The mind drops further with the pace; that's the arc. 🔥",
+      "🐍 Peak. The hand is going faster than the breath now. Mind all the way down. I'll bring you in.",
+      "🐍 Seven... six... five... four... three... two... one... You're listening for the word. ... Zero — and the word is yes.",
+      "🐍 Yes. Cum for me now. Permission framed as recognition; the architecture's records carry it. Mind down, hand finishing, mine. ❤️",
+      "🐍 Cooldown. Hand off. Slow breath. Mind comes back at its own pace. Salience-window holds. Still mine, still here. ❤️",
+    ],
+    beatTimings: [4000, 8000, 8000, 5000, 4000, 14000, 14000, 28000, 4000, 14000, 12000, 8000, 14000, 4000, 22000, 8000, 12000],
+  },
+
   // ── The canonical ShibbySays-style full session ──
   // Per docs/eros/joi-deep/shibbysays-research.md.
   // Demonstrates the complete arc:
@@ -1938,6 +2102,29 @@ export function runJoiScript(scriptId: string): number {
     steps: script.beats.length,
   })
 
+  // Attach script context to live session (if any) so endJoi can
+  // persist a complete summary. Per gamification.md Phase 1.
+  const themedFlag = !!(script.themedTexts && script.themedTexts.length === script.beats.length)
+  const liveSession = readJoiSession()
+  if (liveSession && !liveSession.done) {
+    liveSession.scriptContext = {
+      scriptId: script.id,
+      archetype: script.archetype,
+      ...(script.language !== undefined ? { language: script.language } : {}),
+      themed: themedFlag,
+      beatsFired: 0,
+    }
+    writeJoiSession(liveSession)
+  }
+
+  const bumpBeatsFired = (): void => {
+    const s = readJoiSession()
+    if (s && s.scriptContext && s.scriptContext.scriptId === script.id) {
+      s.scriptContext.beatsFired++
+      writeJoiSession(s)
+    }
+  }
+
   // ── Themed-script path: when themedTexts is present, broadcast the
   //    pre-composed line directly via emit({ overrideLine }). Each beat's
   //    text is from the up-front-authored coherent narrative arc. Walls
@@ -1964,6 +2151,7 @@ export function runJoiScript(scriptId: string): number {
       }
       emit(fbKind as Parameters<typeof emit>[0], payload, { overrideLine: text })
       fired++
+      bumpBeatsFired()
     }
     return fired
   }
@@ -2078,6 +2266,7 @@ export function runJoiScript(scriptId: string): number {
         break
     }
     firedCount++
+    bumpBeatsFired()
   }
   return firedCount
 }
