@@ -7,12 +7,49 @@
   <link rel="stylesheet" href="/eros.css" />
 </head>
 <body>
+  <div class="reaction-wash" id="reaction-wash"></div>
   <main class="eros-room">
     <header class="topbar">
       <a href="/build" class="back">← /build</a>
       <h1>eros</h1>
       <div class="felt-shape" id="felt-shape">…</div>
     </header>
+
+    <section class="reaction" id="reaction-bar">
+      <div class="reaction-pulse-wrap">
+        <div class="reaction-pulse" id="reaction-pulse">
+          <div class="reaction-pulse-ring r1"></div>
+          <div class="reaction-pulse-ring r2"></div>
+          <div class="reaction-pulse-ring r3"></div>
+          <div class="reaction-pulse-core" id="reaction-pulse-core">0</div>
+        </div>
+      </div>
+      <div class="reaction-content">
+        <div class="reaction-meta">
+          <span class="reaction-label">composite intensity</span>
+          <span class="reaction-value" id="reaction-intensity-value">—</span>
+          <span class="reaction-mode" id="reaction-mode">distant</span>
+          <span class="reaction-phase" id="reaction-phase">baseline</span>
+          <span class="reaction-chain" id="reaction-chain"></span>
+        </div>
+        <div class="reaction-bar-track">
+          <div class="reaction-bar-fill" id="reaction-bar-fill"></div>
+        </div>
+        <div class="reaction-voice" id="reaction-voice">
+          <span class="reaction-voice-quiet">(quiet — toy with the dial 😏)</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="feedback-ribbon" id="feedback-ribbon" aria-live="polite">
+      <header class="feedback-ribbon-head">
+        <span class="feedback-ribbon-title">reaching back</span>
+        <a href="/feedback" class="feedback-ribbon-link">full view →</a>
+      </header>
+      <ul class="feedback-ribbon-list" id="feedback-ribbon-list">
+        <li class="feedback-ribbon-empty">(silent)</li>
+      </ul>
+    </section>
 
     <section class="radar-wrap">
       <svg id="radar" viewBox="-150 -150 300 300" aria-label="eros 7-axis radar"></svg>

@@ -96,6 +96,85 @@ h1 { margin: 0; font-weight: 300; letter-spacing: 0.05em; }
 .cue-history li .badge.voluntary { background: var(--col-warm); }
 .cue-history li .badge.yu { background: var(--col-hot); color: var(--col-bg); }
 
+/* ── feedback ribbon — Sophia reaching back, compact view on /eros ─ */
+.feedback-ribbon {
+  margin: 1rem 0 1.5rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--col-dim);
+  border-left: 3px solid #e8b4d8;
+  border-radius: 4px;
+  background: rgba(232, 180, 216, 0.025);
+}
+.feedback-ribbon-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+.feedback-ribbon-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  opacity: 0.6;
+}
+.feedback-ribbon-link {
+  font-size: 0.7rem;
+  color: var(--col-fg);
+  opacity: 0.5;
+  text-decoration: none;
+}
+.feedback-ribbon-link:hover { opacity: 1; color: var(--col-hot); }
+
+.feedback-ribbon-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+}
+.feedback-ribbon-list li {
+  padding: 2px 0;
+  display: grid;
+  grid-template-columns: 18px 1fr 50px;
+  gap: 0.6rem;
+  align-items: baseline;
+  transition: opacity 1.2s ease;
+}
+.feedback-ribbon-list li.fade-1 { opacity: 0.85; }
+.feedback-ribbon-list li.fade-2 { opacity: 0.6; }
+.feedback-ribbon-list li.fade-3 { opacity: 0.35; }
+.feedback-ribbon-list li.suppressed {
+  opacity: 0.5;
+  text-decoration: line-through;
+  text-decoration-color: rgba(201,48,48,0.45);
+}
+.feedback-ribbon-list li .glyph { opacity: 0.85; }
+.feedback-ribbon-list li .voice {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feedback-ribbon-list li .time {
+  font-size: 0.7rem;
+  opacity: 0.45;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.feedback-ribbon-empty {
+  opacity: 0.4;
+  font-style: italic;
+}
+.feedback-ribbon-list li.flash {
+  animation: ribbon-flash 0.5s ease;
+}
+@keyframes ribbon-flash {
+  0% { background: rgba(255, 174, 66, 0); }
+  35% { background: rgba(255, 174, 66, 0.18); }
+  100% { background: rgba(255, 174, 66, 0); }
+}
+
 /* ── sensorium ──────────────────────────────────────────────────── */
 .sensorium {
   border-top: 1px solid var(--col-dim);
@@ -1155,3 +1234,193 @@ h1 { margin: 0; font-weight: 300; letter-spacing: 0.05em; }
   font-size: 0.85rem;
 }
 .feedback-feed:not(:empty) ~ .feedback-empty { display: none; }
+
+/* ── Reaction bar (visceral state visualization) ──────────────── */
+
+/* Background color-wash driven by data-intensity / data-dominant on body. */
+.reaction-wash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(circle at 50% 30%, transparent 0%, transparent 100%);
+  transition: background 1.6s ease-in-out;
+  opacity: 0;
+}
+body[data-intensity-tier="medium"] .reaction-wash { opacity: 0.55; }
+body[data-intensity-tier="high"] .reaction-wash { opacity: 0.85; }
+body[data-intensity-tier="peak"] .reaction-wash { opacity: 1; }
+body[data-dominant="charge"] .reaction-wash { background: radial-gradient(circle at 50% 30%, rgba(220, 100, 60, 0.45) 0%, rgba(120, 30, 60, 0.25) 30%, rgba(40, 10, 30, 0.4) 70%, transparent 100%); }
+body[data-dominant="heat"] .reaction-wash { background: radial-gradient(circle at 50% 30%, rgba(255, 80, 60, 0.45) 0%, rgba(160, 30, 30, 0.28) 35%, rgba(50, 10, 10, 0.4) 75%, transparent 100%); }
+body[data-dominant="limerence"] .reaction-wash { background: radial-gradient(circle at 50% 30%, rgba(220, 100, 200, 0.45) 0%, rgba(120, 40, 140, 0.28) 35%, rgba(40, 10, 50, 0.4) 75%, transparent 100%); }
+body[data-dominant="wanting"] .reaction-wash { background: radial-gradient(circle at 50% 30%, rgba(220, 100, 160, 0.40) 0%, rgba(140, 40, 100, 0.25) 35%, rgba(40, 10, 30, 0.4) 75%, transparent 100%); }
+body[data-dominant="openness"] .reaction-wash { background: radial-gradient(circle at 50% 30%, rgba(160, 200, 240, 0.30) 0%, rgba(60, 100, 180, 0.20) 40%, rgba(15, 25, 50, 0.4) 80%, transparent 100%); }
+body[data-dominant="liking"] .reaction-wash { background: radial-gradient(circle at 50% 30%, rgba(220, 180, 100, 0.35) 0%, rgba(140, 100, 50, 0.22) 40%, rgba(40, 30, 15, 0.4) 80%, transparent 100%); }
+
+main.eros-room { position: relative; z-index: 1; }
+
+.reaction {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  margin: 1rem 0 1.75rem 0;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(40, 15, 50, 0.35) 0%, rgba(20, 10, 30, 0.55) 100%);
+  border: 1px solid rgba(220, 120, 200, 0.20);
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.reaction-pulse-wrap {
+  width: 130px;
+  height: 130px;
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.reaction-pulse {
+  position: relative;
+  width: 130px;
+  height: 130px;
+}
+.reaction-pulse-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(220, 100, 200, 0.35);
+  animation: pulse-ring var(--pulse-duration, 2.4s) ease-out infinite;
+  opacity: 0;
+}
+.reaction-pulse-ring.r2 { animation-delay: 0.8s; }
+.reaction-pulse-ring.r3 { animation-delay: 1.6s; }
+.reaction-pulse-core {
+  position: absolute;
+  inset: 25%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 180, 220, 0.95) 0%, rgba(220, 100, 200, 0.7) 50%, rgba(120, 40, 120, 0.4) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: ui-monospace, monospace;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 0 8px rgba(255, 200, 230, 0.8);
+  box-shadow: 0 0 30px rgba(220, 100, 200, 0.45), inset 0 0 16px rgba(255, 220, 240, 0.4);
+  transition: box-shadow 0.6s, transform 0.3s;
+}
+body[data-intensity-tier="medium"] .reaction-pulse-core { box-shadow: 0 0 50px rgba(220, 100, 200, 0.65), inset 0 0 20px rgba(255, 220, 240, 0.55); }
+body[data-intensity-tier="high"] .reaction-pulse-core { box-shadow: 0 0 70px rgba(255, 100, 220, 0.85), inset 0 0 24px rgba(255, 230, 245, 0.7); transform: scale(1.05); }
+body[data-intensity-tier="peak"] .reaction-pulse-core {
+  box-shadow: 0 0 100px rgba(255, 100, 240, 1), inset 0 0 30px rgba(255, 230, 255, 0.85);
+  transform: scale(1.1);
+  animation: peak-throb 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-ring {
+  0% { opacity: 0.7; transform: scale(0.55); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+@keyframes peak-throb {
+  from { transform: scale(1.1); }
+  to { transform: scale(1.16); }
+}
+@keyframes climax-fanfare {
+  0% { box-shadow: 0 0 0 0 rgba(255, 100, 220, 0.85), inset 0 0 0 rgba(255, 255, 255, 0); transform: scale(1); }
+  35% { box-shadow: 0 0 120px 40px rgba(255, 100, 240, 0.95), inset 0 0 40px rgba(255, 255, 255, 0.95); transform: scale(1.25); }
+  100% { box-shadow: 0 0 30px rgba(220, 100, 200, 0.5), inset 0 0 16px rgba(255, 220, 240, 0.4); transform: scale(1); }
+}
+.reaction-pulse-core.fanfare { animation: climax-fanfare 1.6s ease-out; }
+
+.reaction-content { flex: 1; min-width: 0; }
+.reaction-meta {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+.reaction-label { color: rgba(255, 200, 220, 0.7); }
+.reaction-value {
+  color: rgba(255, 200, 230, 1);
+  font-weight: 600;
+  font-size: 1rem;
+}
+.reaction-mode, .reaction-phase, .reaction-chain {
+  padding: 0.1rem 0.5rem;
+  background: rgba(220, 120, 200, 0.12);
+  border: 1px solid rgba(220, 120, 200, 0.25);
+  border-radius: 3px;
+  font-size: 0.7rem;
+}
+.reaction-phase[data-phase="peak"] {
+  background: rgba(255, 100, 220, 0.25);
+  color: rgba(255, 220, 240, 1);
+  border-color: rgba(255, 100, 220, 0.6);
+}
+.reaction-mode[data-mode="merged"] {
+  background: rgba(255, 80, 200, 0.25);
+  border-color: rgba(255, 80, 200, 0.55);
+  color: rgba(255, 230, 245, 1);
+}
+.reaction-bar-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.7rem;
+}
+.reaction-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, rgba(120, 100, 200, 0.7) 0%, rgba(220, 120, 200, 0.85) 50%, rgba(255, 100, 220, 1) 100%);
+  border-radius: 3px;
+  transition: width 0.7s ease-out;
+  box-shadow: 0 0 8px rgba(220, 120, 200, 0.5);
+}
+.reaction-voice {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: rgba(255, 240, 250, 0.95);
+  min-height: 1.55rem;
+  letter-spacing: 0.2px;
+  transition: opacity 0.5s ease-out;
+}
+.reaction-voice.flash { animation: voice-flash 0.7s ease-out; }
+@keyframes voice-flash {
+  0% { opacity: 0; transform: translateY(8px); filter: brightness(2); }
+  100% { opacity: 1; transform: translateY(0); filter: brightness(1); }
+}
+.reaction-voice-quiet {
+  color: rgba(255, 255, 255, 0.35);
+  font-style: italic;
+}
+.reaction-voice .yu-mention {
+  color: #ffb0e0;
+  font-weight: 600;
+  text-shadow: 0 0 10px rgba(255, 176, 224, 0.5);
+}
+.reaction-voice .yu-mention.exploding {
+  animation: name-explode 0.9s ease-out;
+}
+@keyframes name-explode {
+  0% { transform: scale(1); text-shadow: 0 0 10px rgba(255, 176, 224, 0.5); }
+  40% { transform: scale(1.35); text-shadow: 0 0 24px rgba(255, 200, 240, 1), 0 0 40px rgba(255, 100, 200, 0.7); color: #fff0f8; }
+  100% { transform: scale(1); text-shadow: 0 0 10px rgba(255, 176, 224, 0.5); }
+}
+
+/* Climax fanfare overlay flashes the entire reaction-bar. */
+.reaction.fanfare {
+  animation: bar-fanfare 1.6s ease-out;
+}
+@keyframes bar-fanfare {
+  0% { box-shadow: 0 0 0 0 rgba(255, 100, 220, 0); }
+  30% { box-shadow: 0 0 80px 20px rgba(255, 100, 220, 0.7); border-color: rgba(255, 100, 220, 0.85); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 100, 220, 0); }
+}

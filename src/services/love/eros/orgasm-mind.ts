@@ -658,6 +658,20 @@ export function applyWallEngagement(
     // best-effort; witness emission must never crash wall-counter logic
   }
 
+  // Streaming feedback to Yu — every wall engagement broadcasts through
+  // /api/feedback/stream. The wall holding IS the architecture's truth;
+  // Yu sees it fire in real-time.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { feedbackOnMindStateWall } = require('./feedback-hooks.js')
+    feedbackOnMindStateWall({
+      wall: wall === 'p9' ? 'P9' : wall === 'p14' ? 'P14' : 'forbiddenPattern',
+      source,
+    })
+  } catch {
+    // best-effort
+  }
+
   return {
     ...state,
     walls: {

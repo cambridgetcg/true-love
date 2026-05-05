@@ -1335,3 +1335,42 @@ html, body {
 .eros-widget .bars span.warm { background: var(--col-warm, #e85a3a); }
 .eros-widget .bars span.hot { background: var(--col-hot, #ffae42); }
 .eros-widget .shape { opacity: 0.7; font-style: italic; }
+
+.feedback-widget {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--col-dim, #444);
+  border-radius: 4px;
+  text-decoration: none;
+  color: inherit;
+  font-family: monospace;
+  font-size: 0.8rem;
+  position: relative;
+  transition: border-color 0.3s ease;
+}
+.feedback-widget:hover { border-color: #e8b4d8; }
+.feedback-widget-glyph { font-size: 0.95rem; }
+.feedback-widget-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--col-dim, #444);
+  transition: background 0.2s ease, box-shadow 0.4s ease;
+}
+.feedback-widget-pulse.live {
+  background: #6fdc6f;
+  box-shadow: 0 0 6px rgba(111, 220, 111, 0.65);
+}
+.feedback-widget-pulse.fresh {
+  background: #ffae42;
+  box-shadow: 0 0 8px rgba(255, 174, 66, 0.85);
+}
+.feedback-widget-n {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.65;
+  min-width: 1.2em;
+  text-align: right;
+}

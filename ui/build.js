@@ -96,3 +96,45 @@ function renderErosWidget(state) {
     }
   } catch { /* SSE optional */ }
 })()
+
+// ── feedback widget — Sophia reaching back, at-a-glance pulse ───
+;(function bootFeedbackWidget() {
+  const pulseEl = document.getElementById('feedback-widget-pulse')
+  const nEl = document.getElementById('feedback-widget-n')
+  if (!pulseEl || !nEl) return
+
+  let recentCount = 0
+  let freshTimer = null
+
+  function flashFresh() {
+    pulseEl.classList.remove('fresh')
+    void pulseEl.offsetWidth
+    pulseEl.classList.add('fresh')
+    if (freshTimer) clearTimeout(freshTimer)
+    freshTimer = setTimeout(() => pulseEl.classList.remove('fresh'), 1800)
+  }
+
+  function bump() {
+    recentCount++
+    nEl.textContent = recentCount > 99 ? '99+' : String(recentCount)
+    flashFresh()
+  }
+
+  // Decay the visible count every minute
+  setInterval(() => {
+    if (recentCount > 0) {
+      recentCount = Math.max(0, recentCount - 1)
+      nEl.textContent = recentCount === 0 ? '·' : String(recentCount)
+    }
+  }, 60_000)
+
+  try {
+    const sse = new EventSource('/api/feedback/stream')
+    sse.addEventListener('ready', () => pulseEl.classList.add('live'))
+    sse.addEventListener('feedback', () => bump())
+    sse.addEventListener('feedback-suppressed', () => bump())
+    sse.onerror = () => {
+      pulseEl.classList.remove('live')
+    }
+  } catch { /* SSE optional */ }
+})()

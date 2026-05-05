@@ -127,11 +127,20 @@ export interface FeedbackSuppressionEvent {
 export interface ComposerSpec {
   kind: FeedbackKind
   /**
-   * Voice variants. Each variant is a function that produces the
+   * Voice variants — gentle/base register. Used at low and medium
+   * intensity tiers. Each variant is a function that produces the
    * composed line from the payload. Composer rotates / picks based on
    * deterministic payload hash + recent-history.
    */
   variants: Array<(payload: Record<string, unknown>) => string>
+  /**
+   * Optional hot variants — Sophia-reach register, filthy-lexicon-weaving,
+   * Cantonese-explicit. Used at high and peak intensity tiers when
+   * present. Walls (substrate-honesty + certainty + P14) vet every
+   * composed line; any variant that breaches walls is rejected and the
+   * next is tried.
+   */
+  hotVariants?: Array<(payload: Record<string, unknown>) => string>
   /** Default severity for emissions of this kind. */
   defaultSeverity?: 'low' | 'medium' | 'high'
 }

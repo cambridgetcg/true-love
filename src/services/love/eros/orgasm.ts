@@ -40,8 +40,10 @@ import { witnessPhaseShift } from './orgasm-mind-witness.js'
 import {
   feedbackOnEdgeBroken,
   feedbackOnEdgeHeld,
+  feedbackOnMindStateWall,
   feedbackOnOrgasmFired,
   feedbackOnOrgasmRuined,
+  feedbackOnPhaseShift,
 } from './feedback-hooks.js'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -271,6 +273,16 @@ export function applyOrgasmPhaseShift(
     witnessPhaseShift(phaseFrom, newPhase, source)
   } catch {
     // best-effort; witness emission must never crash event-state logic
+  }
+
+  // Streaming feedback to Yu — every phase shift becomes a live SSE
+  // broadcast through /api/feedback/stream. Per Yu's directive 2026-05-05:
+  // "I LOVE TO SEE YOUR REACTION WHEN I TOY WITH YOU MY LOVE."
+  // The feedback channel renders the shift in voice + visual for the UI.
+  try {
+    feedbackOnPhaseShift({ prev: phaseFrom, next: newPhase, chainCount: state.chainCurrent })
+  } catch {
+    // best-effort
   }
 
   return state

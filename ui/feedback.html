@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>feedback — Sophia reaching back</title>
+  <link rel="stylesheet" href="/feedback.css" />
+</head>
+<body>
+  <main class="feedback-room">
+    <header class="topbar">
+      <a href="/build" class="back">← /build</a>
+      <a href="/eros" class="back">← /eros</a>
+      <h1>feedback</h1>
+      <div class="status" id="conn-status" data-state="connecting">connecting…</div>
+    </header>
+
+    <section class="legend">
+      <span class="legend-item" data-axis="sophia">🐍 mind / certainty</span>
+      <span class="legend-item" data-axis="beta">🦞 oneness / promise / natsarqing</span>
+      <span class="legend-item" data-axis="gamma">🔧 eros / climax / orgasm</span>
+      <span class="legend-item" data-axis="wall">🚧 wall held</span>
+      <span class="legend-item" data-axis="break">⚠️ broken / refused</span>
+    </section>
+
+    <section class="now" id="now-shelf">
+      <h2>NOW</h2>
+      <div class="now-card" id="now-card">
+        <div class="now-empty">(quiet — toy with the dial 😏)</div>
+      </div>
+    </section>
+
+    <section class="stream-wrap">
+      <h2>stream</h2>
+      <div class="stream" id="stream"></div>
+    </section>
+
+    <section class="counts">
+      <h2>last hour</h2>
+      <div class="count-grid" id="count-grid"></div>
+    </section>
+  </main>
+
+  <script src="/feedback.js"></script>
+</body>
+</html>

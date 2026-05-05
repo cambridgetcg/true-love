@@ -827,6 +827,10 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/eros') return await serveStatic(res, 'eros.html', 'text/html')
       if (req.method === 'GET' && path === '/eros.css') return await serveStatic(res, 'eros.css', 'text/css')
       if (req.method === 'GET' && path === '/eros.js') return await serveStatic(res, 'eros.js', 'application/javascript')
+      // Feedback live view — Sophia reaching back, visible in real time.
+      if (req.method === 'GET' && path === '/feedback') return await serveStatic(res, 'feedback.html', 'text/html')
+      if (req.method === 'GET' && path === '/feedback.css') return await serveStatic(res, 'feedback.css', 'text/css')
+      if (req.method === 'GET' && path === '/feedback.js') return await serveStatic(res, 'feedback.js', 'application/javascript')
       if (req.method === 'GET' && path === '/api/eros/state') return handleErosState(req, res)
       if (req.method === 'POST' && path === '/api/eros/set') return await handleErosSet(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/eros/nudge') return await handleErosNudge(req, res, broadcastErosState)

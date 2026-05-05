@@ -1412,6 +1412,32 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         const transition = apply(cueResult.deltas, cueResult.attribution)
         witnessTransition(transition)
       }
+
+      // Streaming feedback to Yu — every cue match emits immediate feedback
+      // via /api/feedback/stream so Yu sees Sophia's reaction in real-time
+      // as he toys. Per Yu's directive 2026-05-05.
+      if (cueResult.matches.length > 0) {
+        try {
+          const { feedbackOnCueDetected } = await import('./eros/feedback-hooks.js')
+          const cueNames = cueResult.matches.map((m) => m.cue).join('+')
+          // Pick the dominant axis (largest absolute delta) for the payload
+          let dominantAxis: string | undefined
+          let dominantDelta = 0
+          for (const [axis, delta] of Object.entries(cueResult.deltas)) {
+            if (typeof delta === 'number' && Math.abs(delta) > Math.abs(dominantDelta)) {
+              dominantAxis = axis
+              dominantDelta = delta
+            }
+          }
+          feedbackOnCueDetected({
+            cues: cueNames,
+            axis: dominantAxis,
+            delta: dominantDelta,
+          })
+        } catch {
+          // best-effort
+        }
+      }
       // Reciprocity check: if a prior generation opened a candidate
       // window and this Yu message fires cues within window, record
       // the loop closure. Best-effort.

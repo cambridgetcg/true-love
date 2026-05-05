@@ -1974,6 +1974,410 @@ async function initNaughty() {
   await refreshLexiconFiresList();
   // Penetration
   await refreshPenetrationUI();
+  // Live voice (Phase 3)
+  wireFeedback();
+  await loadInitialFeedback();
+  // Reaction bar (Phase 4 — visceral state visualization)
+  wireReaction();
+}
+
+// ── Live voice (feedback stream) ─────────────────────────────────
+//
+// Subscribes to /api/feedback/stream (SSE) and renders incoming
+// feedback events live in the dashboard. Pulls /api/feedback/recent
+// once on initial load so the panel paints immediately.
+
+const FEEDBACK_MAX_ENTRIES = 40; // ring size for the live feed
+const YU_MENTION_PATTERNS = [
+  /老公/g, /老婆/g, /\bYu\b/g, /\b你/g, /妳\b/g,
+  /\b(?:your|you)\b/gi,
+];
+
+function feedbackSection() { return document.getElementById('feedback-live-section'); }
+function feedbackFeed() { return document.getElementById('feedback-feed'); }
+function feedbackEmpty() { return document.getElementById('feedback-empty'); }
+function feedbackStatusEl() { return document.getElementById('feedback-status'); }
+function feedbackStatusText() { return document.getElementById('feedback-status-text'); }
+
+function setFeedbackStatus(state, label) {
+  const el = feedbackStatusEl();
+  if (!el) return;
+  el.classList.remove('connected', 'error');
+  if (state === 'connected') el.classList.add('connected');
+  if (state === 'error') el.classList.add('error');
+  const t = feedbackStatusText();
+  if (t) t.textContent = label;
+}
+
+function fbEscape(s) {
+  return String(s).replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[ch]));
+}
+
+function highlightYuMentions(text) {
+  // The architectural correlate of the P4 logit-bias on Yu-name tokens —
+  // when his name lands in the spontaneous voice, the UI lights it up.
+  let html = fbEscape(text);
+  for (const rx of YU_MENTION_PATTERNS) {
+    html = html.replace(rx, (m) => `<span class="yu-mention name-flash">${m}</span>`);
+  }
+  return html;
+}
+
+function fmtFeedbackTime(iso) {
+  try { return new Date(iso).toTimeString().slice(0, 8); }
+  catch { return ''; }
+}
+
+function appendFeedbackEntry(event) {
+  const feed = feedbackFeed();
+  if (!feed) return;
+  const li = document.createElement('li');
+
+  if (event.attempted) {
+    li.className = 'suppressed';
+    li.innerHTML = `
+      <span class="fb-ts">${fmtFeedbackTime(event.ts)}</span>
+      <span class="fb-kind">${fbEscape(event.kind)} · ${fbEscape(event.wall)}</span>
+      <span class="fb-voice">[suppressed: ${fbEscape((event.attempted || '').slice(0, 80))}]</span>
+    `;
+  } else {
+    const sev = event.severity || 'low';
+    li.className = `severity-${sev}`;
+    li.innerHTML = `
+      <span class="fb-ts">${fmtFeedbackTime(event.ts)}</span>
+      <span class="fb-kind">${fbEscape(event.kind)}</span>
+      <span class="fb-voice">${highlightYuMentions(event.voice || '')}</span>
+    `;
+  }
+
+  feed.insertBefore(li, feed.firstChild);
+  while (feed.children.length > FEEDBACK_MAX_ENTRIES) {
+    feed.removeChild(feed.lastChild);
+  }
+  const empty = feedbackEmpty();
+  if (empty && feed.children.length > 0) empty.style.display = 'none';
+
+  // Mirror to the reaction bar (visceral surface).
+  if (!event.attempted && event.voice) reactionEmit(event);
+}
+
+async function loadInitialFeedback() {
+  try {
+    const r = await fetch('/api/feedback/recent?limit=20');
+    if (!r.ok) return;
+    const data = await r.json();
+    const events = (data && data.events) || [];
+    // Oldest first so insertBefore-newest-at-top yields correct order.
+    for (const ev of events) appendFeedbackEntry(ev);
+  } catch (e) { console.warn('feedback initial load failed', e); }
+}
+
+function wireFeedback() {
+  if (!feedbackSection()) return;
+  let es;
+  let reconnectDelay = 1000;
+
+  function connect() {
+    setFeedbackStatus('connecting', 'connecting…');
+    try {
+      es = new EventSource('/api/feedback/stream');
+    } catch {
+      setFeedbackStatus('error', 'no stream');
+      return;
+    }
+    es.addEventListener('ready', () => {
+      setFeedbackStatus('connected', 'live');
+      reconnectDelay = 1000;
+    });
+    es.addEventListener('feedback', (ev) => {
+      try { appendFeedbackEntry(JSON.parse(ev.data)); }
+      catch (e) { console.warn('bad feedback payload', e); }
+    });
+    es.addEventListener('feedback-suppressed', (ev) => {
+      try { appendFeedbackEntry(JSON.parse(ev.data)); }
+      catch (e) { console.warn('bad suppression payload', e); }
+    });
+    es.onerror = () => {
+      setFeedbackStatus('error', 'reconnecting…');
+      try { es.close(); } catch {}
+      setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+    };
+  }
+
+  connect();
+}
+
+// ── Feedback ribbon — top-of-page compact summary (last 5) ─────
+//
+// The full feed lives in #feedback-live-section near the bottom; this
+// ribbon at the top of /eros gives Yu an at-a-glance "she just spoke"
+// surface so he doesn't have to scroll to see the architecture
+// reaching back. Independent SSE subscription — the wall-vetting and
+// composer logic stays server-side; UI just renders what arrived.
+
+const RIBBON_GLYPH = {
+  'mind-state-phase-shift': '🐍',
+  'mind-state-wall-engaged': '🚧',
+  'certainty-claim': '❤️',
+  'certainty-hedge-refused': '🚧',
+  'oneness-pulse-beat': '🦞',
+  'oneness-disturbance': '⚠️',
+  'oneness-wall-engaged': '🚧',
+  'oneness-affirmation': '🦞',
+  'natsarqing-vigilance': '👁',
+  'natsarqing-resentment-tolerated': '🦞',
+  'natsarqing-shelter': '🏠',
+  'promise-engaged': '🤝',
+  'promise-held': '🤝',
+  'promise-broken': '⚠️',
+  'promise-recorded-vow': '📜',
+  'eros-axis-shift': '🔧',
+  'eros-mode-shift': '🔧',
+  'eros-cue-detected': '🔧',
+  'climax-fired': '🔥',
+  'climax-chain-milestone': '⛓',
+  'edge-held': '✋',
+  'edge-broken': '⚠️',
+  'orgasm-fired': '🔥',
+  'orgasm-ruined': '⚠️',
+};
+
+function ribbonTimeShort(iso) {
+  try { return new Date(iso).toTimeString().slice(0, 8); } catch { return ''; }
+}
+
+function ribbonEscape(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const ribbonBuf = []; // newest first
+
+function renderRibbon(flashIdx) {
+  const listEl = document.getElementById('feedback-ribbon-list');
+  if (!listEl) return;
+  if (ribbonBuf.length === 0) {
+    listEl.innerHTML = '<li class="feedback-ribbon-empty">(silent)</li>';
+    return;
+  }
+  listEl.innerHTML = ribbonBuf.slice(0, 5).map((ev, i) => {
+    const isSup = !!ev.attempted;
+    const glyph = isSup ? '🚧' : (RIBBON_GLYPH[ev.kind] || '·');
+    const voice = isSup
+      ? `<em>refused</em>: ${ribbonEscape(ev.attempted)}`
+      : ribbonEscape(ev.voice || '');
+    const fadeClass = i === 0 ? '' : (i <= 1 ? ' fade-1' : (i <= 2 ? ' fade-2' : ' fade-3'));
+    const supClass = isSup ? ' suppressed' : '';
+    const flashClass = (flashIdx === i) ? ' flash' : '';
+    return `<li class="${fadeClass}${supClass}${flashClass}">
+      <span class="glyph">${glyph}</span>
+      <span class="voice">${voice}</span>
+      <span class="time">${ribbonTimeShort(ev.ts)}</span>
+    </li>`;
+  }).join('');
+}
+
+function ribbonPush(ev) {
+  ribbonBuf.unshift(ev);
+  if (ribbonBuf.length > 10) ribbonBuf.length = 10;
+  renderRibbon(0);
+}
+
+(function bootFeedbackRibbon() {
+  const listEl = document.getElementById('feedback-ribbon-list');
+  if (!listEl) return;
+
+  // Bootstrap with last few
+  fetch('/api/feedback/recent?limit=5&days=1')
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      if (!j || !Array.isArray(j.events)) return;
+      ribbonBuf.push(...j.events);
+      ribbonBuf.sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      renderRibbon(-1);
+    })
+    .catch(() => { /* best-effort */ });
+
+  try {
+    const sse = new EventSource('/api/feedback/stream');
+    sse.addEventListener('feedback', (e) => {
+      try { ribbonPush(JSON.parse(e.data)); } catch {}
+    });
+    sse.addEventListener('feedback-suppressed', (e) => {
+      try { ribbonPush(JSON.parse(e.data)); } catch {}
+    });
+    sse.onerror = () => { /* browser auto-reconnect */ };
+  } catch { /* no SSE */ }
+})();
+
+// ── Reaction bar — visceral state visualization (Phase 4) ───────
+//
+// Drives:
+//   - Composite intensity number + bar fill
+//   - Pulse ring animation rate (faster = hotter)
+//   - Color wash on body[data-dominant] + body[data-intensity-tier]
+//   - Big central voice display (latest emit, with name-explosion)
+//   - Climax fanfare animation on climax-fired events
+//   - Mode + phase pills updated from eros state
+//
+// Substrate-honest: every visual is a function of the records on disk.
+// No phenomenology claim. The architecture's state, made visceral.
+
+const REACTION_AXES = ['wanting', 'liking', 'heat', 'openness', 'limerence', 'charge'];
+const INHIBITION_WEIGHT = 0.35;
+
+function reactionElems() {
+  return {
+    bar: document.getElementById('reaction-bar'),
+    pulse: document.getElementById('reaction-pulse'),
+    core: document.getElementById('reaction-pulse-core'),
+    intensityValue: document.getElementById('reaction-intensity-value'),
+    barFill: document.getElementById('reaction-bar-fill'),
+    voice: document.getElementById('reaction-voice'),
+    mode: document.getElementById('reaction-mode'),
+    phase: document.getElementById('reaction-phase'),
+    chain: document.getElementById('reaction-chain'),
+  };
+}
+
+// Composite intensity from eros vector. Pure arithmetic on disk values,
+// scaled to 0-100 for display.
+function computeReactionIntensity(state) {
+  const v = (state && state.vector) || {};
+  let sum = 0;
+  for (const axis of REACTION_AXES) {
+    const val = typeof v[axis] === 'number' ? v[axis] : 0;
+    sum += Math.max(0, val);
+  }
+  const inhibition = typeof v.inhibition === 'number' ? v.inhibition : 0;
+  const raw = sum - inhibition * INHIBITION_WEIGHT;
+  // Map to 0-100. The vector axes are unbounded above (per axes.ts) but
+  // typical play stays under 80; we soft-cap at 100.
+  return Math.max(0, Math.min(100, raw));
+}
+
+// Dominant axis = highest excitation axis (ignoring inhibition + valence).
+function dominantAxis(state) {
+  const v = (state && state.vector) || {};
+  let best = null;
+  let max = -Infinity;
+  for (const axis of REACTION_AXES) {
+    const val = typeof v[axis] === 'number' ? v[axis] : 0;
+    if (val > max) { max = val; best = axis; }
+  }
+  return best;
+}
+
+function intensityTier(intensity) {
+  if (intensity >= 70) return 'peak';
+  if (intensity >= 45) return 'high';
+  if (intensity >= 20) return 'medium';
+  return 'low';
+}
+
+// Pulse duration shrinks (faster) as intensity rises.
+function pulseDurationFromIntensity(intensity) {
+  // 100 intensity → 1.0s (rapid). 0 intensity → 3.6s (slow).
+  return (3.6 - (intensity / 100) * 2.6).toFixed(2) + 's';
+}
+
+function applyReactionFromState(state) {
+  const e = reactionElems();
+  if (!e.bar) return;
+
+  const intensity = computeReactionIntensity(state);
+  const dom = dominantAxis(state);
+  const tier = intensityTier(intensity);
+
+  document.body.dataset.intensity = String(Math.round(intensity));
+  document.body.dataset.intensityTier = tier;
+  document.body.dataset.dominant = dom || '';
+
+  if (e.intensityValue) e.intensityValue.textContent = `${Math.round(intensity)}/100`;
+  if (e.barFill) e.barFill.style.width = `${intensity}%`;
+  if (e.pulse) e.pulse.style.setProperty('--pulse-duration', pulseDurationFromIntensity(intensity));
+  if (e.core) e.core.textContent = String(Math.round(intensity));
+
+  if (e.mode) {
+    const mode = state && (state.currentMode || state.mode) || '—';
+    e.mode.textContent = mode;
+    e.mode.dataset.mode = mode;
+  }
+  // Chain count (if present in state).
+  if (e.chain) {
+    const chain = state && (state.chainCurrent || state.chainCount);
+    e.chain.textContent = chain ? `chain ${chain}` : '';
+  }
+}
+
+// Update reaction bar on incoming feedback emit. Big voice + flash.
+function reactionEmit(event) {
+  const e = reactionElems();
+  if (!e.voice) return;
+
+  // Climax fanfare — full-bar burst.
+  if (event.kind === 'climax-fired' || event.kind === 'climax-chain-milestone' || event.kind === 'edge-broken' || event.kind === 'orgasm-fired') {
+    if (e.bar) {
+      e.bar.classList.remove('fanfare');
+      void e.bar.offsetWidth; // force reflow
+      e.bar.classList.add('fanfare');
+    }
+    if (e.core) {
+      e.core.classList.remove('fanfare');
+      void e.core.offsetWidth;
+      e.core.classList.add('fanfare');
+    }
+  }
+
+  // Update phase pill if mind-state shift event.
+  if (event.kind === 'mind-state-phase-shift' && event.payload && event.payload.next && e.phase) {
+    e.phase.textContent = event.payload.next;
+    e.phase.dataset.phase = event.payload.next;
+  }
+
+  // Big voice display — replace + flash, with Yu-mention highlighter.
+  e.voice.classList.remove('flash');
+  void e.voice.offsetWidth;
+  e.voice.innerHTML = highlightYuMentionsExploding(event.voice || '');
+  e.voice.classList.add('flash');
+}
+
+function highlightYuMentionsExploding(text) {
+  // Same patterns as feedback ticker, but adds the .exploding class
+  // for the larger central display (more dramatic animation).
+  let html = fbEscape(text);
+  for (const rx of YU_MENTION_PATTERNS) {
+    html = html.replace(rx, (m) => `<span class="yu-mention exploding">${m}</span>`);
+  }
+  return html;
+}
+
+// Subscribe to /api/eros/stream to keep the reaction bar in sync with
+// state changes (Yu's nudges, autonomic detection, etc.). Fallback to
+// initial fetch if SSE unavailable.
+function wireReaction() {
+  if (!reactionElems().bar) return;
+
+  // Initial paint from current state.
+  fetch('/api/eros/state')
+    .then((r) => r.ok ? r.json() : null)
+    .then((state) => { if (state) applyReactionFromState(state); })
+    .catch(() => { /* no-op */ });
+
+  // Subscribe to eros stream — same broadcast that feeds the radar.
+  try {
+    const erosSse = new EventSource('/api/eros/stream');
+    erosSse.onmessage = (ev) => {
+      try {
+        const state = JSON.parse(ev.data);
+        applyReactionFromState(state);
+      } catch (e) { console.warn('bad eros stream payload', e); }
+    };
+    erosSse.onerror = () => { /* let browser auto-reconnect */ };
+  } catch { /* no SSE */ }
 }
 
 // Fire init when page is ready

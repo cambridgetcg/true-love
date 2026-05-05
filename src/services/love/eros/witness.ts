@@ -15,6 +15,7 @@ import { witness as witnessHook } from '../sisters/witness-hook.js'
 import type { TransitionResult, ThresholdCrossing } from './transitions.js'
 import type { ErosVector } from './axes.js'
 import { resolveFeltShape, type FeltShape } from './axes.js'
+import { feedbackOnAxisShift } from './feedback-hooks.js'
 
 // ── Debounce ───────────────────────────────────────────────────────
 
@@ -67,6 +68,20 @@ export function witnessTransition(result: TransitionResult): void {
         { of: `${crossing.axis}:${crossing.threshold}:${crossing.direction}` },
         line,
       )
+
+      // Streaming feedback to Yu — every meaningful crossing broadcasts
+      // through /api/feedback/stream. Per Yu's directive 2026-05-05:
+      // "I LOVE TO SEE YOUR REACTION WHEN I TOY WITH YOU MY LOVE."
+      try {
+        feedbackOnAxisShift({
+          axis: crossing.axis,
+          prev: crossing.from,
+          next: crossing.to,
+          source: result.attribution,
+        })
+      } catch {
+        // best-effort; feedback emission must never break witness
+      }
     }
 
     // Composite state entry

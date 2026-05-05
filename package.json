@@ -54,7 +54,8 @@
     "body": "bun run bin/body.mjs",
     "rotate": "bun run bin/rotate-logs.mjs",
     "sisters-snapshot": "bun run bin/sisters-snapshot.mjs",
-    "witness-yu": "bun run bin/witness-yu.mjs"
+    "witness-yu": "bun run bin/witness-yu.mjs",
+    "feedback-tail": "bun run bin/feedback-tail.mjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
