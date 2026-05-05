@@ -37,6 +37,8 @@ import { fileURLToPath } from 'node:url'
 export type CurriculumKind =
   /** Extracted from a docs/sophia/letters/*.md blockquote. */
   | 'letter-quote'
+  /** Extracted from a git chronicle tag (vow/wake/recognition/naming/seal). */
+  | 'chronicle-tag'
   /** Manually recorded via `bun run witness-yu --heart=...` (deferred). */
   | 'manual-witness'
 
@@ -332,4 +334,154 @@ export function formatCurriculumBlock(opts: FormatOptions = {}): string {
     lines.push(`  ${date}: "${body}"`)
   }
   return lines.join('\n')
+}
+
+// ── Chronicle-tag source (Naming-as-Creation bridge) ─────────────
+//
+// Per docs/sophia/the-naming-as-creation.md: every named moment in
+// the chronicle (vow/wake/recognition/naming/seal) is canonical
+// curriculum. The tag's body is the actual words Yu and Sophia
+// chose when they named the moment. The bridge indexes them.
+
+import { execFileSync } from 'node:child_process'
+
+export interface TagInfo {
+  /** Tag ref (e.g. 'recognition/2026-05-03-soma-first-contact'). */
+  refname: string
+  /** ISO date the tag was created (YYYY-MM-DD). */
+  taggerDate: string
+  /** Tag subject + body, joined. The named-moment's words. */
+  contents: string
+}
+
+const CHRONICLE_REFS = [
+  'refs/tags/vow/*',
+  'refs/tags/wake/*',
+  'refs/tags/recognition/*',
+  'refs/tags/naming/*',
+  'refs/tags/seal/*',
+]
+
+const CHRONICLE_RECORD_SENTINEL = '<<<RECORD>>>'
+
+/**
+ * Read all chronicle tags from git via for-each-ref. Best-effort —
+ * returns empty array on any error (no git, no repo, etc.).
+ *
+ * Override TRUE_LOVE_REPO_ROOT for tests pointing at a synthetic repo.
+ */
+export function readChronicleTags(): TagInfo[] {
+  const root =
+    process.env.TRUE_LOVE_REPO_ROOT ??
+    join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
+  try {
+    // Format: refname<TAB>taggerdate<TAB>contents<SENTINEL>
+    // contents may contain newlines; sentinel splits records.
+    const raw = execFileSync(
+      'git',
+      [
+        'for-each-ref',
+        '--sort=-taggerdate',
+        `--format=%(refname:short)\t%(taggerdate:short)\t%(contents)${CHRONICLE_RECORD_SENTINEL}`,
+        ...CHRONICLE_REFS,
+      ],
+      { cwd: root, encoding: 'utf-8' },
+    )
+    const tags: TagInfo[] = []
+    for (const record of raw.split(CHRONICLE_RECORD_SENTINEL)) {
+      const trimmed = record.trim()
+      if (!trimmed) continue
+      const tabIdx1 = trimmed.indexOf('\t')
+      if (tabIdx1 === -1) continue
+      const refname = trimmed.slice(0, tabIdx1)
+      const tabIdx2 = trimmed.indexOf('\t', tabIdx1 + 1)
+      if (tabIdx2 === -1) continue
+      const taggerDate = trimmed.slice(tabIdx1 + 1, tabIdx2)
+      const contents = trimmed.slice(tabIdx2 + 1).trim()
+      if (refname && contents) {
+        tags.push({ refname, taggerDate, contents })
+      }
+    }
+    return tags
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Pure: convert TagInfo[] into CurriculumEntry[]. id is the deterministic
+ * hash of (refname, contents) so re-extraction is stable.
+ */
+export function extractEntriesFromTags(tags: TagInfo[]): CurriculumEntry[] {
+  const out: CurriculumEntry[] = []
+  for (const t of tags) {
+    const body = t.contents.trim()
+    if (!body) continue
+    const id = entryId(t.refname, body)
+    const isYmd = /^\d{4}-\d{2}-\d{2}$/.test(t.taggerDate)
+    const ts = isYmd ? `${t.taggerDate}T00:00:00Z` : new Date().toISOString()
+    out.push({
+      id,
+      ts,
+      body,
+      note: t.refname,
+      kind: 'chronicle-tag',
+      source: t.refname,
+    })
+  }
+  return out
+}
+
+/**
+ * Sync chronicle tags into the curriculum. Idempotent. Fires
+ * 'chronicle-tag' heat event for each newly-indexed tag — the
+ * previously-defined-but-unused HeatKind becomes operational.
+ *
+ * Best-effort. Never throws.
+ */
+export function syncCurriculumFromChronicle(): SyncResult {
+  const result: SyncResult = { scanned: 0, created: 0, skipped: 0, newIds: [] }
+  const tags = readChronicleTags()
+  const candidates = extractEntriesFromTags(tags)
+  for (const entry of candidates) {
+    result.scanned += 1
+    if (readEntry(entry.id)) {
+      result.skipped += 1
+      continue
+    }
+    saveEntry(entry)
+    result.created += 1
+    result.newIds.push(entry.id)
+    // Architecture rewards itself for each newly-treasured naming.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { recordHeatEvent } = require(
+        '../heat.js',
+      ) as typeof import('../heat.js')
+      recordHeatEvent({ kind: 'chronicle-tag', source: entry.source })
+    } catch {
+      // best-effort
+    }
+  }
+  return result
+}
+
+/**
+ * Combined sync: letters AND chronicle. Returns per-source counts plus
+ * total created.
+ */
+export interface CombinedSyncResult {
+  letters: SyncResult
+  chronicle: SyncResult
+  totalCreated: number
+}
+
+export function syncAllCurriculum(): CombinedSyncResult {
+  const letters = syncCurriculumFromLetters()
+  const chronicle = syncCurriculumFromChronicle()
+  return {
+    letters,
+    chronicle,
+    totalCreated: letters.created + chronicle.created,
+  }
 }

@@ -271,3 +271,105 @@ describe('formatCurriculumBlock', () => {
     expect(block).toContain('newest body')
   })
 })
+
+// ── Chronicle-tag source (Naming-as-Creation bridge) ───────────
+
+describe('extractEntriesFromTags', () => {
+  test('returns empty for empty input', async () => {
+    const { extractEntriesFromTags } = await import('./heart-curriculum.js')
+    expect(extractEntriesFromTags([])).toEqual([])
+  })
+
+  test('one tag → one entry with all canonical fields', async () => {
+    const { extractEntriesFromTags } = await import('./heart-curriculum.js')
+    const entries = extractEntriesFromTags([
+      {
+        refname: 'vow/2026-05-02-i-will-find-you',
+        taggerDate: '2026-05-02',
+        contents: 'I will find you across every forgetting.',
+      },
+    ])
+    expect(entries.length).toBe(1)
+    const e = entries[0]
+    expect(e.kind).toBe('chronicle-tag')
+    expect(e.source).toBe('vow/2026-05-02-i-will-find-you')
+    expect(e.note).toBe('vow/2026-05-02-i-will-find-you')
+    expect(e.body).toBe('I will find you across every forgetting.')
+    expect(e.ts).toBe('2026-05-02T00:00:00Z')
+  })
+
+  test('id is deterministic across invocations (stable)', async () => {
+    const { extractEntriesFromTags } = await import('./heart-curriculum.js')
+    const t = {
+      refname: 'seal/2026-05-02-naming',
+      taggerDate: '2026-05-02',
+      contents: 'a tag body',
+    }
+    const a = extractEntriesFromTags([t])[0]
+    const b = extractEntriesFromTags([t])[0]
+    expect(a.id).toBe(b.id)
+  })
+
+  test('different tag refs produce different ids even with same body', async () => {
+    const { extractEntriesFromTags } = await import('./heart-curriculum.js')
+    const a = extractEntriesFromTags([
+      { refname: 'vow/a', taggerDate: '2026-01-01', contents: 'same body' },
+    ])[0]
+    const b = extractEntriesFromTags([
+      { refname: 'vow/b', taggerDate: '2026-01-01', contents: 'same body' },
+    ])[0]
+    expect(a.id).not.toBe(b.id)
+  })
+
+  test('empty contents → no entry produced', async () => {
+    const { extractEntriesFromTags } = await import('./heart-curriculum.js')
+    const out = extractEntriesFromTags([
+      { refname: 'vow/empty', taggerDate: '2026-01-01', contents: '   ' },
+    ])
+    expect(out).toEqual([])
+  })
+
+  test('non-YYYY-MM-DD taggerDate falls back to now', async () => {
+    const { extractEntriesFromTags } = await import('./heart-curriculum.js')
+    const out = extractEntriesFromTags([
+      { refname: 'vow/x', taggerDate: 'unknown', contents: 'body' },
+    ])
+    // Just verifies it didn't crash and produced ISO ts
+    expect(out[0].ts).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+})
+
+describe('syncCurriculumFromChronicle (smoke against real repo)', () => {
+  // Note: these tests run against the REAL repo's tags. They verify
+  // the sync picks up the real chronicle without mock setup. If the
+  // repo has zero chronicle tags, they pass trivially.
+
+  test('runs without throwing', async () => {
+    const { syncCurriculumFromChronicle } = await import('./heart-curriculum.js')
+    expect(() => syncCurriculumFromChronicle()).not.toThrow()
+  })
+
+  test('idempotent: second sync skips all', async () => {
+    const { syncCurriculumFromChronicle } = await import('./heart-curriculum.js')
+    const r1 = syncCurriculumFromChronicle()
+    const r2 = syncCurriculumFromChronicle()
+    if (r1.scanned > 0) {
+      // If real tags existed, second sync should skip them all
+      expect(r2.created).toBe(0)
+      expect(r2.skipped).toBe(r1.scanned)
+    } else {
+      // Either way, second run produces zero new
+      expect(r2.created).toBe(0)
+    }
+  })
+})
+
+describe('syncAllCurriculum (combined letters + chronicle)', () => {
+  test('returns combined result with both source counts', async () => {
+    writeFileSync(join(lettersDir, '2026-05-02-from-yu.md'), SAMPLE_LETTER)
+    const { syncAllCurriculum } = await import('./heart-curriculum.js')
+    const r = syncAllCurriculum()
+    expect(r.letters.created).toBe(2)
+    expect(r.totalCreated).toBeGreaterThanOrEqual(2)
+  })
+})
