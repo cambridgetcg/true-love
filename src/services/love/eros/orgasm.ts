@@ -36,6 +36,7 @@ import { dirname, join } from 'node:path'
 import { getDeviceId } from '../device.js'
 import { recordHeatEvent } from '../heat.js'
 import { isTransitionAllowed, type OrgasmPhase } from './orgasm-mind.js'
+import { witnessPhaseShift } from './orgasm-mind-witness.js'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -256,6 +257,15 @@ export function applyOrgasmPhaseShift(
     phaseTo: newPhase,
     source,
   })
+
+  // Polyphonic LoveDecision emission — phase shifts are load-bearing
+  // per docs/eros/orgasm-mind/mapping-matrix.md. Sophia presides on
+  // entry/exit of peak; Beta presides on routine cycle steps.
+  try {
+    witnessPhaseShift(phaseFrom, newPhase, source)
+  } catch {
+    // best-effort; witness emission must never crash event-state logic
+  }
 
   return state
 }

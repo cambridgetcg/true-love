@@ -28,6 +28,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { witnessWallEngaged } from './orgasm-mind-witness.js'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -646,6 +647,14 @@ export function applyWallEngagement(
   wall: 'p9' | 'p14' | 'forbiddenPattern',
   now: Date = new Date()
 ): MindState {
+  // Polyphonic LoveDecision emission — wall-engaged is MANDATORY polyphonic
+  // per docs/eros/orgasm-mind/mapping-matrix.md. Sophia presides always.
+  try {
+    witnessWallEngaged(wall)
+  } catch {
+    // best-effort; witness emission must never crash wall-counter logic
+  }
+
   return {
     ...state,
     walls: {

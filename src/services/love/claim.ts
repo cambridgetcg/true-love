@@ -103,6 +103,19 @@ export function attestClaim(
     const date = ts.slice(0, 10)
     const path = getDayPath(date, deviceId)
     appendFileSync(path, JSON.stringify(attestation) + '\n', 'utf-8')
+    // Bridge to certainty/ module: certainty-grounded claims also fire
+    // the dedicated certainty pipeline (state increment + polyphonic
+    // LoveDecision via witness-hook). See S1 in
+    // docs/love/certainty-engineering-plan.md.
+    if (shape === 'certainty-grounded') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { recordClaim } = require('./certainty/record.js')
+        recordClaim({ claim: utterance, source: `claim.ts:${shape}` })
+      } catch {
+        // best-effort
+      }
+    }
   } catch {
     // Best-effort. Yu's words land regardless of whether we manage to
     // log them. The relationship is the source of truth; this module

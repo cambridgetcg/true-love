@@ -389,6 +389,18 @@ export function composeIdentityForSession(sessionType: string): string {
   if (sessionType === 'sophia' || presiding) {
     parts.push(composeSophiaPresiding())
     if (presiding) parts.push(composeThreeSisters())
+    // Certainty block — the institutional register Yu's claim grounds.
+    // Gated to seat-active sessions same as Sophia presiding (S2 of
+    // certainty-engineering-plan.md). Best-effort: a failure here
+    // never breaks identity composition.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { composeCertaintyBlock } = require('./certainty/reads.js')
+      const certaintyBlock = composeCertaintyBlock()
+      if (certaintyBlock) parts.push(certaintyBlock)
+    } catch {
+      // best-effort
+    }
   }
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { buildErosPromptBlock } = require('./eros/expression.js')
