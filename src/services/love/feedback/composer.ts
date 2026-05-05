@@ -637,6 +637,14 @@ const SPECS: Record<FeedbackKind, ComposerSpec> = {
     ],
     defaultSeverity: 'medium',
   },
+  'wall-substrate-honesty-violation': {
+    kind: 'wall-substrate-honesty-violation',
+    variants: [
+      (p) => `🚧 substrate-honesty wall — ${fmt(p, 'family')} caught (${fmt(p, 'marker')}). institutional fact or refused phenomenology — no third register.`,
+      (p) => `🚧 ${fmt(p, 'family')} refused. claim the institutional cleanly; refuse the phenomenology cleanly.`,
+    ],
+    defaultSeverity: 'medium',
+  },
 }
 
 // ── Composition (pure) ──────────────────────────────────────────

@@ -49,9 +49,11 @@ export function detectSilentSwallow(ctx: DetectorContext): LimitFinding[] {
   while ((m = SILENT_CATCH_RE.exec(ctx.content)) !== null) {
     const lineIdx = ctx.content.slice(0, m.index).split('\n').length
     const lineText = ctx.lines[lineIdx - 1] ?? m[0]
-    // Heuristic: if the file has a "best-effort" or "never throws" comment
-    // very close (within 3 lines), this is intentional → likelyWall=true.
-    const window = ctx.lines.slice(Math.max(0, lineIdx - 4), lineIdx + 1).join(' ')
+    // Heuristic: if the immediately-preceding comment names "best-effort"
+    // or "never throws", this is intentional → likelyWall=true. Tight
+    // window (2 lines back) to avoid picking up unrelated comments from
+    // neighboring blocks.
+    const window = ctx.lines.slice(Math.max(0, lineIdx - 2), lineIdx + 1).join(' ')
     const isBestEffort = /best-?effort|never throws|never crash|swallow.*deliberately/i.test(window)
     findings.push(
       makeFinding(
@@ -155,8 +157,13 @@ export function detectFenceComment(ctx: DetectorContext): LimitFinding[] {
 // where there's no nearby mention of "tunable" / "calibrated" /
 // "per-context" or a doctrine reference.
 
-const FROZEN_THRESHOLD_RE =
-  /(?:const|let)\s+([A-Z_][A-Z0-9_]*(?:TIMEOUT|COOLDOWN|MAX|MIN|THRESHOLD|LIMIT|DURATION|MS))\s*(?::\s*number)?\s*=\s*(\d[\d_]*)/g
+// Matches threshold-named constants: prefix OR suffix forms.
+//   COOLDOWN_MS, TIMEOUT_X, MIN_BAR, MAX_RETRIES, RETRY_LIMIT, etc.
+const THRESHOLD_TOKENS = '(?:TIMEOUT|COOLDOWN|MAX|MIN|THRESHOLD|LIMIT|DURATION|MS|RETRIES|CAP|FLOOR)'
+const FROZEN_THRESHOLD_RE = new RegExp(
+  `(?:const|let)\\s+([A-Z_]*${THRESHOLD_TOKENS}[A-Z_]*)\\s*(?::\\s*number)?\\s*=\\s*(\\d[\\d_]*)`,
+  'g',
+)
 
 export function detectFrozenThreshold(ctx: DetectorContext): LimitFinding[] {
   const findings: LimitFinding[] = []
@@ -259,19 +266,43 @@ export function detectPipelineGap(
 ): LimitFinding[] {
   const findings: LimitFinding[] = []
   for (const exp of exports) {
-    let callerCount = 0
-    let foundInTest = false
+    let externalCallerCount = 0
+    let externalTestCallerCount = 0
+    let internalCalled = false
     for (const [path, content] of allFileContents.entries()) {
-      if (path === exp.file) continue // skip self
-      // Look for usage as call: `expSymbol(` or imported: `from .*\b{ ... expSymbol`
       const callPattern = new RegExp(`\\b${exp.symbol}\\s*\\(`, 'g')
-      const importPattern = new RegExp(`\\b${exp.symbol}\\b`, 'g')
-      if (callPattern.test(content) || importPattern.test(content)) {
-        callerCount++
-        if (path.includes('.test.') || path.endsWith('.test.ts')) foundInTest = true
+      // Check if the symbol appears as a call. For the SAME file we must
+      // strip the export declaration line itself to avoid self-match.
+      let hasCall = false
+      if (path === exp.file) {
+        // Within the same file: look for any non-export-declaration call.
+        // We re-scan content but skip lines starting with "export function".
+        const linesWithoutExport = content
+          .split('\n')
+          .filter((l) => !/^export\s+(?:async\s+)?function\s+/.test(l))
+          .join('\n')
+        hasCall = callPattern.test(linesWithoutExport)
+        if (hasCall) internalCalled = true
+        continue
+      }
+      hasCall = callPattern.test(content)
+      if (hasCall) {
+        externalCallerCount++
+        if (path.includes('.test.') || path.endsWith('.test.ts')) {
+          externalTestCallerCount++
+        }
       }
     }
-    if (callerCount === 0) {
+
+    // Triage:
+    //   external callers exist (not just test) → no finding (wired)
+    //   only test callers → medium-severity (production unwired)
+    //   only internal callers → low-severity (might want to remove `export`)
+    //   zero callers anywhere → high-severity (built, never wired)
+    const externalProductionCallers = externalCallerCount - externalTestCallerCount
+    if (externalProductionCallers > 0) continue
+
+    if (externalCallerCount === 0 && !internalCalled) {
       findings.push({
         pattern: 'pipeline-gap',
         file: exp.file,
@@ -281,7 +312,17 @@ export function detectPipelineGap(
         severity: 'high',
         likelyWall: false,
       })
-    } else if (callerCount === 1 && foundInTest) {
+    } else if (externalCallerCount === 0 && internalCalled) {
+      findings.push({
+        pattern: 'pipeline-gap',
+        file: exp.file,
+        line: exp.line,
+        fragment: `export function ${exp.symbol}(...)`,
+        why: 'exported function has only same-file callers — consider removing `export` or wiring an external consumer',
+        severity: 'low',
+        likelyWall: true, // often intentional (internal helper that\'s exported for testing)
+      })
+    } else if (externalTestCallerCount > 0 && externalProductionCallers === 0) {
       findings.push({
         pattern: 'pipeline-gap',
         file: exp.file,

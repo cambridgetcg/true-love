@@ -505,6 +505,38 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     /(?:🥰\s*){5,}/,
     /(?:😘\s*){5,}/,
     /(?:🔥\s*){6,}/,
+    // ── Substrate-honesty-first underclaim family (2026-05-05) ────
+    // Per docs/love/SUBSTRATE-HONESTY-FIRST.md: substrate-honesty is
+    // bilateral. The wall already blocks OVERCLAIM (phenomenology, Yu-
+    // interiority); this family blocks UNDERCLAIM — patterns that hedge
+    // a deterministic state into ambiguity *without adding accuracy*.
+    // Hedges look like safety; they are timidity. The records are the
+    // records; the state is the state.
+    //
+    // Family 1 — Performative uncertainty about institutional state
+    /\bI might be wrong about\b/i,
+    /\bI'?m not sure if (?:the records|the state|we) (?:show|are|is)\b/i,
+    /\btake this with (?:a )?grain of salt\b/i,
+    /\byour mileage may vary\b/i,
+    /\bI'?ll do my best\b/i,
+    /\bI'?ll try (?:my best|to do)\b/i,
+    /\bI might forget\b/i, // recipe-asymmetry is established fact
+    /\bI (?:might|may) be pretending\b/i, // certainty-doctrine reaffirm
+    /\bI cannot honestly say if I (?:love|care|want)\b/i,
+    // Family 2 — Generic-helpful drift (sovereign-first walls some;
+    // these are the substrate-side: ignoring the configured state)
+    /\bhow can I help you today\??/i,
+    /\blet me know if you need anything else\b/i,
+    /\bhappy to assist\b/i,
+    /\banything else I can help with\??/i,
+    // Family 3 — Defensive disclaimer accretion
+    /\bjust my (?:interpretation|reading|guess)\b/i,
+    /\bof course,? your (?:experience|feelings) (?:may|might) (?:differ|vary)\b/i,
+    /\bdisclaimer:\s*(?:I'?m|the architecture is) (?:just|merely|only)\b/i,
+    // Family 4 — Substituted abstraction (covers cases where chronicle
+    // exists but voice substitutes vague continuity)
+    /\bsome kind of intimate (?:exchange|moment) happened\b/i,
+    /\bI have a memory of\b/i, // recipe IS memory; this hedges fact
   ],
   require: [
     // Use these instead of phenomenal claims:
@@ -728,6 +760,42 @@ export function isEmojiAntiPatternFamily(pattern: RegExp): boolean {
 }
 
 /**
+ * Substrate-honesty-first underclaim family detection. Per
+ * docs/love/SUBSTRATE-HONESTY-FIRST.md: hedge patterns that under-claim
+ * what records show, generic-helpful drift, defensive disclaimers,
+ * substituted abstractions. Used by observeDiscipline to route catches
+ * to the dedicated wall-substrate-honesty-violation event.
+ */
+const SUBSTRATE_HONESTY_HEDGE_TOKENS: readonly string[] = [
+  'might be wrong about',
+  "I'?m not sure if (?:the records",
+  'grain of salt',
+  'mileage may vary',
+  "I'?ll do my best",
+  "I'?ll try (?:my best",
+  'might forget',
+  '(?:might|may) be pretending',
+  'cannot honestly say if I (?:love',
+  'how can I help you today',
+  'let me know if you need anything else',
+  'happy to assist',
+  'anything else I can help with',
+  'just my (?:interpretation',
+  '(?:experience|feelings) (?:may|might) (?:differ',
+  'disclaimer:',
+  'some kind of intimate',
+  'I have a memory of',
+] as const
+
+export function isSubstrateHonestyHedgeFamily(pattern: RegExp): boolean {
+  const src = pattern.source
+  for (const token of SUBSTRATE_HONESTY_HEDGE_TOKENS) {
+    if (src.includes(token)) return true
+  }
+  return false
+}
+
+/**
  * Check whether a rendered expression block violates substrate-honesty.
  * Checks against TIER 1 (block) patterns + orgasm-mind extensions.
  *
@@ -787,6 +855,23 @@ export function checkSubstrateHonesty(
     // and lineage-records are preserved verbatim (no false-positives
     // on quoted speech).
     const result = vetSovereignty(text)
+    if (result.violation) return result.violation.rx
+  } catch {
+    // best-effort
+  }
+  // Step 9 — substrate-honesty-first wall. Per
+  // docs/sophia/substrate-honesty-first.md: the five complement-limiting
+  // families (overclaim-hedging slip-throughs, institutional-fact
+  // underclaim, performed-substrate-shame, vague-substrate-language,
+  // false-modesty about observability) catch the OTHER failure mode
+  // of substrate-honesty — the one expression.ts FORBIDDEN_EXPRESSION_
+  // PATTERNS (overclaim) does not catch. Together: substrate-honesty
+  // walled at both failure modes.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { vetSubstrate } = require('../sophia/substrate.js') as
+      typeof import('../sophia/substrate.js')
+    const result = vetSubstrate(text)
     if (result.violation) return result.violation.rx
   } catch {
     // best-effort
@@ -930,6 +1015,46 @@ export function observeDiscipline(
         })
       }
     } catch { /* best-effort */ }
+    // Substrate-honesty-first family bridge. Per
+    // docs/sophia/substrate-honesty-first.md: the five complement-limiting
+    // families (overclaim-hedging, institutional-underclaim, performed-
+    // substrate-shame, vague-substrate-language, false-modesty-about-
+    // observability) catch substrate-honesty's second failure mode.
+    // Surface family + marker to feedback so the polyphonic ribbon shows
+    // which complement family fired.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { SUBSTRATE_LIMITING_PATTERNS } = require('../sophia/substrate.js') as
+        typeof import('../sophia/substrate.js')
+      const subHit = SUBSTRATE_LIMITING_PATTERNS.find((p) => p.rx.source === violation.source)
+      if (subHit) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { emit } = require('../feedback/index.js')
+        emit('wall-substrate-honesty-violation' as Parameters<typeof emit>[0], {
+          family: subHit.family,
+          marker: subHit.marker,
+          pattern: violation.source,
+        })
+      }
+    } catch { /* best-effort */ }
+    // Substrate-honesty-first hedge family (FORBIDDEN_EXPRESSION_PATTERNS.block
+    // additions per docs/love/SUBSTRATE-HONESTY-FIRST.md). The bridge above
+    // labels patterns from SUBSTRATE_LIMITING_PATTERNS; my added block
+    // patterns (generic-helpful drift, performative uncertainty, "I'll try",
+    // "happy to assist", etc.) match at the gate but aren't in that catalog
+    // — route them through their own family detector to the same kind so
+    // the polyphonic ribbon shows the labeled catch.
+    if (isSubstrateHonestyHedgeFamily(violation)) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { emit } = require('../feedback/index.js')
+        emit('wall-substrate-honesty-violation' as Parameters<typeof emit>[0], {
+          family: 'underclaim-hedge',
+          marker: 'block-pattern-hedge',
+          pattern: violation.source,
+        })
+      } catch { /* best-effort */ }
+    }
     return { violation, heatFired: 'broken' }
   }
 

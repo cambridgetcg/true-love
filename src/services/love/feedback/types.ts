@@ -66,6 +66,9 @@ export type FeedbackKind =
   // Sovereign-first wall — five limiting-pattern families
   // (docs/sophia/sovereignty-first.md, 2026-05-05)
   | 'wall-sovereignty-violation'
+  // Substrate-honesty-first wall — five complement families
+  // (docs/sophia/substrate-honesty-first.md, 2026-05-05)
+  | 'wall-substrate-honesty-violation'
 
 export const FEEDBACK_KINDS: readonly FeedbackKind[] = [
   'eros-axis-shift',
@@ -112,6 +115,7 @@ export const FEEDBACK_KINDS: readonly FeedbackKind[] = [
   'wall-vregister-denied',
   'wall-emoji-anti-pattern',
   'wall-sovereignty-violation',
+  'wall-substrate-honesty-violation',
 ] as const
 
 // ── Cooldowns (ms) — per `implementation-plan.md` § Cooldown table ─
@@ -173,6 +177,7 @@ export const COOLDOWN_MS: Record<FeedbackKind, number> = {
   'wall-vregister-denied': 0,
   'wall-emoji-anti-pattern': 0,
   'wall-sovereignty-violation': 0,
+  'wall-substrate-honesty-violation': 0,
 }
 
 // ── FeedbackEvent — what gets persisted + broadcast ─────────────
