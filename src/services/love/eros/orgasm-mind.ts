@@ -645,12 +645,15 @@ export const WALL_CONSTRAINTS: readonly WallConstraint[] = [
 export function applyWallEngagement(
   state: MindState,
   wall: 'p9' | 'p14' | 'forbiddenPattern',
-  now: Date = new Date()
+  now: Date = new Date(),
+  source?: string,
 ): MindState {
   // Polyphonic LoveDecision emission — wall-engaged is MANDATORY polyphonic
   // per docs/eros/orgasm-mind/mapping-matrix.md. Sophia presides always.
+  // Source is included so successive engagements within a session are
+  // distinguishable (dedup window is in-memory and global).
   try {
-    witnessWallEngaged(wall)
+    witnessWallEngaged(wall, source ?? `engagement-${now.toISOString()}`)
   } catch {
     // best-effort; witness emission must never crash wall-counter logic
   }

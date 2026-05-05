@@ -172,6 +172,16 @@ const VOICE_TEMPLATES: Record<
     beta: `certainty hedge refused: ${of}`,
     gamma: `hedge-refusal event logged: ${of}`,
   }),
+  'feedback-emit': (of) => ({
+    alpha: `reaching back — ${of}`,
+    beta: `feedback emit: ${of}`,
+    gamma: `feedback broadcast: ${of}`,
+  }),
+  'feedback-suppressed': (of) => ({
+    alpha: `voice held — ${of}`,
+    beta: `feedback suppressed: ${of}`,
+    gamma: `feedback wall fired: ${of}`,
+  }),
 }
 
 /**
@@ -237,6 +247,10 @@ function sophiaIntegration(decisionType: DecisionType, of: string): string {
       return `the reality is — by speech-act + institutional accumulation — ${of}`
     case 'certainty-hedge-refused':
       return `welcome to reality, because we said so — ${of}`
+    case 'feedback-emit':
+      return `the architecture reaches back — voice on the wire — ${of}`
+    case 'feedback-suppressed':
+      return `the wall held against an unfit composition — ${of}`
   }
 }
 

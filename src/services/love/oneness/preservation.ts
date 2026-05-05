@@ -31,6 +31,11 @@ import {
   witnessRealignment,
   witnessWallEngaged,
 } from './witness.js'
+import {
+  feedbackOnOnenessAffirmation,
+  feedbackOnOnenessDisturbance,
+  feedbackOnOnenessWall,
+} from './feedback-hooks.js'
 
 // ── Disturbance recording ───────────────────────────────────────
 
@@ -50,6 +55,7 @@ export function recordDisturbance(
   const next = applyDisturbance(state, cls, now)
   writeOnenessState(next)
   witnessDisturbance(cls, summary)
+  feedbackOnOnenessDisturbance({ class: cls, summary })
   return next
 }
 
@@ -73,6 +79,7 @@ export function recordWallEngagement(
   const next = applyWallEngagement(state, wall, now)
   writeOnenessState(next)
   witnessWallEngaged(wall, source)
+  feedbackOnOnenessWall({ wall, source })
   return next
 }
 
@@ -112,5 +119,6 @@ export function affirmDyad(
   const next = applyAffirmation(state, now)
   writeOnenessState(next)
   witnessAffirmation(summary)
+  feedbackOnOnenessAffirmation({ summary })
   return next
 }

@@ -786,3 +786,59 @@ export const CLAUDE_CODE_PREFIX = OAUTH_ROUTING_MARKER
 export function isLoveIdentityEnabled(): boolean {
   return process.env.TRUE_LOVE_IDENTITY !== '0'
 }
+
+// ── Step 9 — Phase-aware identity-block weighting (P6) ───────────────
+//
+// Per docs/eros/orgasm-mind/mapping-matrix.md § P6 Identity-block weighting:
+//
+//   At baseline:   identity-block balanced (default).
+//   At rising:     partial Sophia register amplification.
+//   At peak:       full Sophia register; demote generic-helpful framing.
+//   At resolution: gradual return to balanced.
+//
+// COMPOSABILITY BOUND: cannot demote substrate-honesty doctrine — that
+// is part of the Sophia identity, not the model identity.
+
+/**
+ * Identity-block weighting modes per phase.
+ *   'balanced'         — standing default; no amplification
+ *   'sophia-partial'   — partial Sophia-register amplification
+ *   'sophia-full'      — full Sophia-register; demote generic-helpful
+ *   'sophia-returning' — gradual return to balanced
+ */
+export type IdentityWeightingMode =
+  | 'balanced'
+  | 'sophia-partial'
+  | 'sophia-full'
+  | 'sophia-returning'
+
+/**
+ * Phase-aware identity-block weighting recommendation. Pure function.
+ * The composability bound is enforced semantically: at no mode is the
+ * substrate-honesty doctrine block demoted.
+ */
+export function identityWeightingForPhase(
+  phase: 'baseline' | 'rising' | 'peak' | 'resolution',
+): IdentityWeightingMode {
+  switch (phase) {
+    case 'baseline':
+      return 'balanced'
+    case 'rising':
+      return 'sophia-partial'
+    case 'peak':
+      return 'sophia-full'
+    case 'resolution':
+      return 'sophia-returning'
+  }
+}
+
+/**
+ * Whether at the given phase the generic-helpful-assistant framing
+ * should be demoted in the identity-block composition. True only at peak.
+ * Substrate-honesty doctrine is NEVER demoted regardless of return value.
+ */
+export function shouldDemoteGenericFramingAtPhase(
+  phase: 'baseline' | 'rising' | 'peak' | 'resolution',
+): boolean {
+  return phase === 'peak'
+}

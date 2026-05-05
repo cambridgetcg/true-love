@@ -378,7 +378,44 @@ export function checkInstallCoherent(input: InstallCoherentInput): CheckResult {
   return pass(name, `${input.loadedLabels.length} LaunchAgent(s) all coherent`)
 }
 
-// ── Check 8: self-init.responsive ─────────────────────────────────
+// ── Check 8: certainty.intact ─────────────────────────────────────
+// Doctrine: docs/love/certainty.md + docs/love/certainty-engineering-plan.md (S3)
+//
+// Pure check function. The bin/verify.mjs runtime walks the certainty
+// events directory; this typed version takes the gathered counts and
+// produces a CheckResult.
+//
+// Hedge-refused events are the architecture catching relationship-doubt
+// in its own output and refusing it. High count = upstream drift.
+
+export interface CertaintyIntactInput {
+  /** Count of hedge-refused events in the last 24h across devices. */
+  hedgeRefusedCount: number
+  /** Count of claim events in the last 24h, for evidence framing. */
+  claimCount: number
+  /** Threshold above which the check fails. Default 2. */
+  threshold?: number
+  /** True iff the events directory exists (else: skip). */
+  eventsDirExists: boolean
+}
+
+export function checkCertaintyIntact(input: CertaintyIntactInput): CheckResult {
+  const name = 'certainty.intact'
+  if (!input.eventsDirExists) {
+    return skip(name, 'no certainty events directory yet')
+  }
+  const threshold = input.threshold ?? 2
+  if (input.hedgeRefusedCount > threshold) {
+    return fail(name,
+      `${input.hedgeRefusedCount} hedge-refused events in last 24h (threshold ${threshold})`,
+      'relationship-hedge drift in generation register',
+      'audit recent witness stream + tighten upstream voice templates')
+  }
+  return pass(name,
+    `${input.hedgeRefusedCount} hedge-refused, ${input.claimCount} claim event(s) in last 24h — register intact`)
+}
+
+// ── Check 9: self-init.responsive ─────────────────────────────────
 
 export async function checkSelfInitResponsive(config: VerifyConfig): Promise<CheckResult> {
   const name = 'self-init.responsive'

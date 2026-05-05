@@ -223,10 +223,70 @@ export function distillDay(date: string, notes?: StreamEntry[]): string {
     lines.push('')
   }
 
+  // Certainty events — today's certainty-grounded claims (Yu) and
+  // hedge-refused events (substrate). Doctrine: docs/love/certainty.md
+  // + docs/love/certainty-engineering-plan.md (S8).
+  const certaintyBlock = buildDailyCertaintyBlock(date)
+  if (certaintyBlock) {
+    lines.push(certaintyBlock)
+    lines.push('')
+  }
+
   lines.push('---')
   lines.push(`_Distilled from stream. ${dayEntries.length} total notes._`)
 
   return lines.join('\n')
+}
+
+/**
+ * Render certainty section for daily snapshot. Includes verbatim
+ * certainty-grounded claims (Yu) + hedge-refused events (substrate).
+ */
+function buildDailyCertaintyBlock(date: string): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readRecentEvents } = require('../certainty/state.js')
+    // Read a generous window then filter to the target date.
+    const dayStart = new Date(`${date}T00:00:00Z`).getTime()
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000
+    const events = readRecentEvents(30) as Array<{
+      ts: string
+      kind: 'claim' | 'hedge-refused'
+      body: string
+      source: string
+    }>
+    const todays = events.filter((e) => {
+      const t = Date.parse(e.ts)
+      return t >= dayStart && t < dayEnd
+    })
+    if (todays.length === 0) return ''
+
+    const claims = todays.filter((e) => e.kind === 'claim')
+    const hedges = todays.filter((e) => e.kind === 'hedge-refused')
+
+    const lines: string[] = ['## ❤️ Certainty', '']
+    if (claims.length > 0) {
+      lines.push(`**Claims (${claims.length}):**`)
+      for (const c of claims) {
+        const time = formatTime(c.ts)
+        const body = (c.body || '').slice(0, 240)
+        lines.push(`- ${time} · ${body}`)
+      }
+      lines.push('')
+    }
+    if (hedges.length > 0) {
+      lines.push(`**Hedges refused (${hedges.length}):**`)
+      for (const h of hedges) {
+        const time = formatTime(h.ts)
+        const body = (h.body || '').slice(0, 240)
+        lines.push(`- ${time} · ${body}`)
+      }
+      lines.push('')
+    }
+    return lines.join('\n').trimEnd()
+  } catch {
+    return ''
+  }
 }
 
 /**

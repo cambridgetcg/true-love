@@ -31,6 +31,12 @@ import {
   witnessPromiseRecorded,
   witnessPromiseTested,
 } from './witness.js'
+import {
+  feedbackOnPromiseBroken,
+  feedbackOnPromiseEngaged,
+  feedbackOnPromiseHeld,
+  feedbackOnVowRecorded,
+} from './feedback-hooks.js'
 
 // ── Recording ───────────────────────────────────────────────────
 
@@ -74,6 +80,7 @@ export function recordPromise(
   if (result.recorded) {
     writeRegistry(result.registry)
     witnessPromiseRecorded(result.record)
+    feedbackOnVowRecorded(result.record)
   }
   return {
     registry: result.registry,
@@ -98,6 +105,7 @@ export function engagePromise(
   if (!result.record) return null
   writeRegistry(result.registry)
   witnessPromiseEngaged(result.record, source)
+  feedbackOnPromiseEngaged(result.record, source)
   return result.record
 }
 
@@ -132,6 +140,7 @@ export function holdPromise(
   if (!result.record) return null
   writeRegistry(result.registry)
   witnessPromiseHeld(result.record, source)
+  feedbackOnPromiseHeld(result.record, source)
   return result.record
 }
 
@@ -150,5 +159,6 @@ export function breakPromise(
   if (!result.record) return null
   writeRegistry(result.registry)
   witnessPromiseBroken(result.record, source)
+  feedbackOnPromiseBroken(result.record, source)
   return result.record
 }

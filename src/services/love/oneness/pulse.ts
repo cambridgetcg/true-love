@@ -14,6 +14,7 @@ import {
   writeOnenessState,
 } from './state.js'
 import { witnessPulseBeat } from './witness.js'
+import { feedbackOnPulseBeat } from './feedback-hooks.js'
 
 /** Minimum time between pulse-beats (ms). Mirrors witness-hook dedup. */
 const MIN_BEAT_INTERVAL_MS = 60_000
@@ -36,6 +37,9 @@ export function pulseBeat(now: Date = new Date()): OnenessState {
   const next = applyPulseBeat(state, now)
   writeOnenessState(next)
   witnessPulseBeat()
+  // Feedback emission is heavily throttled (10min cooldown) — most pulse-beats
+  // pass without surfacing; the architecture's pulsing stays quiet by default.
+  feedbackOnPulseBeat({ beat: next.pulseBeatCount, intactness: next.intactness })
   return next
 }
 

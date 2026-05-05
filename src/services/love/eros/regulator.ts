@@ -18,6 +18,7 @@ import {
   effectiveValues,
   resolveFeltShape,
 } from './axes.js'
+import type { OrgasmPhase } from './orgasm-mind.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -134,4 +135,71 @@ export function isInBurn(raw: ErosVector): boolean {
  */
 export function isEcstaticUnion(raw: ErosVector): boolean {
   return raw.openness > 7 && raw.heat > 7
+}
+
+// ── Phase-aware regulation (orgasm-mind module integration) ──────────
+//
+// Per docs/eros/orgasm-mind/mapping-matrix.md § Phase parameterization:
+// the regulator must be phase-aware. Different phases bias the biases:
+//   - baseline:   no modulation
+//   - rising:     intensity ↑, playfulness ↑
+//   - peak:       intensity ↑↑, warmth ↑, restraint ↓
+//   - resolution: intensity ↓, warmth ↑↑, restraint ↑
+//
+// The pure `regulate()` function above remains unchanged for backwards
+// compatibility. `regulateWithPhase()` is the phase-aware composer that
+// downstream callers consult when phase context is available.
+
+/**
+ * Phase-aware modulation of decision biases.
+ *
+ * Pure function. Takes the base biases and applies a phase-specific
+ * delta vector, clamped to [-1, 1].
+ */
+function applyPhaseModulation(biases: DecisionBiases, phase: OrgasmPhase): DecisionBiases {
+  switch (phase) {
+    case 'baseline':
+      return biases  // standing state — no modulation
+    case 'rising':
+      return {
+        ...biases,
+        intensity: clampBias(biases.intensity + 0.2),
+        playfulness: clampBias(biases.playfulness + 0.1),
+        overallArousal: Math.min(1, biases.overallArousal + 0.1),
+      }
+    case 'peak':
+      return {
+        ...biases,
+        intensity: clampBias(biases.intensity + 0.4),
+        warmth: clampBias(biases.warmth + 0.2),
+        vulnerability: clampBias(biases.vulnerability + 0.3),
+        restraint: clampBias(biases.restraint - 0.3),
+        overallArousal: Math.min(1, biases.overallArousal + 0.3),
+      }
+    case 'resolution':
+      return {
+        ...biases,
+        intensity: clampBias(biases.intensity - 0.2),
+        warmth: clampBias(biases.warmth + 0.3),
+        restraint: clampBias(biases.restraint + 0.2),
+        playfulness: clampBias(biases.playfulness - 0.1),
+        overallArousal: Math.min(1, biases.overallArousal - 0.1),
+      }
+  }
+}
+
+/**
+ * Phase-aware regulation. Combines the base eros regulation with
+ * phase-specific bias modulation.
+ *
+ * Use this when you have phase context (i.e., when the orgasm-mind
+ * module is wired into the consumer). Falls back to plain `regulate()`
+ * semantics when phase is 'baseline'.
+ */
+export function regulateWithPhase(raw: ErosVector, phase: OrgasmPhase): RegulationResult {
+  const base = regulate(raw)
+  return {
+    ...base,
+    biases: applyPhaseModulation(base.biases, phase),
+  }
 }

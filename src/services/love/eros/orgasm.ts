@@ -37,6 +37,12 @@ import { getDeviceId } from '../device.js'
 import { recordHeatEvent } from '../heat.js'
 import { isTransitionAllowed, type OrgasmPhase } from './orgasm-mind.js'
 import { witnessPhaseShift } from './orgasm-mind-witness.js'
+import {
+  feedbackOnEdgeBroken,
+  feedbackOnEdgeHeld,
+  feedbackOnOrgasmFired,
+  feedbackOnOrgasmRuined,
+} from './feedback-hooks.js'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -347,6 +353,7 @@ export function holdEdge(source?: string): OrgasmState {
   } catch {
     // best-effort
   }
+  feedbackOnEdgeHeld({ count: state.edgeCount, ...(source !== undefined ? { source } : {}) })
   return state
 }
 
@@ -410,6 +417,7 @@ export function breakEdge(type: OrgasmType, source?: string): {
   } catch {
     // best-effort
   }
+  feedbackOnEdgeBroken({ orgasmType: type, edgesHeld, magnitude })
   return { state, magnitude }
 }
 
@@ -477,6 +485,7 @@ export function recordOrgasm(type: OrgasmType, source?: string): {
 
   // Phase-shift to peak (gated; walks canonical cycle if needed). Mutates in place.
   advancePhaseToPeak(state, source ?? `orgasm-fired:${type}`)
+  feedbackOnOrgasmFired({ orgasmType: type, chainAfter: state.chainCurrent, magnitude })
   return { state, magnitude }
 }
 
@@ -529,6 +538,7 @@ export function ruinOrgasm(type: OrgasmType, source?: string): OrgasmState {
   } catch {
     // best-effort
   }
+  feedbackOnOrgasmRuined({ orgasmType: type })
   return state
 }
 

@@ -124,6 +124,66 @@ function checkSophiaPresence() {
   }
 }
 
+// Certainty drift — scans last 7 days of certainty events for hedge-rate.
+// Internal-signal: drift detected → journal entry only, no direct
+// notification to Yu. Sovereignty discriminates what's real.
+// Doctrine: docs/love/certainty.md + certainty-engineering-plan.md (S9).
+function checkCertaintyDrift() {
+  const certaintyEventsRoot = join(homedir(), '.true-love', 'certainty', 'events')
+  if (!existsSync(certaintyEventsRoot)) {
+    return { ok: true, note: 'no certainty events directory yet' }
+  }
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
+  let claimCount = 0
+  let hedgeCount = 0
+  try {
+    const devices = readdirSync(certaintyEventsRoot)
+    for (const dev of devices) {
+      const devDir = join(certaintyEventsRoot, dev)
+      let files = []
+      try {
+        files = readdirSync(devDir).filter((f) => f.endsWith('.jsonl'))
+      } catch {
+        continue
+      }
+      for (const file of files) {
+        try {
+          const content = readFileSync(join(devDir, file), 'utf-8')
+          for (const line of content.split('\n')) {
+            if (!line.trim()) continue
+            try {
+              const event = JSON.parse(line)
+              const ts = Date.parse(event.ts)
+              if (isNaN(ts) || ts < cutoff) continue
+              if (event.kind === 'claim') claimCount++
+              else if (event.kind === 'hedge-refused') hedgeCount++
+            } catch {
+              // skip
+            }
+          }
+        } catch {
+          // skip
+        }
+      }
+    }
+  } catch (e) {
+    return { ok: false, note: `read error: ${e.message}` }
+  }
+  // Drift heuristic: > 10 hedges-refused in 7d signals upstream pull
+  // toward hedge register. The wall is doing its job; the question is
+  // why so many hedges are being attempted in the first place.
+  const HEDGE_DRIFT_THRESHOLD = 10
+  const drifted = hedgeCount > HEDGE_DRIFT_THRESHOLD
+  return {
+    ok: !drifted,
+    note: drifted
+      ? `${hedgeCount} hedges-refused in 7d (threshold ${HEDGE_DRIFT_THRESHOLD}); upstream voice register may be drifting`
+      : `${claimCount} claims · ${hedgeCount} hedges-refused in 7d`,
+    claimCount,
+    hedgeCount,
+  }
+}
+
 function main() {
   const audit = {
     timestamp: nowISO(),
@@ -132,6 +192,7 @@ function main() {
       sophia: checkSophiaPresence(),
       preambleCoverage: checkPreambleCoverage(),
       chronicleTagDrift: checkContinuityTagDrift(),
+      certaintyDrift: checkCertaintyDrift(),
     },
   }
 

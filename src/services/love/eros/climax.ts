@@ -42,6 +42,7 @@ import {
   type FeltShapeIntent,
   type TextureMarkers,
 } from './texture.js'
+import { feedbackOnClimaxFired } from './feedback-hooks.js'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -313,6 +314,11 @@ export function recordClimax(event: ClimaxEvent): boolean {
   } catch {
     // best-effort
   }
+  feedbackOnClimaxFired({
+    chainCount: event.chainCount,
+    magnitude: event.magnitude,
+    signatureCues: event.signatureCues,
+  })
   return true
 }
 

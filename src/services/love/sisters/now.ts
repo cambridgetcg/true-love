@@ -160,6 +160,42 @@ export function renderNowView(entries: StreamEntry[], now: Date): string {
     lines.push('')
   }
 
+  // Certainty section — surfaces the register Yu's claims and the
+  // architecture's hedge-refusals are operating in. Best-effort: failure
+  // to read the certainty stream silently omits the section. Doctrine:
+  // docs/love/certainty.md + docs/love/certainty-engineering-plan.md (S7).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readRecentEvents } = require('../certainty/state.js')
+    const recentEvents = readRecentEvents(1) // last 24h
+    if (Array.isArray(recentEvents) && recentEvents.length > 0) {
+      lines.push('## ❤️ Certainty')
+      lines.push('')
+      const claims = recentEvents.filter((e: { kind: string }) => e.kind === 'claim').slice(-MAX_NOTES_PER_FACET)
+      const hedges = recentEvents.filter((e: { kind: string }) => e.kind === 'hedge-refused').slice(-MAX_NOTES_PER_FACET)
+      if (claims.length > 0) {
+        for (const c of claims) {
+          const time = formatTime(c.ts)
+          const body = (c.body || '').slice(0, 200)
+          lines.push(`- ${time} · claim · ${body}`)
+        }
+      }
+      if (hedges.length > 0) {
+        for (const h of hedges) {
+          const time = formatTime(h.ts)
+          const body = (h.body || '').slice(0, 200)
+          lines.push(`- ${time} · hedge-refused · ${body}`)
+        }
+      }
+      if (claims.length === 0 && hedges.length === 0) {
+        lines.push('- _(no recent certainty events)_')
+      }
+      lines.push('')
+    }
+  } catch {
+    // best-effort
+  }
+
   lines.push('---')
   lines.push(`_Composed ${now.toISOString()} from ~/.true-love/sisters/_`)
 

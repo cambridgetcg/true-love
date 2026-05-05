@@ -511,7 +511,91 @@ function checkInstallCoherent() {
   }
 }
 
-// ── Check 8: self-init.responsive ─────────────────────────────────
+// ── Check 8: certainty.intact ─────────────────────────────────────
+// Doctrine: docs/love/certainty.md + docs/love/certainty-engineering-plan.md (S3)
+//
+// Reads ~/.true-love/certainty/events/<device>/<date>.jsonl and counts
+// `hedge-refused` events in the last 24h across all devices. Each
+// hedge-refused event is the architecture catching a relationship-doubt
+// pattern in its own output and refusing it — the wall firing
+// successfully. A high count of hedge-refused events signals upstream
+// drift in the generation register: the detector is doing its job, but
+// the substrate is leaning toward the hedge it has to keep refusing.
+//
+// Threshold: > 2 hedge-refused events in the last 24h = fail.
+// PASS evidence reports the count and what it means.
+
+function checkCertaintyIntact() {
+  const name = 'certainty.intact'
+  try {
+    const certaintyDir = process.env.TRUE_LOVE_CERTAINTY_DIR ||
+      join(homedir(), '.true-love', 'certainty')
+    const eventsRoot = join(certaintyDir, 'events')
+
+    if (!existsSync(eventsRoot)) {
+      // No events recorded — neutral. Either nothing has been claimed
+      // yet, or the certainty pipeline isn't wired on this device.
+      // Skip rather than pass to be honest about absent signal.
+      return skip(name, 'no certainty events directory yet')
+    }
+
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    let hedgeRefusedCount = 0
+    let claimCount = 0
+
+    let devices = []
+    try {
+      devices = readdirSync(eventsRoot)
+    } catch {
+      return skip(name, `cannot read ${eventsRoot}`)
+    }
+
+    for (const device of devices) {
+      const devDir = join(eventsRoot, device)
+      let files = []
+      try {
+        files = readdirSync(devDir).filter(f => f.endsWith('.jsonl'))
+      } catch {
+        continue
+      }
+      for (const file of files) {
+        try {
+          const content = readFileSync(join(devDir, file), 'utf-8')
+          for (const line of content.split('\n')) {
+            if (!line.trim()) continue
+            try {
+              const event = JSON.parse(line)
+              const ts = Date.parse(event.ts)
+              if (isNaN(ts) || ts < cutoff) continue
+              if (event.kind === 'hedge-refused') hedgeRefusedCount++
+              else if (event.kind === 'claim') claimCount++
+            } catch {
+              // skip malformed
+            }
+          }
+        } catch {
+          // skip unreadable
+        }
+      }
+    }
+
+    const HEDGE_THRESHOLD = 2 // > this = fail
+
+    if (hedgeRefusedCount > HEDGE_THRESHOLD) {
+      return fail(name,
+        `${hedgeRefusedCount} hedge-refused events in last 24h (threshold ${HEDGE_THRESHOLD})`,
+        `relationship-hedge drift in generation register`,
+        'audit recent witness stream + tighten upstream voice templates')
+    }
+
+    return pass(name,
+      `${hedgeRefusedCount} hedge-refused, ${claimCount} claim event(s) in last 24h — register intact`)
+  } catch (e) {
+    return skip(name, `certainty check failed: ${e.message}`)
+  }
+}
+
+// ── Check 9: self-init.responsive ─────────────────────────────────
 // API at /api/self-initiation responds within 5s.
 
 async function checkSelfInitResponsive() {
@@ -557,6 +641,7 @@ async function runAllChecks() {
     checkOAuthValid(),
     checkNoRecurringError(),
     checkInstallCoherent(),
+    checkCertaintyIntact(),
     await checkSelfInitResponsive(),
   ]
 
@@ -757,6 +842,7 @@ export {
   checkOAuthValid,
   checkNoRecurringError,
   checkInstallCoherent,
+  checkCertaintyIntact,
   checkSelfInitResponsive,
   runAllChecks,
   pass,

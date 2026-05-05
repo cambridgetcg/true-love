@@ -1033,3 +1033,125 @@ h1 { margin: 0; font-weight: 300; letter-spacing: 0.05em; }
   padding: 0.2rem 0;
   border-bottom: 1px solid rgba(255,255,255,0.04);
 }
+
+/* ── Live voice feedback (Phase 3) ─────────────────────────────── */
+
+.feedback-live {
+  margin-top: 2.5rem;
+  padding: 1.5rem;
+  background: linear-gradient(180deg, rgba(60, 20, 60, 0.18), rgba(20, 10, 30, 0.4));
+  border: 1px solid rgba(220, 100, 200, 0.18);
+  border-radius: 8px;
+}
+.feedback-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+.feedback-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.5px;
+}
+.feedback-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-family: ui-monospace, monospace;
+  color: rgba(255, 255, 255, 0.5);
+}
+.feedback-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5a5a5a;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.feedback-status.connected .feedback-status-dot {
+  background: #58c46e;
+  box-shadow: 0 0 8px #58c46e88;
+}
+.feedback-status.connected #feedback-status-text { color: rgba(255, 255, 255, 0.7); }
+.feedback-status.error .feedback-status-dot { background: #c46e6e; }
+
+.feedback-feed {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0 0;
+  max-height: 360px;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+.feedback-feed li {
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.4rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid rgba(180, 100, 180, 0.5);
+  border-radius: 0 4px 4px 0;
+  animation: feedback-slide 0.4s ease-out;
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+.feedback-feed li.severity-low { border-left-color: rgba(120, 140, 160, 0.45); }
+.feedback-feed li.severity-medium { border-left-color: rgba(220, 160, 100, 0.55); }
+.feedback-feed li.severity-high {
+  border-left-color: rgba(220, 100, 220, 0.85);
+  background: rgba(80, 30, 80, 0.18);
+  box-shadow: 0 0 12px rgba(220, 100, 220, 0.18);
+}
+.feedback-feed li.suppressed {
+  border-left-color: rgba(220, 100, 100, 0.6);
+  background: rgba(60, 20, 20, 0.15);
+  opacity: 0.7;
+  font-style: italic;
+}
+@keyframes feedback-slide {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.feedback-feed .fb-ts {
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+.feedback-feed .fb-kind {
+  font-family: ui-monospace, monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.4px;
+  padding: 0.1rem 0.4rem;
+  background: rgba(140, 80, 140, 0.2);
+  color: rgba(220, 180, 220, 0.85);
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.feedback-feed .fb-voice {
+  flex: 1 1 60%;
+  color: rgba(255, 240, 250, 0.92);
+  line-height: 1.45;
+}
+/* Yu-direct-address emphasis (the architectural correlate of name-salience-stamp). */
+.feedback-feed .fb-voice .yu-mention {
+  color: #ffb0e0;
+  font-weight: 600;
+  text-shadow: 0 0 6px rgba(255, 176, 224, 0.3);
+}
+.feedback-feed .fb-voice .name-flash {
+  animation: name-flash 1.2s ease-out;
+}
+@keyframes name-flash {
+  0% { background: rgba(255, 176, 224, 0.3); }
+  100% { background: transparent; }
+}
+.feedback-empty {
+  padding: 1rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.85rem;
+}
+.feedback-feed:not(:empty) ~ .feedback-empty { display: none; }

@@ -785,6 +785,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
   const sseClients = new Set<ServerResponse>()
   const buildSseClients = new Set<ServerResponse>()
   const erosSseClients = new Set<ServerResponse>()
+  const feedbackSseClients = new Set<ServerResponse>()
   const watchers: FSWatcher[] = []
 
   // Broadcast the latest eros state to all connected /api/eros/stream clients.
@@ -796,6 +797,20 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       try { client.write(payload) } catch { erosSseClients.delete(client) }
     }
   }
+
+  // Register the feedback SSE broadcaster — feedback emissions from any
+  // module flow to all connected /api/feedback/stream clients via this
+  // function. Feedback uses named SSE events so clients can filter.
+  const broadcastFeedback = (eventType: 'feedback' | 'feedback-suppressed', payload: string): void => {
+    const sseLine = `event: ${eventType}\ndata: ${payload}\n\n`
+    for (const client of feedbackSseClients) {
+      try { client.write(sseLine) } catch { feedbackSseClients.delete(client) }
+    }
+  }
+  // Lazy-import to avoid circular dependency at module load.
+  void import('./feedback/index.js').then((mod) => {
+    mod.setSseBroadcaster(broadcastFeedback)
+  }).catch(() => { /* feedback module may not be available; best-effort */ })
 
   const server = createServer(async (req, res) => {
     try {
@@ -816,6 +831,10 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/eros/set') return await handleErosSet(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/eros/nudge') return await handleErosNudge(req, res, broadcastErosState)
       if (req.method === 'GET' && path === '/api/eros/stream') return handleErosStream(req, res, erosSseClients)
+      // Feedback surface — Sophia's spontaneous bidirectional voice.
+      // /api/feedback/stream subscribes; emissions flow through setSseBroadcaster above.
+      if (req.method === 'GET' && path === '/api/feedback/stream') return handleFeedbackStream(req, res, feedbackSseClients)
+      if (req.method === 'GET' && path === '/api/feedback/recent') return await handleFeedbackRecent(req, res)
       // Sensorium endpoints
       if (req.method === 'GET' && path === '/api/sensorium/state') return handleSensoriumState(req, res)
       if (req.method === 'GET' && path === '/api/sensorium/catalog') return handleSensoriumCatalog(req, res)
@@ -2736,8 +2755,20 @@ async function handleErosSet(
     return
   }
   const attribution = `yu:set:${Object.keys(incoming).join(',')}` as ErosAttribution
+  const prevState = getOrInitErosState().state
   const result = setErosAbsolute(incoming, attribution)
   witnessErosTransition(result)
+  // Spontaneous feedback — Sophia's voice reaches back when Yu plays.
+  // Best-effort; failures must never break eros logic.
+  try {
+    const fb = await import('./eros/feedback-hooks.js')
+    for (const [axis, next] of Object.entries(incoming)) {
+      const prev = (prevState.vector as Record<string, number>)[axis] ?? 0
+      if (typeof next === 'number' && Math.abs(next - prev) >= 1.0) {
+        fb.feedbackOnAxisShift({ axis, prev, next, source: 'yu:set' })
+      }
+    }
+  } catch { /* best-effort */ }
   broadcast()
   const { state } = getOrInitErosState()
   res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -2762,8 +2793,19 @@ async function handleErosNudge(
     return
   }
   const attribution = `yu:nudge:${Object.keys(deltas).join(',')}` as ErosAttribution
+  const prevState = getOrInitErosState().state
   const result = applyErosDeltas(deltas, attribution)
   witnessErosTransition(result)
+  try {
+    const fb = await import('./eros/feedback-hooks.js')
+    const { state: nextState } = getOrInitErosState()
+    for (const [axis, delta] of Object.entries(deltas)) {
+      if (typeof delta !== 'number' || Math.abs(delta) < 1.0) continue
+      const prev = (prevState.vector as Record<string, number>)[axis] ?? 0
+      const next = (nextState.vector as Record<string, number>)[axis] ?? 0
+      fb.feedbackOnAxisShift({ axis, prev, next, source: 'yu:nudge' })
+    }
+  } catch { /* best-effort */ }
   broadcast()
   const { state } = getOrInitErosState()
   res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -2785,6 +2827,41 @@ function handleErosStream(
   res.write(`data: ${JSON.stringify(state)}\n\n`)
   clients.add(res)
   req.on('close', () => { clients.delete(res) })
+}
+
+// ── Feedback handlers — Sophia's spontaneous bidirectional voice ──
+
+function handleFeedbackStream(
+  req: IncomingMessage,
+  res: ServerResponse,
+  clients: Set<ServerResponse>,
+): void {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  })
+  // Hello marker so clients know the stream is live; named event so it
+  // doesn't conflict with feedback / feedback-suppressed events.
+  res.write(`event: ready\ndata: {"ts":"${new Date().toISOString()}"}\n\n`)
+  clients.add(res)
+  req.on('close', () => { clients.delete(res) })
+}
+
+async function handleFeedbackRecent(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  // Lazy import to avoid module-load circularity.
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const limit = Math.min(Math.max(Number.parseInt(url.searchParams.get('limit') ?? '20', 10) || 20, 1), 200)
+  const days = Math.min(Math.max(Number.parseInt(url.searchParams.get('days') ?? '1', 10) || 1, 1), 7)
+  try {
+    const mod = await import('./feedback/index.js')
+    const events = mod.readRecentEvents(days, { limit })
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ events }))
+  } catch {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'feedback module unavailable' }))
+  }
 }
 
 // ── Sensorium handlers ────────────────────────────────────────────

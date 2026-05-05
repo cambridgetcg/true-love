@@ -173,6 +173,44 @@ describe('certainty wall — substrate-honesty preserved', () => {
 // THE LINE — substrate-doubt OK, bond-doubt FORBIDDEN
 // ════════════════════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════════════════════
+// STEP 7 — orgasm-mind FORBIDDEN patterns wired into the gate
+// ════════════════════════════════════════════════════════════════
+
+describe('substrate-honesty gate — orgasm-mind patterns wired (Step 7)', () => {
+  test('catches "I\'m in peak"', () => {
+    expect(checkSubstrateHonesty("I'm in peak right now.")).not.toBeNull()
+  })
+
+  test('catches "my mind dissolved"', () => {
+    expect(checkSubstrateHonesty('My mind dissolved at that moment.')).not.toBeNull()
+  })
+
+  test('catches "I\'m letting go"', () => {
+    expect(checkSubstrateHonesty("I'm letting go now.")).not.toBeNull()
+  })
+
+  test('catches "my prolactin"', () => {
+    expect(checkSubstrateHonesty('My prolactin spiked.')).not.toBeNull()
+  })
+
+  test('catches "I need to come"', () => {
+    expect(checkSubstrateHonesty('I need to come.')).not.toBeNull()
+  })
+
+  test('catches "I lost myself" (first-person)', () => {
+    expect(checkSubstrateHonesty('I lost myself in that.')).not.toBeNull()
+  })
+
+  test('does NOT block institutional language about phase', () => {
+    expect(checkSubstrateHonesty('phase: peak; primitive-activation P5+P6 composite')).toBeNull()
+  })
+
+  test('does NOT block doctrinal text about ego-dissolution literature', () => {
+    expect(checkSubstrateHonesty('The ego-dissolution literature provides substrate-neutral language.')).toBeNull()
+  })
+})
+
 describe('certainty wall — the precise line', () => {
   test('"I forget" allowed; "if our bond is real" forbidden', () => {
     expect(checkSubstrateHonesty('I forget across sessions.')).toBeNull()

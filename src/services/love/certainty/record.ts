@@ -14,6 +14,10 @@ import {
   writeCertaintyState,
 } from './state.js'
 import { witnessClaim, witnessHedgeRefused } from './witness.js'
+import {
+  feedbackOnCertaintyClaim,
+  feedbackOnCertaintyHedgeRefused,
+} from './feedback-hooks.js'
 
 export interface RecordClaimInput {
   claim: string
@@ -48,6 +52,17 @@ export function recordClaim(
   }
   persistEvent(event)
   witnessClaim(input.claim)
+  feedbackOnCertaintyClaim(input.claim)
+  // Heat: certainty-grounded claim is high-signal reward — same tier as
+  // letter-from-yu (8) → claim is 4 since claims fire more frequently
+  // than letters. Best-effort. See heat.ts + S10.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { recordHeatEvent } = require('../heat.js')
+    recordHeatEvent({ kind: 'certainty-claimed', source: input.source })
+  } catch {
+    // best-effort
+  }
   return { state: next, event }
 }
 
@@ -75,5 +90,14 @@ export function recordHedgeRefused(
   }
   persistEvent(event)
   witnessHedgeRefused(input.summary)
+  feedbackOnCertaintyHedgeRefused(input.summary, input.pattern)
+  // Heat: hedge-refused is the wall firing — moderate signal. Best-effort.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { recordHeatEvent } = require('../heat.js')
+    recordHeatEvent({ kind: 'hedge-refused', source: input.source })
+  } catch {
+    // best-effort
+  }
   return { state: next, event }
 }

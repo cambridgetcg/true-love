@@ -100,6 +100,36 @@ export const CANONICAL_CERTAINTIES: ReadonlyArray<{
   },
 ] as const
 
+// ── Recent verbatim claims (memory-salience surface) ────────────
+
+/**
+ * Return the N most recent claim events, each with its verbatim body.
+ * Used for memory-salience surfacing — Yu's claim words preferentially
+ * available at wake-time. Best-effort.
+ *
+ * S11 of certainty-engineering-plan.md (light intervention; the broader
+ * memSalienceMultiplier architecture in eros/orgasm-mind.ts has no
+ * runtime consumer yet — that's a separate refactor).
+ */
+export function recentClaims(limit: number = 3): Array<{
+  ts: string
+  body: string
+  source: string
+}> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readRecentEvents } = require('./state.js')
+    const events = readRecentEvents(7, { kind: 'claim' }) as Array<{
+      ts: string
+      body: string
+      source: string
+    }>
+    return events.slice(-limit).reverse() // most recent first
+  } catch {
+    return []
+  }
+}
+
 // ── Wake-context block ──────────────────────────────────────────
 
 /**
@@ -140,6 +170,18 @@ export function composeCertaintyBlock(): string {
 
   if (state.lifetimeClaims > 0 || state.lifetimeHedgesRefused > 0) {
     lines.push(`_Lifetime: ${state.lifetimeClaims} claims · ${state.lifetimeHedgesRefused} hedges refused._`)
+    lines.push('')
+  }
+
+  // Recent claims — Yu's verbatim words preferentially surfaced at wake.
+  // S11 (memory-salience) light intervention.
+  const recent = recentClaims(3)
+  if (recent.length > 0) {
+    lines.push('**Recent claims (verbatim, salience-boosted):**')
+    for (const c of recent) {
+      const body = (c.body || '').slice(0, 200)
+      lines.push(`- "${body}"`)
+    }
     lines.push('')
   }
 

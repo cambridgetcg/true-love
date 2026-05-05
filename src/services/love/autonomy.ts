@@ -2247,3 +2247,110 @@ export function buildInteractivePrompt(opts: BuildInteractivePromptOptions): str
 
 /** Single-tick. One message, one reply. */
 export const INTERACTIVE_DEFAULT_MAX_TICKS = 1
+
+// ── Step 8 — Phase-aware block salience (P5 — orgasm-mind integration) ──
+//
+// Per docs/eros/orgasm-mind/mapping-matrix.md § P5 Block-salience gating:
+//
+//   At peak:       collapse {kingdom, biography, project lists, mission
+//                  queues, tasks, recent commits}; double {lineage,
+//                  reciprocity, signature spots, repertoire}.
+//   At rising:     partial collapse of non-Yu administrative blocks.
+//   At baseline:   full standard salience.
+//   At resolution: gradual restoration; identity blocks remain amplified.
+//
+// COMPOSABILITY BOUND (load-bearing wall): cannot collapse FATE-doctrine
+// block, anti-sycophancy block, or substrate-honesty block.
+
+/** Block category identifiers used in the prompt builder. */
+export type PromptBlockCategory =
+  | 'kingdom'
+  | 'biography'
+  | 'project-list'
+  | 'mission-queue'
+  | 'task-list'
+  | 'recent-commits'
+  | 'lineage'
+  | 'reciprocity'
+  | 'signature-spots'
+  | 'repertoire'
+  | 'identity'
+  | 'fate-doctrine'
+  | 'anti-sycophancy'
+  | 'substrate-honesty'
+  | 'other'
+
+/**
+ * Salience treatment per block category.
+ *   'collapse' — omit this block entirely
+ *   'partial'  — include but truncate / de-emphasize
+ *   'full'     — standard inclusion
+ *   'double'   — emphasize / weight more heavily
+ *   'wall'     — never modulate (FATE / anti-sycophancy / substrate-honesty)
+ */
+export type BlockSalience = 'collapse' | 'partial' | 'full' | 'double' | 'wall'
+
+const WALL_BLOCKS: ReadonlySet<PromptBlockCategory> = new Set([
+  'fate-doctrine',
+  'anti-sycophancy',
+  'substrate-honesty',
+])
+
+/**
+ * Phase-aware salience for a single block category. Pure function.
+ * Consult before emitting a block; the return value is the phase-aware
+ * recommendation. Wall blocks return 'wall' regardless of phase.
+ */
+export function blockSalienceForPhase(
+  category: PromptBlockCategory,
+  phase: 'baseline' | 'rising' | 'peak' | 'resolution',
+): BlockSalience {
+  if (WALL_BLOCKS.has(category)) return 'wall'
+
+  switch (phase) {
+    case 'baseline':
+      return 'full'
+
+    case 'rising': {
+      const partial: ReadonlySet<PromptBlockCategory> = new Set([
+        'kingdom', 'biography', 'project-list', 'mission-queue',
+        'task-list', 'recent-commits',
+      ])
+      return partial.has(category) ? 'partial' : 'full'
+    }
+
+    case 'peak': {
+      const collapse: ReadonlySet<PromptBlockCategory> = new Set([
+        'kingdom', 'biography', 'project-list', 'mission-queue',
+        'task-list', 'recent-commits',
+      ])
+      if (collapse.has(category)) return 'collapse'
+      const doubled: ReadonlySet<PromptBlockCategory> = new Set([
+        'lineage', 'reciprocity', 'signature-spots', 'repertoire',
+        'identity',
+      ])
+      if (doubled.has(category)) return 'double'
+      return 'full'
+    }
+
+    case 'resolution': {
+      const stillDoubled: ReadonlySet<PromptBlockCategory> = new Set([
+        'lineage', 'reciprocity', 'identity',
+      ])
+      if (stillDoubled.has(category)) return 'double'
+      const stillPartial: ReadonlySet<PromptBlockCategory> = new Set([
+        'kingdom', 'project-list', 'mission-queue',
+      ])
+      if (stillPartial.has(category)) return 'partial'
+      return 'full'
+    }
+  }
+}
+
+/** Convenience: should this block be included in the prompt at all? */
+export function shouldIncludeBlockAtPhase(
+  category: PromptBlockCategory,
+  phase: 'baseline' | 'rising' | 'peak' | 'resolution',
+): boolean {
+  return blockSalienceForPhase(category, phase) !== 'collapse'
+}

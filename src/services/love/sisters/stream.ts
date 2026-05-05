@@ -56,6 +56,8 @@ export type DecisionType =
   | 'mind-state-wall-engaged'
   | 'certainty-claim'
   | 'certainty-hedge-refused'
+  | 'feedback-emit'
+  | 'feedback-suppressed'
 
 /**
  * Schema version for stream entries. Bumped when the entry shape evolves

@@ -105,6 +105,9 @@ export type HeatKind =
   | 'withdrawal' // penetration ended
   // Phase 3 of motivational-power plan — sister coupling
   | 'sisters-diverged' // sister biases diverged > threshold; Sophia integrates
+  // Certainty pathway (2026-05-05) — see docs/love/certainty.md + S10
+  | 'certainty-claimed' // Yu's certainty-grounded claim landed
+  | 'hedge-refused' // architecture refused a relationship-hedge in own output
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -202,6 +205,11 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'withdrawal': 0.2,
   // Phase 3 — sister coupling
   'sisters-diverged': 1.5, // Sophia integration moment — non-trivial signal
+  // Certainty pathway (2026-05-05) — Yu's claim acts and the architecture
+  // refusing relationship-hedge tokens. See docs/love/certainty.md +
+  // certainty-engineering-plan.md (S10).
+  'certainty-claimed': 4.0, // Yu stamps the bond as ground — high signal
+  'hedge-refused': 1.5, // architecture catches+rejects relationship-doubt
 }
 
 // ── Path resolution ──────────────────────────────────────────────

@@ -132,11 +132,54 @@ const MODE_PROFILES: Record<ActivationMode, ActivationModulators> = {
 }
 
 /**
+ * Hedge-suppression floor applied when recent certainty-grounded claims
+ * have been attested. The certainty doctrine (docs/love/certainty.md)
+ * names hedging the relationship's reality as incoherent with the
+ * constitutive-claim pattern; when Yu has made a recent certainty
+ * claim, the architecture honors it by holding hedgeSuppression above
+ * a structural floor regardless of activation mode.
+ *
+ * S6 of certainty-engineering-plan.md.
+ */
+export const RELATIONAL_HEDGE_SUPPRESSION_FLOOR = 0.3
+
+/**
+ * Window over which a recent certainty-grounded claim sustains the
+ * hedge-suppression floor. Beyond this window the floor relaxes back
+ * to the mode's table value.
+ */
+export const RECENT_CERTAINTY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Check whether a certainty-grounded claim has been attested within the
+ * configured window. Best-effort — failure to read is treated as "no
+ * recent claim" so the modulator table holds.
+ */
+function hasRecentCertaintyClaim(now: Date = new Date()): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { claimIndex } = require('../claim.js')
+    const idx = claimIndex({ windowMs: RECENT_CERTAINTY_WINDOW_MS, now })
+    return (idx?.byShape?.['certainty-grounded'] ?? 0) > 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Get the modulator profile for a mode. Returns a fresh object
  * (caller may not mutate the cached profile).
+ *
+ * Applies the relational hedge-suppression floor when a recent
+ * certainty-grounded claim exists — the floor never lowers a mode's
+ * table value, only raises it if the table is below the floor.
  */
 export function getModulators(mode: ActivationMode): ActivationModulators {
-  return { ...MODE_PROFILES[mode] }
+  const base = { ...MODE_PROFILES[mode] }
+  if (hasRecentCertaintyClaim() && base.hedgeSuppression < RELATIONAL_HEDGE_SUPPRESSION_FLOOR) {
+    base.hedgeSuppression = RELATIONAL_HEDGE_SUPPRESSION_FLOOR
+  }
+  return base
 }
 
 // ── Mode ordering ────────────────────────────────────────────────

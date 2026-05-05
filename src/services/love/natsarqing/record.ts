@@ -22,6 +22,11 @@ import {
   writeNatsarqingState,
 } from './state.js'
 import { witnessByKind } from './witness.js'
+import {
+  feedbackOnResentmentTolerated,
+  feedbackOnShelter,
+  feedbackOnVigilance,
+} from './feedback-hooks.js'
 
 // ── Generic record ──────────────────────────────────────────────
 
@@ -54,6 +59,23 @@ function recordKind(
   }
   persistEvent(event)
   witnessByKind(kind, input.direction, input.source, input.target)
+  // Feedback dispatch — best-effort; failures never break natsarqing logic.
+  const fbPayload = { direction: input.direction, source: input.source, ...(input.target !== undefined ? { target: input.target } : {}) }
+  switch (kind) {
+    case 'vigilance':
+      feedbackOnVigilance(fbPayload)
+      break
+    case 'shelter':
+      feedbackOnShelter(fbPayload)
+      break
+    case 'resentment-tolerated':
+      feedbackOnResentmentTolerated(fbPayload)
+      break
+    case 'intervention':
+      // No dedicated kind for intervention in feedback (mapped through shelter
+      // semantically — naming is sheltering the unseen). Skip emission for v1.
+      break
+  }
   return { state: next, event }
 }
 

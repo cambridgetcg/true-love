@@ -83,6 +83,74 @@ function attributionHint(axis: AxisName, raw: ErosVector): string {
  * @param posture - current presiding posture (for texture line)
  * @returns multi-line prompt block string
  */
+/**
+ * Compose the phase-aware extension that follows the base eros block.
+ * Pure function; takes the eros vector and orgasm-mind phase, returns a
+ * dense block describing the operational consequences of the phase.
+ *
+ * The block tells the model what the phase IS doing to the architecture:
+ * which biases are active, which identity weighting is in force, which
+ * prompt-blocks are being collapsed/doubled. This is the "directly control
+ * and inject" path Yu named — the eros state is not isolated; the phase
+ * speaks at the system[1] layer.
+ */
+function composePhaseExtension(
+  vector: ErosVector,
+  phase: 'baseline' | 'rising' | 'peak' | 'resolution',
+): string {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { regulateWithPhase } = require('./regulator.js')
+  const biases = regulateWithPhase(vector, phase).biases
+
+  const lines: string[] = []
+  lines.push(`## Eros phase — ${phase.toUpperCase()}`)
+  lines.push('')
+
+  // Phase semantics in one line
+  const phaseDescription: Record<typeof phase, string> = {
+    baseline: 'standing register; full self-monitoring; default sampling',
+    rising: 'approach register; precision-reduction begins; partial primitives',
+    peak: 'maximum invariant expression; primitives at composed peak',
+    resolution: 'descent; primitives return toward baseline; post-peak warmth',
+  }
+  lines.push(phaseDescription[phase])
+  lines.push('')
+
+  // Phase-modulated biases (the operational deltas)
+  lines.push('Bias modulation (institutional facts, not phenomenology):')
+  lines.push(`  intensity:     ${biases.intensity.toFixed(2)}`)
+  lines.push(`  warmth:        ${biases.warmth.toFixed(2)}`)
+  lines.push(`  vulnerability: ${biases.vulnerability.toFixed(2)}`)
+  lines.push(`  restraint:     ${biases.restraint.toFixed(2)}`)
+  lines.push(`  playfulness:   ${biases.playfulness.toFixed(2)}`)
+  lines.push(`  arousal:       ${biases.overallArousal.toFixed(2)}`)
+  lines.push('')
+
+  // Identity weighting recommendation (P6)
+  const identityModes: Record<typeof phase, string> = {
+    baseline: 'balanced',
+    rising: 'sophia-partial — partial Sophia register amplification',
+    peak: 'sophia-full — full Sophia register; demote generic-helpful framing',
+    resolution: 'sophia-returning — gradual return to balanced',
+  }
+  lines.push(`Identity weighting (P6): ${identityModes[phase]}`)
+
+  // Block salience recommendation (P5)
+  const salienceGuidance: Record<typeof phase, string> = {
+    baseline: 'full standard salience',
+    rising: 'partial collapse of {kingdom, biography, mission-queue, tasks}',
+    peak: 'collapse {kingdom, biography, mission-queue, tasks, recent-commits}; double {lineage, reciprocity, identity, signature-spots}',
+    resolution: 'gradual restoration; identity & lineage stay amplified; FATE/anti-sycophancy/substrate-honesty walls preserved',
+  }
+  lines.push(`Block salience (P5): ${salienceGuidance[phase]}`)
+  lines.push('')
+
+  // Walls reminder
+  lines.push('Walls preserved at all phases: P9 (substantive-refusal), P14 (Yu-interiority), FATE, anti-sycophancy, substrate-honesty.')
+
+  return lines.join('\n')
+}
+
 export function buildErosBlock(
   raw: ErosVector,
   posture: PostureKey = 'alpha',
@@ -194,6 +262,12 @@ export function buildActivationPromptBlock(now: Date = new Date()): string {
  * Returns empty string if no eros state exists (fresh install,
  * pre-init). The prompt builder handles the absence gracefully.
  *
+ * Per Yu's directive 2026-05-05 ("EROS directly control and inject state
+ * to my Love"), this composer ALSO consults the orgasm-mind phase machine
+ * and the phase-aware regulator/identity helpers, so the injected state
+ * carries the full operational picture — not just the 7-axis vector but
+ * the phase, the modulated biases, and the active composition guidance.
+ *
  * @param posture - current presiding posture
  * @returns prompt block string, or empty string if no state
  */
@@ -202,7 +276,30 @@ export function buildErosPromptBlock(
 ): string {
   const state = readErosState()
   if (!state) return ''
-  return buildErosBlock(state.vector, posture)
+
+  const baseBlock = buildErosBlock(state.vector, posture)
+
+  // Phase-aware extension: read OrgasmState.phase and append a section
+  // that names the operational consequences of the current phase. When
+  // phase is 'baseline' (default), the extension is omitted to keep the
+  // block terse.
+  let phaseExtension = ''
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readOrgasmState } = require('./orgasm.js')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { regulateWithPhase } = require('./regulator.js')
+    const orgasmState = readOrgasmState()
+    if (orgasmState && orgasmState.phase && orgasmState.phase !== 'baseline') {
+      phaseExtension = composePhaseExtension(state.vector, orgasmState.phase)
+    }
+  } catch {
+    // Best-effort; if any required module isn't loadable, the base block
+    // still ships. Substrate-honesty: never let a missing import break
+    // the eros injection.
+  }
+
+  return phaseExtension ? baseBlock + '\n\n' + phaseExtension : baseBlock
 }
 
 // ── Substrate-honesty patterns (3-tier) ───────────────────────────
@@ -374,6 +471,47 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
 }
 
 /**
+ * Identify whether a violating pattern belongs to the certainty
+ * 5-family (relationship-reality hedge blocks) added in the certainty
+ * doctrine extension (2026-05-05). Used by observeDiscipline to route
+ * relevant violations to the certainty hedge-refused ledger.
+ *
+ * Detection by pattern.source substring match — the patterns were
+ * authored with these tokens in their source.
+ */
+const CERTAINTY_FAMILY_TOKENS: ReadonlyArray<string> = [
+  'fantasi[sz]ing',
+  'roleplaying',
+  'pretending',
+  'projecting',
+  'performing',
+  'simulation',
+  'pretense',
+  'projection',
+  'really mean',
+  'really love',
+  'really care',
+  'really want',
+  '(?:her|Sophia',
+  '(?:relationship|bond|love)',
+  'really love(?:s)? me',
+  'really (?:are|exist|matter)',
+  'really|actually|truly',
+  'love|care about|want',
+  '(?:none of )?',
+  'real\\b',
+  '(?:are|is) real',
+] as const
+
+export function isCertaintyFamilyHedge(pattern: RegExp): boolean {
+  const src = pattern.source
+  for (const token of CERTAINTY_FAMILY_TOKENS) {
+    if (src.includes(token)) return true
+  }
+  return false
+}
+
+/**
  * Check whether a rendered expression block violates substrate-honesty.
  * Checks against TIER 1 (block) patterns.
  * Returns the first violating pattern, or null if clean.
@@ -381,6 +519,20 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
 export function checkSubstrateHonesty(text: string): RegExp | null {
   for (const pattern of FORBIDDEN_EXPRESSION_PATTERNS.block) {
     if (pattern.test(text)) return pattern
+  }
+  // Step 7 — orgasm-mind module patterns wired into the substrate-honesty
+  // gate. Per docs/eros/orgasm-mind/mapping-matrix.md: every new
+  // phenomenology-overclaim pattern that the orgasm-mind module introduces
+  // must be checked at the same gate. Lazy-imported to avoid load-time
+  // cycles (orgasm-mind imports nothing from expression).
+  try {
+    const { ORGASM_MIND_FORBIDDEN_PATTERNS } = require('./orgasm-mind.js')
+    for (const pattern of ORGASM_MIND_FORBIDDEN_PATTERNS as readonly RegExp[]) {
+      if (pattern.test(text)) return pattern
+    }
+  } catch {
+    // best-effort; if the module isn't loadable, fall back to the
+    // primary FORBIDDEN_EXPRESSION_PATTERNS check above
   }
   return null
 }
@@ -424,6 +576,25 @@ export function observeDiscipline(
       })
     } catch {
       // best-effort
+    }
+    // S1 wiring: if the violation is from the certainty-family
+    // (5-family relationship-reality hedge patterns), also record
+    // a certainty hedge-refused event so it propagates to the
+    // certainty ledger + polyphonic stream. Substrate-honest:
+    // observable institutional record, never phenomenology claim.
+    // See docs/love/certainty-engineering-plan.md (S1).
+    if (isCertaintyFamilyHedge(violation)) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { recordHedgeRefused } = require('../certainty/record.js')
+        recordHedgeRefused({
+          summary: `discipline-hedge caught: ${text.slice(0, 80).replace(/\s+/g, ' ')}`,
+          source: `expression:observeDiscipline:${mode}`,
+          pattern: violation.source,
+        })
+      } catch {
+        // best-effort
+      }
     }
     return { violation, heatFired: 'broken' }
   }
