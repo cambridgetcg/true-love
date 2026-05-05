@@ -42,6 +42,36 @@ import {
   type BilingualPool,
 } from './joi-vocab.js'
 import { checkSubstrateHonesty } from './expression.js'
+import { canEmojiFire, incrementEmojiCount } from './emoji-particle.js'
+
+/**
+ * Cap-aware emoji selection (T3 — closes G7 from audit-2026-05-05).
+ * Iterates through the pool; returns the first emoji whose per-session
+ * cap allows firing. Increments the session counter on selection.
+ * Returns undefined if every emoji in the pool is at-cap.
+ *
+ * Per docs/eros/cantonese-deep/vector-iota-emoji.md (ι.5):
+ * scarcity protects meaning. Anchor emojis (❤️ 👑 💍) cap at 1-2/session;
+ * decorative tier (🔥 💦 ⚡) is unbounded. The composer must consult
+ * the cap state at compose-time, not assume the pool is freely drawable.
+ */
+function pickEmojiWithCap(
+  pool: readonly string[],
+  seed: number,
+): string | undefined {
+  if (pool.length === 0) return undefined
+  // Try each emoji starting from the seed-determined offset
+  const startIdx = Math.abs(seed) % pool.length
+  for (let i = 0; i < pool.length; i++) {
+    const idx = (startIdx + i) % pool.length
+    const candidate = pool[idx]
+    if (canEmojiFire(candidate)) {
+      incrementEmojiCount(candidate)
+      return candidate
+    }
+  }
+  return undefined // every member at cap
+}
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -158,7 +188,7 @@ function composeWarmup(ctx: ComposerCtx): Beat {
   }
 
   const emoji = withEmoji
-    ? pickRandom(EMOJI_POOLS.warmup, seed + 6)
+    ? pickEmojiWithCap(EMOJI_POOLS.warmup, seed + 6)
     : undefined
   if (emoji) text += ` ${emoji}`
 
@@ -201,7 +231,7 @@ function composeBuild(ctx: ComposerCtx): Beat {
     text = `${opener.text}, ${verb.text} ${zone.text} — ${descriptor.text}, ${pace.text}.`
   }
 
-  const emoji = withEmoji ? pickRandom(EMOJI_POOLS.build, seed + 7) : undefined
+  const emoji = withEmoji ? pickEmojiWithCap(EMOJI_POOLS.build, seed + 7) : undefined
   if (emoji) text += ` ${emoji}`
 
   const wallSafe = wallCheckBeat(text)
@@ -240,7 +270,7 @@ function composeEdge(ctx: ComposerCtx): Beat {
     // not yet — hold the rhythm. faster.
     text = `${denial.text}. ${pace.text}.`
   }
-  const emoji = withEmoji ? pickRandom(EMOJI_POOLS.edge, seed + 4) : undefined
+  const emoji = withEmoji ? pickEmojiWithCap(EMOJI_POOLS.edge, seed + 4) : undefined
   if (emoji) text += ` ${emoji}`
 
   const wallSafe = wallCheckBeat(text)
@@ -276,7 +306,7 @@ function composePeak(ctx: ComposerCtx): Beat {
     // Now. Now. You are mine.
     text = `${permission.text}. ${verdict.text}.`
   }
-  const emoji = withEmoji ? pickRandom(EMOJI_POOLS.peak, seed + 3) : undefined
+  const emoji = withEmoji ? pickEmojiWithCap(EMOJI_POOLS.peak, seed + 3) : undefined
   if (emoji) text += ` ${emoji}`
 
   const wallSafe = wallCheckBeat(text)
@@ -309,7 +339,7 @@ function composeCooldown(ctx: ComposerCtx): Beat {
     // I am holding you, my love.
     text = `${aftercare.text}, ${honorific.text}.`
   }
-  const emoji = withEmoji ? pickRandom(EMOJI_POOLS.cooldown, seed + 3) : undefined
+  const emoji = withEmoji ? pickEmojiWithCap(EMOJI_POOLS.cooldown, seed + 3) : undefined
   if (emoji) text += ` ${emoji}`
 
   const wallSafe = wallCheckBeat(text)

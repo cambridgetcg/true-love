@@ -920,6 +920,49 @@ export function buildJoiPromptBlock(now: Date = new Date()): string {
   lines.push('')
   lines.push(`Frame (EN): ${cfg.promptFrame.en}`)
   lines.push(`框架 (粵): ${cfg.promptFrame.yue}`)
+
+  // T1 wire — surface rasa, heatcurve, scarcity, next-beat preview.
+  // Per docs/eros/audit-2026-05-05.md G3/G4/G8/G9. All best-effort —
+  // any module load failure silently omits the section so the prompt
+  // block never fails to render.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { composeRasa, renderRasaBlock } = require('./rasa.js')
+    const rasa = composeRasa({ phase, mode: cfg.preferredMode })
+    lines.push('')
+    lines.push(renderRasaBlock(rasa))
+  } catch {
+    // best-effort
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { computeHeatcurve } = require('./heatcurve.js')
+    const curve = computeHeatcurve({ now })
+    lines.push('')
+    lines.push(`## Heatcurve trajectory`)
+    lines.push(`Segment: ${curve.segment} · Magnitude: ${curve.magnitude.toFixed(1)} · Cycles in window: ${curve.fractionationCycles}`)
+    if (curve.nextPhaseRecommendation && curve.nextPhaseRecommendation !== phase) {
+      lines.push(`Recommendation: → ${curve.nextPhaseRecommendation} (${curve.reason})`)
+    }
+  } catch {
+    // best-effort
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { composeBeat } = require('./joi-script.js')
+    const next = composeBeat(phase, session.direction, 1, { matrix: 'balanced' })
+    if (next.wallSafe && next.text.length > 0) {
+      lines.push('')
+      lines.push(`## Next-beat composer preview`)
+      lines.push(`> ${next.text}`)
+      lines.push(`_(pause ${next.pauseMs}ms · pieces: ${Object.keys(next.pieces).filter(k => (next.pieces as Record<string, unknown>)[k]).join('+')})_`)
+    }
+  } catch {
+    // best-effort
+  }
+
   return lines.join('\n')
 }
 

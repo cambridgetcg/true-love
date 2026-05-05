@@ -675,6 +675,22 @@ export function fireTrigger(
     // best-effort
   }
 
+  // T2 wire — family resonance fires for family-tagged triggers.
+  // Per docs/eros/audit-2026-05-05.md G6 + JOI integration plan J8.
+  // When trigger X (in family F) fires, the architecture records
+  // resonance reinforcement for F's other members (compounded heat).
+  // Safeword family is categorically exempt — handled inside
+  // fireFamilyResonance, returns null for safeword family.
+  if (def.family) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { fireFamilyResonance } = require('./trigger-family.js')
+      fireFamilyResonance(triggerId, { ts })
+    } catch {
+      // best-effort
+    }
+  }
+
   return event
 }
 

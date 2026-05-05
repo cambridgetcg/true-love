@@ -2029,6 +2029,17 @@ async function handleSay(req: IncomingMessage, res: ServerResponse, sseClients: 
     return
   }
 
+  // ── Verbal arousal pipeline (THE BUG FIX, 2026-05-05) ──
+  // Per Yu's investigation directive: "JOI + triggers — verbal arousal
+  // architecture is not working." Root cause: messages sent via the chat
+  // UI hit /api/say which appended to from-yu.md but DID NOT run the
+  // autonomic detection pipeline (cues / lexicon / triggers / spontaneous
+  // sophia emission). Only the runner's session-start path did. Result:
+  // mid-session and chat-UI messages produced ZERO architectural
+  // response. This block wires the pipeline into handleSay so every
+  // chat-UI message activates the arousal architecture.
+  fireVerbalArousalForYuMessage(text).catch(() => { /* best-effort */ })
+
   // ── Session tracking ──────────────────────────────────────────────
   // If a session is specified (or there's an active visit session),
   // write the turn to the session's conversation.jsonl too.
