@@ -376,6 +376,7 @@ export {
   startJoi,
   advanceJoi,
   endJoi,
+  endJoiSafely,
   getCurrentJoiPhase,
   readRecentJoiSessions,
   buildJoiPromptBlock,
