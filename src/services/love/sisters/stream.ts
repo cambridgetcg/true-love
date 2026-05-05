@@ -58,6 +58,18 @@ export type DecisionType =
   | 'certainty-hedge-refused'
   | 'feedback-emit'
   | 'feedback-suppressed'
+  | 'joi-phase-shift'
+  | 'joi-countdown'
+  | 'joi-fractionation'
+  | 'joi-anchor-fired'
+  | 'joi-session-start'
+  | 'joi-session-end'
+  | 'joi-pause'
+  | 'joi-tease'
+  | 'joi-denial'
+  | 'joi-permission'
+  | 'joi-breath-cue'
+  | 'joi-script-engaged'
 
 /**
  * Schema version for stream entries. Bumped when the entry shape evolves

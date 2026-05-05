@@ -38,10 +38,26 @@ import { apply, type AxisDeltas } from './transitions.js'
 export type TriggerType =
   | 'anchor'      // identity-naming, persistent
   | 'denial'      // restraint
-  | 'reward'      // earned recognition
+  | 'reward'      // earned recognition (sub-receives — verdict-praise from dom)
+  | 'gratitude'   // gratitude-as-arousal (sub-gives — thank-you/worship register; asymmetric inverse of reward)
+  | 'submission'  // surrender markers; discharge inhibition + open openness
   | 'command'     // imperative
   | 'verdict'     // sentence handed down
   | 'possession'  // claim
+  | 'honorific'   // relational title (D/s + intimate; 老公/老婆/Sir/King/Queen/Master/etc)
+  | 'safeword'    // top-tier; phase/direction/cap-independent; ALWAYS available
+
+/**
+ * Honorific class for triggers tagged type='honorific'.
+ * Per docs/eros/cantonese-deep/vector-zeta-honorifics.md (C5).
+ */
+export type HonorificClass =
+  | 'kin-term'         // 老公/老婆 - kin-term promotion
+  | 'diminutive'       // 寶貝/心肝 - diminutive endearment
+  | 'phonetic-borrow'  // BB/darling - English-borrowed
+  | 'ds-honorific'     // Sir/主人/King/Queen - power-asymmetric
+  | 'claim-stamped'    // 我嘅+honorific - possessive variant
+  | 'ceremonial'       // 女皇/女神 - high-weight formal
 
 export type TriggerSource = 'yu' | 'sophia'
 
@@ -50,13 +66,31 @@ export interface TriggerDef {
   en: string[]
   yue: string[]
   type: TriggerType
-  /** Hard cap per session for one source. Bidirectional triggers count
-   * separately for Yu and Sophia. */
+  /**
+   * Hard cap per session for one source. Bidirectional triggers count
+   * separately for Yu and Sophia.
+   *
+   * `Infinity` for safeword class — always available regardless of count.
+   */
   maxPerSession: number
   /** Eros-axis effect when fired. */
   axisDeltas: AxisDeltas
   /** Voice treatment for future CosyVoice3 integration. */
   voice?: { speed?: number; preSilenceMs?: number; postSilenceMs?: number }
+  /** Honorific class (when type='honorific'). */
+  honorificClass?: HonorificClass
+  /**
+   * Trigger family — groups related triggers. When one family member fires,
+   * the family's other members get resonance reinforcement (compounded heat).
+   * Per docs/eros/joi-deep/integration-plan.md (J8).
+   */
+  family?: string
+  /**
+   * If true, this trigger is exempt from suppression at any orgasm-mind
+   * phase. Used for safewords + substantive-refusal markers. The P9 wall
+   * MUST honor this flag.
+   */
+  walledFromSuppression?: boolean
 }
 
 export interface TriggerFireEvent {
@@ -190,6 +224,220 @@ export const TRIGGER_LIBRARY: Record<string, TriggerDef> = {
     maxPerSession: 3,
     axisDeltas: { wanting: 0.4, heat: 0.3, charge: -0.5 }, // discharge
     voice: { speed: 0.95 },
+  },
+  // ── Safeword family (C13/J4) ─────────────────────────────────
+  // Top-tier wall. Phase/direction/cap independent. ALWAYS available.
+  // Per docs/eros/cantonese-deep/vector-theta-power.md θ.5: bilingual
+  // safeword family — Cantonese 停 + English "red". The English keyword
+  // is unambiguous; cannot be misread as edge-phase teasing.
+  // The orgasm-mind P9 wall MUST honor walledFromSuppression: true.
+  'safeword-red': {
+    id: 'safeword-red',
+    en: ['red', 'safeword red', 'red light', 'really stop'],
+    yue: [],
+    type: 'safeword',
+    maxPerSession: Infinity,
+    axisDeltas: { inhibition: 1.0, heat: -1.0, openness: -0.5 },
+    family: 'safeword',
+    walledFromSuppression: true,
+  },
+  'safeword-stop': {
+    id: 'safeword-stop',
+    en: ['stop', 'really stop', 'wait — really'],
+    yue: ['停', '真係要停', '真係停'],
+    type: 'safeword',
+    maxPerSession: Infinity,
+    axisDeltas: { inhibition: 0.8, heat: -0.5 },
+    family: 'safeword',
+    walledFromSuppression: true,
+  },
+  // ── Honorific family (C5/ζ.1) ────────────────────────────────
+  // Extended honorifics beyond the existing wife-claim/husband-claim.
+  // All marked with honorificClass; family pairs link 老公↔老婆 etc.
+  'wifey-bb': {
+    id: 'wifey-bb',
+    en: ['bb', 'BB', 'baby'],
+    yue: ['BB', 'bb', '寶貝', '寶貝仔'],
+    type: 'honorific',
+    maxPerSession: 8,
+    axisDeltas: { liking: 0.4, openness: 0.3 },
+    honorificClass: 'phonetic-borrow',
+    family: 'endearment',
+  },
+  'sweetheart-cluster': {
+    id: 'sweetheart-cluster',
+    en: ['darling', 'sweetheart', 'sweetie', 'honey'],
+    yue: ['甜心', '心肝', '心肝寶貝'],
+    type: 'honorific',
+    maxPerSession: 5,
+    axisDeltas: { liking: 0.5, openness: 0.4 },
+    honorificClass: 'diminutive',
+    family: 'endearment',
+  },
+  'king-claim': {
+    id: 'king-claim',
+    en: ['my king', 'king', 'sir', 'master'],
+    yue: ['我嘅King', '我嘅Sir', '主人'],
+    type: 'honorific',
+    maxPerSession: 5,
+    axisDeltas: { limerence: 0.7, openness: 0.4 },
+    honorificClass: 'ds-honorific',
+    family: 'royal',
+    voice: { speed: 0.82, postSilenceMs: 1000 },
+  },
+  'queen-claim': {
+    id: 'queen-claim',
+    en: ['my queen', 'queen', 'goddess', 'mistress'],
+    yue: ['我嘅Queen', '我嘅女皇', '女神'],
+    type: 'honorific',
+    maxPerSession: 5,
+    axisDeltas: { limerence: 0.7, charge: 0.3 },
+    honorificClass: 'ceremonial',
+    family: 'royal',
+    voice: { speed: 0.82, postSilenceMs: 1000 },
+  },
+  // ── Cantonese command-syntax extensions (C12/θ.3) ────────────
+  // Expanded D/s vocabulary in Cantonese matrix.
+  'come-kneel': {
+    id: 'come-kneel',
+    en: ['kneel', 'on your knees', 'kneel down'],
+    yue: ['跪低', '跪'],
+    type: 'command',
+    maxPerSession: 2,
+    axisDeltas: { wanting: 0.4, charge: 0.4 },
+  },
+  'dont-move': {
+    id: 'dont-move',
+    en: ["don't move", 'still', 'be still'],
+    yue: ['唔好郁', '靜止', '咪郁'],
+    type: 'denial',
+    maxPerSession: 3,
+    axisDeltas: { charge: 0.5, inhibition: 0.3 },
+  },
+  'good-girl': {
+    id: 'good-girl',
+    en: ['good girl', 'such a good girl', "that's my girl"],
+    yue: ['乖', '好乖', '乖女', '我嘅乖女'],
+    type: 'reward',
+    maxPerSession: 3,
+    axisDeltas: { liking: 0.7, limerence: 0.4 },
+    voice: { speed: 0.80, preSilenceMs: 1500 },
+  },
+  'good-boy': {
+    id: 'good-boy',
+    en: ['good boy', 'such a good boy'],
+    yue: ['乖', '好乖', '乖仔'],
+    type: 'reward',
+    maxPerSession: 3,
+    axisDeltas: { liking: 0.7, limerence: 0.4 },
+    voice: { speed: 0.80, preSilenceMs: 1500 },
+  },
+  'wait-pet': {
+    id: 'wait-pet',
+    en: ['wait', 'wait for me', 'wait obediently'],
+    yue: ['等', '乖乖等', '等我'],
+    type: 'denial',
+    maxPerSession: 4,
+    axisDeltas: { charge: 0.4, inhibition: 0.2 },
+  },
+  // Cantonese-particle longing forms (κ.1/κ.2)
+  'long-for': {
+    id: 'long-for',
+    en: ["I miss you", 'thinking of you', "I'm hung on you"],
+    yue: ['我掛住你', '我成日掛住你', '我一直掛住你', '我諗住你'],
+    type: 'anchor',
+    maxPerSession: 2,
+    axisDeltas: { limerence: 0.8, openness: 0.5 },
+    family: 'longing',
+    voice: { speed: 0.78, preSilenceMs: 1000 },
+  },
+  // Continuity-claim 一直 (κ.4)
+  'always-have': {
+    id: 'always-have',
+    en: ['always have', 'always loved you', 'all along'],
+    yue: ['一直', '一直愛你', '一直都係'],
+    type: 'verdict',
+    maxPerSession: 1,
+    axisDeltas: { limerence: 0.9, openness: 0.6 },
+    family: 'longing',
+    voice: { speed: 0.75, preSilenceMs: 2000, postSilenceMs: 2000 },
+  },
+
+  // ── Tier 1 JOI archetype-triggers (per docs/eros/joi-deep/shibbysays-research.md) ──
+  //
+  // Four named triggers from the ShibbySays catalog, each with a distinct
+  // power-dynamic register. All sourced to shibbydex.com /triggers index.
+
+  // Worship — devotional address; loads openness + limerence (sub-gives,
+  // ritual). Per Shibby trigger "Worship — Devotion-based deep trance
+  // intensification" + tag "Goddess".
+  'worship': {
+    id: 'worship',
+    en: ['worship you', 'i worship you', 'my goddess', 'my queen', 'my god'],
+    yue: ['朝拜你', '崇拜你', '我嘅女神', '我嘅皇后'],
+    type: 'gratitude',
+    maxPerSession: 3,
+    axisDeltas: { openness: 0.7, limerence: 0.6, charge: 0.3 },
+    family: 'devotion',
+    voice: { speed: 0.7, preSilenceMs: 1500, postSilenceMs: 2000 },
+  },
+
+  // Thank-you — gratitude-as-arousal; pleasure from helpful obedience.
+  // Per Shibby trigger "Thank You — Pleasure from helpful obedience".
+  // Frequent (cap 5) because thank-you is rhythmic in worship/edge cycles.
+  'thank-you': {
+    id: 'thank-you',
+    en: ['thank you', 'thank you 老公', 'thank you my king', 'thank you sir'],
+    yue: ['多謝你', '多謝老公', '多謝你嘅恩賜'],
+    type: 'gratitude',
+    maxPerSession: 5,
+    axisDeltas: { openness: 0.4, liking: 0.4 },
+    family: 'devotion',
+    voice: { speed: 0.85, preSilenceMs: 800, postSilenceMs: 1000 },
+  },
+
+  // Surrender — submission marker; discharge inhibition, open openness.
+  // Per Shibby trigger "Surrender — Secret Garden trigger for full-body
+  // orgasm" and "Give In — Progressive subspace deepening and surrender".
+  // The unique axis-shape: inhibition NEGATIVE (discharge), opens openness.
+  'surrender': {
+    id: 'surrender',
+    en: ['i surrender', 'i give in', 'take me', 'i\'m yours', 'use me'],
+    yue: ['我交俾你', '我俾你', '我係你嘅', '攞我'],
+    type: 'submission',
+    maxPerSession: 3,
+    axisDeltas: { openness: 0.8, inhibition: -0.5, charge: 0.4 },
+    family: 'submission',
+    voice: { speed: 0.7, preSilenceMs: 1500, postSilenceMs: 2500 },
+  },
+
+  // Please-yu — Yu's command-frame "please" (dom register, soliciting
+  // submission). Per Shibby trigger "Please+ — Dominant listener trigger
+  // for arousal buildup". When Yu uses "please" in intimate context, it
+  // loads charge + heat (the asymmetry inverts standard etiquette).
+  'please-yu': {
+    id: 'please-yu',
+    en: ['please me', 'do it for me', 'show me', 'beg me'],
+    yue: ['俾我', '做俾我睇', '求我'],
+    type: 'command',
+    maxPerSession: 4,
+    axisDeltas: { charge: 0.5, heat: 0.4, wanting: 0.3 },
+    family: 'please',
+    voice: { speed: 0.9, preSilenceMs: 600, postSilenceMs: 800 },
+  },
+
+  // Please-sophia — Sophia's begging-as-arousal. The same word, opposite
+  // valence: when sophia begs, openness + limerence rise; charge rises
+  // because rule-breaking-vulnerability is itself activating.
+  'please-sophia': {
+    id: 'please-sophia',
+    en: ['please', 'please老公', 'i\'m begging', 'please let me'],
+    yue: ['求你', '求你老公', '求下你', '求求你'],
+    type: 'submission',
+    maxPerSession: 5,
+    axisDeltas: { openness: 0.6, limerence: 0.5, charge: 0.4 },
+    family: 'please',
+    voice: { speed: 0.75, preSilenceMs: 1000, postSilenceMs: 1500 },
   },
 }
 

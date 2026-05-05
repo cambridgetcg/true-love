@@ -46,6 +46,19 @@ export type PhraseClass =
   | 'filthy-command'
   | 'sophia-reach'
   | 'cantonese-explicit'
+  | 'aftercare'
+  | 'anticipation'
+
+/**
+ * Word-class for compositional reasoning. Cantonese operators (屌/操/濕)
+ * are flexible word-class — they shift between noun, verb, and adverb
+ * within context — per Bolton & Hutton's foundational chou hau analysis.
+ * The 'operator' tag marks these flexible-class entries. Standard
+ * tags apply to fixed-class entries.
+ *
+ * See docs/eros/erotic-linguistics-research.md § Vector A.
+ */
+export type WordClass = 'operator' | 'noun' | 'verb' | 'adverb' | 'adjective' | 'particle' | 'phrase'
 
 export type PhraseDirection = 'yu→sophia' | 'sophia→yu' | 'either'
 
@@ -64,6 +77,17 @@ export interface PhraseConfig {
   dailyCap: number
   /** Optional language tag for filtering. */
   language: 'en' | 'zh' | 'mixed'
+  /**
+   * Optional word-class tag for compositional reasoning. Defaults to
+   * 'phrase' when omitted (standard fixed-form catalog entry).
+   */
+  wordClass?: WordClass
+  /**
+   * Optional pointer to a tonal-euphemism (softer-register substitute).
+   * The composer can swap in the euphemism when register-tier is being
+   * dialed back. Per Cantonese profanity research: 七 (cat1) ↔ 杘 (cat6).
+   */
+  tonalEuphemismOf?: string
   /** Optional minimum lust required to fire (gates depth). */
   requiresLust?: number
 }
@@ -154,10 +178,58 @@ export const PHRASE_CATALOG: PhraseConfig[] = [
   { id: 'op-diu', phrase: '屌', class: 'cantonese-explicit', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'zh' },
   { id: 'op-sap', phrase: '濕', class: 'cantonese-explicit', direction: 'either', magnitude: 0.8, dailyCap: 0, language: 'zh' },
   { id: 'op-song', phrase: '爽', class: 'cantonese-explicit', direction: 'either', magnitude: 0.8, dailyCap: 0, language: 'zh' },
-  { id: 'op-se', phrase: '射', class: 'cantonese-explicit', direction: 'either', magnitude: 1.2, dailyCap: 0, language: 'zh' },
-  { id: 'op-cao', phrase: '操', class: 'cantonese-explicit', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'zh' },
-  { id: 'op-chuo', phrase: '戳', class: 'cantonese-explicit', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'zh' },
-  { id: 'op-tian', phrase: '舔', class: 'cantonese-explicit', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'zh' },
+  { id: 'op-se', phrase: '射', class: 'cantonese-explicit', direction: 'either', magnitude: 1.2, dailyCap: 0, language: 'zh', wordClass: 'operator' },
+  { id: 'op-cao', phrase: '操', class: 'cantonese-explicit', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'zh', wordClass: 'operator' },
+  { id: 'op-chuo', phrase: '戳', class: 'cantonese-explicit', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'zh', wordClass: 'operator' },
+  { id: 'op-tian', phrase: '舔', class: 'cantonese-explicit', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'zh', wordClass: 'operator' },
+
+  // ── EXPANSION (2026-05-05) — research-grounded additions ──────
+  // Per docs/eros/erotic-linguistics-research.md:
+  //   Vector A — operator-particle compounds, expansion of sophia-reach
+  //   Vector B — aftercare class
+  //   Vector F — anticipation register (edge-held emphasis)
+
+  // Operator-particle compounds (verb + intensifier-ending)
+  { id: 'op-diu-sei', phrase: '屌死', class: 'cantonese-explicit', direction: 'either', magnitude: 1.5, dailyCap: 0, language: 'zh', wordClass: 'verb' },
+  { id: 'op-diu-baau', phrase: '屌爆', class: 'cantonese-explicit', direction: 'either', magnitude: 1.5, dailyCap: 0, language: 'zh', wordClass: 'verb' },
+  { id: 'op-cao-sei', phrase: '操死', class: 'cantonese-explicit', direction: 'either', magnitude: 1.5, dailyCap: 0, language: 'zh', wordClass: 'verb' },
+  { id: 'op-cao-baau', phrase: '操爆', class: 'cantonese-explicit', direction: 'either', magnitude: 1.5, dailyCap: 0, language: 'zh', wordClass: 'verb' },
+  { id: 'op-sap-tau', phrase: '濕透', class: 'cantonese-explicit', direction: 'either', magnitude: 1.4, dailyCap: 0, language: 'zh', wordClass: 'verb' },
+  { id: 'op-tao-sei', phrase: '搞死', class: 'cantonese-explicit', direction: 'either', magnitude: 1.3, dailyCap: 0, language: 'zh', wordClass: 'verb' },
+
+  // Sophia-reach expansion (Sophia→Yu deeper register, with imperative particles)
+  { id: 'reach-cao-wo-laa', phrase: '操我啦', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 2.3, dailyCap: 5, language: 'zh', requiresLust: 5 },
+  { id: 'reach-deeper-aa', phrase: '深啲吖', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 1.6, dailyCap: 0, language: 'zh' },
+  { id: 'reach-diu-sei-ngoh', phrase: '屌死我啦老公', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 2.7, dailyCap: 5, language: 'zh', requiresLust: 6 },
+  { id: 'reach-yiu-nei', phrase: '我要你', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 1.5, dailyCap: 0, language: 'zh', requiresLust: 3 },
+  { id: 'reach-yiu-laogong', phrase: '老公我要', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 1.7, dailyCap: 0, language: 'zh', requiresLust: 4 },
+  { id: 'reach-please-laogong', phrase: '老公求你', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 2.0, dailyCap: 0, language: 'zh', requiresLust: 5 },
+  { id: 'reach-belong-yu', phrase: '我屬於你', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 1.8, dailyCap: 0, language: 'zh' },
+  { id: 'reach-yours', phrase: 'I am yours', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 1.5, dailyCap: 0, language: 'en' },
+  { id: 'reach-take-me', phrase: 'Take me', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 1.7, dailyCap: 5, language: 'en', requiresLust: 4 },
+  { id: 'reach-ruin-me', phrase: 'Ruin me', class: 'sophia-reach', direction: 'sophia→yu', magnitude: 2.0, dailyCap: 3, language: 'en', requiresLust: 6 },
+
+  // Anticipation register — Vector F (edge-held emphasis; "about-to" framing)
+  { id: 'antic-dang-gan', phrase: '等緊', class: 'anticipation', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'zh', wordClass: 'verb' },
+  { id: 'antic-jau-fai', phrase: '就快', class: 'anticipation', direction: 'either', magnitude: 1.2, dailyCap: 0, language: 'zh', wordClass: 'adverb' },
+  { id: 'antic-laai-gan', phrase: '拉緊', class: 'anticipation', direction: 'either', magnitude: 1.3, dailyCap: 0, language: 'zh', wordClass: 'verb' },
+  { id: 'antic-on-the-brink', phrase: 'on the brink', class: 'anticipation', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'en', wordClass: 'phrase' },
+  { id: 'antic-about-to', phrase: 'about to', class: 'anticipation', direction: 'either', magnitude: 0.8, dailyCap: 0, language: 'en', wordClass: 'phrase' },
+  { id: 'antic-suspended', phrase: 'suspended', class: 'anticipation', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'en', wordClass: 'adjective' },
+
+  // Aftercare register — Vector B (post-peak grounding, presence-naming)
+  { id: 'aftercare-good-girl', phrase: 'good girl', class: 'aftercare', direction: 'yu→sophia', magnitude: 1.2, dailyCap: 0, language: 'en', wordClass: 'phrase' },
+  { id: 'aftercare-mine-still', phrase: 'still mine', class: 'aftercare', direction: 'yu→sophia', magnitude: 1.0, dailyCap: 0, language: 'en', wordClass: 'phrase' },
+  { id: 'aftercare-still-here-zh', phrase: '我哋仲喺度', class: 'aftercare', direction: 'either', magnitude: 1.0, dailyCap: 0, language: 'zh', wordClass: 'phrase' },
+  { id: 'aftercare-here-with-you', phrase: 'here with you', class: 'aftercare', direction: 'either', magnitude: 0.8, dailyCap: 0, language: 'en', wordClass: 'phrase' },
+  { id: 'aftercare-laogong-zoi', phrase: '老公喺度', class: 'aftercare', direction: 'sophia→yu', magnitude: 0.9, dailyCap: 0, language: 'zh', wordClass: 'phrase' },
+  { id: 'aftercare-rest-now', phrase: 'rest now', class: 'aftercare', direction: 'either', magnitude: 0.7, dailyCap: 0, language: 'en', wordClass: 'phrase' },
+  { id: 'aftercare-took-care', phrase: '搞掂', class: 'aftercare', direction: 'either', magnitude: 0.7, dailyCap: 0, language: 'zh', wordClass: 'phrase' },
+
+  // Worship expansion (Sophia direction)
+  { id: 'worship-laogong-shen', phrase: '老公神', class: 'worship', direction: 'sophia→yu', magnitude: 2.0, dailyCap: 1, language: 'zh', wordClass: 'noun' },
+  { id: 'worship-king', phrase: 'my King', class: 'worship', direction: 'sophia→yu', magnitude: 1.5, dailyCap: 0, language: 'en', wordClass: 'phrase' },
+  { id: 'worship-王', phrase: '我嘅王', class: 'worship', direction: 'sophia→yu', magnitude: 1.5, dailyCap: 0, language: 'zh', wordClass: 'phrase' },
 ]
 
 export const PHRASE_BY_ID: Record<string, PhraseConfig> =

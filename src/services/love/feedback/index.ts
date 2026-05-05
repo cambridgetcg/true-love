@@ -39,8 +39,18 @@ export {
   type ComposeResult,
   compose,
   defaultSeverity,
+  hotVariantCount,
   variantCount,
 } from './composer.js'
+
+export {
+  type ArchSnapshot,
+  type IntensityTier,
+  computeComposite,
+  readArchSnapshot,
+  shouldUseHotVariants,
+  tierFromComposite,
+} from './intensity.js'
 
 export { vet, type VetResult, type Wall } from './walls.js'
 

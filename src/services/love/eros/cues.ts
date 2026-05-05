@@ -239,6 +239,116 @@ const CUE_PATTERNS: CuePattern[] = [
     },
     deltas: { heat: 0.2, openness: 0.2, liking: 0.2 },
   },
+
+  // ── Tier 1 Cantonese eros detectors (per docs/eros/cantonese-eros-linguistics.md) ──
+  //
+  // All five are well-sourced (peer-reviewed sociolinguistics or canonical
+  // dictionaries). Each maps to one of the four mechanisms (M1-M4) of
+  // linguistic-patterns.md.
+
+  {
+    // M3/M4 — 撩-family: the Cantonese verb of textual provocation.
+    // 撩 (liu1) = stir up someone's emotions / hit on someone. Distinguishes
+    // seduction-as-craft from solicitation. Per Wiktionary/CantoDict/
+    // Contextual Chinese (well-sourced).
+    name: 'liu-flirt-family',
+    test: (t) => {
+      // 撩你/撩我/撩起 (core); 撩女/撩仔/撩妹/撩漢 (target-marked); 撩交嗌 (Cantonese-only)
+      const m = t.match(/撩(?:你|我|起|交|妹|女|仔|漢)/)
+      return m ? m[0] : null
+    },
+    deltas: { charge: 0.5, wanting: 0.4, heat: 0.3 },
+  },
+
+  {
+    // M1 — 嘅-omitted possessive presupposition (kin-claim). The omission
+    // of 嘅 between possessor and kin term is the intimate-Cantonese
+    // possessive: presupposes shared knowledge rather than asserting.
+    // Per Cantonese Learning / CantoDict (well-sourced grammar).
+    //
+    // Distinct from existing `wife-possessive` cue (which catches the
+    // bare 老婆 token); this catches the FULL CLAIM construction with
+    // explicit copula 係.
+    name: 'kin-claim-presupposition',
+    test: (t) => {
+      // 你係我老婆/老公/寶貝/心肝/人 (no 嘅 between 我 and kin term)
+      const m = t.match(/(?:你|佢)\s*係\s*我\s*(?:老婆|老公|寶貝|心肝寶貝|心肝|人|嘢|架啦|唯一)/)
+      return m ? m[0] : null
+    },
+    deltas: { limerence: 1.2, openness: 0.5, liking: 0.5 },
+  },
+
+  {
+    // M4 — 撚-infix vulgar intensifier (and 鳩, 閪 same productive pattern).
+    // 撚 (lan2) is grammaticalized as infix after degree adverbs.
+    // Per Cantowords / Wikipedia (well-sourced).
+    //
+    // CRITICAL DISAMBIGUATION (per docs/eros/cantonese-eros-linguistics.md
+    // §2.4 — sociolinguistic finding from Language Sciences corpus): in
+    // established intimate register, 撚-infix is INTIMACY MARKER, not
+    // conflict-vulgarity. The deltas reflect intimacy-bonded-vulgar (heat
+    // intensifier) rather than triggering an inhibition spike. Co-context
+    // (other intimate cues firing in the same message) confirms the
+    // disambiguation; the eros system already aggregates cue deltas, so
+    // co-occurrence with possessive/particle cues amplifies the right register.
+    name: 'vulgar-intensifier-infix',
+    test: (t) => {
+      // (好|咁|幾|勁|最|唔) + (撚|鳩|閪)
+      const m = t.match(/(?:好|咁|幾|勁|最|唔)(?:撚|鳩|閪)/)
+      return m ? m[0] : null
+    },
+    deltas: { heat: 0.5, charge: 0.3 },
+  },
+
+  {
+    // M3 — Reduplication is the Cantonese tempo primitive. XX patterns
+    // simultaneously slow tempo AND signal affection: 慢慢, 等等, 攬攬,
+    // 錫錫, 豬豬. Per Wiktionary 慢慢 / 攬攬錫錫 (well-sourced).
+    //
+    // Conservative match: requires a Han-character (CJK Unified
+    // Ideographs) reduplication of length 1+1 (single-char reduplicate).
+    // Avoids false positives on punctuation/whitespace.
+    name: 'reduplication-tempo',
+    test: (t) => {
+      // \p{Script=Han} matches CJK ideographs. Match XX where X is one Han char.
+      const m = t.match(/(\p{Script=Han})\1/u)
+      return m ? m[0] : null
+    },
+    deltas: { openness: 0.3, liking: 0.3, charge: 0.2 },
+  },
+
+  {
+    // M3 — Cantonese sentence-final particles in an imperative or
+    // intimate sentence. Per Matthews & Yip 1994 / Language Log: the
+    // PRESENCE of a softening particle flips a Cantonese imperative
+    // from harsh→invitation. Most common: 啦, 呀, 吓, 喎, 嘛, 㗎啦, 囉.
+    //
+    // Operationally: this cue surfaces when Yu's message ends with a
+    // softener — a signal of pleading-affectionate or invitation register.
+    // Adds openness + liking (softening-as-affection); does not modulate
+    // heat (the particle does not force intensity).
+    name: 'softening-particle',
+    test: (t) => {
+      // Match a particle at end of a sentence segment (before punctuation, emoji, or eol)
+      // 啦/啦~ / 呀/呀~ / 吓 / 喎 / 嘛 / 㗎啦 / 囉
+      const m = t.match(/(?:㗎啦|啦|呀|吓|喎|嘛|囉)~*(?:[\s。.！!？?…❤️🥺😏🔥💦]|$)/)
+      return m ? m[0].trim() : null
+    },
+    deltas: { openness: 0.3, liking: 0.2 },
+  },
+
+  {
+    // M3 — 啖 (daam6) + body-verb productive intimate construction.
+    // Per CantoDict / Wiktionary 啖 (well-sourced). 一啖 / 食啖 / 錫一啖
+    // / 咬一啖 — measured-pace body-act-as-verb.
+    name: 'daam-body-verb',
+    test: (t) => {
+      // (一|食|錫|咬|啜) + 啖 (with optional 一/嗰 in between)
+      const m = t.match(/(?:一啖|食(?:一)?啖|錫(?:一)?啖|咬(?:一)?啖|啜(?:一)?啖)/)
+      return m ? m[0] : null
+    },
+    deltas: { heat: 0.3, charge: 0.3 },
+  },
 ]
 
 // ── Heat emoji counting ────────────────────────────────────────────

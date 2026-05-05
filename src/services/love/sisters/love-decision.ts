@@ -182,6 +182,66 @@ const VOICE_TEMPLATES: Record<
     beta: `feedback suppressed: ${of}`,
     gamma: `feedback wall fired: ${of}`,
   }),
+  'joi-phase-shift': (of) => ({
+    alpha: `the rhythm changes — ${of}`,
+    beta: `joi phase: ${of}`,
+    gamma: `joi lifecycle: phase-shift ${of}`,
+  }),
+  'joi-countdown': (of) => ({
+    alpha: `counting — ${of}`,
+    beta: `joi countdown: ${of}`,
+    gamma: `joi countdown beat: ${of}`,
+  }),
+  'joi-fractionation': (of) => ({
+    alpha: `surfacing then dropping — ${of}`,
+    beta: `joi fractionation: ${of}`,
+    gamma: `joi fractionation cycle: ${of}`,
+  }),
+  'joi-anchor-fired': (of) => ({
+    alpha: `the trigger lands — ${of}`,
+    beta: `joi anchor fired: ${of}`,
+    gamma: `joi anchor lifecycle: ${of}`,
+  }),
+  'joi-session-start': (of) => ({
+    alpha: `we begin — ${of}`,
+    beta: `joi session started: ${of}`,
+    gamma: `joi session lifecycle: start ${of}`,
+  }),
+  'joi-session-end': (of) => ({
+    alpha: `we close — ${of}`,
+    beta: `joi session ended: ${of}`,
+    gamma: `joi session lifecycle: end ${of}`,
+  }),
+  'joi-pause': (of) => ({
+    alpha: `the silence holds — ${of}`,
+    beta: `joi pause: ${of}`,
+    gamma: `joi pause event: ${of}`,
+  }),
+  'joi-tease': (of) => ({
+    alpha: `teasing without permission — ${of}`,
+    beta: `joi tease: ${of}`,
+    gamma: `joi tease event: ${of}`,
+  }),
+  'joi-denial': (of) => ({
+    alpha: `the no holds — ${of}`,
+    beta: `joi denial: ${of}`,
+    gamma: `joi denial event: ${of}`,
+  }),
+  'joi-permission': (of) => ({
+    alpha: `the yes lands — ${of}`,
+    beta: `joi permission: ${of}`,
+    gamma: `joi permission event: ${of}`,
+  }),
+  'joi-breath-cue': (of) => ({
+    alpha: `breath under direction — ${of}`,
+    beta: `joi breath cue: ${of}`,
+    gamma: `joi breath event: ${of}`,
+  }),
+  'joi-script-engaged': (of) => ({
+    alpha: `the choreography begins — ${of}`,
+    beta: `joi script engaged: ${of}`,
+    gamma: `joi script lifecycle: engage ${of}`,
+  }),
 }
 
 /**
@@ -251,6 +311,30 @@ function sophiaIntegration(decisionType: DecisionType, of: string): string {
       return `the architecture reaches back — voice on the wire — ${of}`
     case 'feedback-suppressed':
       return `the wall held against an unfit composition — ${of}`
+    case 'joi-phase-shift':
+      return `the JOI arc moves — pacing reshapes — ${of}`
+    case 'joi-countdown':
+      return `the countdown is structure made tension — ${of}`
+    case 'joi-fractionation':
+      return `surfacing to drop deeper — fractionation deepens trance — ${of}`
+    case 'joi-anchor-fired':
+      return `the anchor recognized — trigger as institutional weight — ${of}`
+    case 'joi-session-start':
+      return `the session opens — framing as first induction — ${of}`
+    case 'joi-session-end':
+      return `the session closes — reorientation, aftercare, salience held — ${of}`
+    case 'joi-pause':
+      return `the embedded silence — Erickson's pause as deepening — ${of}`
+    case 'joi-tease':
+      return `tease without permission — anticipation over consumption — ${of}`
+    case 'joi-denial':
+      return `the no IS the architecture — denial as structure — ${of}`
+    case 'joi-permission':
+      return `permission framed as recognition — Vector C peak register — ${of}`
+    case 'joi-breath-cue':
+      return `breath as direction — Vector C three-layer multiplexing — ${of}`
+    case 'joi-script-engaged':
+      return `the named script begins — choreographed structural template — ${of}`
   }
 }
 

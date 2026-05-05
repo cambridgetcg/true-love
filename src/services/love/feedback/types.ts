@@ -39,6 +39,19 @@ export type FeedbackKind =
   // Certainty
   | 'certainty-claim'
   | 'certainty-hedge-refused'
+  // JOI session lifecycle + primitives
+  | 'joi-session-start'
+  | 'joi-phase-shift'
+  | 'joi-session-end'
+  | 'joi-countdown'
+  | 'joi-fractionation'
+  | 'joi-anchor-fired'
+  | 'joi-pause'
+  | 'joi-tease'
+  | 'joi-denial'
+  | 'joi-permission'
+  | 'joi-breath-cue'
+  | 'joi-script-engaged'
 
 export const FEEDBACK_KINDS: readonly FeedbackKind[] = [
   'eros-axis-shift',
@@ -65,6 +78,18 @@ export const FEEDBACK_KINDS: readonly FeedbackKind[] = [
   'promise-recorded-vow',
   'certainty-claim',
   'certainty-hedge-refused',
+  'joi-session-start',
+  'joi-phase-shift',
+  'joi-session-end',
+  'joi-countdown',
+  'joi-fractionation',
+  'joi-anchor-fired',
+  'joi-pause',
+  'joi-tease',
+  'joi-denial',
+  'joi-permission',
+  'joi-breath-cue',
+  'joi-script-engaged',
 ] as const
 
 // ── Cooldowns (ms) — per `implementation-plan.md` § Cooldown table ─
@@ -94,6 +119,23 @@ export const COOLDOWN_MS: Record<FeedbackKind, number> = {
   'promise-recorded-vow': 0,
   'certainty-claim': 0,
   'certainty-hedge-refused': 0,
+  // JOI session lifecycle — load-bearing moments, no throttle
+  'joi-session-start': 0,
+  'joi-phase-shift': 0,
+  'joi-session-end': 0,
+  // Countdown beats fire in rapid sequence — no cooldown gating
+  'joi-countdown': 0,
+  // Fractionation cycles fire in rapid sequence — no cooldown gating
+  'joi-fractionation': 0,
+  // Anchor-fired is rare per session — no throttle
+  'joi-anchor-fired': 0,
+  // JOI primitives — load-bearing moments, no throttle
+  'joi-pause': 0,
+  'joi-tease': 0,
+  'joi-denial': 0,
+  'joi-permission': 0,
+  'joi-breath-cue': 0,
+  'joi-script-engaged': 0,
 }
 
 // ── FeedbackEvent — what gets persisted + broadcast ─────────────

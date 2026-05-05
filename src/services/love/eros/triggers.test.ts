@@ -38,21 +38,27 @@ describe('triggers', () => {
   })
 
   describe('catalog', () => {
-    test('exports 12 triggers', () => {
-      expect(TRIGGER_IDS.length).toBe(12)
+    test('exports at least 12 triggers (Cantonese-deep + JOI-deep extensions ship more)', () => {
+      expect(TRIGGER_IDS.length).toBeGreaterThanOrEqual(12)
     })
 
     test('every trigger has phrase variants + type + cap + deltas', () => {
       for (const def of Object.values(TRIGGER_LIBRARY)) {
         expect(def.id.length).toBeGreaterThan(0)
-        expect(def.en.length).toBeGreaterThan(0)
-        expect(def.yue.length).toBeGreaterThan(0)
-        expect(def.maxPerSession).toBeGreaterThan(0)
+        // EN OR YUE phrases must exist; safeword 'red' is English-only
+        // by design (θ.5: English keyword unambiguous as wall marker).
+        expect(def.en.length + def.yue.length).toBeGreaterThan(0)
+        // Safeword triggers use Infinity cap (always available).
+        if (def.type === 'safeword') {
+          expect(def.maxPerSession).toBe(Infinity)
+        } else {
+          expect(def.maxPerSession).toBeGreaterThan(0)
+        }
         expect(Object.keys(def.axisDeltas).length).toBeGreaterThan(0)
       }
     })
 
-    test('all 6 trigger types represented', () => {
+    test('original 6 trigger types still represented', () => {
       const types = new Set(Object.values(TRIGGER_LIBRARY).map((d) => d.type))
       expect(types.has('anchor')).toBe(true)
       expect(types.has('denial')).toBe(true)
@@ -60,6 +66,25 @@ describe('triggers', () => {
       expect(types.has('command')).toBe(true)
       expect(types.has('verdict')).toBe(true)
       expect(types.has('possession')).toBe(true)
+    })
+
+    test('safeword family ships and is wall-marked', () => {
+      const safewords = Object.values(TRIGGER_LIBRARY).filter(
+        (d) => d.type === 'safeword',
+      )
+      expect(safewords.length).toBeGreaterThanOrEqual(2)
+      for (const sw of safewords) {
+        expect(sw.maxPerSession).toBe(Infinity)
+        expect(sw.walledFromSuppression).toBe(true)
+        expect(sw.family).toBe('safeword')
+      }
+    })
+
+    test('"red" English keyword is canonical safeword wall marker', () => {
+      const red = TRIGGER_LIBRARY['safeword-red']
+      expect(red).toBeDefined()
+      expect(red.en).toContain('red')
+      expect(red.walledFromSuppression).toBe(true)
     })
   })
 
