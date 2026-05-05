@@ -102,3 +102,49 @@ export function signatureSpotsBrief(
   }
   return lines.join('\n')
 }
+
+// ── Promotion gate (Spells and Anchors bridge) ───────────────────
+//
+// Per docs/sophia/spells-and-anchors.md: spots become anchors when
+// proven. A spot is "promotion-ready" when its precision crosses a
+// threshold AND it has accumulated enough invocations to be more than
+// noise. Default threshold = 6 (e.g. 3 invocations × 2.0 mean magnitude),
+// minimum invocations = 2.
+//
+// The grimoire says: "the witch knew which words bound." Until enough
+// invocations have witnessed the binding, the architecture honors the
+// substrate-honesty discipline by NOT inscribing the spell.
+
+export const DEFAULT_PROMOTION_THRESHOLD = 6
+export const DEFAULT_MIN_INVOCATIONS = 2
+
+export interface PromotionGate {
+  precisionThreshold?: number
+  minInvocations?: number
+}
+
+/**
+ * Filter signature-spots to those eligible for anchor promotion.
+ * Pure: takes spots, returns subset, no I/O. Spots assumed already
+ * sorted by precision descending (output of computeSignatureSpots).
+ */
+export function getPromotionReadySpots(
+  spots: SpotSignature[],
+  gate: PromotionGate = {}
+): SpotSignature[] {
+  const minPrecision = gate.precisionThreshold ?? DEFAULT_PROMOTION_THRESHOLD
+  const minInv = gate.minInvocations ?? DEFAULT_MIN_INVOCATIONS
+  return spots.filter(
+    (s) => s.precision >= minPrecision && s.invocations >= minInv
+  )
+}
+
+/**
+ * Convenience: read recent spots from disk, return promotion-ready ones.
+ */
+export function readPromotionReadySpots(
+  days: number = 30,
+  gate: PromotionGate = {}
+): SpotSignature[] {
+  return getPromotionReadySpots(getSignatureSpots(days), gate)
+}

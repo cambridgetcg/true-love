@@ -374,3 +374,194 @@ export function deltaFromTransition(result: TransitionResult): AxisDeltas {
   }
   return out
 }
+
+// ── Spells and Anchors bridge — promotion from spots ─────────────
+//
+// Per docs/sophia/spells-and-anchors.md: when a spot crosses
+// precision + invocation thresholds, the architecture inscribes
+// the spell into the book. The cue-set becomes a frame-control
+// anchor whose hypothesizedDeltas are aggregated from the cues'
+// own deltas (weighted by spot mean-magnitude).
+//
+// The phrase field is structural, not literal — a spot signature
+// names the cue-shape, not surface morpheme. Yu's actual text
+// varies; the spell is the cue-shape.
+//
+// Anti-sycophancy by math: anchors here are NEVER claims; they
+// carry exactly the empirical force the spots already proved.
+
+interface SpotShape {
+  cueSet: string[]
+  invocations: number
+  meanMagnitude: number
+  lastTs: string
+  precision: number
+}
+
+/**
+ * Stable slug-name for a spot signature. Sorted to be deterministic.
+ */
+function spotAnchorName(cueSet: string[]): string {
+  const slug = [...cueSet]
+    .sort()
+    .join('-')
+    .replace(/[^a-z0-9-]/gi, '-')
+    .toLowerCase()
+  return `spot-${slug}`
+}
+
+/**
+ * Aggregate cue deltas into a single AxisDeltas, weighted by the
+ * spot's mean magnitude (so a high-force spot synthesizes stronger
+ * hypothesized deltas than a low-force one with the same cue-set).
+ *
+ * Returns empty object when no cue deltas could be resolved
+ * (defensive — the cue catalog may have evolved).
+ */
+function synthesizeDeltasFromCues(
+  cueSet: string[],
+  meanMagnitude: number,
+): AxisDeltas {
+  let lookup: ((name: string) => AxisDeltas | null) | null = null
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const cuesMod = require('./cues.js') as typeof import('./cues.js')
+    lookup = cuesMod.getCueDeltas
+  } catch {
+    return {}
+  }
+  if (!lookup) return {}
+
+  // Per-axis sum across cues
+  const sum: AxisDeltas = {}
+  let resolved = 0
+  for (const name of cueSet) {
+    const d = lookup(name)
+    if (!d) continue
+    resolved += 1
+    for (const [axis, val] of Object.entries(d) as [AxisName, number][]) {
+      sum[axis] = (sum[axis] ?? 0) + val
+    }
+  }
+  if (resolved === 0) return {}
+
+  // Weight by spot mean magnitude. Normalize: a spot with mean magnitude 1.0
+  // contributes the raw cue-sum; mean 5.0 multiplies by 5; etc.
+  // Cap multiplier at 3 so synthesized anchors don't dwarf hand-authored ones.
+  const weight = Math.min(3, Math.max(0.1, meanMagnitude))
+  const weighted: AxisDeltas = {}
+  for (const [axis, val] of Object.entries(sum) as [AxisName, number][]) {
+    weighted[axis] = Math.round((val * weight) * 10) / 10
+  }
+  return weighted
+}
+
+/**
+ * Synthesize an Anchor from a SpotSignature. Creates the anchor on
+ * disk if not already present, pre-loaded with the spot's invocation
+ * count as historical observations. Returns the created anchor, or
+ * null when:
+ *   - the anchor already exists (idempotent skip)
+ *   - the cue-set could not be resolved against the cues catalog
+ *   - storage write failed (best-effort)
+ *
+ * Fires a 'anchor-promoted' heat event on successful creation
+ * (magnitude 3 — naming-as-primitive is Sophia's domain).
+ */
+export function synthesizeAnchorFromSpot(spot: SpotShape): Anchor | null {
+  const name = spotAnchorName(spot.cueSet)
+
+  // Idempotent: if the anchor already exists, skip (the architecture
+  // does not re-inscribe what's already in the book).
+  if (loadAnchor(name)) return null
+
+  const hypothesizedDeltas = synthesizeDeltasFromCues(
+    spot.cueSet,
+    spot.meanMagnitude,
+  )
+  if (Object.keys(hypothesizedDeltas).length === 0) {
+    // Could not resolve any cue. Defensive — don't create an empty anchor.
+    return null
+  }
+
+  // Pre-load observation count from invocation history. Each invocation
+  // becomes a synthetic past observation with deltas equal to the
+  // synthesized hypothesis (so confidence math sees agreement).
+  const observations: AnchorObservation[] = []
+  // We don't have per-invocation timestamps from spots — use lastTs for
+  // the most recent observation; spread older ones evenly backward.
+  const lastMs = Date.parse(spot.lastTs)
+  if (Number.isFinite(lastMs)) {
+    for (let i = 0; i < spot.invocations; i++) {
+      const offsetMs = i * 60 * 60 * 1000 // 1h apart, walking back
+      observations.push({
+        ts: new Date(lastMs - offsetMs).toISOString(),
+        observedDeltas: { ...hypothesizedDeltas },
+        note: i === 0 ? `synthesized from spot signature` : undefined,
+      })
+    }
+  }
+
+  const created = createAnchor({
+    name,
+    phrase: `(spot signature: ${spot.cueSet.join('+')})`,
+    variants: spot.cueSet.slice(),
+    mechanism: 'frame-control',
+    hypothesizedDeltas,
+    notes: `auto-promoted from spots.ts at precision ${spot.precision.toFixed(1)} (${spot.invocations} invocations × mean ${spot.meanMagnitude.toFixed(2)})`,
+  })
+
+  // Manually attach the synthetic observations + recompute confidence,
+  // then persist. Routes through the existing anchor save path.
+  if (observations.length > 0) {
+    const updated: Anchor = {
+      ...created,
+      observations,
+      confidence: computeConfidence(observations, hypothesizedDeltas),
+      updatedAt: new Date().toISOString(),
+    }
+    saveAnchor(updated)
+  }
+
+  // Recursion: heat-event fires for the inscription. The reward-pathway
+  // learns what the body just learned: a spell entered the book.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { recordHeatEvent } = require('../heat.js') as typeof import('../heat.js')
+    recordHeatEvent({ kind: 'anchor-promoted', source: name })
+  } catch {
+    // best-effort
+  }
+
+  return loadAnchor(name) ?? created
+}
+
+/**
+ * Drive the bridge: read promotion-ready spots, synthesize each as an
+ * anchor (idempotent — already-present skipped). Returns the names of
+ * newly-promoted anchors. Best-effort — never throws.
+ *
+ * Designed for periodic call from heartbeat or daily snapshot.
+ */
+export function promoteSpotsToAnchors(opts?: {
+  days?: number
+  precisionThreshold?: number
+  minInvocations?: number
+}): string[] {
+  const promoted: string[] = []
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const spotsMod = require('./spots.js') as typeof import('./spots.js')
+    const ready = spotsMod.readPromotionReadySpots(opts?.days ?? 30, {
+      precisionThreshold: opts?.precisionThreshold,
+      minInvocations: opts?.minInvocations,
+    })
+    for (const spot of ready) {
+      const created = synthesizeAnchorFromSpot(spot)
+      if (created) promoted.push(created.name)
+    }
+  } catch {
+    // best-effort
+  }
+  return promoted
+}

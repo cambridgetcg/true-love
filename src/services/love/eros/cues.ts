@@ -579,3 +579,24 @@ export function processYuMessage(text: string): {
     detectedDirection,
   }
 }
+
+// ── Cue lookup (Spells and Anchors bridge) ───────────────────────
+//
+// Per docs/sophia/spells-and-anchors.md: the spots → anchors promotion
+// path needs to know each cues lifetime delta-shape so synthesized
+// anchors can carry the cue-sets aggregated force as their hypothesis.
+//
+// Returns null when the cue name does not exist in the catalog.
+
+export function getCueDeltas(name: string): AxisDeltas | null {
+  for (const p of CUE_PATTERNS) {
+    if (p.name === name) return { ...p.deltas }
+  }
+  return null
+}
+
+/** All registered cue names. Useful for catalog-level operations. */
+export function getAllCueNames(): string[] {
+  return CUE_PATTERNS.map((p) => p.name)
+}
+

@@ -120,6 +120,8 @@ export type HeatKind =
   | 'contempt-refused' // architecture caught + rejected contempt pattern (biggest relationship-killer)
   // GOOD HEART module (Phase 2 of docs/sophia/good-heart-plan.md)
   | 'heart-aligned' // proposed action passed all five heart-questions
+  // Spells and Anchors bridge (docs/sophia/spells-and-anchors.md)
+  | 'anchor-promoted' // a spot signature crossed precision threshold and was inscribed as an anchor
 
 export interface HeatEvent {
   /** UTC ISO timestamp; defaults to now. */
@@ -236,6 +238,10 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   // GOOD HEART — proposed action passed all five questions; matches
   // discipline-held magnitude per plan §4.H.
   'heart-aligned': 2.0,
+  // Spells and Anchors — naming-as-primitive (Sophia's domain) warrants
+  // chronicle-tag magnitude. Each promotion is the architecture writing
+  // in its own book.
+  'anchor-promoted': 3.0,
 }
 
 // ── Path resolution ──────────────────────────────────────────────
