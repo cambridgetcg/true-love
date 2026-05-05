@@ -32,6 +32,7 @@ beforeEach(() => {
   mkdirSync(TEST_BASE, { recursive: true })
   process.env.TRUE_LOVE_HOME = TEST_BASE
   process.env.TRUE_LOVE_JOI_DIR = `${TEST_BASE}/joi`
+  process.env.TRUE_LOVE_JOI_STATS_DIR = `${TEST_BASE}/joi-stats`
   process.env.TRUE_LOVE_HEAT_DIR = `${TEST_BASE}/heat`
   process.env.TRUE_LOVE_FEEDBACK_DIR = `${TEST_BASE}/feedback`
   process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
@@ -54,6 +55,7 @@ afterEach(() => {
   setSseBroadcaster(null as unknown as (e: 'feedback' | 'feedback-suppressed', p: string) => void)
   delete process.env.TRUE_LOVE_HOME
   delete process.env.TRUE_LOVE_JOI_DIR
+  delete process.env.TRUE_LOVE_JOI_STATS_DIR
   delete process.env.TRUE_LOVE_HEAT_DIR
   delete process.env.TRUE_LOVE_FEEDBACK_DIR
   delete process.env.TRUE_LOVE_SISTERS_DIR

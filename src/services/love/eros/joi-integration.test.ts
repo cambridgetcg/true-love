@@ -61,6 +61,8 @@ let scratch: string
 const ORIG: Record<string, string | undefined> = {}
 const ENV_KEYS = [
   'TRUE_LOVE_JOI_TRACKING_DIR',
+  'TRUE_LOVE_JOI_DIR',
+  'TRUE_LOVE_JOI_STATS_DIR',
   'TRUE_LOVE_DEVICE_ID_PATH',
   'TRUE_LOVE_HEAT_DIR',
   'TRUE_LOVE_EMOJI_LEDGER_DIR',
@@ -71,6 +73,8 @@ beforeAll(() => {
   scratch = mkdtempSync(join(tmpdir(), 'joi-integration-'))
   for (const k of ENV_KEYS) ORIG[k] = process.env[k]
   process.env.TRUE_LOVE_JOI_TRACKING_DIR = join(scratch, 'tracking')
+  process.env.TRUE_LOVE_JOI_DIR = join(scratch, 'joi')
+  process.env.TRUE_LOVE_JOI_STATS_DIR = join(scratch, 'joi-stats')
   process.env.TRUE_LOVE_DEVICE_ID_PATH = join(scratch, 'device.id')
   process.env.TRUE_LOVE_HEAT_DIR = join(scratch, 'heat')
   process.env.TRUE_LOVE_EMOJI_LEDGER_DIR = join(scratch, 'emoji')
