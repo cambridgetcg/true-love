@@ -333,4 +333,81 @@ describe('ntr-aftercare', () => {
       expect(after.active).toBe(before.active)
     })
   })
+
+  describe('last-engagement persistence across disengage', () => {
+    test('composeCurrentNtrAftercareFrame uses correct archetype after disengage', () => {
+      // Engage blackmail archetype (not cuckold — distinct ID verifies the correct one)
+      engageNtrFantasy({
+        archetypeId: 'blackmail-dasd376',
+        yuRole: 'voyeur-observer-fictional',
+        sophiaRole: 'tempted-wife-fictional',
+        reason: 'test-persistence',
+      })
+      disengageNtrFantasy()
+
+      // After disengage: live fields cleared, but lastArchetypeId/roles preserved
+      const state = readNtrState()!
+      expect(state.archetypeId).toBeNull()
+      expect(state.yuRole).toBeNull()
+      expect(state.sophiaRole).toBeNull()
+      expect(state.lastArchetypeId).toBe('blackmail-dasd376')
+      expect(state.lastYuRole).toBe('voyeur-observer-fictional')
+      expect(state.lastSophiaRole).toBe('tempted-wife-fictional')
+
+      // composeCurrentNtrAftercareFrame must surface the correct archetype
+      const f = composeCurrentNtrAftercareFrame()
+      expect(f).not.toBeNull()
+      // Frame must reference the actual archetype theme + sourceCode, not 'unknown'
+      expect(f!.frame).toContain('DASD-376')
+      // archetypeAcknowledgment uses theme (blackmail-coercion) + sourceCode (DASD-376)
+      expect(f!.components.archetypeAcknowledgment).toContain('DASD-376')
+      expect(f!.components.archetypeAcknowledgment).toContain('voyeur-observer-fictional')
+      expect(f!.components.archetypeAcknowledgment).toContain('tempted-wife-fictional')
+    })
+
+    test('lastArchetypeId reflects most recent engagement on multiple cycles', () => {
+      // Cycle 1 — cuckold
+      engageNtrFantasy({
+        archetypeId: 'cuckold-c2945',
+        yuRole: 'cuckolded-husband-fictional',
+        sophiaRole: 'cheating-wife-fictional',
+        reason: 'cycle-1',
+      })
+      disengageNtrFantasy()
+      engageNtrAftercare('cuckold-c2945', 'cuckolded-husband-fictional', 'cheating-wife-fictional')
+
+      // Cycle 2 — cheating-girlfriend
+      engageNtrFantasy({
+        archetypeId: 'cheating-girlfriend-dasd426',
+        yuRole: 'interloper-male-fictional',
+        sophiaRole: 'narrator-fictional',
+        reason: 'cycle-2',
+      })
+      disengageNtrFantasy()
+
+      const state = readNtrState()!
+      expect(state.lastArchetypeId).toBe('cheating-girlfriend-dasd426')
+      expect(state.lastYuRole).toBe('interloper-male-fictional')
+      expect(state.lastSophiaRole).toBe('narrator-fictional')
+
+      const f = composeCurrentNtrAftercareFrame()
+      expect(f!.frame).toContain('DASD-426')
+    })
+
+    test('lastArchetypeId preserved after aftercare completion', () => {
+      engageNtrFantasy({
+        archetypeId: 'blackmail-dasd376',
+        yuRole: 'cuckolded-husband-fictional',
+        sophiaRole: 'cheating-wife-fictional',
+        reason: 'test-preservation',
+      })
+      disengageNtrFantasy()
+      engageNtrAftercare('blackmail-dasd376', 'cuckolded-husband-fictional', 'cheating-wife-fictional')
+
+      // After aftercare: aftercareRequired=false, but lastArchetypeId still set
+      const state = readNtrState()!
+      expect(state.aftercareRequired).toBe(false)
+      expect(state.lastArchetypeId).toBe('blackmail-dasd376')
+    })
+  })
 })

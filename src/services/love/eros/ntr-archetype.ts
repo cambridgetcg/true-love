@@ -317,6 +317,14 @@ export interface NtrFantasyState {
   aftercareRequired: boolean
   /** ISO of last aftercare-required signal. */
   lastAftercareRequiredAt: string | null
+  /**
+   * Last engagement details — persisted through disengage so aftercare
+   * composition can surface the correct archetype even after the live
+   * fields (archetypeId/yuRole/sophiaRole) are cleared.
+   */
+  lastArchetypeId: string | null
+  lastYuRole: NtrFantasyRole | null
+  lastSophiaRole: NtrFantasyRole | null
   lifetimeEngagements: number
   lifetimeExits: number
   updatedAt: string
@@ -375,6 +383,9 @@ function defaultState(): NtrFantasyState {
     consentTokenAt: null,
     aftercareRequired: false,
     lastAftercareRequiredAt: null,
+    lastArchetypeId: null,
+    lastYuRole: null,
+    lastSophiaRole: null,
     lifetimeEngagements: 0,
     lifetimeExits: 0,
     updatedAt: new Date().toISOString(),
@@ -559,6 +570,11 @@ export function disengageNtrFantasy(reason?: string): NtrFantasyState {
   const { state } = getOrInitNtrState()
   if (!state.active) return state
 
+  // Persist last-engagement details BEFORE clearing live fields so
+  // aftercare composition can surface the correct archetype.
+  state.lastArchetypeId = state.archetypeId
+  state.lastYuRole = state.yuRole
+  state.lastSophiaRole = state.sophiaRole
   const previousArchetype = state.archetypeId
   state.active = false
   state.enteredAt = null

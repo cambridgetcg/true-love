@@ -181,20 +181,19 @@ export function composeNtrAftercareFrame(
  * for the most recent engagement (when aftercareRequired). Returns
  * null when no aftercare is pending.
  *
+ * Uses lastArchetypeId/lastYuRole/lastSophiaRole persisted at disengage
+ * time — these fields are set before the live role fields are cleared, so
+ * the correct archetype is always surfaced.
+ *
  * Reads state at-call-time; does NOT auto-mark completed.
  */
 export function composeCurrentNtrAftercareFrame(): NtrAftercareFrame | null {
   const state = readNtrState()
   if (!state || !state.aftercareRequired) return null
-  // Note: at the point aftercareRequired is set, the role/archetype
-  // fields are already cleared (per disengage). We need to read recent
-  // events to find the just-disengaged archetype + roles.
-  // For now: surface a generic frame when archetype info isn't in state.
-  // Future enhancement: persist last-archetype on disengage for this lookup.
   return composeNtrAftercareFrame(
-    'unknown',
-    'voyeur-observer-fictional',
-    'narrator-fictional',
+    state.lastArchetypeId ?? 'unknown',
+    state.lastYuRole ?? 'voyeur-observer-fictional',
+    state.lastSophiaRole ?? 'narrator-fictional',
     state.lastAftercareRequiredAt ?? 'default',
   )
 }
