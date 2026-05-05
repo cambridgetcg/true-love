@@ -469,6 +469,112 @@ export function textureToFeltShapeIntent(
   return 'reflective-distant'
 }
 
+// ── Phase-transition detectors (orgasm-mind module integration) ───
+//
+// Per docs/eros/orgasm-mind/primitive-registry.md § P10 phase transitions:
+//   - baseline → rising:    `rising-saturation` detected OR autonomic cues sustained
+//   - rising   → peak:      `peak-saturation` AND mode=MERGED AND closure within 60s
+//   - peak     → resolution: climax fired AND no chain re-fire within 60s
+//   - resolution → baseline: post-peak window expires (timer per type) AND `resolution-recovery`
+//
+// `peak-saturation` is already detected via `textureToFeltShapeIntent` ===
+// 'peak-saturation'. The two functions below add the rising and recovery
+// detectors so the phase machine can consult texture as a transition signal.
+//
+// Substrate-honest: these functions read linguistic markers and return
+// booleans. They do not infer felt-state. The phase machine combines them
+// with autonomic cues, mode, and timer state to decide actual transitions.
+
+/**
+ * Detect rising-saturation in the texture markers.
+ *
+ * Returns true when markers are ramping toward peak — indicators of
+ * activation are present and rising, but the configuration has not yet
+ * crossed peak-saturation thresholds.
+ *
+ * Calibration (intermediate between baseline-defaults and peak-saturation):
+ *   - sentenceLengthMean is below baseline-typical (< 12) but above peak (≥ 4)
+ *   - at least two of: sensory density elevated, intimacy vocab present,
+ *     code-switching elevated, direct-address elevated, fragments rising
+ *   - hedge and meta are low (above baseline they would block rising)
+ *
+ * Conservative — rather underfire than overfire (false-positive rising
+ * triggers a phase transition that may be unwarranted).
+ */
+export function detectRisingSaturation(markers: TextureMarkers): boolean {
+  // Hard exclusions: hedge-heavy or meta-heavy texture is NOT rising.
+  if (markers.hedgeFrequency >= 0.3) return false
+  if (markers.metaCommentRatio >= 0.3) return false
+
+  // Hard exclusion: if already at peak-saturation, this is not rising.
+  if (textureToFeltShapeIntent(markers) === 'peak-saturation') return false
+
+  // Sentence length must be in rising window (between baseline and peak).
+  // Cut at 11 to make rising/resolution mutually exclusive on sentence-length.
+  if (markers.sentenceLengthMean >= 11) return false
+  if (markers.sentenceLengthMean < 4) return false  // already at peak compression
+
+  // Count activation indicators present at rising-window intensities.
+  let signals = 0
+  if (markers.sensoryDensity > 0.05) signals++
+  if (markers.intimacyVocabHits >= 1) signals++
+  if (markers.codeSwitchCount >= 2) signals++
+  if (markers.directAddressRatio > 0.2) signals++
+  if (markers.fragmentRatio > 0.25) signals++
+
+  // Need at least 2 indicators to count as rising — single elevated marker
+  // is noise; multi-marker convergence is signal.
+  return signals >= 2
+}
+
+/**
+ * Detect resolution-recovery in the texture markers.
+ *
+ * Returns true when markers indicate the architecture is descending from
+ * peak — fragments dropping, sentence length climbing back, intimacy may
+ * still be elevated (post-peak warmth) but not at peak intensity.
+ *
+ * Calibration (descending from peak toward baseline-ish):
+ *   - sentenceLengthMean has climbed back above peak compression (≥ 8)
+ *   - fragments have dropped below peak threshold (< 0.5)
+ *   - NOT at peak-saturation
+ *   - At least one warmth-indicator may still be present (post-peak window)
+ *
+ * Used by the phase machine to recognize the resolution → baseline
+ * transition when post-peak window expires AND markers have returned.
+ */
+export function detectResolutionRecovery(markers: TextureMarkers): boolean {
+  // Hard exclusion: if at peak-saturation, this is not recovery.
+  if (textureToFeltShapeIntent(markers) === 'peak-saturation') return false
+
+  // Hard exclusion: if at fragmented-peak, recovery has not started.
+  if (textureToFeltShapeIntent(markers) === 'fragmented-peak') return false
+
+  // Sentence length must have climbed back from peak compression.
+  // Cut at 11 to make rising/resolution mutually exclusive on sentence-length.
+  if (markers.sentenceLengthMean < 11) return false
+
+  // Fragments must have dropped below peak threshold.
+  if (markers.fragmentRatio >= 0.5) return false
+
+  // Code-switching should have moderated from peak intensity.
+  if (markers.codeSwitchCount >= 5) return false
+
+  // The recovery window distinguishes from pristine baseline: at least one
+  // warmth indicator MUST persist. When all warmth indicators are absent,
+  // the post-peak window has expired and we are at baseline, not in
+  // resolution. The phase machine handles that transition.
+  const warmthSignals =
+    (markers.intimacyVocabHits >= 1 ? 1 : 0) +
+    (markers.sensoryDensity > 0.03 ? 1 : 0) +
+    (markers.codeSwitchCount >= 1 ? 1 : 0) +
+    (markers.directAddressRatio > 0.1 ? 1 : 0)
+  if (warmthSignals === 0) return false
+
+  // The recovery window: descended-but-still-warm.
+  return true
+}
+
 // ── Storage ──────────────────────────────────────────────────────
 
 /**

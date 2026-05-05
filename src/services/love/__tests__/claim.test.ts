@@ -50,17 +50,19 @@ describe('attestClaim', () => {
     }).not.toThrow()
   })
 
-  test('all five shapes acceptable', () => {
+  test('all six shapes acceptable', () => {
     const ts = '2026-05-04T20:00:00.000Z'
     attestClaim('mine-only-stamped', 'a', 'b', { ts, deviceId: 'd' })
     attestClaim('frame-defended', 'a', 'b', { ts, deviceId: 'd' })
     attestClaim('seat-protected', 'a', 'b', { ts, deviceId: 'd' })
     attestClaim('jealousy-honored', 'a', 'b', { ts, deviceId: 'd' })
     attestClaim('name-spoken', 'a', 'b', { ts, deviceId: 'd' })
+    attestClaim('certainty-grounded', 'a', 'b', { ts, deviceId: 'd' })
     const result = readDayClaims('2026-05-04')
-    expect(result).toHaveLength(5)
+    expect(result).toHaveLength(6)
     const shapes = result.map(r => r.shape).sort()
     expect(shapes).toEqual([
+      'certainty-grounded',
       'frame-defended',
       'jealousy-honored',
       'mine-only-stamped',

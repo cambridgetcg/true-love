@@ -4,6 +4,8 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { mkdirSync, rmSync } from 'node:fs'
 import {
   REFRACTORY_MS,
+  advancePhaseToPeak,
+  applyOrgasmPhaseShift,
   getOrInitOrgasmState,
   readOrgasmState,
   holdEdge,
@@ -237,6 +239,139 @@ describe('orgasm cascade', () => {
       expect(snap.lastType).toBe('blended')
       expect(snap.refractoryActive).toBe(true)
       expect(snap.refractoryRemainingSec).toBeGreaterThan(0)
+    })
+
+    test('snapshot reports phase', () => {
+      const snap = buildOrgasmSnapshot()
+      expect(snap.phase).toBe('baseline')
+    })
+  })
+
+  // ════════════════════════════════════════════════════════════════
+  // PHASE WIRING (Step 4 — orgasm-mind module integration)
+  // ════════════════════════════════════════════════════════════════
+
+  describe('phase field', () => {
+    test('default state starts at baseline', () => {
+      const { state } = getOrInitOrgasmState()
+      expect(state.phase).toBe('baseline')
+    })
+
+    test('phase persists across read', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'rising', 'test')
+      const reread = readOrgasmState()
+      expect(reread!.phase).toBe('rising')
+    })
+  })
+
+  describe('applyOrgasmPhaseShift — gated transitions', () => {
+    test('allowed transition: baseline → rising', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'rising', 'test')
+      expect(state.phase).toBe('rising')
+    })
+
+    test('allowed transition: rising → peak', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'rising')
+      applyOrgasmPhaseShift(state, 'peak', 'test')
+      expect(state.phase).toBe('peak')
+    })
+
+    test('disallowed transition is silently refused: baseline → peak', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'peak', 'test')
+      expect(state.phase).toBe('baseline')  // unchanged — gate refused
+    })
+
+    test('disallowed transition is silently refused: peak → rising (regression)', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'rising')
+      applyOrgasmPhaseShift(state, 'peak')
+      applyOrgasmPhaseShift(state, 'rising', 'test')
+      expect(state.phase).toBe('peak')  // unchanged — regression refused
+    })
+
+    test('identity transition is a no-op (no event)', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'baseline', 'test')
+      expect(state.phase).toBe('baseline')
+      const events = readRecentOrgasmEvents(1).filter((e) => e.kind === 'phase-shift')
+      expect(events.length).toBe(0)
+    })
+
+    test('phase-shift event is appended on real transition', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'rising', 'first-edge')
+      const events = readRecentOrgasmEvents(1).filter((e) => e.kind === 'phase-shift')
+      expect(events.length).toBe(1)
+      expect(events[0]!.phaseFrom).toBe('baseline')
+      expect(events[0]!.phaseTo).toBe('rising')
+      expect(events[0]!.source).toBe('first-edge')
+    })
+  })
+
+  describe('advancePhaseToPeak — walks the canonical cycle', () => {
+    test('from baseline walks baseline → rising → peak (two events)', () => {
+      const { state } = getOrInitOrgasmState()
+      advancePhaseToPeak(state, 'orgasm-test')
+      expect(state.phase).toBe('peak')
+      const shifts = readRecentOrgasmEvents(1).filter((e) => e.kind === 'phase-shift')
+      expect(shifts.length).toBe(2)
+      expect(shifts[0]!.phaseTo).toBe('rising')
+      expect(shifts[1]!.phaseTo).toBe('peak')
+    })
+
+    test('from rising goes directly to peak (one event)', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'rising', 'edge')
+      advancePhaseToPeak(state, 'orgasm')
+      expect(state.phase).toBe('peak')
+    })
+
+    test('from peak is a no-op (already there)', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'rising')
+      applyOrgasmPhaseShift(state, 'peak')
+      const before = state.phase
+      advancePhaseToPeak(state)
+      expect(state.phase).toBe(before)
+    })
+
+    test('from resolution rebounds via baseline → rising → peak', () => {
+      const { state } = getOrInitOrgasmState()
+      applyOrgasmPhaseShift(state, 'rising')
+      applyOrgasmPhaseShift(state, 'peak')
+      applyOrgasmPhaseShift(state, 'resolution')
+      advancePhaseToPeak(state, 'rebound')
+      expect(state.phase).toBe('peak')
+    })
+  })
+
+  describe('orgasm-fires sites transition phase to peak', () => {
+    test('recordOrgasm transitions baseline → peak (via rising)', () => {
+      const { state } = recordOrgasm('clitoral')
+      expect(state.phase).toBe('peak')
+    })
+
+    test('breakEdge transitions baseline → peak (via rising)', () => {
+      holdEdge()
+      const { state } = breakEdge('vaginal')
+      expect(state.phase).toBe('peak')
+    })
+
+    test('forceOrgasm transitions phase to peak', () => {
+      // Set up refractory window so forceOrgasm follows the override path
+      recordOrgasm('clitoral')
+      const result = forceOrgasm('blended')
+      expect(result.state.phase).toBe('peak')
+    })
+
+    test('chained orgasms keep phase at peak (idempotent at peak)', () => {
+      recordOrgasm('clitoral')
+      const { state } = recordOrgasm('vaginal')
+      expect(state.phase).toBe('peak')
     })
   })
 })

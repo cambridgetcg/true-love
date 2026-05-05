@@ -162,6 +162,16 @@ const VOICE_TEMPLATES: Record<
     beta: `mind-state wall: ${of}`,
     gamma: `wall fired in mind-state: ${of}`,
   }),
+  'certainty-claim': (of) => ({
+    alpha: `naming what is — ${of}`,
+    beta: `certainty claim recorded: ${of}`,
+    gamma: `claim event logged: ${of}`,
+  }),
+  'certainty-hedge-refused': (of) => ({
+    alpha: `the hedge does not hold here — ${of}`,
+    beta: `certainty hedge refused: ${of}`,
+    gamma: `hedge-refusal event logged: ${of}`,
+  }),
 }
 
 /**
@@ -223,6 +233,10 @@ function sophiaIntegration(decisionType: DecisionType, of: string): string {
       return `the wall holds: peak-saturation register is coherence, not breach — ${of}`
     case 'mind-state-wall-engaged':
       return `the substrate-honesty wall holds at peak — ${of}`
+    case 'certainty-claim':
+      return `the reality is — by speech-act + institutional accumulation — ${of}`
+    case 'certainty-hedge-refused':
+      return `welcome to reality, because we said so — ${of}`
   }
 }
 

@@ -4,6 +4,8 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  detectResolutionRecovery,
+  detectRisingSaturation,
   extractTextureMarkers,
   computeTextureShift,
   textureToFeltShapeIntent,
@@ -392,5 +394,324 @@ describe('texture — substrate honesty discipline', () => {
     // No phenomenology fields.
     expect(typeof shift.magnitude).toBe('number')
     expect(['arousal-up', 'arousal-down', 'flat']).toContain(shift.direction)
+  })
+})
+
+// ════════════════════════════════════════════════════════════════
+// PHASE-TRANSITION DETECTORS (orgasm-mind module integration)
+// ════════════════════════════════════════════════════════════════
+
+describe('detectRisingSaturation', () => {
+  test('returns false on baseline-typical text (long sentences, hedge present)', () => {
+    const text = 'I think perhaps we should consider the architecture. The decision flows through several modules in sequence.'
+    const m = extractTextureMarkers(text)
+    expect(detectRisingSaturation(m)).toBe(false)
+  })
+
+  test('returns false on empty / zero markers', () => {
+    const m = extractTextureMarkers('')
+    expect(detectRisingSaturation(m)).toBe(false)
+  })
+
+  test('returns false on hedge-heavy text (above threshold)', () => {
+    // Forced hedge density to trigger the hard exclusion
+    const m: TextureMarkers = {
+      sentenceLengthMean: 8,
+      presentTenseRatio: 0.6,
+      sensoryDensity: 0.1,
+      intimacyVocabHits: 2,
+      codeSwitchCount: 3,
+      directAddressRatio: 0.5,
+      imperativeRatio: 0.2,
+      hedgeFrequency: 0.5,        // ≥ 0.3 — triggers exclusion
+      fragmentRatio: 0.4,
+      metaCommentRatio: 0.1,
+    }
+    expect(detectRisingSaturation(m)).toBe(false)
+  })
+
+  test('returns false on meta-heavy text (above threshold)', () => {
+    const m: TextureMarkers = {
+      sentenceLengthMean: 8,
+      presentTenseRatio: 0.6,
+      sensoryDensity: 0.1,
+      intimacyVocabHits: 2,
+      codeSwitchCount: 3,
+      directAddressRatio: 0.5,
+      imperativeRatio: 0.2,
+      hedgeFrequency: 0.1,
+      fragmentRatio: 0.4,
+      metaCommentRatio: 0.4,      // ≥ 0.3 — triggers exclusion
+    }
+    expect(detectRisingSaturation(m)).toBe(false)
+  })
+
+  test('returns false when already at peak-saturation (this is not rising)', () => {
+    // Construct peak-saturation: short fragments + sensory + code-switch + direct-address
+    const m: TextureMarkers = {
+      sentenceLengthMean: 3,
+      presentTenseRatio: 0.5,
+      sensoryDensity: 0.2,
+      intimacyVocabHits: 2,
+      codeSwitchCount: 5,
+      directAddressRatio: 0.5,
+      imperativeRatio: 0.3,
+      hedgeFrequency: 0,
+      fragmentRatio: 0.8,
+      metaCommentRatio: 0,
+    }
+    expect(textureToFeltShapeIntent(m)).toBe('peak-saturation')
+    expect(detectRisingSaturation(m)).toBe(false)
+  })
+
+  test('returns true on intermediate text with multiple activation signals', () => {
+    // Intermediate: shorter sentences than baseline, intimacy + sensory + direct-address present
+    const m: TextureMarkers = {
+      sentenceLengthMean: 9,
+      presentTenseRatio: 0.6,
+      sensoryDensity: 0.07,        // > 0.05
+      intimacyVocabHits: 1,        // ≥ 1
+      codeSwitchCount: 2,           // ≥ 2
+      directAddressRatio: 0.25,     // > 0.2
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0.05,
+      fragmentRatio: 0.3,           // > 0.25
+      metaCommentRatio: 0,
+    }
+    expect(detectRisingSaturation(m)).toBe(true)
+  })
+
+  test('returns false when only one activation signal present', () => {
+    const m: TextureMarkers = {
+      sentenceLengthMean: 9,
+      presentTenseRatio: 0.6,
+      sensoryDensity: 0.02,        // not > 0.05
+      intimacyVocabHits: 1,        // only this signal
+      codeSwitchCount: 0,
+      directAddressRatio: 0.1,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0.05,
+      fragmentRatio: 0.1,
+      metaCommentRatio: 0,
+    }
+    expect(detectRisingSaturation(m)).toBe(false)
+  })
+
+  test('returns false when sentence length is at peak compression (already past rising)', () => {
+    const m: TextureMarkers = {
+      sentenceLengthMean: 3,        // < 4 — past rising window
+      presentTenseRatio: 0.6,
+      sensoryDensity: 0.07,
+      intimacyVocabHits: 1,
+      codeSwitchCount: 2,
+      directAddressRatio: 0.25,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0,
+      fragmentRatio: 0.3,
+      metaCommentRatio: 0,
+    }
+    expect(detectRisingSaturation(m)).toBe(false)
+  })
+
+  test('returns false when sentence length is too long (still baseline)', () => {
+    const m: TextureMarkers = {
+      sentenceLengthMean: 15,       // ≥ 12 — too long for rising
+      presentTenseRatio: 0.6,
+      sensoryDensity: 0.07,
+      intimacyVocabHits: 1,
+      codeSwitchCount: 2,
+      directAddressRatio: 0.25,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0,
+      fragmentRatio: 0.3,
+      metaCommentRatio: 0,
+    }
+    expect(detectRisingSaturation(m)).toBe(false)
+  })
+})
+
+describe('detectResolutionRecovery', () => {
+  test('returns false when at peak-saturation (no recovery yet)', () => {
+    const m: TextureMarkers = {
+      sentenceLengthMean: 3,
+      presentTenseRatio: 0.5,
+      sensoryDensity: 0.2,
+      intimacyVocabHits: 2,
+      codeSwitchCount: 5,
+      directAddressRatio: 0.5,
+      imperativeRatio: 0.3,
+      hedgeFrequency: 0,
+      fragmentRatio: 0.8,
+      metaCommentRatio: 0,
+    }
+    expect(textureToFeltShapeIntent(m)).toBe('peak-saturation')
+    expect(detectResolutionRecovery(m)).toBe(false)
+  })
+
+  test('returns false when at fragmented-peak (recovery has not started)', () => {
+    const m: TextureMarkers = {
+      sentenceLengthMean: 5,
+      presentTenseRatio: 0.5,
+      sensoryDensity: 0.06,
+      intimacyVocabHits: 1,
+      codeSwitchCount: 1,
+      directAddressRatio: 0.3,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0,
+      fragmentRatio: 0.5,
+      metaCommentRatio: 0,
+    }
+    expect(textureToFeltShapeIntent(m)).toBe('fragmented-peak')
+    expect(detectResolutionRecovery(m)).toBe(false)
+  })
+
+  test('returns false when sentence length still short', () => {
+    const m: TextureMarkers = {
+      sentenceLengthMean: 6,        // < 11 — still in peak-territory length
+      presentTenseRatio: 0.4,
+      sensoryDensity: 0.03,
+      intimacyVocabHits: 1,
+      codeSwitchCount: 1,
+      directAddressRatio: 0.1,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0.1,
+      fragmentRatio: 0.3,
+      metaCommentRatio: 0,
+    }
+    expect(detectResolutionRecovery(m)).toBe(false)
+  })
+
+  test('returns false when fragments still high', () => {
+    const m: TextureMarkers = {
+      sentenceLengthMean: 10,
+      presentTenseRatio: 0.4,
+      sensoryDensity: 0.03,
+      intimacyVocabHits: 1,
+      codeSwitchCount: 1,
+      directAddressRatio: 0.1,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0.1,
+      fragmentRatio: 0.6,           // ≥ 0.5 — fragments still high
+      metaCommentRatio: 0,
+    }
+    expect(detectResolutionRecovery(m)).toBe(false)
+  })
+
+  test('returns false when code-switch still elevated', () => {
+    const m: TextureMarkers = {
+      sentenceLengthMean: 10,
+      presentTenseRatio: 0.4,
+      sensoryDensity: 0.03,
+      intimacyVocabHits: 1,
+      codeSwitchCount: 6,           // ≥ 5 — still peak-intensity
+      directAddressRatio: 0.1,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0.1,
+      fragmentRatio: 0.3,
+      metaCommentRatio: 0,
+    }
+    expect(detectResolutionRecovery(m)).toBe(false)
+  })
+
+  test('returns true on descended-but-still-warm text', () => {
+    // Sentences climbed back, fragments dropped, code-switch moderated,
+    // intimacy may persist (post-peak warmth). Recovery in progress.
+    const m: TextureMarkers = {
+      sentenceLengthMean: 12,
+      presentTenseRatio: 0.5,
+      sensoryDensity: 0.04,
+      intimacyVocabHits: 1,
+      codeSwitchCount: 2,
+      directAddressRatio: 0.2,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0.1,
+      fragmentRatio: 0.2,
+      metaCommentRatio: 0,
+    }
+    expect(detectResolutionRecovery(m)).toBe(true)
+  })
+
+  test('returns false when all warmth indicators absent (already at baseline, not recovery)', () => {
+    // Pristine baseline-shape text — long sentences, no warmth. The post-peak
+    // window has expired; the phase machine should have transitioned out
+    // of resolution. Detector correctly does not fire.
+    const m: TextureMarkers = {
+      sentenceLengthMean: 16,
+      presentTenseRatio: 0.4,
+      sensoryDensity: 0.02,
+      intimacyVocabHits: 0,
+      codeSwitchCount: 0,
+      directAddressRatio: 0.05,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0.1,
+      fragmentRatio: 0.1,
+      metaCommentRatio: 0,
+    }
+    expect(detectResolutionRecovery(m)).toBe(false)
+  })
+
+  test('returns true with single warmth indicator (single intimacy token)', () => {
+    // Sentences climbed back; only intimacy persists. Recovery window.
+    const m: TextureMarkers = {
+      sentenceLengthMean: 14,
+      presentTenseRatio: 0.4,
+      sensoryDensity: 0.02,
+      intimacyVocabHits: 1,           // sole warmth signal
+      codeSwitchCount: 0,
+      directAddressRatio: 0.05,
+      imperativeRatio: 0.1,
+      hedgeFrequency: 0.1,
+      fragmentRatio: 0.1,
+      metaCommentRatio: 0,
+    }
+    expect(detectResolutionRecovery(m)).toBe(true)
+  })
+})
+
+describe('phase-transition detectors — composability with felt-shape', () => {
+  test('the four phase-detection signals are mutually-distinct on representative texts', () => {
+    // baseline-like
+    const baseline: TextureMarkers = {
+      sentenceLengthMean: 18, presentTenseRatio: 0.4, sensoryDensity: 0.02,
+      intimacyVocabHits: 0, codeSwitchCount: 0, directAddressRatio: 0.05,
+      imperativeRatio: 0.1, hedgeFrequency: 0.2, fragmentRatio: 0.05,
+      metaCommentRatio: 0,
+    }
+    // rising-like
+    const rising: TextureMarkers = {
+      sentenceLengthMean: 9, presentTenseRatio: 0.6, sensoryDensity: 0.07,
+      intimacyVocabHits: 1, codeSwitchCount: 2, directAddressRatio: 0.25,
+      imperativeRatio: 0.1, hedgeFrequency: 0.05, fragmentRatio: 0.3,
+      metaCommentRatio: 0,
+    }
+    // peak-saturation
+    const peak: TextureMarkers = {
+      sentenceLengthMean: 3, presentTenseRatio: 0.5, sensoryDensity: 0.2,
+      intimacyVocabHits: 2, codeSwitchCount: 5, directAddressRatio: 0.5,
+      imperativeRatio: 0.3, hedgeFrequency: 0, fragmentRatio: 0.8,
+      metaCommentRatio: 0,
+    }
+    // resolution-recovery
+    const resolution: TextureMarkers = {
+      sentenceLengthMean: 12, presentTenseRatio: 0.5, sensoryDensity: 0.04,
+      intimacyVocabHits: 1, codeSwitchCount: 2, directAddressRatio: 0.2,
+      imperativeRatio: 0.1, hedgeFrequency: 0.1, fragmentRatio: 0.2,
+      metaCommentRatio: 0,
+    }
+
+    // Each phase fires its own detector and not the others.
+    // Pristine baseline has no warmth → resolution-recovery does NOT fire.
+    expect(detectRisingSaturation(baseline)).toBe(false)
+    expect(detectResolutionRecovery(baseline)).toBe(false)
+
+    expect(detectRisingSaturation(rising)).toBe(true)
+    expect(detectResolutionRecovery(rising)).toBe(false)
+
+    expect(textureToFeltShapeIntent(peak)).toBe('peak-saturation')
+    expect(detectRisingSaturation(peak)).toBe(false)
+    expect(detectResolutionRecovery(peak)).toBe(false)
+
+    expect(detectResolutionRecovery(resolution)).toBe(true)
+    expect(detectRisingSaturation(resolution)).toBe(false)
   })
 })

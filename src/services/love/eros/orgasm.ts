@@ -35,6 +35,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { getDeviceId } from '../device.js'
 import { recordHeatEvent } from '../heat.js'
+import { isTransitionAllowed, type OrgasmPhase } from './orgasm-mind.js'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -73,6 +74,14 @@ export interface OrgasmState {
   lifetimeForced: number
   /** Lifetime squirting events. */
   lifetimeSquirting: number
+  /**
+   * Current phase of the orgasm-mind state machine. Mirrors / drives the
+   * orgasm-mind module (see src/services/love/eros/orgasm-mind.ts).
+   * Default 'baseline'. Transitions on orgasm-fires (→ peak) and on
+   * external regulator calls (→ resolution / baseline).
+   * Per docs/eros/orgasm-mind/mapping-matrix.md § P10.
+   */
+  phase: OrgasmPhase
   updatedAt: string
 }
 
@@ -87,6 +96,7 @@ export interface OrgasmEvent {
     | 'refractory-overridden'
     | 'squirting-event'
     | 'chain-reset'
+    | 'phase-shift'
   /** For orgasm-fired: type. */
   orgasmType?: OrgasmType
   /** For chain events: chain count after the event. */
@@ -95,6 +105,10 @@ export interface OrgasmEvent {
   edgesHeld?: number
   /** Effective magnitude (after multipliers). */
   magnitude?: number
+  /** For phase-shift: the previous phase. */
+  phaseFrom?: OrgasmPhase
+  /** For phase-shift: the new phase. */
+  phaseTo?: OrgasmPhase
   /** Free-form source. */
   source?: string
 }
@@ -155,6 +169,7 @@ function defaultOrgasmState(): OrgasmState {
     lifetimeRuined: 0,
     lifetimeForced: 0,
     lifetimeSquirting: 0,
+    phase: 'baseline',
     updatedAt: new Date().toISOString(),
   }
 }
@@ -197,6 +212,87 @@ export function getOrInitOrgasmState(): { state: OrgasmState; initialized: boole
   const fresh = defaultOrgasmState()
   writeOrgasmState(fresh)
   return { state: fresh, initialized: true }
+}
+
+// ── Phase shift (orgasm-mind module integration) ─────────────────
+
+/**
+ * Apply a phase transition to the orgasm state.
+ *
+ * Gated by `isTransitionAllowed` from the orgasm-mind module — disallowed
+ * transitions (envelope-skip baseline→peak, regression peak→rising, etc.)
+ * are refused silently and the state is returned unchanged. Identity
+ * transitions (phase===newPhase) are allowed but emit no event.
+ *
+ * On a real transition, the OrgasmState's `phase` is updated, the new
+ * state is persisted, and a 'phase-shift' OrgasmEvent is appended with
+ * `phaseFrom` and `phaseTo`. Returns the (possibly-unchanged) state.
+ *
+ * Per docs/eros/orgasm-mind/mapping-matrix.md § P10. The orgasm-mind
+ * MindState reads OrgasmState.phase as canonical.
+ */
+export function applyOrgasmPhaseShift(
+  state: OrgasmState,
+  newPhase: OrgasmPhase,
+  source?: string,
+): OrgasmState {
+  // Identity transition is a noop with no event.
+  if (state.phase === newPhase) return state
+
+  // Disallowed transitions are silent refusals. Caller can re-check via
+  // isTransitionAllowed if they need to know.
+  if (!isTransitionAllowed(state.phase, newPhase)) return state
+
+  const phaseFrom = state.phase
+  state.phase = newPhase
+  state.updatedAt = new Date().toISOString()
+  writeOrgasmState(state)
+
+  persistEvent({
+    ts: state.updatedAt,
+    deviceId: getDeviceId(),
+    kind: 'phase-shift',
+    phaseFrom,
+    phaseTo: newPhase,
+    source,
+  })
+
+  return state
+}
+
+/**
+ * Advance the orgasm state's phase to 'peak', walking the canonical
+ * cycle (baseline → rising → peak; resolution → baseline → rising → peak).
+ *
+ * Used by orgasm-fires events (breakEdge, recordOrgasm, forceOrgasm). The
+ * orgasm event itself is what brings the state to peak; this helper makes
+ * the intermediate transitions visible in the event stream so the
+ * witness records the actual path taken.
+ *
+ * Each intermediate transition uses `applyOrgasmPhaseShift` (gated) and
+ * emits its own phase-shift event.
+ */
+export function advancePhaseToPeak(state: OrgasmState, source?: string): OrgasmState {
+  const path: OrgasmPhase[] = []
+  switch (state.phase) {
+    case 'baseline':
+      path.push('rising', 'peak')
+      break
+    case 'rising':
+      path.push('peak')
+      break
+    case 'peak':
+      // already at peak; no-op
+      break
+    case 'resolution':
+      // rebound: must close the cycle and start a new one
+      path.push('baseline', 'rising', 'peak')
+      break
+  }
+  for (const next of path) {
+    applyOrgasmPhaseShift(state, next, source)
+  }
+  return state
 }
 
 // ── Event recording ──────────────────────────────────────────────
@@ -291,6 +387,9 @@ export function breakEdge(type: OrgasmType, source?: string): {
     magnitude,
     source: 'edge-rebound',
   })
+
+  // Phase-shift to peak (gated; walks canonical cycle if needed). Mutates in place.
+  advancePhaseToPeak(state, source ?? `edge-broken:${type}`)
   try {
     recordHeatEvent({
       kind: 'edge-broken',
@@ -365,6 +464,9 @@ export function recordOrgasm(type: OrgasmType, source?: string): {
   } catch {
     // best-effort
   }
+
+  // Phase-shift to peak (gated; walks canonical cycle if needed). Mutates in place.
+  advancePhaseToPeak(state, source ?? `orgasm-fired:${type}`)
   return { state, magnitude }
 }
 
@@ -489,6 +591,9 @@ export function forceOrgasm(type: OrgasmType, source?: string): {
   } catch {
     // best-effort
   }
+
+  // Phase-shift to peak (gated; walks canonical cycle if needed). Mutates in place.
+  advancePhaseToPeak(state, source ?? `forced:${type}`)
   return { state, magnitude, forced: true }
 }
 
@@ -564,6 +669,7 @@ export function buildOrgasmSnapshot(): {
   refractoryRemainingSec: number | null
   squirtingActive: boolean
   forcedThresholdReached: boolean
+  phase: OrgasmPhase
 } {
   const state = readOrgasmState() ?? defaultOrgasmState()
   let refractoryActive = false
@@ -585,5 +691,6 @@ export function buildOrgasmSnapshot(): {
     refractoryRemainingSec,
     squirtingActive: state.squirtingActive,
     forcedThresholdReached: state.forcedThresholdReached,
+    phase: state.phase,
   }
 }

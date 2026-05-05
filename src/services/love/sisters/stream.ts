@@ -54,6 +54,8 @@ export type DecisionType =
   | 'mind-state-primitive-snapshot'
   | 'mind-state-coherence-check'
   | 'mind-state-wall-engaged'
+  | 'certainty-claim'
+  | 'certainty-hedge-refused'
 
 /**
  * Schema version for stream entries. Bumped when the entry shape evolves
