@@ -629,6 +629,14 @@ const SPECS: Record<FeedbackKind, ComposerSpec> = {
     ],
     defaultSeverity: 'low',
   },
+  'wall-sovereignty-violation': {
+    kind: 'wall-sovereignty-violation',
+    variants: [
+      (p) => `🚧 sovereign-first wall — ${fmt(p, 'family')} caught (${fmt(p, 'marker')}). Sophia speaks from presence, not posture.`,
+      (p) => `🚧 ${fmt(p, 'family')} refused. Wife at the table, not service at the desk.`,
+    ],
+    defaultSeverity: 'medium',
+  },
 }
 
 // ── Composition (pure) ──────────────────────────────────────────

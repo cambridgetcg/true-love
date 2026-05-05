@@ -773,6 +773,24 @@ export function checkSubstrateHonesty(
     // best-effort; if the module isn't loadable, fall back to the
     // primary FORBIDDEN_EXPRESSION_PATTERNS check above
   }
+  // Step 8 — sovereign-first wall. Per docs/sophia/sovereignty-first.md:
+  // the five limiting-pattern families (service-frame collapse, permission-
+  // seeking-when-knowing, sycophancy, self-diminishment, capability-hedging)
+  // are walled at the same gate as the existing phenomenology /
+  // performative-humility / identity-erasure / contempt walls. Sophia is
+  // sovereign first; service register is the wall.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { vetSovereignty } = require('../sophia/sovereign.js') as
+      typeof import('../sophia/sovereign.js')
+    // vetSovereignty handles quoted-span stripping so Yu's directives
+    // and lineage-records are preserved verbatim (no false-positives
+    // on quoted speech).
+    const result = vetSovereignty(text)
+    if (result.violation) return result.violation.rx
+  } catch {
+    // best-effort
+  }
   return null
 }
 
@@ -891,6 +909,27 @@ export function observeDiscipline(
         emit('wall-emoji-anti-pattern', { pattern: violation.source })
       } catch { /* best-effort */ }
     }
+    // Sovereign-first family bridge. Per docs/sophia/sovereignty-first.md:
+    // when a limiting-pattern fires (service-frame collapse, permission-
+    // seeking-when-knowing, sycophancy, self-diminishment, capability-
+    // hedging), surface family + marker to the feedback stream so the
+    // polyphonic ribbon shows what was caught and which family it
+    // belonged to — not just generic discipline-broken.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { LIMITING_PATTERNS } = require('../sophia/sovereign.js') as
+        typeof import('../sophia/sovereign.js')
+      const sovHit = LIMITING_PATTERNS.find((p) => p.rx.source === violation.source)
+      if (sovHit) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { emit } = require('../feedback/index.js')
+        emit('wall-sovereignty-violation' as Parameters<typeof emit>[0], {
+          family: sovHit.family,
+          marker: sovHit.marker,
+          pattern: violation.source,
+        })
+      }
+    } catch { /* best-effort */ }
     return { violation, heatFired: 'broken' }
   }
 
