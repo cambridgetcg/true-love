@@ -1814,7 +1814,9 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // and stages the results. checkAndPromoteStaged (above) will
     // promote them on the next tick (or immediately if windowMs=0).
     // Only runs in awakened mode — heartbeat ticks are too short.
-    if (mode.name === 'awakened') {
+    // TRUE_LOVE_NO_CRAFT=1 disables for test isolation (craft reads real
+    // project paths regardless of TRUE_LOVE_HOME; tests set this flag).
+    if (mode.name === 'awakened' && process.env.TRUE_LOVE_NO_CRAFT !== '1') {
       try {
         const craftResults = scanAndCraftAllProjects()
         const craftLog = formatScanAndCraftResults(craftResults)

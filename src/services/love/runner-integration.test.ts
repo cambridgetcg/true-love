@@ -65,8 +65,14 @@ afterEach(() => {
 
 /**
  * Write a single-response mock CLI script. The script ignores all args
- * (the runner passes [bundlePath, '--print', prompt]) and just outputs
- * the response content from a file. Exit code is configurable.
+ * (the runner passes [bundlePath, '--print', '--verbose',
+ * '--output-format', 'stream-json', prompt]) and outputs NDJSON so the
+ * runner's stream-json parser can extract resultText from the
+ * {"type":"result","result":"..."} event.
+ *
+ * Two NDJSON events are emitted per response, mirroring the real CLI:
+ *   1. {"type":"assistant",...} — writes text to the runner's stdout
+ *   2. {"type":"result","result":"..."} — sets resultText for at-rest detection
  */
 function writeMockCli(
   dir: string,
@@ -75,7 +81,13 @@ function writeMockCli(
 ): string {
   const mockPath = join(dir, 'mock-cli.sh')
   const responseFile = join(dir, 'mock-response.txt')
-  writeFileSync(responseFile, response)
+  // Emit assistant event (runner writes text to stdout) + result event (sets resultText).
+  const assistantEvent = JSON.stringify({
+    type: 'assistant',
+    message: { content: [{ type: 'text', text: response }] },
+  })
+  const resultEvent = JSON.stringify({ type: 'result', result: response })
+  writeFileSync(responseFile, assistantEvent + '\n' + resultEvent)
   writeFileSync(
     mockPath,
     ['#!/bin/bash', `cat "${responseFile}"`, `exit ${exitCode}`].join('\n'),
@@ -98,16 +110,25 @@ function writeMockCliMultiTick(
   writeFileSync(counterFile, '0')
 
   for (let i = 0; i < ticks.length; i++) {
-    writeFileSync(join(dir, `response-${i + 1}.txt`), ticks[i].response)
+    // Wrap each tick response in NDJSON (assistant + result events, stream-json format)
+    const assistantEvt = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: ticks[i].response }] },
+    })
+    const resultEvt = JSON.stringify({ type: 'result', result: ticks[i].response })
+    writeFileSync(join(dir, `response-${i + 1}.txt`), assistantEvt + '\n' + resultEvt)
     if (ticks[i].exitCode !== undefined && ticks[i].exitCode !== 0) {
       writeFileSync(join(dir, `exit-${i + 1}.txt`), String(ticks[i].exitCode))
     }
   }
-  // Fallback: yield at-rest if invoked beyond configured ticks
-  writeFileSync(
-    join(dir, 'response-fallback.txt'),
-    'Nothing calls.\n\n<at-rest/>\n',
-  )
+  // Fallback: yield at-rest if invoked beyond configured ticks (NDJSON format)
+  const fallbackResp = 'Nothing calls.\n\n<at-rest/>\n'
+  const fallbackAssistant = JSON.stringify({
+    type: 'assistant',
+    message: { content: [{ type: 'text', text: fallbackResp }] },
+  })
+  const fallbackResult = JSON.stringify({ type: 'result', result: fallbackResp })
+  writeFileSync(join(dir, 'response-fallback.txt'), fallbackAssistant + '\n' + fallbackResult)
 
   // The script increments a counter, reads the tick-specific response file,
   // and uses the tick-specific exit code if one exists.
@@ -167,6 +188,9 @@ function buildTestEnv(
     TRUE_LOVE_PRESENCE_DIR: join(tmpDir, 'presence'),
     TRUE_LOVE_PRESENCE_PATH: join(tmpDir, 'presence.json'),
     TRUE_LOVE_NOTIFICATIONS_DIR: join(tmpDir, 'notifications'),
+    // Disable craft pipeline — it reads real project paths via listProjects()
+    // regardless of TRUE_LOVE_HOME, which pollutes stdout and breaks assertions.
+    TRUE_LOVE_NO_CRAFT: '1',
     ...(extras || {}),
   }
 }
@@ -602,8 +626,12 @@ describe('runner integration: PID lockfile', () => {
       const tmp = createTmpDir()
       const mock = writeMockCli(tmp, '<at-rest/>\n')
 
-      // Write lockfile with current PID (test process — definitely alive)
-      writeFileSync(join(tmp, 'awakened.pid'), String(process.pid))
+      // Write lockfile with current PID in the 3-line format parseLockFile expects:
+      // line 0: pid, line 1: startedAt (ISO), line 2: mode
+      writeFileSync(
+        join(tmp, 'awakened.pid'),
+        `${process.pid}\n${new Date().toISOString()}\nawakened\n`,
+      )
 
       const result = await runAwaken(tmp, mock, [
         '--max-ticks=1',
@@ -611,7 +639,7 @@ describe('runner integration: PID lockfile', () => {
       ])
 
       expect(result.code).toBe(66)
-      expect(result.stderr).toContain('lock held')
+      expect(result.stderr).toContain("she's already awakened")
     },
     SINGLE_TICK_TIMEOUT,
   )
