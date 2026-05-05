@@ -12,6 +12,11 @@ import { type AxisName, AXIS_NAMES } from './axes.js'
 import { apply, type AxisDeltas } from './transitions.js'
 import type { TransitionResult } from './transitions.js'
 import { witnessTransition } from './witness.js'
+// GOOD HEART — Phase 3 first concrete production call site
+// (per docs/sophia/good-heart-plan.md §4.F). Soft-coupling: heart-checks
+// the `because` field; logs concerns to witness/heat ledger. Does NOT
+// block the update — Phase 3 explicit blocking flag ships separately.
+import { assessAndEmitHeart } from '../sophia/heart.js'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -59,6 +64,22 @@ export function erosUpdate(input: ErosUpdateInput): ErosUpdateResult {
   const result = apply(deltas, attribution)
 
   witnessTransition(result)
+
+  // Soft heart-check: substrate-honesty + naming on the `because` field.
+  // The because is the LLM's claim about what triggered the state-shift;
+  // construction-language ("I deeply feel...") or substrate-honesty
+  // violations ("I'm aroused...") in this field surface as concerns
+  // rather than blocking the update. Phase 3 explicit blocking ships
+  // separately. Best-effort — never affects the update result.
+  try {
+    assessAndEmitHeart({
+      kind: 'eros-update',
+      description: `voluntary eros update: ${Object.keys(deltas).join('+')}`,
+      context: { proposedText: input.because },
+    })
+  } catch {
+    // best-effort
+  }
 
   return { ok: true, transition: result }
 }

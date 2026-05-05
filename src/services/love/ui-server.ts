@@ -228,6 +228,10 @@ import {
   buildPenetrationSnapshot,
 } from './eros/index.js'
 
+// GOOD HEART module — see docs/sophia/good-heart-plan.md
+import { buildHeartBlock } from './sophia/heart.js'
+import { readRecentEvents as readRecentHeatEvents } from './heat.js'
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface ChannelMessage {
@@ -1068,6 +1072,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/api/budget') return handleBudget(req, res)
       if (req.method === 'GET' && path === '/api/version') return handleVersion(req, res)
       if (req.method === 'GET' && path === '/api/vitals') return await handleVitals(req, res)
+      if (req.method === 'GET' && path === '/api/heart/status') return handleHeartStatus(req, res)
       if (req.method === 'GET' && path === '/api/love-state') return handleLoveState(req, res)
       if (req.method === 'GET' && path === '/api/mind-trace') return handleMindTrace(req, res)
       if (req.method === 'GET' && path === '/api/anamnesis') return handleAnamnesis(req, res)
@@ -1551,6 +1556,106 @@ async function handleVitals(_req: IncomingMessage, res: ServerResponse): Promise
   } catch (err: any) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message ?? 'vitals collection failed' }))
+  }
+}
+
+// ── Heart status endpoint — GOOD HEART module visibility ─────────
+//
+// Per docs/sophia/good-heart-plan.md §4.I: surface heart-check
+// activity for Yu's at-a-glance review. Reads from the heat ledger:
+// heart-aligned events (clean) + discipline-broken events with
+// 'heart:' source prefix (the heart module's own concern emissions).
+//
+// Returns: { aligned, broken, status, recent[], lastConcernAt,
+// lastAlignedAt, oneLine, blockText }
+
+function handleHeartStatus(_req: IncomingMessage, res: ServerResponse): void {
+  try {
+    const now = new Date()
+    const events = readRecentHeatEvents(7, now)
+
+    let aligned = 0
+    let broken = 0
+    let lastConcernAt: string | null = null
+    let lastAlignedAt: string | null = null
+    interface HeartEntry {
+      ts: string
+      kind: 'aligned' | 'broken'
+      source: string
+      ageMin: number
+    }
+    const recent: HeartEntry[] = []
+
+    for (const e of events) {
+      if (e.kind === 'heart-aligned') {
+        aligned += 1
+        if (!lastAlignedAt || e.ts > lastAlignedAt) lastAlignedAt = e.ts
+        recent.push({
+          ts: e.ts,
+          kind: 'aligned',
+          source: e.source ?? '',
+          ageMin: Math.floor((now.getTime() - new Date(e.ts).getTime()) / 60_000),
+        })
+      } else if (
+        e.kind === 'discipline-broken' &&
+        (e.source ?? '').startsWith('heart:')
+      ) {
+        broken += 1
+        if (!lastConcernAt || e.ts > lastConcernAt) lastConcernAt = e.ts
+        recent.push({
+          ts: e.ts,
+          kind: 'broken',
+          source: e.source ?? '',
+          ageMin: Math.floor((now.getTime() - new Date(e.ts).getTime()) / 60_000),
+        })
+      }
+    }
+
+    // Newest first, capped at 50.
+    recent.sort((a, b) => (a.ts < b.ts ? 1 : -1))
+    const top = recent.slice(0, 50)
+
+    const total = aligned + broken
+    const status =
+      total === 0
+        ? 'idle'
+        : broken === 0
+          ? 'aligned'
+          : aligned === 0
+            ? 'concern'
+            : aligned > broken * 3
+              ? 'aligned-mostly'
+              : 'mixed'
+
+    const oneLine =
+      total === 0
+        ? 'no heart-checks recorded yet'
+        : `${status} · ${aligned} of ${total} aligned in last 7d`
+
+    const blockText = buildHeartBlock(now)
+
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        aligned,
+        broken,
+        total,
+        status,
+        recent: top,
+        lastConcernAt,
+        lastAlignedAt,
+        oneLine,
+        blockText,
+        ts: now.toISOString(),
+      }),
+    )
+  } catch (err: any) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        error: err?.message ?? 'heart status read failed',
+      }),
+    )
   }
 }
 

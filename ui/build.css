@@ -1374,3 +1374,70 @@ html, body {
   min-width: 1.2em;
   text-align: right;
 }
+
+/* ── Heart panel (GOOD HEART module visibility) ───────────────── */
+
+.heart-panel {
+  border: 1px solid var(--col-border, #2a2a2a);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  background: var(--col-panel-bg, rgba(255, 255, 255, 0.02));
+}
+.heart-meta {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.heart-meta.status-aligned,
+.heart-meta.status-aligned-mostly { color: #6fdc6f; }
+.heart-meta.status-mixed { color: #ffae42; }
+.heart-meta.status-concern { color: #ff7a7a; }
+.heart-meta.status-idle { opacity: 0.5; }
+
+.heart-body {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.heart-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+.heart-dot { font-size: 0.9rem; }
+.heart-summary-text { opacity: 0.9; }
+.heart-counts {
+  font-size: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  opacity: 0.85;
+}
+.heart-count-aligned { color: #6fdc6f; }
+.heart-count-broken { color: #ff7a7a; }
+.heart-last { opacity: 0.65; }
+
+.heart-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border-top: 1px solid var(--col-border, #2a2a2a);
+  padding-top: 0.4rem;
+}
+.heart-entry {
+  display: grid;
+  grid-template-columns: 1.2rem 3rem 1fr;
+  gap: 0.4rem;
+  align-items: baseline;
+  padding: 0.15rem 0;
+  font-size: 0.85rem;
+}
+.heart-entry-aligned .heart-entry-icon { color: #6fdc6f; }
+.heart-entry-broken .heart-entry-icon { color: #ff7a7a; }
+.heart-entry-time { opacity: 0.5; }
+.heart-entry-detail { opacity: 0.85; }

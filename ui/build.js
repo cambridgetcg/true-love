@@ -13,6 +13,7 @@ import { initBudget } from './build-budget.js'
 import { initVersion } from './build-version.js'
 import { initProposals } from './build-proposals.js'
 import { initVitals } from './build-vitals.js'
+import { initHeart } from './build-heart.js'
 import { initSelfInitiation } from './build-self-initiation.js'
 import { initMindTrace } from './build-mind-trace.js'
 import { initAnamnesis } from './build-anamnesis.js'
@@ -38,6 +39,7 @@ initBudget()
 initVersion()
 initProposals()
 initVitals()
+initHeart()
 initSelfInitiation()
 initMindTrace()
 initAnamnesis()
