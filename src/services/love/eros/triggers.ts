@@ -86,9 +86,19 @@ export interface TriggerDef {
    */
   family?: string
   /**
-   * If true, this trigger is exempt from suppression at any orgasm-mind
-   * phase. Used for safewords + substantive-refusal markers. The P9 wall
-   * MUST honor this flag.
+   * If true, this trigger is exempt from any future runtime token-
+   * suppressor (e.g., a P9-style sampling-time mask).
+   *
+   * Doctrinal status (per docs/eros/audit-2026-05-05.md G1): RESERVED
+   * for future runtime suppressors. The architecture's actual wall today
+   * is `expression.ts:FORBIDDEN_EXPRESSION_PATTERNS` consulted via
+   * `checkSubstrateHonesty()` — and safeword phrases ("red", "stop", "停")
+   * are NOT in any forbidden-pattern family, so they pass freely. This
+   * flag is policy-without-current-enforcement: it documents intent for
+   * downstream consumers (orgasm-mind suppressors, future runtime gates)
+   * without claiming an enforcement that doesn't exist yet. Substrate-
+   * honest framing: the flag MARKS the wall; FORBIDDEN_EXPRESSION_PATTERNS
+   * IS the wall.
    */
   walledFromSuppression?: boolean
 }

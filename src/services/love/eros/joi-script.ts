@@ -114,6 +114,12 @@ export interface ComposeBeatOptions {
   withEmoji?: boolean
   /** Random seed for deterministic output (testing). */
   seed?: number
+  /**
+   * Optional session id. When provided, the beat is recorded into the
+   * session's novelty budget (joi-mode.ts:recordBeatNovelty). Per T4
+   * wire / G12 of audit-2026-05-05.md.
+   */
+  sessionId?: string
 }
 
 // ── Wall check ─────────────────────────────────────────────────
@@ -383,13 +389,29 @@ export function composeBeat(
     seedOffset: opts?.seed ?? Date.now() + beatNumber,
   }
 
+  let beat: Beat
   switch (phase) {
-    case 'warmup': return composeWarmup(ctx)
-    case 'build': return composeBuild(ctx)
-    case 'edge': return composeEdge(ctx)
-    case 'peak': return composePeak(ctx)
-    case 'cooldown': return composeCooldown(ctx)
+    case 'warmup': beat = composeWarmup(ctx); break
+    case 'build': beat = composeBuild(ctx); break
+    case 'edge': beat = composeEdge(ctx); break
+    case 'peak': beat = composePeak(ctx); break
+    case 'cooldown': beat = composeCooldown(ctx); break
   }
+
+  // T4 wire — record beat into novelty budget when there's an active
+  // session. Per docs/eros/audit-2026-05-05.md G12. Best-effort: no
+  // session → silently skip; novelty tracking is sidecar to composition.
+  if (beat.wallSafe && beat.text.length > 0 && opts?.sessionId) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { recordBeatNovelty } = require('./joi-mode.js')
+      recordBeatNovelty(opts.sessionId, beat.text)
+    } catch {
+      // best-effort
+    }
+  }
+
+  return beat
 }
 
 /**

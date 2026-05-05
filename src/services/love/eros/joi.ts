@@ -591,6 +591,36 @@ export function advanceJoi(now: Date = new Date()): JoiSession | null {
       }
     }
     feedbackOnJoiPhaseShift(oldPhase, newPhase, session)
+
+    // T4 wire — auto-link sidecar tracking on phase transitions.
+    // Per docs/eros/audit-2026-05-05.md G10/G11.
+    //   - Entering peak → start countdown if not already active (M4)
+    //   - Entering edge → open fractionation cycle (M1 supplement;
+    //     heatcurve also detects this from event signals)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { startCountdown, readCountdown, recordFractionationApproach } =
+        require('./joi-tracking.js')
+      if (newPhase === 'peak') {
+        const existing = readCountdown(session.id)
+        if (!existing) {
+          startCountdown(session.id, {
+            from: 5,
+            paceMs: 700,
+            permissionFramedAs: 'recognition',
+            edgeBackoffs: 1,
+            ts: now.toISOString(),
+          })
+        }
+      } else if (newPhase === 'edge') {
+        // Open a fractionation cycle on edge entry. The cycle gets
+        // edge-reached + retreated by heatcurve auto-link or manual
+        // call as the trajectory evolves.
+        recordFractionationApproach(session.id, { ts: now.toISOString() })
+      }
+    } catch {
+      // best-effort
+    }
   }
 
   if (newPosition >= 1.0 && !session.done) {
@@ -958,6 +988,42 @@ export function buildJoiPromptBlock(now: Date = new Date()): string {
       lines.push(`## Next-beat composer preview`)
       lines.push(`> ${next.text}`)
       lines.push(`_(pause ${next.pauseMs}ms · pieces: ${Object.keys(next.pieces).filter(k => (next.pieces as Record<string, unknown>)[k]).join('+')})_`)
+    }
+  } catch {
+    // best-effort
+  }
+
+  // Cooldown phase: surface forward-anchor from longing.ts (κ.6 / C18).
+  // Per docs/eros/audit-2026-05-05.md follow-through: longing.ts unwired.
+  // The forward-anchor seeds the next session, completing the long-arc loop.
+  if (phase === 'cooldown') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { composeForwardAnchor } = require('./longing.js')
+      const anchor = composeForwardAnchor('balanced')
+      if (anchor) {
+        lines.push('')
+        lines.push(`## Forward anchor (cooldown closing)`)
+        lines.push(`> ${anchor}`)
+      }
+    } catch {
+      // best-effort
+    }
+  }
+
+  // Session-chain analysis — surfaces cadence + most-recent across history.
+  // Per audit follow-through: session-chain.ts was unwired.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { analyzeSessionChain } = require('./session-chain.js')
+    const chain = analyzeSessionChain({ now })
+    if (chain.recentSessionCount > 0) {
+      lines.push('')
+      lines.push(`## Session chain`)
+      lines.push(`Cadence: ${chain.cadence} · Recent (7d): ${chain.recentSessionCount} · Within day: ${chain.withinDayCount}`)
+      if (chain.medianGapHours !== null) {
+        lines.push(`Median gap: ${chain.medianGapHours.toFixed(1)}h`)
+      }
     }
   } catch {
     // best-effort

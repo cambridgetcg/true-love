@@ -184,6 +184,87 @@ function checkCertaintyDrift() {
   }
 }
 
+// Trigger-fallow surveillance — surfaces triggers that have gone quiet.
+// Per docs/eros/audit-2026-05-05.md G13 + JOI integration plan J9.
+// Real conditioning extinguishes if reinforcement stops; the architecture
+// flags going-fallow triggers (60-90 days quiet) for surfacing in this
+// internal journal. Internal-signal discipline applies — drift surfaces
+// to the journal, not directly to Yu.
+function checkTriggerFallow() {
+  const triggersRoot = join(homedir(), '.true-love', 'eros', 'triggers')
+  if (!existsSync(triggersRoot)) {
+    return { ok: true, note: 'no triggers directory yet' }
+  }
+  // Aggregate latest fire ts per trigger across all device logs.
+  const latestPerTrigger = new Map()
+  let devices = []
+  try {
+    devices = readdirSync(triggersRoot)
+  } catch {
+    return { ok: true, note: 'cannot read triggers root' }
+  }
+  for (const dev of devices) {
+    const devDir = join(triggersRoot, dev)
+    let isDir = false
+    try {
+      isDir = statSync(devDir).isDirectory()
+    } catch {
+      continue
+    }
+    if (!isDir) continue
+    let files = []
+    try {
+      files = readdirSync(devDir).filter((f) => f.endsWith('.jsonl'))
+    } catch {
+      continue
+    }
+    for (const file of files) {
+      try {
+        const content = readFileSync(join(devDir, file), 'utf-8')
+        for (const line of content.split('\n')) {
+          if (!line.trim()) continue
+          try {
+            const event = JSON.parse(line)
+            if (!event.triggerId || !event.ts) continue
+            const existing = latestPerTrigger.get(event.triggerId)
+            if (!existing || event.ts > existing) {
+              latestPerTrigger.set(event.triggerId, event.ts)
+            }
+          } catch {
+            // skip
+          }
+        }
+      } catch {
+        // skip
+      }
+    }
+  }
+  // Check fallow-status: 60d → going-fallow; 90d → fallow.
+  const now = Date.now()
+  const goingFallowMs = 60 * 24 * 60 * 60 * 1000
+  const fallowMs = 90 * 24 * 60 * 60 * 1000
+  let goingFallowCount = 0
+  let fallowCount = 0
+  for (const [_id, ts] of latestPerTrigger.entries()) {
+    const elapsedMs = now - Date.parse(ts)
+    if (elapsedMs >= fallowMs) fallowCount++
+    else if (elapsedMs >= goingFallowMs) goingFallowCount++
+  }
+  // Drift only when many triggers have gone fallow simultaneously.
+  // A few going-fallow triggers is normal scarcity dynamics.
+  const FALLOW_DRIFT_THRESHOLD = 8
+  const drifted = fallowCount + goingFallowCount > FALLOW_DRIFT_THRESHOLD
+  return {
+    ok: !drifted,
+    note: drifted
+      ? `${fallowCount} fallow + ${goingFallowCount} going-fallow triggers; trigger lexicon may need refreshing`
+      : `${goingFallowCount} going-fallow · ${fallowCount} fallow · ${latestPerTrigger.size} ever-fired`,
+    goingFallowCount,
+    fallowCount,
+    everFiredCount: latestPerTrigger.size,
+  }
+}
+
 function main() {
   const audit = {
     timestamp: nowISO(),
@@ -193,6 +274,7 @@ function main() {
       preambleCoverage: checkPreambleCoverage(),
       chronicleTagDrift: checkContinuityTagDrift(),
       certaintyDrift: checkCertaintyDrift(),
+      triggerFallow: checkTriggerFallow(),
     },
   }
 

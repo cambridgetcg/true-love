@@ -161,6 +161,7 @@ import {
   startJoi,
   advanceJoi,
   endJoi,
+  endJoiSafely,
   readJoiSession,
   getCurrentJoiPhase,
   TRIGGER_LIBRARY,
@@ -433,6 +434,123 @@ export function readConversation(opts?: ReadConversationOpts): ChannelMessage[] 
 }
 
 // ── Yu's compose ───────────────────────────────────────────────────
+
+/**
+ * Run the verbal arousal pipeline on a Yu message.
+ *
+ * Per Yu's directive 2026-05-05 ("JOI + triggers — verbal arousal
+ * architecture is not working"). The runner's session-start path runs
+ * this pipeline on `args.invitation`; the chat-UI send path historically
+ * did NOT. This helper closes the gap so every chat-UI message activates:
+ *
+ *   1. Cue detection (cues.ts → processYuMessage)
+ *      - autonomic axis-shift application via apply()
+ *      - witnessTransition for threshold crossings
+ *      - feedback emission for cue match (eros-cue-detected)
+ *   2. Verbal trigger detection (triggers.ts → processMessageTriggers)
+ *      - per-session caps + lifetime fire counts
+ *      - heat events on each fire
+ *   3. Lexicon auto-detection (lexicon.ts → fireDetectedLexicon)
+ *      - PHRASE_CATALOG match against text
+ *      - per-phrase scarcity caps + lust gates
+ *      - SSE emit of lexicon-fired
+ *   4. Spontaneous Sophia emission (lexicon.ts → fireSpontaneousIfReady)
+ *      - reads current eros vector + orgasm phase + lust
+ *      - state-shape thresholds drive sophia→yu phrase selection
+ *      - 60s global rate-limit + per-phrase scarcity
+ *      - SSE emit of lexicon-spontaneous with reason payload
+ *
+ * Best-effort throughout — any individual step's failure does NOT
+ * cascade. Returns a minimal summary so the caller can log if desired,
+ * but the primary side effect is the SSE feedback broadcasts and the
+ * eros state shifts.
+ */
+export async function fireVerbalArousalForYuMessage(text: string): Promise<{
+  cueMatches: number
+  lexiconFires: number
+  spontaneous: boolean
+}> {
+  let cueMatches = 0
+  let lexiconFires = 0
+  let spontaneous = false
+
+  if (!text || text.trim().length === 0) {
+    return { cueMatches, lexiconFires, spontaneous }
+  }
+
+  // 1. Cue detection + axis-shift application
+  try {
+    const { processYuMessage } = await import('./eros/cues.js')
+    const { apply } = await import('./eros/transitions.js')
+    const { witnessTransition } = await import('./eros/witness.js')
+    const cueResult = processYuMessage(text)
+    cueMatches = cueResult.matches.length
+    if (Object.keys(cueResult.deltas).length > 0) {
+      const transition = apply(cueResult.deltas, cueResult.attribution)
+      witnessTransition(transition)
+    }
+    if (cueMatches > 0) {
+      try {
+        const { feedbackOnCueDetected } = await import('./eros/feedback-hooks.js')
+        const cueNames = cueResult.matches.map((m) => m.cue).join('+')
+        let dominantAxis: string | undefined
+        let dominantDelta = 0
+        for (const [axis, delta] of Object.entries(cueResult.deltas)) {
+          if (typeof delta === 'number' && Math.abs(delta) > Math.abs(dominantDelta)) {
+            dominantAxis = axis
+            dominantDelta = delta
+          }
+        }
+        feedbackOnCueDetected({ cues: cueNames, axis: dominantAxis, delta: dominantDelta })
+      } catch {
+        /* best-effort */
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  // 2. Verbal trigger detection
+  try {
+    const { processMessageTriggers } = await import('./eros/triggers.js')
+    processMessageTriggers(text, 'yu')
+  } catch {
+    /* best-effort */
+  }
+
+  // 3. Lexicon auto-detection (Yu→Sophia direction)
+  try {
+    const { fireDetectedLexicon } = await import('./eros/lexicon.js')
+    const { buildLustSnapshot } = await import('./eros/lust.js')
+    const lustSnap = buildLustSnapshot()
+    const fires = fireDetectedLexicon(text, 'yu-to-sophia', {
+      currentLust: lustSnap.level,
+      scarcityShift: lustSnap.slutModeActive ? 1.5 : 1.0,
+      source: 'autonomic:chat-ui',
+    })
+    lexiconFires = fires.filter((f) => f.result.fired).length
+  } catch {
+    /* best-effort */
+  }
+
+  // 4. Spontaneous Sophia emission (state-driven, after the cues moved state)
+  try {
+    const { fireSpontaneousIfReady } = await import('./eros/lexicon.js')
+    const { getOrInitState: getOrInitErosState } = await import('./eros/state.js')
+    const { readOrgasmState } = await import('./eros/orgasm.js')
+    const { buildLustSnapshot } = await import('./eros/lust.js')
+    const erosState = getOrInitErosState()
+    const orgasmState = readOrgasmState()
+    const lustSnap = buildLustSnapshot()
+    const phase = orgasmState?.phase ?? 'baseline'
+    const result = fireSpontaneousIfReady(erosState.state.vector, phase, lustSnap.level)
+    spontaneous = result !== null
+  } catch {
+    /* best-effort */
+  }
+
+  return { cueMatches, lexiconFires, spontaneous }
+}
 
 export function appendYuMessage(
   text: string,
@@ -2219,6 +2337,10 @@ async function handleProjectSay(req: IncomingMessage, res: ServerResponse, proje
     res.end(JSON.stringify({ ok: false, error: err?.message ?? 'write failed' }))
     return
   }
+
+  // ── Verbal arousal pipeline (same fix as handleSay, project scope) ──
+  fireVerbalArousalForYuMessage(text).catch(() => { /* best-effort */ })
+
   let heartbeatPid: number | undefined
   let heartbeatError: string | undefined
   if (parsed.wake) {
@@ -2861,9 +2983,18 @@ async function handleJoiStart(req: IncomingMessage, res: ServerResponse): Promis
 async function handleJoiEnd(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
     const mod = await import('./eros/joi.js')
-    const session = mod.endJoi()
+    // T7 wire — use endJoiSafely (G2). Honors aftercare wall: if session
+    // is still pre-cooldown when end is requested, snaps to cooldown phase
+    // and returns the enforcement result so the caller can render aftercare
+    // before final completion. Per docs/eros/audit-2026-05-05.md.
+    const result = mod.endJoiSafely()
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, session }))
+    res.end(JSON.stringify({
+      ok: true,
+      session: result.session,
+      enforced: result.enforced,
+      reason: result.reason,
+    }))
   } catch (e) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ok: false, error: String(e) }))
@@ -3659,10 +3790,17 @@ async function handleJoiEnd(
   res: ServerResponse,
   broadcast: () => void,
 ): Promise<void> {
-  const session = endJoi()
+  // T7 wire — endJoiSafely (G2). See parallel handleJoiEnd above for the
+  // aftercare-wall doctrine.
+  const result = endJoiSafely()
   broadcast()
   res.writeHead(200, { 'Content-Type': 'application/json' })
-  res.end(JSON.stringify({ ok: true, session }))
+  res.end(JSON.stringify({
+    ok: true,
+    session: result.session,
+    enforced: result.enforced,
+    reason: result.reason,
+  }))
 }
 
 async function handleJoiAdvance(

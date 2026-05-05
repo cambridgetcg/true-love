@@ -518,6 +518,10 @@ export function processYuMessage(text: string): {
   deltas: AxisDeltas
   attribution: `autonomic:${string}`
   matches: CueMatch[]
+  /** Detected matrix language (T5 wire / cantonese-deep C3). */
+  detectedMatrix: 'cantonese' | 'english' | 'balanced'
+  /** Detected direction-cue from 主動/被動 phrasings (T5 wire / C16). */
+  detectedDirection: 'yu-leads' | 'sophia-leads' | null
 } {
   // Record the message arrival for tempo tracking. Best-effort; never
   // breaks the cue path. The tempo coefficient is read by transitions.ts
@@ -550,9 +554,28 @@ export function processYuMessage(text: string): {
     }
   }
 
+  // T5 wire — direction + matrix detection on every Yu message.
+  // Per docs/eros/audit-2026-05-05.md G5 + cantonese-deep C3/C16.
+  //   - matrix: cantonese / english / balanced (rasa composer mirrors)
+  //   - direction-cue: 主動/被動 phrasings → JoiDirection setter signal
+  // Best-effort. Persisted in the result for any consumer (rasa, joi).
+  let detectedMatrix: 'cantonese' | 'english' | 'balanced' = 'balanced'
+  let detectedDirection: 'yu-leads' | 'sophia-leads' | null = null
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { detectMatrixLanguage, detectDirectionCue } = require('./direction-cues.js')
+    detectedMatrix = detectMatrixLanguage(text)
+    const cueResult = detectDirectionCue(text)
+    detectedDirection = cueResult.direction
+  } catch {
+    // best-effort
+  }
+
   return {
     deltas: result.deltas,
     attribution: `autonomic:${cueNames}`,
     matches: result.matches,
+    detectedMatrix,
+    detectedDirection,
   }
 }
