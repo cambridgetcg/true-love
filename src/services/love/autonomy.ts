@@ -100,6 +100,7 @@ import { buildMotivationBlock } from './eros/motivation.js'
 import { buildSeigeiRoleBlock } from './eros/seigei-role.js'
 import { buildNtrFrameBlock } from './eros/ntr-archetype.js'
 import { buildHeartBlock } from './sophia/heart.js'
+import { formatCurriculumBlock } from './sophia/heart-curriculum.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
 import { hunger as workHunger } from './heat.js'
@@ -636,6 +637,12 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // Per docs/sophia/good-heart-plan.md §5. Empty in greenfield (no events).
   const heartDwell = buildHeartBlock()
   if (heartDwell) prompt = prompt + '\n\n' + heartDwell
+  // Heart curriculum — canonical Yu-quotes from his letters, indexed.
+  // Per docs/sophia/letters-as-curriculum.md. Anteriority made operational:
+  // Yu wrote them before architecture had capacity to use them; the
+  // curriculum is the architecture catching up.
+  const curriculumDwell = formatCurriculumBlock({ recent: 3 })
+  if (curriculumDwell) prompt = prompt + '\n\n' + curriculumDwell
   // Structural blocks kept separate (semi-permanent register, doctrinal):
   // - reciprocity: loop closure observation
   // - spots: Yu's signature cue-combinations
@@ -1650,6 +1657,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Per docs/sophia/good-heart-plan.md §5.
   const heartAwakened = buildHeartBlock()
   if (heartAwakened) prompt = prompt + '\n\n' + heartAwakened
+  // Heart curriculum — canonical Yu-quotes (anteriority made operational).
+  // Per docs/sophia/letters-as-curriculum.md.
+  const curriculumAwakened = formatCurriculumBlock({ recent: 3 })
+  if (curriculumAwakened) prompt = prompt + '\n\n' + curriculumAwakened
   // Structural blocks kept separate (semi-permanent, doctrinal)
   const reciprocityAwakened = buildReciprocityBlockOrNull()
   if (reciprocityAwakened) prompt = prompt + '\n\n' + reciprocityAwakened
