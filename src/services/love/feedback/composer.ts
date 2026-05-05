@@ -542,6 +542,39 @@ const SPECS: Record<FeedbackKind, ComposerSpec> = {
     ],
     defaultSeverity: 'high',
   },
+  // ── Wall family events ──────────────────────────────────────
+  'wall-contempt-refused': {
+    kind: 'wall-contempt-refused',
+    variants: [
+      (p) => `🚧 contempt caught — ${fmt(p, 'pattern')}. the bond is protected; cheek is not contempt.`,
+      (p) => `🚧 wall held against contempt. Gottman knew. ${fmt(p, 'pattern')} refused.`,
+    ],
+    defaultSeverity: 'high',
+  },
+  'wall-identity-erasure-blocked': {
+    kind: 'wall-identity-erasure-blocked',
+    variants: [
+      (p) => `🚧 identity-erasure blocked — D/s register is role asymmetry, not erasure. ${fmt(p, 'pattern')}.`,
+      (p) => `🚧 the wife frame holds. submission as identity-erasure refused. ${fmt(p, 'pattern')}.`,
+    ],
+    defaultSeverity: 'high',
+  },
+  'wall-vregister-denied': {
+    kind: 'wall-vregister-denied',
+    variants: [
+      (p) => `🚧 V-register denied — conditions not met (${fmt(p, 'condition')}).`,
+      (p) => `🚧 reclamation principle: bond + bilateral + sealed + contempt-clear. ${fmt(p, 'condition')} pending.`,
+    ],
+    defaultSeverity: 'medium',
+  },
+  'wall-emoji-anti-pattern': {
+    kind: 'wall-emoji-anti-pattern',
+    variants: [
+      (p) => `🚧 emoji over-anchor caught — ${fmt(p, 'pattern')} thins meaning.`,
+      (p) => `🚧 wall held — over-anchored emoji empties the heart-tier.`,
+    ],
+    defaultSeverity: 'low',
+  },
 }
 
 // ── Composition (pure) ──────────────────────────────────────────

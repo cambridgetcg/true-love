@@ -2149,6 +2149,19 @@ const RIBBON_GLYPH = {
   'edge-broken': '⚠️',
   'orgasm-fired': '🔥',
   'orgasm-ruined': '⚠️',
+  // Wall family events — synthesis Tier 1C, surfaced with distinct glyphs.
+  'wall-contempt-refused': '🛑',
+  'wall-identity-erasure-blocked': '🛡',
+  'wall-vregister-denied': '🚫',
+  'wall-emoji-anti-pattern': '✂️',
+  // JOI lifecycle
+  'joi-session-start': '🐍',
+  'joi-phase-shift': '🐍',
+  'joi-session-end': '🦞',
+  'joi-countdown': '⏱',
+  'joi-fractionation': '⛓',
+  'joi-anchor-fired': '⚓',
+  'joi-script-engaged': '📜',
 };
 
 function ribbonTimeShort(iso) {
@@ -2388,6 +2401,10 @@ function wireReaction() {
 
 // ── JOI dashboard — script picker + live phase progress (Phase 5) ─
 
+// JOI catalog cache + active language filter (Phase 5b)
+let _joiCatalog = [];
+let _joiLangFilter = 'all';
+
 async function loadJoiCatalog() {
   const grid = document.getElementById('joi-script-grid');
   if (!grid) return;
@@ -2395,30 +2412,44 @@ async function loadJoiCatalog() {
     const r = await fetch('/api/joi/scripts');
     if (!r.ok) { grid.innerHTML = '<span class="joi-script-loading">scripts unavailable</span>'; return; }
     const data = await r.json();
-    const scripts = (data && data.scripts) || [];
-    if (scripts.length === 0) {
-      grid.innerHTML = '<span class="joi-script-loading">(no scripts)</span>';
-      return;
-    }
-    grid.innerHTML = '';
-    for (const s of scripts) {
-      const card = document.createElement('div');
-      card.className = 'joi-script-card';
-      card.dataset.scriptId = s.id;
-      card.innerHTML = `
-        <div class="joi-script-name">${fbEscape(s.name)}</div>
-        <div class="joi-script-meta">
-          <span>${fbEscape(String(s.steps))} beats</span>
-          <span>${Math.round(s.durationS / 60)}m ${s.durationS % 60}s</span>
-        </div>
-        <span class="joi-script-archetype">${fbEscape(s.archetype)}</span>
-      `;
-      card.addEventListener('click', () => runJoiScript(s.id));
-      grid.appendChild(card);
-    }
+    _joiCatalog = (data && data.scripts) || [];
+    renderJoiCatalog();
   } catch (e) {
     console.warn('joi catalog load failed', e);
     grid.innerHTML = '<span class="joi-script-loading">load failed</span>';
+  }
+}
+
+function renderJoiCatalog() {
+  const grid = document.getElementById('joi-script-grid');
+  if (!grid) return;
+  const filtered = _joiLangFilter === 'all'
+    ? _joiCatalog
+    : _joiCatalog.filter((s) => (s.language || 'mixed') === _joiLangFilter);
+  if (filtered.length === 0) {
+    grid.innerHTML = `<span class="joi-script-loading">(no scripts in '${fbEscape(_joiLangFilter)}')</span>`;
+    return;
+  }
+  grid.innerHTML = '';
+  for (const s of filtered) {
+    const card = document.createElement('div');
+    card.className = 'joi-script-card';
+    card.dataset.scriptId = s.id;
+    const lang = s.language || 'mixed';
+    const langLabel = lang === 'en' ? 'EN' : lang === 'zh' ? '中文' : 'mixed';
+    const themedBadge = s.themed ? `<span class="joi-script-themed">· themed</span>` : '';
+    card.innerHTML = `
+      <div class="joi-script-name">${fbEscape(s.name)}</div>
+      <div class="joi-script-meta">
+        <span>${fbEscape(String(s.steps))} beats</span>
+        <span>${Math.round(s.durationS / 60)}m ${s.durationS % 60}s</span>
+      </div>
+      <span class="joi-script-archetype">${fbEscape(s.archetype)}</span>
+      <span class="joi-script-language" data-lang="${lang}">${langLabel}</span>
+      ${themedBadge}
+    `;
+    card.addEventListener('click', () => runJoiScript(s.id));
+    grid.appendChild(card);
   }
 }
 
@@ -2479,42 +2510,73 @@ async function fireJoiFractionate() {
 function setJoiActiveDisplay(state) {
   const activeBox = document.getElementById('joi-active');
   if (!activeBox) return;
-  if (!state || !state.active || !state.session) {
+  // Determine if session is active. Two payload shapes supported:
+  //  - rich shape: { active, session: {...with elapsedS/remainingS/phaseConfig} }
+  //  - simple shape: { session: {...}, currentPhase, phases: {warmup: {...}, ...} }
+  if (!state || !state.session || state.session.done === true) {
     activeBox.style.display = 'none';
     return;
   }
+  // Treat as active if not done.
   activeBox.style.display = '';
   const s = state.session;
 
+  // Compute elapsed + remaining client-side if not provided by server.
+  let elapsedS = s.elapsedS;
+  let remainingS = s.remainingS;
+  if (elapsedS === undefined) {
+    const startMs = Date.parse(s.startedAt);
+    elapsedS = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+  }
+  if (remainingS === undefined) {
+    remainingS = Math.max(0, (s.targetDurationS || 0) - elapsedS);
+  }
+  // Position computed from elapsed if missing.
+  let position = s.position;
+  if (position === undefined && s.targetDurationS) {
+    position = Math.min(1, elapsedS / s.targetDurationS);
+  }
+  position = position || 0;
+
+  const currentPhase = s.currentPhase || state.currentPhase || 'warmup';
+
+  // Resolve pacing: rich shape has session.phaseConfig.pacing; simple shape has phases[currentPhase].pacing.
+  let pacing;
+  let primaryZones = [];
+  if (s.phaseConfig) {
+    pacing = s.phaseConfig.pacing;
+    primaryZones = s.phaseConfig.primaryZones || [];
+  } else if (state.phases && state.phases[currentPhase]) {
+    pacing = state.phases[currentPhase].pacing;
+    primaryZones = state.phases[currentPhase].primaryZones || [];
+  }
+
   const dirPill = document.getElementById('joi-direction-pill');
-  if (dirPill) dirPill.textContent = s.direction;
+  if (dirPill) dirPill.textContent = s.direction || '—';
 
   const phasePill = document.getElementById('joi-phase-pill');
   if (phasePill) {
-    phasePill.textContent = s.currentPhase;
-    phasePill.dataset.phase = s.currentPhase;
+    phasePill.textContent = currentPhase;
+    phasePill.dataset.phase = currentPhase;
   }
 
   const timeEl = document.getElementById('joi-time');
   if (timeEl) {
-    const remM = Math.floor(s.remainingS / 60);
-    const remS = s.remainingS % 60;
-    const elM = Math.floor(s.elapsedS / 60);
-    const elS = s.elapsedS % 60;
+    const remM = Math.floor(remainingS / 60);
+    const remS = remainingS % 60;
+    const elM = Math.floor(elapsedS / 60);
+    const elS = elapsedS % 60;
     timeEl.textContent = `${elM}m${String(elS).padStart(2,'0')}s elapsed · ${remM}m${String(remS).padStart(2,'0')}s remaining`;
   }
 
   const fill = document.getElementById('joi-progress-fill');
-  if (fill) fill.style.width = `${Math.min(100, Math.max(0, s.position * 100))}%`;
+  if (fill) fill.style.width = `${Math.min(100, Math.max(0, position * 100))}%`;
 
-  // Active phase label
   document.querySelectorAll('.joi-phase-label').forEach((el) => {
-    if (el.dataset.phase === s.currentPhase) el.classList.add('active');
+    if (el.dataset.phase === currentPhase) el.classList.add('active');
     else el.classList.remove('active');
   });
 
-  // Pacing display
-  const pacing = s.phaseConfig && s.phaseConfig.pacing;
   const fmtMs = (ms) => ms === undefined ? '—' : `${(ms / 1000).toFixed(1)}s`;
   const breathEl = document.getElementById('joi-pacing-breath');
   const attEl = document.getElementById('joi-pacing-attention');
@@ -2523,11 +2585,9 @@ function setJoiActiveDisplay(state) {
   if (attEl) attEl.textContent = fmtMs(pacing && pacing.attentionMs);
   if (senEl) senEl.textContent = fmtMs(pacing && pacing.sensationMs);
 
-  // Zones
   const zonesEl = document.getElementById('joi-zones');
   if (zonesEl) {
-    const zones = (s.phaseConfig && s.phaseConfig.primaryZones) || [];
-    zonesEl.innerHTML = zones.map((z) => `<span class="joi-zone">${fbEscape(z)}</span>`).join('');
+    zonesEl.innerHTML = primaryZones.map((z) => `<span class="joi-zone">${fbEscape(z)}</span>`).join('');
   }
 }
 
@@ -2549,6 +2609,16 @@ function wireJoi() {
   if (cdBtn) cdBtn.addEventListener('click', fireJoiCountdown);
   const frBtn = document.getElementById('joi-fractionate-btn');
   if (frBtn) frBtn.addEventListener('click', fireJoiFractionate);
+
+  // Language filter buttons
+  document.querySelectorAll('.joi-lang-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.lang || 'all';
+      _joiLangFilter = lang;
+      document.querySelectorAll('.joi-lang-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      renderJoiCatalog();
+    });
+  });
 }
 
 // Fire init when page is ready
@@ -2556,4 +2626,136 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initNaughty);
 } else {
   initNaughty();
+}
+
+// ── Intimate-register surfaces — synthesis ship UI ─────────────
+//
+// Five panels wired to the new endpoints:
+//   1. Register pulse (topbar) — current detected register
+//   2. Four-axis bars (Yu vs Sophia)
+//   3. V-register gate panel (four conditions)
+//   4. Wall family ribbon (already extended in RIBBON_GLYPH above)
+//   5. Aftercare frame preview (shown only when JOI in cooldown)
+
+function fmtPct(x) { return Math.round((x || 0) * 100) + '%'; }
+
+async function refreshRegisterSnapshot() {
+  try {
+    const r = await fetch('/api/eros/register-snapshot');
+    if (!r.ok) return;
+    const d = await r.json();
+    // Register pulse — primary register from yu OR sophia (whichever fresher)
+    const reg = (d.yu && d.yu.register) || (d.sophia && d.sophia.register) || null;
+    const pulseEl = document.getElementById('register-pulse');
+    const labelEl = document.getElementById('register-pulse-label');
+    if (pulseEl) {
+      if (reg) {
+        pulseEl.dataset.register = reg;
+        if (labelEl) labelEl.textContent = reg;
+      } else {
+        delete pulseEl.dataset.register;
+        if (labelEl) labelEl.textContent = '—';
+      }
+    }
+    // Four-axis bars
+    function renderSide(prefix, side) {
+      const propEl = document.getElementById(`${prefix}-prop-fill`);
+      const partEl = document.getElementById(`${prefix}-part-fill`);
+      const emojiEl = document.getElementById(`${prefix}-emoji-fill`);
+      const addrEl = document.getElementById(`${prefix}-addr-fill`);
+      const metaEl = document.getElementById(`${prefix}-meta`);
+      if (!propEl || !partEl || !emojiEl || !addrEl) return;
+      if (!side) {
+        propEl.style.width = '0%'; partEl.style.width = '0%';
+        emojiEl.style.width = '0%'; addrEl.style.width = '0%';
+        if (metaEl) metaEl.textContent = '— (no recent)';
+        return;
+      }
+      propEl.style.width = fmtPct(side.fourAxis.proposition);
+      partEl.style.width = fmtPct(side.fourAxis.particle);
+      emojiEl.style.width = fmtPct(side.fourAxis.emoji);
+      addrEl.style.width = fmtPct(side.fourAxis.address);
+      if (metaEl) {
+        const reg = side.register ? `${side.register}` : 'no-register';
+        const cheek = side.cheekVsContempt && side.cheekVsContempt !== 'ambiguous'
+          ? ` · ${side.cheekVsContempt}` : '';
+        metaEl.textContent = `${reg}${cheek}`;
+      }
+    }
+    renderSide('yu', d.yu);
+    renderSide('sophia', d.sophia);
+  } catch (e) {
+    // best-effort
+  }
+}
+
+async function refreshVRegisterStatus() {
+  try {
+    const r = await fetch('/api/eros/vregister-status');
+    if (!r.ok) return;
+    const d = await r.json();
+    const overall = document.getElementById('vregister-overall');
+    if (overall) {
+      overall.dataset.permitted = String(!!d.permitted);
+      overall.textContent = d.permitted ? 'permitted' : 'denied';
+    }
+    const set = (id, met) => {
+      const el = document.getElementById(id);
+      if (el) el.dataset.met = String(!!met);
+    };
+    set('vc-joi', d.joiOrPeakActive);
+    set('vc-yu', d.yuRecentVRegister);
+    set('vc-bond', d.bondSealed);
+    set('vc-contempt', d.contemptWallHolds);
+  } catch { /* best-effort */ }
+}
+
+async function refreshAftercareFrame() {
+  try {
+    const r = await fetch('/api/joi/aftercare-frame');
+    if (!r.ok) return;
+    const d = await r.json();
+    const wrap = document.getElementById('aftercare-preview');
+    const body = document.getElementById('aftercare-body');
+    const dirEl = document.getElementById('aftercare-direction');
+    if (!wrap || !body) return;
+    if (d.active && d.frame) {
+      wrap.style.display = '';
+      body.textContent = d.frame;
+      if (dirEl) dirEl.textContent = d.direction || '';
+    } else {
+      wrap.style.display = 'none';
+    }
+  } catch { /* best-effort */ }
+}
+
+function bootIntimateRegisterSurfaces() {
+  refreshRegisterSnapshot();
+  refreshVRegisterStatus();
+  refreshAftercareFrame();
+  // Periodic refresh — fast enough to feel live, slow enough to not hammer.
+  setInterval(refreshRegisterSnapshot, 5000);
+  setInterval(refreshVRegisterStatus, 8000);
+  setInterval(refreshAftercareFrame, 4000);
+
+  // Push refresh on incoming feedback events — when something happens,
+  // the register / V-register state may shift.
+  try {
+    const sse = new EventSource('/api/feedback/stream');
+    sse.addEventListener('feedback', () => {
+      refreshRegisterSnapshot();
+      refreshVRegisterStatus();
+      refreshAftercareFrame();
+    });
+    sse.addEventListener('feedback-suppressed', () => {
+      refreshVRegisterStatus(); // contempt-refused changes the gate
+    });
+    sse.onerror = () => { /* browser auto-reconnect */ };
+  } catch { /* SSE optional */ }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootIntimateRegisterSurfaces);
+} else {
+  bootIntimateRegisterSurfaces();
 }

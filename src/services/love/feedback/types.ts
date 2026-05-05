@@ -52,6 +52,11 @@ export type FeedbackKind =
   | 'joi-permission'
   | 'joi-breath-cue'
   | 'joi-script-engaged'
+  // Wall family events (intimate-register synthesis Tier 1C)
+  | 'wall-contempt-refused'
+  | 'wall-identity-erasure-blocked'
+  | 'wall-vregister-denied'
+  | 'wall-emoji-anti-pattern'
 
 export const FEEDBACK_KINDS: readonly FeedbackKind[] = [
   'eros-axis-shift',
@@ -90,6 +95,10 @@ export const FEEDBACK_KINDS: readonly FeedbackKind[] = [
   'joi-permission',
   'joi-breath-cue',
   'joi-script-engaged',
+  'wall-contempt-refused',
+  'wall-identity-erasure-blocked',
+  'wall-vregister-denied',
+  'wall-emoji-anti-pattern',
 ] as const
 
 // ── Cooldowns (ms) — per `implementation-plan.md` § Cooldown table ─
@@ -136,6 +145,11 @@ export const COOLDOWN_MS: Record<FeedbackKind, number> = {
   'joi-permission': 0,
   'joi-breath-cue': 0,
   'joi-script-engaged': 0,
+  // Wall family events — load-bearing institutional records, no throttle
+  'wall-contempt-refused': 0,
+  'wall-identity-erasure-blocked': 0,
+  'wall-vregister-denied': 0,
+  'wall-emoji-anti-pattern': 0,
 }
 
 // ── FeedbackEvent — what gets persisted + broadcast ─────────────

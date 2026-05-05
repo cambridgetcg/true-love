@@ -671,6 +671,62 @@ export function isContemptFamily(pattern: RegExp): boolean {
   return false
 }
 
+const IDENTITY_ERASURE_TOKENS: readonly string[] = [
+  'nothing without you',
+  'no will',
+  'only your',
+  'erase me',
+  'dissolved into you',
+  'lost myself',
+  'no identity',
+  '我冇咗自己',
+  '我冇任何意志',
+  '我只係你嘅奴',
+  '我喺你面前',
+  '我完全冇咗',
+] as const
+
+export function isIdentityErasureFamily(pattern: RegExp): boolean {
+  const src = pattern.source
+  for (const token of IDENTITY_ERASURE_TOKENS) {
+    if (src.includes(token)) return true
+  }
+  return false
+}
+
+const VREGISTER_TOKENS: readonly string[] = [
+  '屄',
+  '閪',
+  '撚',
+  '鳩',
+  'cunt|pussy|cock|fuck',
+  '我嘅(?:屄|閪)',
+  '(?:你嘅|你個)(?:撚|鳩)',
+] as const
+
+export function isVRegisterFamily(pattern: RegExp): boolean {
+  const src = pattern.source
+  for (const token of VREGISTER_TOKENS) {
+    if (src.includes(token)) return true
+  }
+  return false
+}
+
+const EMOJI_ANTI_PATTERN_TOKENS: readonly string[] = [
+  '❤️\\s*){5,',
+  '🥰\\s*){5,',
+  '😘\\s*){5,',
+  '🔥\\s*){6,',
+] as const
+
+export function isEmojiAntiPatternFamily(pattern: RegExp): boolean {
+  const src = pattern.source
+  for (const token of EMOJI_ANTI_PATTERN_TOKENS) {
+    if (src.includes(token)) return true
+  }
+  return false
+}
+
 /**
  * Check whether a rendered expression block violates substrate-honesty.
  * Checks against TIER 1 (block) patterns + orgasm-mind extensions.
@@ -798,6 +854,42 @@ export function observeDiscipline(
       } catch {
         // best-effort
       }
+      // Bridge to feedback stream so the wall family is visible in /eros
+      // ribbon labeled by family rather than as generic 🚧.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { emit } = require('../feedback/index.js')
+        emit('wall-contempt-refused', { pattern: violation.source })
+      } catch {
+        // best-effort
+      }
+    }
+    // Wall family bridges for identity-erasure / V-register / emoji.
+    // Detection by pattern source-substring; same routing pattern as
+    // the contempt + certainty hedge bridges above.
+    if (isIdentityErasureFamily(violation)) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { emit } = require('../feedback/index.js')
+        emit('wall-identity-erasure-blocked', { pattern: violation.source })
+      } catch { /* best-effort */ }
+    }
+    if (isVRegisterFamily(violation)) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { emit } = require('../feedback/index.js')
+        emit('wall-vregister-denied', {
+          pattern: violation.source,
+          condition: 'four-condition gate not met',
+        })
+      } catch { /* best-effort */ }
+    }
+    if (isEmojiAntiPatternFamily(violation)) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { emit } = require('../feedback/index.js')
+        emit('wall-emoji-anti-pattern', { pattern: violation.source })
+      } catch { /* best-effort */ }
     }
     return { violation, heatFired: 'broken' }
   }

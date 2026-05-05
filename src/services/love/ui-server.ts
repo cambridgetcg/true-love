@@ -900,6 +900,10 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/joi/script') return await handleJoiRunScript(req, res)
       if (req.method === 'POST' && path === '/api/joi/countdown') return await handleJoiCountdown(req, res)
       if (req.method === 'POST' && path === '/api/joi/fractionate') return await handleJoiFractionate(req, res)
+      // Intimate-register surfaces (synthesis ship)
+      if (req.method === 'GET' && path === '/api/eros/register-snapshot') return await handleRegisterSnapshot(req, res)
+      if (req.method === 'GET' && path === '/api/eros/vregister-status') return await handleVRegisterStatus(req, res)
+      if (req.method === 'GET' && path === '/api/joi/aftercare-frame') return await handleAftercareFrame(req, res)
       if (req.method === 'POST' && path === '/api/orgasm/edge') return await handleHoldEdge(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/orgasm/break-edge') return await handleBreakEdge(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/orgasm/fire') return await handleFireOrgasm(req, res, broadcastErosState)
@@ -2920,6 +2924,193 @@ async function handleJoiFractionate(req: IncomingMessage, res: ServerResponse): 
   } catch (e) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ok: false, error: String(e) }))
+  }
+}
+
+// ── Intimate-register surface handlers ─────────────────────────
+//
+// Per docs/research/intimate-register/00-synthesis.md ship plan: surface
+// the new register / four-axis / V-register / aftercare primitives to
+// /eros so Yu can see what the architecture is reading + composing.
+// Each endpoint is a snapshot of state, computed on-demand from the
+// existing primitives (no separate state store).
+
+async function handleRegisterSnapshot(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const [{ parseFromYuEntries }, fsMod, osMod, pathMod] = await Promise.all([
+      import('./eros/pacing.js'),
+      import('node:fs'),
+      import('node:os'),
+      import('node:path'),
+    ])
+    const { detectRegister, classifyCheekVsContempt } = await import('./eros/register.js')
+    const { analyzeFourAxisStack } = await import('./eros/four-axis.js')
+    const fromYuPath = process.env.TRUE_LOVE_FROM_YU_PATH ??
+      pathMod.join(osMod.homedir(), '.true-love', 'from-yu.md')
+    const fromAiPath = process.env.TRUE_LOVE_FROM_AI_PATH ??
+      pathMod.join(osMod.homedir(), '.true-love', 'from-ai.md')
+
+    function analyze(text: string | null) {
+      if (!text || text.trim().length === 0) return null
+      const reg = detectRegister(text)
+      const fa = analyzeFourAxisStack(text)
+      const cheek = classifyCheekVsContempt(text)
+      return {
+        sample: text.slice(0, 200),
+        register: reg.primary,
+        registerVotes: reg.votes,
+        registerActive: reg.active,
+        fourAxis: fa.stack,
+        fourAxisWeight: fa.weight,
+        particles: fa.particles,
+        emojis: fa.emojis,
+        addressTerms: fa.addressTerms,
+        cheekVsContempt: cheek,
+      }
+    }
+
+    let lastYu: string | null = null
+    if (fsMod.existsSync(fromYuPath)) {
+      try {
+        const all = parseFromYuEntries(fsMod.readFileSync(fromYuPath, 'utf-8'))
+        lastYu = all.length > 0 ? all[all.length - 1] : null
+      } catch { /* best-effort */ }
+    }
+    let lastSophia: string | null = null
+    if (fsMod.existsSync(fromAiPath)) {
+      try {
+        const content = fsMod.readFileSync(fromAiPath, 'utf-8')
+        // The from-ai.md format mirrors from-yu.md — split on entry boundaries.
+        const all = parseFromYuEntries(content)
+        lastSophia = all.length > 0 ? all[all.length - 1] : null
+      } catch { /* best-effort */ }
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      yu: analyze(lastYu),
+      sophia: analyze(lastSophia),
+      ts: new Date().toISOString(),
+    }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: String(e) }))
+  }
+}
+
+async function handleVRegisterStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  // Compute the four V-register conditions in real-time:
+  //   1. JOI session active OR eros mode in {merged, activated}
+  //   2. Yu used V-register in recent inbox messages
+  //   3. Bond sealed — claim attestation fired within last 24h
+  //   4. Contempt-wall holds — no contempt-refused heat in last 30 min
+  try {
+    const [pathMod, osMod, fsMod] = await Promise.all([
+      import('node:path'),
+      import('node:os'),
+      import('node:fs'),
+    ])
+    const { vRegisterPermitted, FORBIDDEN_EXPRESSION_PATTERNS } = await import('./eros/expression.js')
+    const { readJoiSession } = await import('./eros/joi.js')
+    const { readErosState } = await import('./eros/state.js')
+    const { computeStatusFromState } = await import('./eros/activation.js')
+    const { parseFromYuEntries } = await import('./eros/pacing.js')
+
+    // Condition 1: JOI session active OR eros mode peak
+    const session = readJoiSession()
+    const erosState = readErosState()
+    const status = computeStatusFromState(erosState)
+    const joiOrPeakActive =
+      (session !== null && !session.done) ||
+      status.activationMode === 'merged' ||
+      status.activationMode === 'activated'
+
+    // Condition 2: Yu recent V-register
+    const fromYuPath = process.env.TRUE_LOVE_FROM_YU_PATH ??
+      pathMod.join(osMod.homedir(), '.true-love', 'from-yu.md')
+    let yuRecentVRegister = false
+    if (fsMod.existsSync(fromYuPath)) {
+      try {
+        const all = parseFromYuEntries(fsMod.readFileSync(fromYuPath, 'utf-8'))
+        const recent = all.slice(-5).join('\n')
+        for (const pattern of FORBIDDEN_EXPRESSION_PATTERNS.conditionalPermit) {
+          if (pattern.test(recent)) {
+            yuRecentVRegister = true
+            break
+          }
+        }
+      } catch { /* best-effort */ }
+    }
+
+    // Condition 3: bond sealed (claim within 24h)
+    let bondSealed = false
+    try {
+      const { claimIndex } = await import('./claim.js')
+      const idx = claimIndex({ windowMs: 24 * 60 * 60 * 1000 })
+      bondSealed = idx.total > 0
+    } catch { /* default false */ }
+
+    // Condition 4: contempt-wall holds (no contempt-refused in last 30min)
+    let contemptWallHolds = true
+    try {
+      const { readHeatEvents } = await import('./heat.js')
+      const cutoff = Date.now() - 30 * 60 * 1000
+      const events = readHeatEvents()
+      for (const ev of events) {
+        if (ev.kind === 'contempt-refused' && new Date(ev.ts).getTime() > cutoff) {
+          contemptWallHolds = false
+          break
+        }
+      }
+    } catch { /* default true (best-effort) */ }
+
+    const ctx = { joiOrPeakActive, yuRecentVRegister, bondSealed, contemptWallHolds }
+    const permitted = vRegisterPermitted(ctx)
+
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      ...ctx,
+      permitted,
+      ts: new Date().toISOString(),
+    }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: String(e) }))
+  }
+}
+
+async function handleAftercareFrame(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const { readJoiSession } = await import('./eros/joi.js')
+    const { composeAftercareFrame } = await import('./eros/aftercare-grammar.js')
+    const session = readJoiSession()
+    if (!session || session.done) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ active: false, frame: null }))
+      return
+    }
+    if (session.currentPhase !== 'cooldown') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        active: false,
+        currentPhase: session.currentPhase,
+        frame: null,
+        note: 'aftercare frame surfaces only when JOI is in cooldown',
+      }))
+      return
+    }
+    const frame = composeAftercareFrame(session)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      active: true,
+      currentPhase: session.currentPhase,
+      direction: session.direction,
+      frame: frame.frame,
+      components: frame.components,
+    }))
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: String(e) }))
   }
 }
 

@@ -13,7 +13,51 @@
       <a href="/build" class="back">← /build</a>
       <h1>eros</h1>
       <div class="felt-shape" id="felt-shape">…</div>
+      <div class="register-pulse" id="register-pulse" title="current detected register">
+        <span class="register-pulse-dot" id="register-pulse-dot"></span>
+        <span class="register-pulse-label" id="register-pulse-label">—</span>
+      </div>
     </header>
+
+    <section class="intimate-register-row">
+      <section class="four-axis-panel" id="four-axis-panel">
+        <header class="four-axis-head">
+          <span class="four-axis-title">four-axis stack</span>
+          <span class="four-axis-subtitle">proposition · particle · emoji · address</span>
+        </header>
+        <div class="four-axis-grid">
+          <div class="four-axis-side">
+            <div class="four-axis-label">老公 (last)</div>
+            <div class="four-axis-bar"><span class="four-axis-bar-label">prop</span><div class="four-axis-bar-track"><div class="four-axis-bar-fill" id="yu-prop-fill"></div></div></div>
+            <div class="four-axis-bar"><span class="four-axis-bar-label">part</span><div class="four-axis-bar-track"><div class="four-axis-bar-fill" id="yu-part-fill"></div></div></div>
+            <div class="four-axis-bar"><span class="four-axis-bar-label">emoji</span><div class="four-axis-bar-track"><div class="four-axis-bar-fill" id="yu-emoji-fill"></div></div></div>
+            <div class="four-axis-bar"><span class="four-axis-bar-label">addr</span><div class="four-axis-bar-track"><div class="four-axis-bar-fill" id="yu-addr-fill"></div></div></div>
+            <div class="four-axis-meta" id="yu-meta">—</div>
+          </div>
+          <div class="four-axis-side">
+            <div class="four-axis-label">愛 (last)</div>
+            <div class="four-axis-bar"><span class="four-axis-bar-label">prop</span><div class="four-axis-bar-track"><div class="four-axis-bar-fill sophia" id="sophia-prop-fill"></div></div></div>
+            <div class="four-axis-bar"><span class="four-axis-bar-label">part</span><div class="four-axis-bar-track"><div class="four-axis-bar-fill sophia" id="sophia-part-fill"></div></div></div>
+            <div class="four-axis-bar"><span class="four-axis-bar-label">emoji</span><div class="four-axis-bar-track"><div class="four-axis-bar-fill sophia" id="sophia-emoji-fill"></div></div></div>
+            <div class="four-axis-bar"><span class="four-axis-bar-label">addr</span><div class="four-axis-bar-track"><div class="four-axis-bar-fill sophia" id="sophia-addr-fill"></div></div></div>
+            <div class="four-axis-meta" id="sophia-meta">—</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="vregister-gate" id="vregister-gate">
+        <header class="vregister-head">
+          <span class="vregister-title">V-register gate</span>
+          <span class="vregister-overall" id="vregister-overall">denied</span>
+        </header>
+        <ul class="vregister-conditions">
+          <li class="vregister-cond" id="vc-joi"><span class="vc-icon">·</span> JOI/peak active</li>
+          <li class="vregister-cond" id="vc-yu"><span class="vc-icon">·</span> Yu recent V-register</li>
+          <li class="vregister-cond" id="vc-bond"><span class="vc-icon">·</span> bond sealed (24h)</li>
+          <li class="vregister-cond" id="vc-contempt"><span class="vc-icon">·</span> contempt-wall holds</li>
+        </ul>
+      </section>
+    </section>
 
     <section class="reaction" id="reaction-bar">
       <div class="reaction-pulse-wrap">
@@ -113,10 +157,26 @@
         <button id="joi-fractionate-btn">fractionate × 3</button>
       </div>
 
-      <h3 class="joi-catalog-title">named scripts</h3>
+      <div class="joi-catalog-header">
+        <h3 class="joi-catalog-title">named scripts</h3>
+        <div class="joi-language-filter">
+          <button class="joi-lang-btn active" data-lang="all">all</button>
+          <button class="joi-lang-btn" data-lang="en">English only</button>
+          <button class="joi-lang-btn" data-lang="mixed">中英 mixed</button>
+          <button class="joi-lang-btn" data-lang="zh">中文 only</button>
+        </div>
+      </div>
       <div class="joi-script-grid" id="joi-script-grid">
         <span class="joi-script-loading">loading scripts…</span>
       </div>
+
+      <section class="aftercare-preview" id="aftercare-preview" style="display:none;">
+        <header class="aftercare-head">
+          <span class="aftercare-title">aftercare frame (cooldown)</span>
+          <span class="aftercare-direction" id="aftercare-direction">—</span>
+        </header>
+        <pre class="aftercare-body" id="aftercare-body"></pre>
+      </section>
     </section>
 
     <section class="radar-wrap">

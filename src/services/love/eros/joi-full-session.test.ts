@@ -173,6 +173,79 @@ describe('runJoiScript with extended DSL', () => {
 })
 
 // ════════════════════════════════════════════════════════════════
+// FOUR DEMONSTRATION SCRIPTS — each exercises the DSL differently
+// ════════════════════════════════════════════════════════════════
+
+describe('demonstration scripts — DSL coverage', () => {
+  test('tender-worship: sophia-leads, slow-burn, worship-heavy', () => {
+    const script = JOI_SCRIPTS['tender-worship']!
+    expect(script.direction).toBe('sophia-leads')
+    expect(script.archetype).toBe('slow-burn')
+    expect(script.beats.filter((b) => b.kind === 'worship-cycle').length).toBeGreaterThanOrEqual(2)
+    // No edges or denials — gentle register
+    expect(script.beats.filter((b) => b.kind === 'denial').length).toBe(0)
+    expect(script.beats.filter((b) => b.kind === 'phase-shift' && b.phase === 'edge').length).toBe(0)
+    // Runs cleanly
+    expect(runJoiScript('tender-worship')).toBe(script.beats.length)
+  })
+
+  test('brat-tamed: provocation → escalation → submission → release', () => {
+    const script = JOI_SCRIPTS['brat-tamed']!
+    expect(script.archetype).toBe('edge-and-deny')
+    // Brat-provoke fires before surrender
+    const beats = script.beats
+    const firstBratIdx = beats.findIndex((b) => b.kind === 'anchor-fire' && b.phraseId === 'brat-provoke')
+    const surrenderIdx = beats.findIndex((b) => b.kind === 'anchor-fire' && b.phraseId === 'surrender')
+    expect(firstBratIdx).toBeGreaterThanOrEqual(0)
+    expect(surrenderIdx).toBeGreaterThan(firstBratIdx)
+    // Permission only fires AFTER surrender
+    const permissionIdx = beats.findIndex((b) => b.kind === 'permission')
+    expect(permissionIdx).toBeGreaterThan(surrenderIdx)
+    // Runs
+    expect(runJoiScript('brat-tamed')).toBe(beats.length)
+  })
+
+  test('flip-session: mid-session direction reversal', () => {
+    const script = JOI_SCRIPTS['flip-session']!
+    expect(script.direction).toBe('yu-leads') // initial
+    const beats = script.beats
+    const flip = beats.find((b): b is { kind: 'flip-direction'; to: 'yu-leads' | 'sophia-leads' } => b.kind === 'flip-direction')
+    expect(flip).toBeDefined()
+    expect(flip!.to).toBe('sophia-leads')
+    // Two halves: denials before AND after the flip
+    const flipIdx = beats.findIndex((b) => b.kind === 'flip-direction')
+    const denialsBeforeFlip = beats.slice(0, flipIdx).filter((b) => b.kind === 'denial').length
+    const denialsAfterFlip = beats.slice(flipIdx).filter((b) => b.kind === 'denial').length
+    expect(denialsBeforeFlip).toBeGreaterThanOrEqual(1)
+    expect(denialsAfterFlip).toBeGreaterThanOrEqual(1)
+    // Runs
+    expect(runJoiScript('flip-session')).toBe(beats.length)
+  })
+
+  test('welcome-home: short returning-listener session', () => {
+    const script = JOI_SCRIPTS['welcome-home']!
+    expect(script.archetype).toBe('gentle-warmup')
+    expect(script.durationS).toBeLessThan(600) // brief
+    // Opens with welcome-back + yes-set (presupposed continuity)
+    expect(script.beats[1]?.kind).toBe('welcome-back')
+    expect(script.beats[2]?.kind).toBe('yes-set')
+    // No edge/peak — gentle reassertion of bond, not arousal escalation
+    expect(script.beats.filter((b) => b.kind === 'phase-shift' && b.phase === 'edge').length).toBe(0)
+    expect(script.beats.filter((b) => b.kind === 'phase-shift' && b.phase === 'peak').length).toBe(0)
+    // Runs
+    expect(runJoiScript('welcome-home')).toBe(script.beats.length)
+  })
+
+  test('all 5 new scripts are catalogued and runnable', () => {
+    const list = listJoiScripts().map((s) => s.id)
+    for (const id of ['shibby-full-session', 'tender-worship', 'brat-tamed', 'flip-session', 'welcome-home']) {
+      expect(list).toContain(id)
+      expect(runJoiScript(id)).toBeGreaterThan(0)
+    }
+  })
+})
+
+// ════════════════════════════════════════════════════════════════
 // TIER 2 — gendered reward triggers + welcome-back
 // ════════════════════════════════════════════════════════════════
 
