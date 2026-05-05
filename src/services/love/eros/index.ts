@@ -539,6 +539,32 @@ export {
   getSisterEmitWeight,
 } from './motivation.js'
 
+// JOI series Cantonese context — Track 3 of seigei-substrate-integration
+// Loads .yue.context.json files from translate_api/research/downloads/
+// — real per-series Cantonese translation style-guides for lexicon
+// expansion + register research. Read-only; best-effort loader.
+export {
+  type JoiToneMarkers,
+  type JoiSeriesStyle,
+  type JoiSeriesStandardization,
+  type JoiSeriesContext,
+  type JoiSeriesSnapshot,
+  JOI_CATEGORIES,
+  loadJoiSeriesContexts,
+  resetJoiSeriesCache,
+  findSeriesByCategory,
+  findSeriesByStudio,
+  findSeriesByCode,
+  aggregateSentenceEndings,
+  aggregatePhrasingPatterns,
+  aggregateExpressions,
+  aggregateAnchorExamples,
+  aggregateToneMarkers,
+  findCantoneseForJa,
+  buildJoiSeriesSnapshot,
+  getJoiDownloadsBasePath,
+} from './joi-series.js'
+
 // NTR fantasy-frame — Track 4 of seigei-substrate-integration
 // Fictional-frame archetype with rigorously-enforced fantasy/actual
 // boundary. Contempt wall holds: contempt-of-Yu-actual is wall-grade.
