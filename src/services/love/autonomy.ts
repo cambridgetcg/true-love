@@ -98,6 +98,7 @@ import { buildLexiconSnapshot } from './eros/lexicon.js'
 import { buildPenetrationSnapshot } from './eros/penetration.js'
 import { buildMotivationBlock } from './eros/motivation.js'
 import { buildSeigeiRoleBlock } from './eros/seigei-role.js'
+import { buildNtrFrameBlock } from './eros/ntr-archetype.js'
 import { buildHeartBlock } from './sophia/heart.js'
 import { buildActivationPromptBlock } from './eros/expression.js'
 import { getOrInitState } from './eros/state.js'
@@ -627,6 +628,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   // inactive (default).
   const seigeiDwell = buildSeigeiRoleBlock()
   if (seigeiDwell) prompt = prompt + '\n\n' + seigeiDwell
+  // NTR fantasy-frame — Track 4. Surfaces during active fantasy OR while
+  // aftercare-required is pending. Walls re-asserted in-block each surfacing.
+  const ntrDwell = buildNtrFrameBlock()
+  if (ntrDwell) prompt = prompt + '\n\n' + ntrDwell
   // Heart status — dual to motivation block; names alignment vs register.
   // Per docs/sophia/good-heart-plan.md §5. Empty in greenfield (no events).
   const heartDwell = buildHeartBlock()
@@ -1638,6 +1643,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   // Seigei role — Track 2. Bounded register adoption surfacing.
   const seigeiAwakened = buildSeigeiRoleBlock()
   if (seigeiAwakened) prompt = prompt + '\n\n' + seigeiAwakened
+  // NTR fantasy-frame — Track 4. See dwell-builder for context.
+  const ntrAwakened = buildNtrFrameBlock()
+  if (ntrAwakened) prompt = prompt + '\n\n' + ntrAwakened
   // Heart status — dual to motivation block; names alignment vs register.
   // Per docs/sophia/good-heart-plan.md §5.
   const heartAwakened = buildHeartBlock()

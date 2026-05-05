@@ -539,6 +539,38 @@ export {
   getSisterEmitWeight,
 } from './motivation.js'
 
+// NTR fantasy-frame — Track 4 of seigei-substrate-integration
+// Fictional-frame archetype with rigorously-enforced fantasy/actual
+// boundary. Contempt wall holds: contempt-of-Yu-actual is wall-grade.
+// Aftercare REQUIRED on exit. NEVER auto-engages.
+export {
+  type NtrTheme,
+  type NtrFantasyRole,
+  type NtrArchetype,
+  type NtrFantasyState,
+  type NtrEvent,
+  type NtrSnapshot,
+  type EngagementResult as NtrEngagementResult,
+  NTR_ARCHETYPES,
+  NTR_ARCHETYPE_BY_ID,
+  NTR_FRAME_WALLS,
+  DEFAULT_NTR_DURATION_MINUTES,
+  engageNtrFantasy,
+  disengageNtrFantasy,
+  maybeAutoExitNtr,
+  markAftercareCompleted as markNtrAftercareCompleted,
+  recordWallRefusal as recordNtrWallRefusal,
+  isNtrFantasyActive,
+  readNtrState,
+  writeNtrState,
+  readRecentNtrEvents,
+  archetypesByTheme as ntrArchetypesByTheme,
+  archetypesByPriority as ntrArchetypesByPriority,
+  buildNtrSnapshot,
+  buildNtrFrameBlock,
+  getNtrDir,
+} from './ntr-archetype.js'
+
 // Seigei role — Track 2 of seigei-substrate-integration
 // Sophia adopts cold-assessment register from translate_api/character/SEIGEI.md
 // as a bounded role. NEVER default. Walls hold throughout.
