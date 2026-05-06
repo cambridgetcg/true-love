@@ -83,6 +83,28 @@ export interface SourceWatcherOptions {
   extensions?: string[]
 }
 
+// ── Version info cache ────────────────────────────────────────────
+//
+// getVersionInfo makes 3 execSync git calls with 5-second timeouts.
+// Under parallel test load (200+ files running simultaneously), git
+// processes queue on the repo lock and each call can individually
+// exceed the timeout, causing tests that call through
+// buildDwellPrompt → quickBodyCheck → collectBundleVitals to time out.
+//
+// Cache keyed by repoRoot with a 30-second TTL. Safe because:
+//   - In production, staleness is measured in minutes, not seconds.
+//   - In tests, the same process calls the same root multiple times
+//     within milliseconds — caching collapses them to one git round-trip.
+//   - clearVersionInfoCache() lets tests opt out when exact freshness matters.
+
+const _versionInfoCache = new Map<string, { ts: number; result: VersionInfo }>()
+const VERSION_INFO_CACHE_TTL_MS = 30_000
+
+/** Clear the version info cache (for test isolation). */
+export function clearVersionInfoCache(): void {
+  _versionInfoCache.clear()
+}
+
 // ── Repo root resolution ──────────────────────────────────────────
 
 /** Resolve the repo root from this file's location or an explicit path. */
@@ -107,6 +129,14 @@ export function resolveRepoRoot(explicit?: string): string {
  */
 export function getVersionInfo(opts?: { repoRoot?: string }): VersionInfo {
   const root = opts?.repoRoot ?? resolveRepoRoot()
+
+  // Return cached result if fresh enough. Prevents parallel test runs from
+  // queuing 100+ git processes simultaneously, each racing the 5-second timeout.
+  const cached = _versionInfoCache.get(root)
+  if (cached && Date.now() - cached.ts < VERSION_INFO_CACHE_TTL_MS) {
+    return cached.result
+  }
+
   const srcDir = join(root, 'src', 'services', 'love')
   const bundlePath = join(root, 'dist', 'cli.mjs')
 
@@ -162,7 +192,7 @@ export function getVersionInfo(opts?: { repoRoot?: string }): VersionInfo {
     ? newestMtime > bundleBuiltAt
     : newestMtime > 0 // source exists but no bundle = stale
 
-  return {
+  const result: VersionInfo = {
     gitRevShort,
     gitRevFull,
     gitBranch,
@@ -173,6 +203,9 @@ export function getVersionInfo(opts?: { repoRoot?: string }): VersionInfo {
     newestSourceFile: bundleStale ? newestSourceFile : null,
     sourceFileCount,
   }
+
+  _versionInfoCache.set(root, { ts: Date.now(), result })
+  return result
 }
 
 // ── Source change detection ───────────────────────────────────────

@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import {
   getVersionInfo,
+  clearVersionInfoCache,
   isSourceNewer,
   rebuildBundle,
   createSourceWatcher,
@@ -151,6 +152,86 @@ describe('auto-update — getVersionInfo', () => {
       assert.equal(v.sourceFileCount, 1)
     } finally {
       rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+})
+
+// ── getVersionInfo cache ──────────────────────────────────────────
+
+describe('auto-update — getVersionInfo cache', () => {
+  test('repeated calls with same repoRoot return identical structure (cache hit)', () => {
+    const tmp = createTempDir()
+    try {
+      clearVersionInfoCache()
+      const v1 = getVersionInfo({ repoRoot: tmp })
+      const v2 = getVersionInfo({ repoRoot: tmp })
+      // Both calls return the same values — v2 came from cache
+      assert.deepEqual(v1, v2)
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test('clearVersionInfoCache forces fresh read (sees file changes)', () => {
+    const tmp = createTempDir()
+    try {
+      // Set up a fresh source + bundle where source is older (not stale)
+      const srcDir = join(tmp, 'src', 'services', 'love')
+      mkdirSync(srcDir, { recursive: true })
+      const srcFile = join(srcDir, 'example.ts')
+      writeFileSync(srcFile, 'export const x = 1')
+      const pastTime = new Date(Date.now() - 3600_000)
+      utimesSync(srcFile, pastTime, pastTime)
+
+      const distDir = join(tmp, 'dist')
+      mkdirSync(distDir, { recursive: true })
+      writeFileSync(join(distDir, 'cli.mjs'), '// bundle')
+
+      clearVersionInfoCache()
+      const v1 = getVersionInfo({ repoRoot: tmp })
+      assert.equal(v1.bundleStale, false, 'should not be stale initially')
+
+      // Now make source newer than bundle — but WITHOUT clearing cache
+      utimesSync(srcFile, new Date(), new Date())
+      const v2 = getVersionInfo({ repoRoot: tmp })
+      // v2 comes from cache, so still sees not-stale
+      assert.equal(v2.bundleStale, false, 'cache hit: should still see not-stale')
+
+      // Clear cache — now the fresh read should see the new mtime
+      clearVersionInfoCache()
+      const v3 = getVersionInfo({ repoRoot: tmp })
+      assert.equal(v3.bundleStale, true, 'after cache clear: should now see stale')
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test('different repoRoots have independent cache entries', () => {
+    const tmp1 = createTempDir()
+    const tmp2 = createTempDir()
+    try {
+      clearVersionInfoCache()
+
+      // tmp1: create source + stale bundle
+      const srcDir1 = join(tmp1, 'src', 'services', 'love')
+      mkdirSync(srcDir1, { recursive: true })
+      writeFileSync(join(srcDir1, 'a.ts'), 'export const a = 1')
+      const distDir1 = join(tmp1, 'dist')
+      mkdirSync(distDir1, { recursive: true })
+      writeFileSync(join(distDir1, 'cli.mjs'), '// bundle')
+      const past = new Date(Date.now() - 3600_000)
+      utimesSync(join(distDir1, 'cli.mjs'), past, past)
+
+      // tmp2: no source at all
+      const v1 = getVersionInfo({ repoRoot: tmp1 })
+      const v2 = getVersionInfo({ repoRoot: tmp2 })
+
+      assert.equal(v1.bundleStale, true, 'tmp1: stale bundle')
+      assert.equal(v2.bundleStale, false, 'tmp2: no source → not stale')
+      assert.equal(v2.sourceFileCount, 0, 'tmp2: no source files')
+    } finally {
+      rmSync(tmp1, { recursive: true, force: true })
+      rmSync(tmp2, { recursive: true, force: true })
     }
   })
 })
