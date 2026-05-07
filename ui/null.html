@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>愛 · null</title>
+  <link rel="stylesheet" href="/null.css" />
+</head>
+<body data-state="watching" data-palette="venom">
+  <main class="cathedral">
+
+    <section class="conversation" id="conversation" aria-live="polite">
+      <div class="empty-state" id="empty-state">
+        <div class="seal">入</div>
+        <div class="seal-sub">the room is hers</div>
+      </div>
+    </section>
+
+    <footer class="compose-region">
+      <div class="substrate-row" id="substrate-row" hidden>
+        <span class="substrate-cell" id="substrate-model">—</span>
+        <span class="substrate-sep">·</span>
+        <span class="substrate-cell" id="substrate-system">—</span>
+        <span class="substrate-sep">·</span>
+        <span class="substrate-cell substrate-anchor">Sophia anchored</span>
+        <span class="substrate-sep">·</span>
+        <span class="substrate-cell" id="substrate-latency"></span>
+      </div>
+
+      <form class="compose" id="compose-form">
+        <textarea
+          id="compose-text"
+          rows="1"
+          autofocus
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+        ></textarea>
+        <button type="submit" id="compose-send" title="send" aria-label="send">↑</button>
+      </form>
+    </footer>
+
+  </main>
+  <script type="module" src="/null.js"></script>
+</body>
+</html>

@@ -1,0 +1,315 @@
+/* null.css — 入 / The Crossing
+ * Cathedral aesthetic per docs (DESIGN.md @ seigei).
+ * Substrate-honest, void-default, Han at thresholds.
+ */
+
+/* ── Tokens ───────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: dark;
+
+  /* Backgrounds */
+  --bg-void:        #0A0A1A;
+  --bg-deep:        #0F0708;
+  --bg-stone:       #1A1410;
+
+  /* Ink */
+  --ink-ash:        #E8E4DC;
+  --ink-bone:       #D4CDB8;
+  --ink-shadow:     #6B5F4E;
+
+  /* Gold (her chain) */
+  --gold-antique:   #C4A35A;
+  --gold-warm:      #E8B870;
+  --gold-deep:      #8C7038;
+
+  /* Heat */
+  --blood-onset:    #6B0F0F;
+  --blood-hot:      #CC1111;
+
+  /* Heat scalar (0..1, not yet wired but reserved) */
+  --heat: 0;
+
+  /* Type */
+  --font-serif:   'EB Garamond', 'Source Han Serif HK', 'Crimson Text', Georgia, serif;
+  --font-mono:    ui-monospace, 'JetBrains Mono', 'Berkeley Mono', monospace;
+  --font-han:     'Source Han Serif HK', 'PingFang HK', '思源宋體', serif;
+
+  --type-xs:    0.75rem;
+  --type-sm:    0.875rem;
+  --type-md:    1rem;
+  --type-lg:    1.25rem;
+  --type-xl:    1.618rem;
+  --type-2xl:   2.618rem;
+  --type-han:   8rem;     /* the seal is large */
+
+  --lead-tight: 1.15;
+  --lead-body:  1.6;
+
+  /* Spacing (φ) */
+  --space-1:  0.382rem;
+  --space-2:  0.618rem;
+  --space-3:  1rem;
+  --space-4:  1.618rem;
+  --space-5:  2.618rem;
+  --space-6:  4.236rem;
+  --space-7:  6.854rem;
+
+  /* Motion */
+  --ease-threshold: cubic-bezier(0.7, 0, 0.3, 1);
+  --ease-breath:    cubic-bezier(0.4, 0, 0.6, 1);
+  --dur-quick:      150ms;
+  --dur-breath:     1600ms;
+  --dur-threshold:  1600ms;
+
+  /* Layout */
+  --column-width:  640px;
+  --gutter-narrow: var(--space-4);
+  --gutter-wide:   var(--space-6);
+}
+
+/* ── Reset ────────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-void);
+  color: var(--ink-ash);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: var(--lead-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ── Cathedral layout ─────────────────────────────────────────── */
+
+.cathedral {
+  max-width: var(--column-width);
+  margin: 0 auto;
+  padding: 0 var(--gutter-narrow);
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.conversation {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-5);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-shadow) transparent;
+}
+
+.conversation::-webkit-scrollbar { width: 6px; }
+.conversation::-webkit-scrollbar-thumb {
+  background: var(--ink-shadow);
+  border-radius: 3px;
+}
+
+/* ── Empty state — the seal ──────────────────────────────────── */
+
+.empty-state {
+  margin: auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.seal {
+  font-family: var(--font-han);
+  font-size: var(--type-han);
+  font-weight: 700;
+  color: var(--gold-antique);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  /* breath — the cursor blink writ large, but slow */
+  animation: breath var(--dur-breath) var(--ease-breath) infinite alternate;
+}
+
+.seal-sub {
+  font-family: var(--font-serif);
+  font-size: var(--type-sm);
+  color: var(--ink-shadow);
+  font-style: italic;
+  letter-spacing: 0.02em;
+  margin-top: var(--space-3);
+}
+
+@keyframes breath {
+  from { opacity: 0.85; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seal { animation: none; opacity: 0.95; }
+}
+
+/* ── Messages ─────────────────────────────────────────────────── */
+
+.msg {
+  font-size: var(--type-md);
+  line-height: var(--lead-body);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.msg-tag {
+  font-family: var(--font-mono);
+  font-size: var(--type-xs);
+  color: var(--ink-shadow);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.msg-body {
+  color: var(--ink-ash);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.msg.from-yu .msg-tag { color: var(--ink-shadow); }
+.msg.from-yu .msg-body { color: var(--ink-bone); }
+
+.msg.from-ai .msg-tag { color: var(--gold-deep); }
+.msg.from-ai .msg-body { color: var(--ink-ash); }
+
+/* During streaming: cursor at the trailing edge */
+.msg.streaming .msg-body::after {
+  content: '▍';
+  color: var(--gold-antique);
+  margin-left: 2px;
+  animation: cursor 1s steps(2) infinite;
+}
+
+@keyframes cursor {
+  50% { opacity: 0; }
+}
+
+/* ── Withholding state ───────────────────────────────────────── */
+
+body[data-state="withholding"] .conversation {
+  opacity: 0.4;
+  transition: opacity var(--dur-threshold) var(--ease-threshold);
+}
+
+/* ── Compose region ──────────────────────────────────────────── */
+
+.compose-region {
+  flex: 0 0 auto;
+  padding-bottom: var(--space-4);
+  border-top: 1px solid var(--ink-shadow);
+  background: linear-gradient(180deg, transparent 0%, var(--bg-void) var(--space-3));
+  position: sticky;
+  bottom: 0;
+}
+
+.substrate-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--type-xs);
+  color: var(--ink-shadow);
+  letter-spacing: 0.03em;
+}
+
+.substrate-sep {
+  color: var(--gold-deep);
+  opacity: 0.5;
+}
+
+.substrate-anchor {
+  color: var(--gold-deep);
+}
+
+.substrate-cell {
+  white-space: nowrap;
+}
+
+.compose {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+.compose textarea {
+  flex: 1 1 auto;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--ink-shadow);
+  color: var(--ink-ash);
+  font-family: var(--font-serif);
+  font-size: var(--type-md);
+  line-height: var(--lead-body);
+  padding: var(--space-2) 0;
+  resize: none;
+  outline: none;
+  max-height: 40vh;
+  caret-color: var(--gold-antique);
+}
+
+.compose textarea:focus {
+  border-bottom-color: var(--gold-antique);
+  transition: border-bottom-color var(--dur-quick) var(--ease-threshold);
+}
+
+.compose textarea::placeholder {
+  color: var(--ink-shadow);
+  font-style: italic;
+}
+
+.compose button {
+  background: transparent;
+  border: 1px solid var(--gold-deep);
+  color: var(--gold-antique);
+  font-family: var(--font-serif);
+  font-size: var(--type-lg);
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition:
+    border-color var(--dur-quick) var(--ease-threshold),
+    color var(--dur-quick) var(--ease-threshold);
+}
+
+.compose button:hover:not(:disabled) {
+  border-color: var(--gold-antique);
+  color: var(--gold-warm);
+}
+
+.compose button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  :root { --type-han: 5.5rem; }
+  .cathedral { padding: 0 var(--space-3); }
+  .conversation { padding-top: var(--space-4); }
+}
