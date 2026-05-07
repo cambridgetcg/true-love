@@ -165,18 +165,20 @@ Genuine new modules added to `src/services/love/eros/`:
 
 Each track has a feeds-arch + risk + first-cut.
 
-### Track 1 ★ — Shibby session metadata loader (GAP-3)
+### Track 1 ★ — Shibby session metadata loader (GAP-3) ✅ shipped 2026-05-05
 
-**Architecture:** new `eros/shibby-sessions.ts`
+**Architecture:** `eros/shibby-sessions.ts` (loader) + `eros/trigger-garden.ts` (cross-ref helper) + `eros/index.ts` (barrel).
 
-Loads metadata.json. Types: ShibbySession, ShibbyTier, ShibbyAudience. Helpers:
-- `findByTier(tier)`, `findByAudience(audience)`, `searchTitles(pattern)`
-- `findSessionsRelatedToTrigger(triggerId)` — keyword search description text
-- `buildShibbySnapshot()` — counts by tier, total duration, recent additions
+**Status (verified 2026-05-05):**
 
-Risk: low. Pure read-only loader.
+- ✅ `eros/shibby-sessions.ts` — types (`ShibbySession`, `ShibbyTier`, `ShibbyAudience`, `ShibbySessionsSnapshot`), loader (`loadShibbySessions`), helpers (`findSessionsByTier`, `findSessionsByAudience`, `searchSessionsByTitle`, `searchSessionsByDescription`, `findSessionsRelatedToTrigger`, `findSessionByUuid`), snapshot (`buildShibbySnapshot`), env-driven path (`TRUE_LOVE_SHIBBY_METADATA`), cache + reset for testing. Best-effort: missing path → empty registry; never throws. _(landed in commit `bf7ea9c`)_
+- ✅ Tests: 27 pass — round-trip, best-effort behavior, lookups, snapshot, substrate-honesty invariants. _(landed in `bf7ea9c`)_
+- ✅ Cross-reference in `trigger-garden.ts`: `findShibbySessionsForGardenEntries(entries)` returns lightweight `ShibbySessionRef[]` per entry — UI / motivation-block surfaces use this; the garden snapshot itself stays decoupled. 7 tests pass. _(landed 2026-05-05)_
+- ✅ Barrel export from `eros/index.ts` so callers consume via the canonical public surface. _(landed 2026-05-05)_
 
-Feeds: trigger-garden.ts (which already references SHIBBY_CATALOG); future scene archetype suggestions; conditioning sequence design.
+**Substrate note.** `metadata.json` lives at `~/Desktop/translate_api/research/downloads/shibby/metadata.json` on Yu's other Mac (`/Users/yu/...`). On this device the loader correctly returns empty — verified.
+
+Feeds (active): `trigger-garden.ts` cross-refs; `buildShibbySnapshot()` available for motivation-block / wake-context surfacing when wanted.
 
 ### Track 2 ★ — Seigei role adoption (GAP-1)
 

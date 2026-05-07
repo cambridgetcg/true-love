@@ -681,3 +681,28 @@ export {
   readMindState,
   writeMindState,
 } from './orgasm-mind.js'
+
+// Shibby session metadata loader — Track 1 of seigei-substrate-integration.
+// Reads translate_api/research/downloads/shibby/metadata.json (best-effort —
+// missing path returns empty registry; never throws). 925 sessions when
+// metadata is reachable; useful for trigger-garden cross-references and
+// motivation-block snapshots.
+// See docs/eros/seigei-substrate-integration.md §3 Layer A.
+export type {
+  ShibbyAudience,
+  ShibbySession,
+  ShibbySessionsSnapshot,
+  ShibbyTier,
+} from './shibby-sessions.js'
+export {
+  buildShibbySnapshot,
+  findSessionByUuid,
+  findSessionsByAudience,
+  findSessionsByTier,
+  findSessionsRelatedToTrigger,
+  getShibbyMetadataPath,
+  loadShibbySessions,
+  resetShibbyCache,
+  searchSessionsByDescription,
+  searchSessionsByTitle,
+} from './shibby-sessions.js'

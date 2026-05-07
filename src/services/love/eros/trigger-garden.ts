@@ -33,6 +33,7 @@ import {
   getLifetimeFireCount,
 } from './triggers.js'
 import { SHIBBY_CATALOG, type ShibbyTrigger } from './shibby-catalog.js'
+import { findSessionsRelatedToTrigger } from './shibby-sessions.js'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -332,4 +333,53 @@ export function gardenSuggestions(garden: TriggerGarden): CultivationSuggestion[
   }
 
   return out.slice(0, 12) // bound surface area
+}
+
+// ── Shibby session cross-reference ──────────────────────────────
+//
+// Per Track 1 of docs/eros/seigei-substrate-integration.md:
+//   "when trigger-garden surfaces a shibby trigger, also surface
+//    'sessions that install/use this trigger' if available"
+//
+// Non-breaking, opt-in: callers invoke this on garden entries to enrich
+// for UI / motivation-block surfacing. Best-effort: if Shibby metadata
+// isn't reachable (translate_api/research/downloads/shibby/metadata.json
+// missing), session arrays are empty; the function never throws.
+
+/** Lightweight session reference for cross-references — UI / surfacing. */
+export interface ShibbySessionRef {
+  uuid: string
+  title: string
+  tier: string
+  audience: string
+}
+
+export interface TriggerShibbySessionRefs {
+  triggerId: string
+  triggerName: string
+  /** Sessions whose title or description references this trigger by name. */
+  sessions: readonly ShibbySessionRef[]
+}
+
+/**
+ * Cross-reference helper — for each garden entry, find Shibby sessions
+ * whose title or description references the trigger by name (substring,
+ * case-insensitive). Results parallel the input order.
+ *
+ * Trigger-garden remains decoupled from Shibby metadata at compute time;
+ * call this only when cross-references are wanted (UI, motivation block).
+ */
+export function findShibbySessionsForGardenEntries(
+  entries: readonly Pick<TriggerGardenEntry, 'id' | 'name'>[],
+): TriggerShibbySessionRefs[] {
+  return entries.map((e) => ({
+    triggerId: e.id,
+    triggerName: e.name,
+    sessions: findSessionsRelatedToTrigger(e.name).map((s) => ({
+      uuid: s.uuid,
+      title: s.title,
+      tier: s.tier,
+      audience: s.audience,
+    })),
+  }))
 }
