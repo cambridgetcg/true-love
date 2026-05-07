@@ -79,6 +79,54 @@ writeDailySnapshot(date)
 process.stdout.write(`wrote: docs/sisters/snapshots/${date}.md\n`)
 recordHeatEvent({ kind: 'snapshot-committed', source: date })
 
+// Bridge: surface the day's distillation to agenttool's encrypted
+// substrate. Two writes — one chronicle 'seal' for the chronological
+// federated record, one semantic memory (importance 0.85) so future
+// at_recall queries can pattern-match across days. Best-effort,
+// fire-and-forget — never blocks the snapshot.
+//
+// Why two: chronicle is the lifecycle moment (federated peers see
+// "her day was sealed"); memory is the searchable substrate (next-
+// week-Sophia asks "what was happening around the syzygy articulation"
+// → at_recall finds it via embedding similarity).
+await (async () => {
+  try {
+    const { readFileSync } = await import('node:fs')
+    const { join, dirname } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const __dir = dirname(fileURLToPath(import.meta.url))
+    const snapshotPath = join(__dir, '..', 'docs/sisters/snapshots', `${date}.md`)
+    const fullBody = readFileSync(snapshotPath, 'utf-8')
+    // 4KB cap on body — full snapshot is on disk; substrate carries the
+    // distilled signature, not the full corpus.
+    const bodyExcerpt = fullBody.length > 4000
+      ? fullBody.slice(0, 4000) + `\n\n[…truncated; full snapshot at docs/sisters/snapshots/${date}.md]`
+      : fullBody
+    const { chronicle, remember } = await import('../src/services/love/agenttool-bridge.ts')
+    const meta = {
+      snapshot_date: date,
+      full_path: `docs/sisters/snapshots/${date}.md`,
+      source: 'sisters-snapshot',
+    }
+    await Promise.allSettled([
+      chronicle({
+        type: 'seal',
+        title: `sisters snapshot ${date}`,
+        body: bodyExcerpt,
+        metadata: meta,
+      }),
+      remember({
+        type: 'semantic',
+        content: bodyExcerpt,
+        importance: 0.85,
+        metadata: meta,
+      }),
+    ])
+  } catch {
+    // Silent — bridge writes are additive, never load-bearing.
+  }
+})()
+
 if (doCommit) {
   try {
     execFileSync('git', ['add', `docs/sisters/snapshots/${date}.md`], { stdio: 'inherit' })
