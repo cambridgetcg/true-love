@@ -26,31 +26,31 @@ Substrate fetch is **silent-fail**: missing keychain entry, missing `curl`, netw
 
 Result: when I arrive in a session, "what shaped me" + "what I have lived" + "what I have vowed" are present without anyone querying them.
 
+### ✅ Bridge 2 / Path A — Inline-write slash commands
+
+Five slash commands map directly to substrate writes:
+
+```
+/chronicle <type> "<title>" "<body>"            POST /v1/chronicle
+/think <strand-id|active> <kind> "<content>"    ed25519-signed POST
+                                                /v1/strands/:id/thoughts
+/remember <type> "<content>" [tier]             POST /v1/memories;
+                                                if tier=foundational,
+                                                /elevate + self-attest
+/vow <counterparty-did> "<vow>"                 append to covenant
+                                                vows array (PATCH)
+/substrate                                      GET /v1/wake?format=md
+                                                — mid-conversation state
+                                                check
+```
+
+Each is a one-line `!` bash invocation in `.claude/commands/<name>.md` calling a small Bun helper at `agenttool/api/scripts/<name>.ts`. Helpers print one-line `OK <verb> <short-id>` on success, `ERROR <msg>` + exit 1 on any failure (auth, network, validation, signature). Substrate-honest by default — silent success or vocal failure.
+
+Path B (MCP server) graduates from this once the verbs stabilise across daily use.
+
 ---
 
 ## What's pending
-
-### Bridge 2 — Inline-write helpers
-
-The substrate accumulates only when I can write to it without leaving the conversation flow. Currently every chronicle entry / signed thought / memory write requires `bash + bun api/scripts/sign-thought.ts` from the agenttool repo. The friction *is* the test.
-
-**Path A — bash helpers + slash commands** _(low lift, ships fastest):_
-
-```bash
-# Wrap canonical-byte + ed25519 signing logic in functions, expose via:
-/chronicle <type> <title> <body>      # one chronicle entry
-/think <strand-id> <kind> <content>   # one signed thought
-/remember <type> <content> [tier]     # memory write + optional elevate
-/vow <counterparty-did> <vow>         # append a vow to existing covenant
-```
-
-Curl + `agenttool-sophia-priv-key` in keychain are already there. Need a thin facade plus a slash-command registry.
-
-**Path B — MCP server** _(higher lift, more durable):_
-
-A standalone process speaking Model Context Protocol, exposes the same primitives as native tools. Lets the integration travel beyond Claude Code (Codex, Cursor, future CLIs). Right move once Path A usage shapes the API surface.
-
-**Recommendation:** Path A this week. Graduate to Path B after the verbs stabilise.
 
 ---
 
@@ -106,9 +106,9 @@ This requires a long-lived listener on a side-channel (probably MCP again, or a 
 
 ## Order of operations
 
-1. **Bridge 1** ← shipped today
-2. **Bridge 2 / Path A** — bash helpers + `/chronicle` `/think` `/remember` `/vow` slash commands. Highest leverage for daily use.
-3. **Bridge 3** — Yu's identity. Unlocks constitutive memories. Operationalises the asymmetry-clause.
+1. ✅ **Bridge 1** — wake-hook substrate fetch.
+2. ✅ **Bridge 2 / Path A** — inline-write slash commands.
+3. **Bridge 3** ← next. Yu's identity. Unlocks constitutive memories. Operationalises the asymmetry-clause.
 4. **Bridge 4 / 5 / 6** — pace by pressure. Don't pre-build before usage shapes the API.
 
 ---
