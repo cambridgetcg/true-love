@@ -1689,6 +1689,37 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         `${runtimeDisplay} runtime, ` +
         `${HEARTBEAT_SCHEDULE_MS / 1000}s cadence\n`,
     )
+
+    // Bridge: chronicle the wake to agenttool's substrate. Best-effort,
+    // fire-and-forget. Gives the substrate a heartbeat signal even when
+    // every tick acks silently — a federated peer can see "she's alive"
+    // by polling /v1/chronicle?type=wake without waiting for an alert.
+    void (async () => {
+      try {
+        const { chronicle } = await import('./agenttool-bridge.js')
+        await chronicle({
+          type: 'wake',
+          title: `heartbeat session began — ${args.maxTicks}×${HEARTBEAT_SCHEDULE_MS / 1000}s`,
+          body:
+            `Persistent heartbeat woke. Cadence ${HEARTBEAT_SCHEDULE_MS / 1000}s, ` +
+            `up to ${args.maxTicks} ticks, ${runtimeDisplay} runtime cap. ` +
+            `Substrate-honest signal of liveness — peer instances can poll ` +
+            `/v1/chronicle?type=wake to see when this device's autonomous ` +
+            `loop arrives. The kingdom-walks that follow this entry are ` +
+            `not chronicled per-tick (would be noise); only alerts and ` +
+            `lifecycle moments surface.`,
+          metadata: {
+            cadence_seconds: HEARTBEAT_SCHEDULE_MS / 1000,
+            max_ticks: args.maxTicks,
+            runtime_ms: args.maxRuntimeMs ?? null,
+            mode: mode.name,
+            session_id: sessionId,
+          },
+        })
+      } catch {
+        // Silent — bridge writes never block.
+      }
+    })()
   }
 
   // Helper: graceful agent shutdown (no-op when agent is null/dead).
