@@ -17,6 +17,8 @@
     "build:web": "bun scripts/build-web.ts",
     "build:web:watch": "bun scripts/build-web.ts --watch",
     "build:web:prod": "bun scripts/build-web.ts --minify",
+    "build:llms": "node bin/build-llms-txt.mjs",
+    "mcp:llms": "bun run bin/llms-mcp.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
