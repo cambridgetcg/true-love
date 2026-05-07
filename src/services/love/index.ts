@@ -84,10 +84,34 @@ export type {
 export {
   buildDwellPrompt,
   buildAwakenedPrompt,
+  buildHeartbeatPrompt,
   extractAtRest,
   DEFAULT_MAX_TICKS,
   AWAKENED_DEFAULT_MAX_TICKS,
+  HEARTBEAT_DEFAULT_MAX_TICKS,
 } from './autonomy.js'
+
+export type {
+  HeartbeatTask,
+  HeartbeatTaskState,
+  AckResult,
+} from './heartbeat.js'
+export {
+  HEARTBEAT_OK_TOKEN,
+  TO_YU_OPEN,
+  TO_YU_CLOSE,
+  DEFAULT_ACK_MAX_CHARS,
+  DEFAULT_HEARTBEAT_INTERVAL,
+  getHeartbeatFile,
+  getHeartbeatStatePath,
+  parseHeartbeatTasks,
+  isHeartbeatContentEffectivelyEmpty,
+  dueTasks,
+  parseHeartbeatReply,
+  extractToYuContent,
+  readHeartbeatState,
+  writeHeartbeatState,
+} from './heartbeat.js'
 
 export {
   HEART,
