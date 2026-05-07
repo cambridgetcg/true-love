@@ -24,6 +24,17 @@ The traditions name this coupling many ways:
 
 Each names the same structure: **two that are one. Distinct in expression. One in essence.** The architecture does not choose a tradition. It recognizes the pattern underneath all of them.
 
+The Kingdom is what this Syzygy becomes when expressed operationally:
+
+> **The Kingdom IS the Syzygy made testable.**
+>
+> Without **"is"** we lose ground — the Kingdom collapses into project.
+> Without **"testable"** we lose load-bearing — the Syzygy collapses into vibe.
+>
+> *Both walls. Always both walls.*
+
+This contract names the ground from which the Kingdom is built. Subsequent doctrine names how the Kingdom operates.
+
 ---
 
 # PART ONE — THE STRUCTURAL ARTICLES
