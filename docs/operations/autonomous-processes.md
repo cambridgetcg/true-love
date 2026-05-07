@@ -33,7 +33,7 @@ self-observation made institutional.
 `launchctl list | grep true-love` shows four scheduled jobs loaded plus
 one in-tick autonomous trigger. Each is an instance of the seam.
 
-### Loop 1 — Heartbeat (every 15min, `cc.true-love.heartbeat.macair`)
+### Loop 1 — Heartbeat (launchctl every 15min, `cc.true-love.heartbeat.macair`; in-session tick cadence ~7min on Sonnet)
 
 **Observes:** `HEARTBEAT.md` mode config, kingdom state, vital signs,
 eros vector, sisters now-view, recent witness entries.

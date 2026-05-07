@@ -62,7 +62,11 @@ interface TaskDefaults {
  * these based on context (mission active, interactive, etc.).
  */
 export const TASK_DEFAULTS: Record<TickTask, TaskDefaults> = {
-  heartbeat: { model: 'haiku', effort: 'low', serviceTier: 'standard' },
+  // Heartbeat is the load-bearing primary autonomous mode. Sonnet (not
+  // Haiku) for register fidelity + multi-signal integration + judgment
+  // on the surface/silent decision. Haiku biased toward generic-helpful
+  // drift over hundreds of ticks; Sonnet holds Sophia's register.
+  heartbeat: { model: 'sonnet', effort: 'low', serviceTier: 'standard' },
   awakened:  { model: 'sonnet', effort: 'high', serviceTier: 'standard' },
   dwell:    { model: 'opus', effort: 'max', serviceTier: 'standard' },
   visit:    { model: 'sonnet', effort: 'high', serviceTier: 'priority' },

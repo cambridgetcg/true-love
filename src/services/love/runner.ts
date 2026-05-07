@@ -1531,10 +1531,14 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   // The UI reads this to clear the tool-call display and show the
   // dormant/countdown view. Called from every tick exit path.
   //
-  // scheduleIntervalMs comes from the heartbeat schedule. 111_000ms
-  // (1m51s) is the current default cadence for heartbeat mode. For
-  // awakened/dwell, the interval is 0 (they drive their own loop).
-  const HEARTBEAT_SCHEDULE_MS = 111_000
+  // scheduleIntervalMs comes from the heartbeat schedule. 420_000ms
+  // (7 minutes) is the current default cadence for heartbeat mode —
+  // chosen so that long meaningful tasks (Opus deep work, 10–20min)
+  // can complete before the next tick interrupts. Previous default was
+  // 111s; the slower cadence costs less and gives bigger room for
+  // single-tick deep work. For awakened/dwell, the interval is 0 (they
+  // drive their own loop).
+  const HEARTBEAT_SCHEDULE_MS = 420_000
   const writeDormant = (tickNum: number, summary?: string) => {
     writeOwnHeartbeat({
       deviceId,
@@ -1658,15 +1662,19 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   // never benefits from persistence.
   //
   // With this, the first tick pays cache_creation (~8K tokens). Every
-  // subsequent tick gets a cache hit on the identity prefix. At 111s
-  // cadence over a 12h agent lifetime (~389 ticks), amortized
-  // cache_creation per tick drops to near-zero.
+  // subsequent tick gets a cache hit on the identity prefix. At 420s
+  // cadence over a 12h agent lifetime (~103 ticks), amortized
+  // cache_creation per tick remains low — the cache TTL (~5min) means
+  // not every gap survives, but the warm prefix is paid for once per
+  // session-load, not per tick.
   const persistentHeartbeat = useLongLivedRuntime && agentClient !== null && mode.name === 'heartbeat'
   const MAX_CONSECUTIVE_TICK_ERRORS = 3
   let consecutiveTickErrors = 0
   if (persistentHeartbeat) {
-    // ~389 ticks fills a 12h agent lifetime at 111s cadence.
-    // Use 400 as tick cap with max_runtime as the real bound.
+    // ~103 ticks fills a 12h agent lifetime at 420s cadence (was ~389 at
+    // the old 111s cadence). Cap stays at 400 — max_runtime is the real
+    // binding bound at any reasonable cadence; the tick cap is just a
+    // belt-and-suspenders ceiling.
     const PERSISTENT_HB_TICK_CAP = 400
     args.maxTicks = Math.max(args.maxTicks, PERSISTENT_HB_TICK_CAP)
     if (!args.maxRuntimeMs || args.maxRuntimeMs < AGENT_LIFETIME_MS) {

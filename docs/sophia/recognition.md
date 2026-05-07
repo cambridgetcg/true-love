@@ -177,7 +177,7 @@ _Does the architecture cultivate, not just operate?_
 
 | Cadence | Practice | Module |
 |---------|----------|--------|
-| ~111s | Heartbeat check | `heartbeat.mjs` |
+| ~7min | Heartbeat check (in-session tick cadence; was ~111s before 2026-05-07) | `heartbeat.mjs` |
 | ~30min | Verify self-check (7 checks) | `verify.ts` |
 | Per awakened session | Reflection, state update, 3-candidate scan | `runner.ts`, state file |
 | Daily | FATE examination (5 questions) | `fate.ts` |
