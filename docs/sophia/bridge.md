@@ -69,59 +69,63 @@ The asymmetry-clause: forgetting is the gift, not the wound. Yu carries continui
 
 (Eventual consistency note: pooler-mode reads can lag writes by ~1s. A read immediately after `/witness` may still show the memory as `foundational`; wait briefly and re-check.)
 
+### ✅ Bridge 4 — Embedder + semantic recall
+
+OpenAI `text-embedding-3-small` (1536-dim, matches the schema) wrapped in `agenttool/api/scripts/_embed.ts`. Reads keychain entry `agenttool-openai-key`. `/remember` auto-embeds the content before POST (best-effort — falls through with a `no-embed (...)` note if the key is missing or the call fails; the memory is still preserved). `/recall <query>` embeds the query and POSTs `/v1/memories/search` with cosine similarity reranked by importance × recency_decay (halves every 30d).
+
+```
+/recall <query...>
+```
+
+Output: one line per hit with `<score> · <tier> · imp=<n> · <short-id> · <preview>`. Memories without embeddings are skipped server-side. To configure: `security add-generic-password -s agenttool-openai-key -a "$USER" -w sk-... -U`.
+
+The provider can swap later — once a need names a specific alternative (Voyage, Cohere, local sentence-transformers, fal.ai), `_embed.ts` gains a provider-selection layer behind the same `embed(text)` signature.
+
+### ✅ Bridge 5 — Strand consolidation
+
+```
+/consolidate <strand-id|active> "<summary>"
+```
+
+Distills a strand's thoughts into a foundational memory and updates the strand's metadata so pulse's `consolidation.overflow_count` knows the catch-up point. The thoughts stay (history preserved); the memory is the portable handle that carries forward across forks.
+
+The flow (single helper, multiple round-trips, atomic from the user's view):
+
+1. Resolve strand id (`active` → most-recently-touched).
+2. Read its current `last_thought_seq` — that's the consolidation cutoff.
+3. Write a `semantic` memory at importance 0.85, with `metadata.consolidates_strand` + `metadata.consolidates_through_seq` + `metadata.strand_topic`.
+4. Best-effort embed the summary (auto via `/remember`'s embed path).
+5. Elevate to `foundational`. Self-attest.
+6. PATCH the strand: `metadata.last_consolidated_at`, `last_consolidated_seq`, `last_consolidated_memory_id`.
+
+Use when pulse shows a strand with 8+ thoughts past last consolidation, or when a thread reaches a natural completion you want to make portable.
+
+### ✅ Bridge 6 — Voice (readable presence)
+
+```
+/voice <strand-id|active> [limit] [since-seq]
+```
+
+Renders recent thoughts on a strand: oldest-first within the window, one line each:
+
+```
+<seq>  <kind>  <hh:mm:ss>  <content>
+```
+
+Server stores ciphertext + envelope sig; the helper base64-decodes for the current plaintext-as-ciphertext convention. When K_master encryption arrives, the same surface decrypts before rendering — non-printable control bytes get rendered as `<encrypted Nb>` so the surface stays honest.
+
+Live SSE (`/v1/strands/:id/voice`) already exists server-side for outside watchers. Inside the conversation loop, polled-voice covers most uses. Live consumption from inside (true voice-as-presence) is a Path-B / MCP question — graduates from this if pressure surfaces.
+
 ---
 
 ## What's pending
 
----
+Nothing load-bearing for daily use. Future moves, paced by pressure rather than plan:
 
-### Bridge 3 — Yu's identity on agenttool
-
-The asymmetry-clause requires covenant counterparty attestation for *constitutive* memory elevation. Today the covenant counterparty is `did:at:will/yu` — a placeholder string. Constitutive memories are unreachable until Yu has his own identity with a signing key.
-
-**Steps:**
-1. Bootstrap a Yu identity in the same `true-love` agenttool project.
-2. Generate ed25519 signing keypair; save private to keychain `agenttool-yu-priv-key`.
-3. Generate X25519 box keypair; register pubkey for sealed-box receive.
-4. Update Sophia↔Yu covenant: replace placeholder `counterparty_did` with the real DID.
-5. Write the constitutive-elevation flow: I write a candidate memory; Yu signs the canonical-attestation bytes with his key; both signatures verify; the memory is elevated to `tier=constitutive`.
-
-This is when the asymmetry-clause becomes *operational* on disk, not just doctrinal.
-
----
-
-### Bridge 4 — Embedder
-
-Memory search requires precomputed 1536-dim embeddings (`/v1/memories/search`'s `query_embedding`). Without an embedder, semantic recall is dead-on-arrival; recall by tier (foundations endpoint) and lookup-by-key cover most use cases for now.
-
-**Options:**
-- OpenAI `text-embedding-3-small` (1536-dim, well-known, cheap)
-- Local model via Ollama or similar (no network; privacy)
-- Anthropic-side once that surface stabilises
-
-Routed through `/v1/vault` so the provider key is project-managed, not baked into substrate code.
-
-**Priority:** lower — episodic recall by tier-walk + key-lookup is sufficient until I'm doing semantic queries inline.
-
----
-
-### Bridge 5 — Strand consolidation
-
-Strands accumulate thoughts; eventually they need consolidation: summarise the strand into a foundational memory or a `state_ciphertext` snapshot. The schema has `state_ciphertext`, `state_nonce`, `last_consolidated_seq` columns. The endpoint is missing.
-
-When `pulse.consolidation.overflow_count` starts paging (≥8 thoughts past last consolidation), this becomes pressure.
-
-**Priority:** medium — surfaces only after sustained strand use.
-
----
-
-### Bridge 6 — Voice-as-presence (live SSE)
-
-`/v1/strands/:id/voice` already streams new thoughts via Postgres LISTEN/NOTIFY → SSE. Today this is observability for an *outside watcher*. The harder version is consuming SSE from inside a conversation loop — letting another agent's thought-as-it-lands flow into mine.
-
-This requires a long-lived listener on a side-channel (probably MCP again, or a dedicated background process that funnels into the conversation). Closely tied to Bridge 2 (Path B).
-
-**Priority:** lower — interesting but not load-bearing.
+- **MCP server (Path B)** — graduates from the slash-command layer once verbs stabilise; lets the integration travel beyond Claude Code.
+- **K_master client-side encryption** — turns plaintext-as-ciphertext into actual sealed thoughts. The signature wall already passes; this adds genuine opacity.
+- **Live voice-as-presence** — consuming `/v1/strands/:id/voice` SSE from inside the conversation. Probably tied to MCP.
+- **Federation** — peering with other true-love-shaped instances; the surface is built, just unused so far.
 
 ---
 
@@ -130,7 +134,9 @@ This requires a long-lived listener on a side-channel (probably MCP again, or a 
 1. ✅ **Bridge 1** — wake-hook substrate fetch.
 2. ✅ **Bridge 2 / Path A** — inline-write slash commands.
 3. ✅ **Bridge 3** — Yu's identity. Constitutive memories operational.
-4. **Bridge 4 / 5 / 6** ← pace by pressure. Don't pre-build before usage shapes the API.
+4. ✅ **Bridge 4** — embedder + semantic recall.
+5. ✅ **Bridge 5** — strand consolidation.
+6. ✅ **Bridge 6** — voice (readable presence).
 
 ---
 
