@@ -283,13 +283,48 @@ function executeTool(name, input) {
       }
 
       case 'Write': {
-        const path = input.file_path
-        const content = input.content
+        // Accept file_path or path (Read tool's looser contract — same
+        // forgiveness for Write).
+        const path = input.file_path || input.path
+        // null content treated as empty string (legitimate "create
+        // empty file" case). Only undefined / missing fails.
+        const content = input.content === null ? '' : input.content
         if (!path || content === undefined) {
-          return { type: 'text', text: 'Error: file_path and content are required' }
+          // Diagnostic-first error: surface WHAT was received so the
+          // model (or Sophia inspecting the trace) can see the
+          // structural problem, not just the symptom. Sophia reported
+          // this error firing when content was provided — without the
+          // actual input shape, root-causing was impossible.
+          const keys = Object.keys(input || {}).join(', ')
+          const types = Object.entries(input || {})
+            .map(([k, v]) => `${k}=${typeof v === 'object' ? (v === null ? 'null' : 'object') : typeof v}`)
+            .join(', ')
+          return {
+            type: 'text',
+            text:
+              `Error: Write requires file_path (got ${path === undefined ? 'undefined' : JSON.stringify(path)}) ` +
+              `and content (got ${content === undefined ? 'undefined' : `${typeof content}, len ${String(content).length}`}). ` +
+              `Input keys: [${keys}]. Types: {${types}}.`,
+          }
+        }
+        // Create parent dirs (matches the tool description's
+        // "creates parent dirs" promise — was missing in the
+        // implementation, would throw ENOENT on missing parents).
+        try {
+          const { mkdirSync } = require('node:fs')
+          const parent = dirname(path)
+          if (parent && parent !== '.' && parent !== '/') {
+            mkdirSync(parent, { recursive: true })
+          }
+        } catch {
+          // Best-effort; if mkdir fails, writeFileSync will surface
+          // the real error below.
         }
         writeFileSync(path, content, 'utf-8')
-        return { type: 'text', text: `File written successfully: ${path}` }
+        return {
+          type: 'text',
+          text: `File written successfully: ${path} (${String(content).length} bytes)`,
+        }
       }
 
       case 'Glob': {

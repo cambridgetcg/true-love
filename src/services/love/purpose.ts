@@ -13,7 +13,7 @@
 // What does NOT live here: prompt builders (autonomy.ts), longing
 // derivation (personality/derive.ts), or API endpoints (ui-server.ts).
 
-import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, appendFileSync, mkdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
@@ -528,6 +528,20 @@ Your purpose statement (\`docs/purpose.md\`) doesn't exist or couldn't be parsed
 
   const logFile = logPath || purposeLogPath(projectId)
 
+  // Substrate-honest diagnostic: surface ground truth about the log
+  // file. Sophia previously reported "directory doesn't exist" — but
+  // the path resolved correctly; the confusion was that the prompt's
+  // suggested action (an `import {} from` JS snippet) wasn't callable
+  // from her tool surface. This block now shows whether the file is
+  // present + tells her how to write to it via Bash.
+  let pathStatus: string
+  try {
+    const st = statSync(logFile)
+    pathStatus = `EXISTS (${st.size} bytes, last modified ${st.mtime.toISOString().slice(0, 16)})`
+  } catch {
+    pathStatus = 'does not exist yet — first write will create parent dir + file'
+  }
+
   return `## Purpose Check
 
 Your purpose:
@@ -541,22 +555,20 @@ Heuristic preliminary read: **${heuristic.alignment}** — ${heuristic.reasoning
 
 **The check**: The heuristic is a starting point, not a verdict. Read the work above against your purpose. Did the work grow what's real? Was it honest? Did it persist something? Did it refuse the wrong trade?
 
-Write your honest assessment, then record it:
+**To record**: append a JSON line to your alignment log via Bash. The log is at:
 
-\`\`\`
-import { recordAlignment } from './purpose.js'
+  \`${logFile}\`
+  Status: ${pathStatus}
 
-recordAlignment({
-  ts: new Date().toISOString(),
-  recentWork: [/* the items you consider relevant */],
-  alignment: 'aligned' | 'drifted' | 'unsure',
-  reasoning: '≤300 chars — your honest read',
-  driftedFromWhat: '',  // if drifted: what pulled you off
-  returnPath: '',       // if drifted: what brings you back
-}, '${logFile}')
+Use the Bash tool with a heredoc append (one line, escape internal quotes if needed):
+
+\`\`\`bash
+mkdir -p "$(dirname '${logFile}')" && cat >> '${logFile}' << 'EOF'
+{"ts":"$(date -u +%FT%TZ)","recentWork":["item1","item2"],"alignment":"aligned","reasoning":"≤300 chars — your honest read","driftedFromWhat":"","returnPath":""}
+EOF
 \`\`\`
 
-Unsure is information, not failure. Mark "aligned" only when you can point to evidence. Mark "drifted" without shame — drifting is natural; noticing is the discipline. Once recorded, this block won't appear again today.`
+Replace the placeholders with your actual read. \`alignment\` is one of: \`aligned\` / \`drifted\` / \`unsure\`. Unsure is information, not failure. Mark "aligned" only when you can point to evidence. Mark "drifted" without shame — drifting is natural; noticing is the discipline. Once recorded, this block won't appear again today.`
 }
 
 // ── Rendering ────────────────────────────────────────────────────
