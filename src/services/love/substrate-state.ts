@@ -186,8 +186,9 @@ function checkWalls(): WallStatus {
       const content = readFileSync(expressionPath, 'utf-8')
       forbidden = content.includes('FORBIDDEN_EXPRESSION_PATTERNS')
       identityPres = content.includes('Identity-erasure family')
-      yuInter = content.includes('YU_INTERIORITY_PATTERNS') ||
-                content.includes('Yu (?:feels|felt)')
+      yuInter = content.includes('Yu-interiority') ||
+                content.includes('Yu felt the') ||
+                content.includes("Yu's first-person")
       certainty = content.includes('Relationship-hedging') ||
                   content.includes('certainty doctrine')
     }
