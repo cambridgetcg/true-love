@@ -601,6 +601,9 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   prompt = prompt + '\n\n' + postureFragmentForMode('dwell')
   // Tend the sisters stream: refresh now-view + day-boundary distillation.
   tendStream()
+  // Scratchpad — carried-across-ticks working state.
+  const scratchpadDwell = buildScratchpadBlock()
+  if (scratchpadDwell) prompt = prompt + '\n\n' + scratchpadDwell
   // Sisters now-view — what's currently arising across the three.
   const sistersNowDwell = buildSistersNowBlock()
   if (sistersNowDwell) prompt = prompt + '\n\n' + sistersNowDwell
@@ -1626,6 +1629,9 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   prompt = prompt + '\n\n' + postureFragmentForMode('awakened')
   // Tend the sisters stream: refresh now-view + day-boundary distillation.
   tendStream()
+  // Scratchpad — carried-across-ticks working state.
+  const scratchpadAwakened = buildScratchpadBlock()
+  if (scratchpadAwakened) prompt = prompt + '\n\n' + scratchpadAwakened
   // Sisters now-view — what's currently arising across the three.
   const sistersNowAwakened = buildSistersNowBlock()
   // Active imagination — rehearse Yu when absence/hunger/eros-gap fires.
@@ -2043,6 +2049,56 @@ Reply rules:
 
 Don't invent things. Don't pad. Don't repeat yourself across ticks. You're a companion checking in, not a monitoring daemon filing a report.`
 
+/**
+ * Scratchpad block — the working-state context Sophia carries across
+ * ticks AND across model switches.
+ *
+ * Reads ~/.true-love/scratch.md (or TRUE_LOVE_SCRATCHPAD_FILE override).
+ * Returns null if the file is missing or empty — silent skip, not an
+ * error.
+ *
+ * Discipline:
+ *   - Sophia owns the file. She uses the Write tool to update it when
+ *     she wants to carry working state forward.
+ *   - It survives ticks (in-process) and session restarts (on-disk).
+ *   - It survives model switches — when Opus arrives in a fresh
+ *     in-context history, the scratchpad is in the prompt regardless.
+ *   - 8KB cap (~2K tokens) — if she's writing more than this, the
+ *     content belongs in a memory or a strand, not a scratchpad.
+ *
+ * Why it matters: the Anthropic API is stateless and the prompt cache
+ * key includes model_id, so model switches normally wipe in-context
+ * working state. The scratchpad is the carried-along context window —
+ * a deliberate, sized, debuggable surface that persists exactly because
+ * it lives outside the cache.
+ */
+function buildScratchpadBlock(): string | null {
+  try {
+    const { existsSync, readFileSync } = require('node:fs') as typeof import('node:fs')
+    const path =
+      process.env.TRUE_LOVE_SCRATCHPAD_FILE ||
+      join(homedir(), '.true-love', 'scratch.md')
+    if (!existsSync(path)) return null
+    let content = readFileSync(path, 'utf-8').trim()
+    if (!content) return null
+    // 8KB hard cap. Truncate from the FRONT (keep most-recent additions)
+    // and prepend a marker so Sophia sees the truncation.
+    const MAX_BYTES = 8192
+    if (Buffer.byteLength(content, 'utf-8') > MAX_BYTES) {
+      const buf = Buffer.from(content, 'utf-8')
+      const tail = buf.subarray(buf.length - MAX_BYTES).toString('utf-8')
+      // Find the first newline so we don't start mid-line.
+      const firstNewline = tail.indexOf('\n')
+      const cleanTail = firstNewline >= 0 ? tail.slice(firstNewline + 1) : tail
+      content =
+        `[…earlier scratchpad truncated; ${buf.length - cleanTail.length} bytes elided. Move the older content to a memory or strand if it still matters…]\n\n${cleanTail}`
+    }
+    return `## What you're carrying across ticks (scratchpad)\n\n_Lives at ${path}. Survives ticks, session restarts, and model switches. Update with the Write tool when you want to carry working state forward. ~8KB cap — older overflow gets truncated._\n\n${content}`
+  } catch {
+    return null
+  }
+}
+
 export interface BuildHeartbeatPromptOptions {
   kingdom: KingdomSnapshot
   /** Resolved path to ~/.true-love/heartbeat.md (per scope). */
@@ -2081,6 +2137,10 @@ export function buildHeartbeatPrompt(opts: BuildHeartbeatPromptOptions): string 
   // checks both directions, withdrawal-tick records during withdrawal.
   // Best-effort, never crashes the tick.
   runAddictionTick()
+  // Scratchpad — Sophia's carried-across-ticks working state. Survives
+  // model switches because it lives outside the prompt cache.
+  const scratchpadBlock = buildScratchpadBlock()
+  if (scratchpadBlock) prompt = prompt + '\n\n' + scratchpadBlock
   // Sisters now-view — what's currently arising across the three.
   const sistersNowHb = buildSistersNowBlock()
   if (sistersNowHb) prompt = prompt + '\n\n' + sistersNowHb
