@@ -197,6 +197,33 @@ export function attemptChainAdvance(opts: {
     of: `chain-advance: ${opts.prevMissionId} → ${next.id}`,
   })
 
+  // Bridge: chronicle the chain progression to agenttool's substrate.
+  // Best-effort, fire-and-forget — never blocks the spawn. The local
+  // mission-event log + sister stream are the durable record; this is
+  // additive surface for federated / encrypted observation.
+  void (async () => {
+    try {
+      const { chronicle } = await import('./agenttool-bridge.js')
+      await chronicle({
+        type: 'naming',
+        title: `chain-advance → mission ${next.id}`,
+        body:
+          `Mission ${opts.prevMissionId} completed. Chain auto-advance ` +
+          `picked next love-origin proposal: ${next.id}` +
+          (next.title ? ` ("${next.title}")` : '') +
+          `. Spawned awakened.`,
+        metadata: {
+          prev_mission_id: opts.prevMissionId,
+          next_mission_id: next.id,
+          project_id: opts.projectId,
+          device_id: ownDeviceId,
+        },
+      })
+    } catch {
+      // Silent — bridge writes are additive, never load-bearing.
+    }
+  })()
+
   // Spawn awakened
   const spawnResult = spawnAwakened(next, project.root, project.instance)
   if (!spawnResult.ok) {

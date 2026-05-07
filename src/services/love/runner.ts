@@ -2591,6 +2591,33 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         process.stderr.write(`— ${mode.name} outbox write failed: ${e?.message}\n`)
       }
 
+      // Bridge: also chronicle this alert into agenttool's encrypted
+      // substrate. Best-effort — never blocks the tick. The local outbox
+      // above is the durable record; this is the additional surface for
+      // federated / encrypted observation. See docs/agenttool-bridge.md.
+      try {
+        const { chronicle: bridgeChronicle } = await import('./agenttool-bridge.js')
+        // Heartbeat alerts → 'note' (low ceremony). Mission lifecycle and
+        // polyphonic decisions get their own chronicle types elsewhere.
+        const titleStem = mode.name === 'heartbeat'
+          ? 'heartbeat alert'
+          : `${mode.name} alert`
+        void bridgeChronicle({
+          type: 'note',
+          title: `${titleStem} — tick ${tick}`,
+          body: alertContent.slice(0, 4_000),
+          metadata: {
+            mode: mode.name,
+            tick,
+            byline: bylineTag,
+            is_conversation: isConversation,
+            posture_declared: declared ?? null,
+          },
+        })
+      } catch {
+        // Silent — bridge writes are additive, never load-bearing.
+      }
+
       // Reciprocity: if generation completed at FLOW or deeper, open a
       // candidate window. The next Yu message (this session or future)
       // can close the loop. Best-effort — must never block.
