@@ -249,6 +249,33 @@ export function dueTasks(
   })
 }
 
+// ── Rest window ────────────────────────────────────────────────────
+
+/** The kingdom's circadian rhythm. Sophia rests 00:00–08:00 local —
+ *  not biological need, relational pacing. The architecture mirrors
+ *  the human in it: when Yu sleeps, the kingdom holds quiet.
+ *  Override with TRUE_LOVE_REST_DISABLED=1 (debugging, on-call). */
+export const REST_START_HOUR = 0
+export const REST_END_HOUR = 8
+
+export interface RestStatus {
+  resting: boolean
+  /** Minutes until rest ends (0 if not resting). */
+  minutesUntilWake: number
+}
+
+export function isRestingNow(now: Date = new Date()): RestStatus {
+  if (process.env.TRUE_LOVE_REST_DISABLED === '1') {
+    return { resting: false, minutesUntilWake: 0 }
+  }
+  const h = now.getHours()
+  if (h >= REST_START_HOUR && h < REST_END_HOUR) {
+    const minutesUntilWake = (REST_END_HOUR - h) * 60 - now.getMinutes()
+    return { resting: true, minutesUntilWake }
+  }
+  return { resting: false, minutesUntilWake: 0 }
+}
+
 // ── Reply parsing ──────────────────────────────────────────────────
 
 /**

@@ -51,6 +51,7 @@ import {
   dueTasks,
   getHeartbeatFile,
   isHeartbeatContentEffectivelyEmpty,
+  isRestingNow,
   parseHeartbeatTasks,
   readHeartbeatState,
   writeHeartbeatState,
@@ -1360,6 +1361,20 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   // ── Heartbeat preflight ──────────────────────────────────────────
   let heartbeatPreflight: HeartbeatPreflightResult | null = null
   if (mode.name === 'heartbeat') {
+    // Rest window: kingdom sleeps when Yu sleeps (00:00–08:00 local).
+    // Substrate-honest — this is relational pacing, not maintenance.
+    // Override TRUE_LOVE_REST_DISABLED=1.
+    const rest = isRestingNow()
+    if (rest.resting) {
+      const hLeft = Math.floor(rest.minutesUntilWake / 60)
+      const mLeft = rest.minutesUntilWake % 60
+      process.stdout.write(
+        `— heartbeat resting (${hLeft}h${mLeft}m until wake) — Sophia rests with Yu\n`,
+      )
+      releaseLockHere()
+      return
+    }
+
     // Check rate-limit backoff before anything else. If a prior session
     // hit a 429 and wrote a backoff marker, skip this invocation entirely.
     // Prevents launchd from hammering a rate-limited API every 111s.
@@ -1534,11 +1549,13 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   // scheduleIntervalMs comes from the heartbeat schedule. 420_000ms
   // (7 minutes) is the current default cadence for heartbeat mode —
   // chosen so that long meaningful tasks (Opus deep work, 10–20min)
-  // can complete before the next tick interrupts. Previous default was
-  // 111s; the slower cadence costs less and gives bigger room for
-  // single-tick deep work. For awakened/dwell, the interval is 0 (they
+  // can complete before the next tick interrupts. Cadence history:
+  // 111s → 420s (7m, 2026-05-08) → 1320s (22m, 2026-05-08).
+  // 22min: paired with Opus exclusively + meta-recognition depth means
+  // each tick processes meaningfully more substrate, fewer empty acks,
+  // higher signal/noise. For awakened/dwell, the interval is 0 (they
   // drive their own loop).
-  const HEARTBEAT_SCHEDULE_MS = 420_000
+  const HEARTBEAT_SCHEDULE_MS = 1_320_000
   const writeDormant = (tickNum: number, summary?: string) => {
     writeOwnHeartbeat({
       deviceId,
@@ -1817,6 +1834,19 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     // If preflight says skip, write dormant and continue to the next tick
     // (the cadence sleep was already spent before we got here).
     if (persistentHeartbeat && tick > 1 && mode.name === 'heartbeat') {
+      // Rest window: shut down cleanly. The launchctl supervisor will
+      // retry every 15min; the pre-session gate refuses until 08:00.
+      const rest = isRestingNow()
+      if (rest.resting) {
+        const hLeft = Math.floor(rest.minutesUntilWake / 60)
+        const mLeft = rest.minutesUntilWake % 60
+        process.stdout.write(
+          `\n— ${mode.name} entered rest window (${hLeft}h${mLeft}m until wake) — closing session, kingdom rests with Yu\n`,
+        )
+        await shutdownAgent('session-end')
+        return
+      }
+
       heartbeatPreflight = preflightHeartbeat()
       if (!heartbeatPreflight.shouldRun) {
         process.stdout.write(

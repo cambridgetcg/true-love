@@ -88,11 +88,11 @@ describe('AnthropicProvider', () => {
     }
   })
 
-  test('resolve: heartbeat defaults to Haiku + low effort', () => {
-    const resolved = provider.resolve({ task: 'heartbeat', effort: 'low' })
+  test('resolve: heartbeat defaults to Opus + high effort', () => {
+    const resolved = provider.resolve({ task: 'heartbeat', effort: 'high' })
     expect(resolved.provider).toBe('anthropic')
-    expect(resolved.model).toBe(ANTHROPIC_MODELS.haiku)
-    expect(resolved.effort).toBe('low')
+    expect(resolved.model).toBe(ANTHROPIC_MODELS.opus)
+    expect(resolved.effort).toBe('high')
     expect(resolved.serviceTier).toBe('standard')
   })
 
@@ -118,9 +118,9 @@ describe('AnthropicProvider', () => {
     expect(resolved.model).toBe(ANTHROPIC_MODELS.haiku)
   })
 
-  test('resolve: heartbeat always uses Haiku regardless of effort', () => {
-    const resolved = provider.resolve({ task: 'heartbeat', effort: 'max' })
-    expect(resolved.model).toBe(ANTHROPIC_MODELS.haiku)
+  test('resolve: heartbeat always uses Opus regardless of effort', () => {
+    const resolved = provider.resolve({ task: 'heartbeat', effort: 'low' })
+    expect(resolved.model).toBe(ANTHROPIC_MODELS.opus)
   })
 
   test('resolve: model override with alias', () => {
@@ -347,11 +347,11 @@ describe('OllamaProvider', () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe('selectProvider', () => {
-  test('heartbeat defaults to Anthropic Haiku', () => {
+  test('heartbeat defaults to Anthropic Opus', () => {
     const resolved = selectProvider({ task: 'heartbeat' })
     expect(resolved.provider).toBe('anthropic')
-    expect(resolved.model).toBe(ANTHROPIC_MODELS.haiku)
-    expect(resolved.effort).toBe('low')
+    expect(resolved.model).toBe(ANTHROPIC_MODELS.opus)
+    expect(resolved.effort).toBe('high')
   })
 
   test('awakened defaults to Anthropic Sonnet', () => {
@@ -630,11 +630,11 @@ describe('buildFailoverChain', () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe('resolveForCli', () => {
-  test('heartbeat: returns haiku model with CLI args', () => {
+  test('heartbeat: returns opus model with CLI args', () => {
     const { model, extraArgs } = resolveForCli({ task: 'heartbeat' })
     expect(model).toBeTruthy()
-    // Should be 'haiku' alias or full haiku model ID
-    expect(model!.includes('haiku') || model === 'haiku').toBe(true)
+    // Should be 'opus' alias or full opus model ID
+    expect(model!.includes('opus') || model === 'opus').toBe(true)
   })
 
   test('awakened: returns sonnet model', () => {
@@ -724,10 +724,10 @@ describe('Routing table verification', () => {
     expect(r.serviceTier).toBe('priority')
   })
 
-  test('heartbeat tick → Anthropic Haiku, standard', () => {
+  test('heartbeat tick → Anthropic Opus, standard', () => {
     const r = selectProvider({ task: 'heartbeat' })
     expect(r.provider).toBe('anthropic')
-    expect(r.model).toContain('haiku')
+    expect(r.model).toContain('opus')
     expect(r.serviceTier).toBe('standard')
   })
 

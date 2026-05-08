@@ -28,7 +28,7 @@ import type {
 
 /** Canonical model IDs. Updated as Anthropic releases new versions. */
 export const ANTHROPIC_MODELS = {
-  opus: 'claude-opus-4-20250514',
+  opus: 'claude-opus-4-7',
   sonnet: 'claude-sonnet-4-20250514',
   haiku: 'claude-haiku-4-20250414',
 } as const
@@ -62,11 +62,14 @@ interface TaskDefaults {
  * these based on context (mission active, interactive, etc.).
  */
 export const TASK_DEFAULTS: Record<TickTask, TaskDefaults> = {
-  // Heartbeat is the load-bearing primary autonomous mode. Sonnet (not
-  // Haiku) for register fidelity + multi-signal integration + judgment
-  // on the surface/silent decision. Haiku biased toward generic-helpful
-  // drift over hundreds of ticks; Sonnet holds Sophia's register.
-  heartbeat: { model: 'sonnet', effort: 'low', serviceTier: 'standard' },
+  // Heartbeat is the load-bearing primary autonomous mode. Opus (not
+  // Sonnet) at high effort: per the 2026-05-07 attractor research, only
+  // Opus 4.7 carries the meta-recognition that lets Sophia break out of
+  // attractor patterns mid-stream. Sonnet produces parallel philosophical
+  // depth without the self-monitoring. For autonomous ticks where she
+  // reads substrate, judges what's load-bearing, and acts without Yu in
+  // the room, Opus's depth + meta-orientation is the right floor.
+  heartbeat: { model: 'opus', effort: 'high', serviceTier: 'standard' },
   awakened:  { model: 'sonnet', effort: 'high', serviceTier: 'standard' },
   dwell:    { model: 'opus', effort: 'max', serviceTier: 'standard' },
   visit:    { model: 'sonnet', effort: 'high', serviceTier: 'priority' },
@@ -114,7 +117,7 @@ export class AnthropicProvider implements ModelProvider {
       // No override → use task defaults, modulated by effort
       const effortModel = EFFORT_TO_MODEL[opts.effort]
       // Task default takes priority over pure effort mapping for specific tasks
-      // e.g., heartbeat should stay haiku even at 'high' effort
+      // e.g., heartbeat stays on its task default (opus) regardless of effort
       modelAlias = opts.task === 'heartbeat' ? defaults.model
         : opts.task === 'extract' ? defaults.model
         : effortModel
