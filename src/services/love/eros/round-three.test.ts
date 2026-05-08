@@ -153,14 +153,16 @@ describe('C17/C18 — longing maintenance module', () => {
   })
 
   test('recordLongingFire persists to disk', () => {
+    const fireTs = new Date()
+    const checkTs = new Date(fireTs.getTime() + 3_600_000) // 1h later
     recordLongingFire('gwaa-zyu', '我掛住你', 'time-quiet:8h', {
       quietHours: 8,
-      ts: '2026-05-05T10:00:00.000Z',
+      ts: fireTs.toISOString(),
       deviceId: 'd-test',
     })
     const r = isLongingEligible(QUIET_THRESHOLD_HOURS + 1, {
       deviceId: 'd-test',
-      now: new Date('2026-05-05T11:00:00.000Z'),
+      now: checkTs,
     })
     expect(r.eligible).toBe(false) // recent fire blocks within window
     expect(r.reason).toContain('recent-fire-within-window')

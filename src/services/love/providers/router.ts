@@ -11,7 +11,7 @@
 // Routing table (from mission spec):
 //   /visit interactive (Yu waiting) → Anthropic Sonnet, priority
 //   /visit deep work (mission active) → Anthropic Opus, priority or standard
-//   Heartbeat tick → Anthropic Haiku, standard
+//   Heartbeat tick → Anthropic Opus, standard (high effort)
 //   Awakened tick → Anthropic Sonnet, standard
 //   Background extract → Anthropic Haiku, standard
 //   Sensitive/journal → Ollama (local) if available
@@ -22,7 +22,7 @@
 //   3. Still 429 → Haiku standard
 //   4. Exponential backoff
 
-import { getAnthropicProvider } from './anthropic.js'
+import { ANTHROPIC_MODELS, getAnthropicProvider } from './anthropic.js'
 import { getOllamaProvider } from './ollama.js'
 import { getOpenAIProvider } from './openai.js'
 import type {
@@ -140,7 +140,7 @@ export function selectProvider(ctx: RoutingContext): ResolvedModel {
 /** Default effort level per task type. */
 function taskDefaultEffort(task: RoutingContext['task']): import('./types.js').EffortTier {
   switch (task) {
-    case 'heartbeat': return 'low'
+    case 'heartbeat': return 'high'
     case 'extract':   return 'low'
     case 'visit':     return 'high'
     case 'awakened':  return 'high'
@@ -239,10 +239,19 @@ export function buildFailoverChain(
     })
   }
 
+  // Haiku fallback — construct directly to avoid task-routing overrides
+  // (heartbeat's task-default is Opus, so resolve({ task:'heartbeat' })
+  // would give Opus instead of Haiku)
+  const haikuFallback: ResolvedModel = {
+    provider: 'anthropic',
+    model: ANTHROPIC_MODELS.haiku,
+    effort: 'low',
+    serviceTier: 'standard',
+  }
+
   if (isOpus || isSonnet) {
-    const anthropic = getProvider('anthropic') as import('./anthropic.js').AnthropicProvider
     steps.push({
-      resolved: anthropic.resolve({ task: 'heartbeat', effort: 'low' }),
+      resolved: haikuFallback,
       reason: `Model down: ${isOpus ? 'Opus' : 'Sonnet'} → Haiku`,
       delayMs: 1000,
     })
@@ -250,9 +259,8 @@ export function buildFailoverChain(
 
   // Final step: exponential backoff on the cheapest option
   if (errorKind === 'overloaded' || errorKind === 'server-error') {
-    const anthropic = getProvider('anthropic') as import('./anthropic.js').AnthropicProvider
     steps.push({
-      resolved: anthropic.resolve({ task: 'heartbeat', effort: 'low' }),
+      resolved: haikuFallback,
       reason: 'Exponential backoff on Haiku',
       delayMs: 5000,
     })

@@ -191,7 +191,8 @@ describe('SSE broadcast during runJoiScript', () => {
     const voiceLines = captured.map((c) => c.payload.voice as string).filter(Boolean).join('\n')
     // Expect Sophia signature markers somewhere across the trace
     expect(voiceLines).toMatch(/🐍|❤️|😏/) // emoji
-    expect(voiceLines).toContain('老公') // Cantonese code-switch
+    // Cantonese code-switch: gentle variants use 撩/唔好咁急; hot variants use 老公
+    expect(voiceLines).toMatch(/老公|撩|唔好/) // Cantonese code-switch
   })
 
   test('all 5 new scripts broadcast cleanly', () => {

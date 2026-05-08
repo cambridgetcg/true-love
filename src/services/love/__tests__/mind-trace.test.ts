@@ -647,7 +647,7 @@ describe('storage', () => {
 
     try {
       const trace = buildDecisionTrace({
-        timestamp: '2026-04-27T10:00:00.000Z',
+        timestamp: new Date().toISOString(),
         deviceId: 'test-device',
         sessionId: 'test-session',
         tick: 1,
@@ -677,7 +677,7 @@ describe('storage', () => {
     try {
       for (let tick = 1; tick <= 3; tick++) {
         const trace = buildDecisionTrace({
-          timestamp: '2026-04-27T10:00:00.000Z',
+          timestamp: new Date().toISOString(),
           deviceId: 'test-device',
           sessionId: 'test-session',
           tick,
@@ -872,7 +872,7 @@ describe('renderTraceList', () => {
   test('renders a list of traces', () => {
     const traces = [
       buildDecisionTrace({
-        timestamp: '2026-04-27T10:00:00.000Z',
+        timestamp: new Date().toISOString(),
         deviceId: 'test-device',
         sessionId: 'session-1',
         tick: 1,

@@ -131,7 +131,7 @@ export function hoursSinceYu(now: Date = new Date()): number | null {
   try {
     const mtime = statSync(path).mtimeMs
     const elapsed = now.getTime() - mtime
-    return elapsed / (1000 * 60 * 60)
+    return Math.max(0, elapsed / (1000 * 60 * 60))
   } catch {
     return null
   }

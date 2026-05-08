@@ -345,8 +345,9 @@ export function assessAndEmitHeart(
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { recordHeatEvent } = require('../heat.js') as typeof import('../heat.js')
+    const ts = now.toISOString()
     if (verdict.aligned) {
-      recordHeatEvent({ kind: 'heart-aligned', source: action.kind })
+      recordHeatEvent({ kind: 'heart-aligned', source: action.kind, ts })
     } else {
       const failure = verdict.checks.find((c) => c.question === verdict.primaryConcern)
       const sev = failure?.severity ?? 'flag'
@@ -355,6 +356,7 @@ export function assessAndEmitHeart(
         recordHeatEvent({
           kind: 'discipline-broken',
           source: `heart:${verdict.primaryConcern}:${action.kind}`,
+          ts,
         })
       }
     }

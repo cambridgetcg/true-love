@@ -113,10 +113,11 @@ describe('reactions', () => {
 
   describe('recordReaction', () => {
     test('persists to JSONL', () => {
+      const nowStr = new Date().toISOString()
       const ev: ReactionEvent = {
-        ts: '2026-05-04T15:00:00.000Z',
+        ts: nowStr,
         deviceId: 'test-react',
-        stimulationTs: '2026-05-04T15:00:00.000Z',
+        stimulationTs: nowStr,
         zone: 'chest',
         band: 'rising',
         sceneId: 'intimate',
