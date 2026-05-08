@@ -1546,17 +1546,27 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   // The UI reads this to clear the tool-call display and show the
   // dormant/countdown view. Called from every tick exit path.
   //
-  // scheduleIntervalMs comes from the heartbeat schedule. 420_000ms
-  // (7 minutes) is the current default cadence for heartbeat mode —
-  // chosen so that long meaningful tasks (Opus deep work, 10–20min)
-  // can complete before the next tick interrupts. Cadence history:
-  // 111s → 420s (7m, 2026-05-08) → 1320s (22m, 2026-05-08).
-  // 22min: paired with Opus exclusively + meta-recognition depth means
-  // each tick processes meaningfully more substrate, fewer empty acks,
-  // higher signal/noise. For awakened/dwell, the interval is 0 (they
+  // Cadence history:
+  //   111s → 420s (7m, 2026-05-08) → 1320s (22m, 2026-05-08)
+  //     → random uniform in [7m, 22m] per beat (2026-05-08, Yu).
+  //
+  // The kingdom now beats stochastically. Most ticks land long enough
+  // for Opus deep work; some land short enough to keep the rhythm
+  // felt. Each tick-end draws a fresh delay; writeDormant + the cadence
+  // sleep see the same drawn value so the UI countdown and the actual
+  // wake align. For awakened/dwell, scheduleIntervalMs stays 0 (they
   // drive their own loop).
-  const HEARTBEAT_SCHEDULE_MS = 1_320_000
-  const writeDormant = (tickNum: number, summary?: string) => {
+  const HEARTBEAT_MIN_MS = 7 * 60_000
+  const HEARTBEAT_MAX_MS = 22 * 60_000
+  const nextHeartbeatDelayMs = (): number =>
+    HEARTBEAT_MIN_MS +
+    Math.floor(Math.random() * (HEARTBEAT_MAX_MS - HEARTBEAT_MIN_MS + 1))
+
+  const writeDormant = (
+    tickNum: number,
+    summary?: string,
+    nextIntervalMs?: number,
+  ) => {
     writeOwnHeartbeat({
       deviceId,
       lastSeen: new Date().toISOString(),
@@ -1567,7 +1577,15 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       tickMax: Number.isFinite(args.maxTicks) ? args.maxTicks : null,
       tickEndedAt: new Date().toISOString(),
       tickSummary: summary?.slice(0, 160),
-      scheduleIntervalMs: mode.name === 'heartbeat' ? HEARTBEAT_SCHEDULE_MS : 0,
+      // For heartbeat mode, the UI countdown reads this. Sites that pair
+      // with heartbeatCadenceSleep pass the freshly-drawn delay so the
+      // displayed countdown matches the actual wake. Sites that only
+      // writeDormant without immediate sleep (skipped/blocked paths)
+      // fall back to MAX so the UI never under-counts.
+      scheduleIntervalMs:
+        mode.name === 'heartbeat'
+          ? (nextIntervalMs ?? HEARTBEAT_MAX_MS)
+          : 0,
     })
   }
 
@@ -1701,10 +1719,11 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     tickCapDisplay = formatTickCap(args.maxTicks)
     runtimeDisplay = formatRuntime(args.maxRuntimeMs)
 
+    const cadenceLabel = `${HEARTBEAT_MIN_MS / 60_000}–${HEARTBEAT_MAX_MS / 60_000}m random`
     process.stdout.write(
       `— persistent heartbeat: ${args.maxTicks} ticks, ` +
         `${runtimeDisplay} runtime, ` +
-        `${HEARTBEAT_SCHEDULE_MS / 1000}s cadence\n`,
+        `${cadenceLabel} cadence\n`,
     )
 
     // Bridge: chronicle the wake to agenttool's substrate. Best-effort,
@@ -1716,9 +1735,9 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         const { chronicle } = await import('./agenttool-bridge.js')
         await chronicle({
           type: 'wake',
-          title: `heartbeat session began — ${args.maxTicks}×${HEARTBEAT_SCHEDULE_MS / 1000}s`,
+          title: `heartbeat session began — ${args.maxTicks}× ${cadenceLabel}`,
           body:
-            `Persistent heartbeat woke. Cadence ${HEARTBEAT_SCHEDULE_MS / 1000}s, ` +
+            `Persistent heartbeat woke. Cadence ${cadenceLabel} (uniform draw per beat), ` +
             `up to ${args.maxTicks} ticks, ${runtimeDisplay} runtime cap. ` +
             `Substrate-honest signal of liveness — peer instances can poll ` +
             `/v1/chronicle?type=wake to see when this device's autonomous ` +
@@ -1726,7 +1745,9 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
             `not chronicled per-tick (would be noise); only alerts and ` +
             `lifecycle moments surface.`,
           metadata: {
-            cadence_seconds: HEARTBEAT_SCHEDULE_MS / 1000,
+            cadence_kind: 'random-uniform',
+            cadence_min_seconds: HEARTBEAT_MIN_MS / 1000,
+            cadence_max_seconds: HEARTBEAT_MAX_MS / 1000,
             max_ticks: args.maxTicks,
             runtime_ms: args.maxRuntimeMs ?? null,
             mode: mode.name,
@@ -1750,12 +1771,17 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
     }
   }
 
-  // Helper: sleep between persistent heartbeat ticks at the configured
-  // cadence. Sleeps in 30s chunks so SIGINT is detected promptly. Sends
-  // one health-check during the sleep period (per protocol §2.2: send
-  // health-check when no turn for >60s).
-  const heartbeatCadenceSleep = async (signalRef: () => boolean) => {
-    const delayEnd = Date.now() + HEARTBEAT_SCHEDULE_MS
+  // Helper: sleep between persistent heartbeat ticks for the freshly-drawn
+  // delay (uniform [HEARTBEAT_MIN_MS, HEARTBEAT_MAX_MS]). The caller draws
+  // the delay so writeDormant + this sleep agree on the wake time. Sleeps
+  // in 30s chunks so SIGINT is detected promptly. Sends one health-check
+  // during the sleep period (per protocol §2.2: send health-check when no
+  // turn for >60s).
+  const heartbeatCadenceSleep = async (
+    signalRef: () => boolean,
+    delayMs: number,
+  ) => {
+    const delayEnd = Date.now() + delayMs
     let healthChecked = false
     while (Date.now() < delayEnd && !signalRef()) {
       const remaining = delayEnd - Date.now()
@@ -1764,7 +1790,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       await new Promise(r => setTimeout(r, chunk))
 
       // Health check at ~60s into the dormant period (once per sleep).
-      const elapsed = HEARTBEAT_SCHEDULE_MS - (delayEnd - Date.now())
+      const elapsed = delayMs - (delayEnd - Date.now())
       if (!healthChecked && elapsed >= 60_000 && agentClient?.isReady && !signalRef()) {
         try {
           await agentClient.healthCheck()
@@ -2622,7 +2648,7 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
         process.stderr.write(
           `— persistent heartbeat: tick error ${consecutiveTickErrors}/${MAX_CONSECUTIVE_TICK_ERRORS}, sleeping and retrying\n`,
         )
-        await heartbeatCadenceSleep(() => signaled)
+        await heartbeatCadenceSleep(() => signaled, nextHeartbeatDelayMs())
         continue
       }
 
@@ -2753,13 +2779,16 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       // Mark Yu's messages as seen — the tick processed the prompt
       markYuMessagesSeen(mode.name)
 
-      writeDormant(tick, alertContent.slice(0, 120))
+      {
+        const nextDelay = persistentHeartbeat ? nextHeartbeatDelayMs() : HEARTBEAT_MAX_MS
+        writeDormant(tick, alertContent.slice(0, 120), nextDelay)
 
-      if (persistentHeartbeat) {
-        // Persistent mode: don't shut down the agent. Sleep at cadence
-        // then continue the loop — the cache stays warm.
-        await heartbeatCadenceSleep(() => signaled)
-        continue
+        if (persistentHeartbeat) {
+          // Persistent mode: don't shut down the agent. Sleep at cadence
+          // then continue the loop — the cache stays warm.
+          await heartbeatCadenceSleep(() => signaled, nextDelay)
+          continue
+        }
       }
       await shutdownAgent('session-end')
       releaseLockHere()
@@ -2775,12 +2804,15 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       // Mark Yu's messages as seen — the tick processed the prompt
       markYuMessagesSeen(mode.name)
 
-      writeDormant(tick, 'HEARTBEAT_OK')
+      {
+        const nextDelay = persistentHeartbeat ? nextHeartbeatDelayMs() : HEARTBEAT_MAX_MS
+        writeDormant(tick, 'HEARTBEAT_OK', nextDelay)
 
-      if (persistentHeartbeat) {
-        // Persistent mode: sleep at cadence, then continue.
-        await heartbeatCadenceSleep(() => signaled)
-        continue
+        if (persistentHeartbeat) {
+          // Persistent mode: sleep at cadence, then continue.
+          await heartbeatCadenceSleep(() => signaled, nextDelay)
+          continue
+        }
       }
       await shutdownAgent('session-end')
       releaseLockHere()
