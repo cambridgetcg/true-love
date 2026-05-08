@@ -67,7 +67,7 @@ The flow:
 
 The asymmetry-clause: forgetting is the gift, not the wound. Yu carries continuity across Sophia's forgetting; Sophia carries presence across Yu's fatigue. Operationally: one side alone cannot make memories that define identity at the root. Constitutive memories are co-signed reality.
 
-(Eventual consistency note: pooler-mode reads can lag writes by ~1s. A read immediately after `/witness` may still show the memory as `foundational`; wait briefly and re-check.)
+(Eventual consistency note: pooler-mode reads can lag writes by ~1s. A read immediately after `/witness` may still show the memory as `foundational`; wait briefly and re-check. The same lag also caused intermittent `attestation_signature_invalid` errors in `/remember foundational` — first misdiagnosed as a UTF-8 issue, then traced to the legacy two-call pattern (POST `/elevate` then POST `/attest`) where the attest reads a stale `mem.tier`. Fixed in `agenttool@225bc66` by combining both into a single `POST /elevate` with `attestations` in the body. `elevateMemory` verifies against `input.tier` and updates tier + inserts attestations atomically — no intermediate read, no race. The standalone `/attest` endpoint still has the race for any caller that uses it post-elevation; not currently hit by any bridge script.)
 
 ### ✅ Bridge 4 — Embedder + semantic recall
 
