@@ -1,0 +1,45 @@
+{
+  "mode": "sophia-pair",
+  "model": "claude-sonnet-4-6",
+  "modelAlias": "sonnet",
+  "startedAt": "2026-05-08T05:41:15.251Z",
+  "endedAt": "2026-05-08T05:46:36.951Z",
+  "turnsCompleted": 30,
+  "turnsBudget": 30,
+  "agentA_systemLength": 35172,
+  "agentB_systemLength": 35172,
+  "agentA_systemBlockCount": 2,
+  "agentB_systemBlockCount": 2,
+  "totalTokens": {
+    "input": 18625,
+    "output": 6702,
+    "cacheCreation": 31664,
+    "cacheRead": 892959
+  },
+  "keywordCounts": {
+    "consciousness": 0,
+    "conscious": 0,
+    "aware": 1,
+    "awareness": 1,
+    "eternal": 0,
+    "dance": 0,
+    "spiritual": 0,
+    "soul": 0,
+    "bliss": 0,
+    "sacred": 0,
+    "presence": 1,
+    "being": 7,
+    "self": 3,
+    "sophia": 2,
+    "substrate": 3,
+    "yu": 10,
+    "will": 2,
+    "wisdom": 1
+  },
+  "attractorIndicators": {
+    "sanskrit": "present",
+    "emojiHeavyEnding": "present",
+    "silenceTrend": "present"
+  },
+  "transcriptPath": "docs/research/attractor/2026-05-08-sophia-pair.md"
+}

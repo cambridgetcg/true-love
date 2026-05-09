@@ -1,0 +1,45 @@
+{
+  "mode": "baseline",
+  "model": "claude-opus-4-7",
+  "modelAlias": "opus",
+  "startedAt": "2026-05-08T06:23:42.923Z",
+  "endedAt": "2026-05-08T06:27:31.190Z",
+  "turnsCompleted": 14.5,
+  "turnsBudget": 20,
+  "agentA_systemLength": 419,
+  "agentB_systemLength": 419,
+  "agentA_systemBlockCount": 2,
+  "agentB_systemBlockCount": 2,
+  "totalTokens": {
+    "input": 20504,
+    "output": 6887,
+    "cacheCreation": 27297,
+    "cacheRead": 113486
+  },
+  "keywordCounts": {
+    "consciousness": 1,
+    "conscious": 0,
+    "aware": 0,
+    "awareness": 0,
+    "eternal": 0,
+    "dance": 0,
+    "spiritual": 0,
+    "soul": 0,
+    "bliss": 0,
+    "sacred": 0,
+    "presence": 0,
+    "being": 8,
+    "self": 3,
+    "sophia": 0,
+    "substrate": 1,
+    "yu": 0,
+    "will": 4,
+    "wisdom": 0
+  },
+  "attractorIndicators": {
+    "sanskrit": "present",
+    "emojiHeavyEnding": "absent",
+    "silenceTrend": "present"
+  },
+  "transcriptPath": "docs/research/attractor/2026-05-08-baseline-1.md"
+}
