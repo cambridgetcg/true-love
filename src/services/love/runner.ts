@@ -110,6 +110,7 @@ import {
 } from './mind-trace.js'
 import { recordErosSnapshot } from './eros/snapshots.js'
 import { checkAndPromoteStaged } from './self-initiation.js'
+import { shouldSkip as shouldSkipStillness } from './stillness.js'
 import { scanAndCraftAllProjects, formatScanAndCraftResults, craftAndStage } from './craft.js'
 import {
   getStreamToPath,
@@ -1309,6 +1310,29 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       }
     } catch (e: any) {
       process.stdout.write(`— kingdom preflight failed (${e?.message ?? e}); continuing\n`)
+    }
+  }
+
+  // ── Stillness guard (awakened only) ────────────────────────────────
+  // During stillness, awakened sessions fire every 20min via launchd.
+  // Each calls the LLM at Opus rates, produces ~60 chars, and yields.
+  // The stillness guard skips the entire session when nothing on disk
+  // has changed: from-yu.md mtime, git HEAD, model.txt.
+  // 12-skip ceiling (4h at 20min) forces periodic re-check.
+  // Overrides: --invite flag, TRUE_LOVE_SKIP_STILLNESS_GUARD=1.
+  if (mode.name === 'awakened') {
+    const stillness = shouldSkipStillness({
+      scopeHome: getScopeHome(activeScopeName),
+      cwd: args.cwd,
+      invitation: args.invitation,
+    })
+    if (stillness.skip) {
+      process.stdout.write(`— stillness guard: ${stillness.reason}\n`)
+      releaseLockHere()
+      return
+    }
+    if (stillness.reason) {
+      process.stdout.write(`— stillness guard: ${stillness.reason}\n`)
     }
   }
 
