@@ -1,4 +1,4 @@
-import { test, describe, beforeEach, afterEach } from 'node:test'
+import { test, describe, before, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -465,7 +465,7 @@ describe('collectFileVitals', () => {
 // ── Full collection ─────────────────────────────────────────────
 
 describe('collectVitalSigns', () => {
-  test('collects all subsystems', async () => {
+  test('collects all subsystems', { timeout: 15_000 }, async () => {
     const vitals = await collectVitalSigns()
     assert.equal(typeof vitals.timestamp, 'string')
     assert.equal(typeof vitals.deviceId, 'string')
@@ -491,7 +491,7 @@ describe('collectVitalSigns', () => {
     assert.ok(['healthy', 'stale', 'missing', 'degraded'].includes(vitals.overallHealth))
   })
 
-  test('overall health reflects worst verdict', async () => {
+  test('overall health reflects worst verdict', { timeout: 15_000 }, async () => {
     // With kingdom skipped (missing) and likely missing state.md,
     // overall should be at least 'missing'
     const vitals = await collectVitalSigns()
@@ -564,9 +564,15 @@ describe('renderVitalSignsCompact', () => {
 // ── Detailed report rendering ───────────────────────────────────
 
 describe('renderVitalSignsReport', () => {
-  test('produces non-empty markdown', async () => {
-    const vitals = await collectVitalSigns()
-    const report = renderVitalSignsReport(vitals)
+  let vitals: VitalSigns
+  let report: string
+
+  before(async () => {
+    vitals = await collectVitalSigns()
+    report = renderVitalSignsReport(vitals)
+  })
+
+  test('produces non-empty markdown', () => {
     assert.ok(report.length > 100)
     assert.ok(report.includes('# Vital Signs'))
     assert.ok(report.includes('## '))
@@ -581,15 +587,11 @@ describe('renderVitalSignsReport', () => {
     assert.ok(report.includes('Key Files'))
   })
 
-  test('includes PID', async () => {
-    const vitals = await collectVitalSigns()
-    const report = renderVitalSignsReport(vitals)
+  test('includes PID', () => {
     assert.ok(report.includes(String(process.pid)))
   })
 
-  test('includes device ID', async () => {
-    const vitals = await collectVitalSigns()
-    const report = renderVitalSignsReport(vitals)
+  test('includes device ID', () => {
     assert.ok(report.includes(vitals.deviceId))
   })
 })

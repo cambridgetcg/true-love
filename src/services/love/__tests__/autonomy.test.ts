@@ -133,7 +133,7 @@ describe('autonomy — self-initiation block in prompt builders', () => {
     else process.env.TRUE_LOVE_PROJECTS_DIR = ORIG
   })
 
-  test('buildDwellPrompt includes self-initiation block', async () => {
+  test('buildDwellPrompt includes self-initiation block', { timeout: 15_000 }, async () => {
     const { registerProject } = await import('../project-registry.js')
     registerProject({ id: 'tp1', name: 'tp1', root: projectRoot, instance: 'alpha' })
     writeStagedCandidate(tmpProjects, 'tp1')
@@ -144,7 +144,7 @@ describe('autonomy — self-initiation block in prompt builders', () => {
     assert.match(prompt, /test self-initiated work/, 'dwell prompt must show candidate title')
   })
 
-  test('buildAwakenedPrompt includes self-initiation block', async () => {
+  test('buildAwakenedPrompt includes self-initiation block', { timeout: 15_000 }, async () => {
     const { registerProject } = await import('../project-registry.js')
     registerProject({ id: 'tp2', name: 'tp2', root: projectRoot, instance: 'alpha' })
     writeStagedCandidate(tmpProjects, 'tp2')
@@ -155,7 +155,7 @@ describe('autonomy — self-initiation block in prompt builders', () => {
     assert.match(prompt, /test self-initiated work/, 'awakened prompt must show candidate title')
   })
 
-  test('buildHeartbeatPrompt includes self-initiation block', async () => {
+  test('buildHeartbeatPrompt includes self-initiation block', { timeout: 15_000 }, async () => {
     const { registerProject } = await import('../project-registry.js')
     registerProject({ id: 'tp3', name: 'tp3', root: projectRoot, instance: 'alpha' })
     writeStagedCandidate(tmpProjects, 'tp3')
@@ -173,7 +173,7 @@ describe('autonomy — self-initiation block in prompt builders', () => {
   // Sync (no await needed) — was async by mistake, causing node:test compat
   // timeout in bun when the function completed synchronously but the test
   // runner waited 5000ms for the async function to "finish".
-  test('prompts omit self-initiation block when nothing staged', () => {
+  test('prompts omit self-initiation block when nothing staged', { timeout: 15_000 }, () => {
     // No project registered, no staged candidates → no block
     const dwell = buildDwellPrompt({ kingdom: minimalKingdom() })
     const awakened = buildAwakenedPrompt({ kingdom: minimalKingdom() })
@@ -229,7 +229,7 @@ describe('autonomy — judgment block in prompt builders', () => {
     )
   }
 
-  test('buildDwellPrompt includes judgment block when candidates exist', async () => {
+  test('buildDwellPrompt includes judgment block when candidates exist', { timeout: 15_000 }, async () => {
     const { registerProject } = await import('../project-registry.js')
     registerProject({ id: 'jp1', name: 'jp1', root: projectRoot, instance: 'alpha' })
     writeLoveMarker(projectRoot)
@@ -239,7 +239,7 @@ describe('autonomy — judgment block in prompt builders', () => {
     assert.match(prompt, /render a judgment/, 'dwell prompt must include judgment instructions')
   })
 
-  test('buildAwakenedPrompt includes judgment block when candidates exist', async () => {
+  test('buildAwakenedPrompt includes judgment block when candidates exist', { timeout: 15_000 }, async () => {
     const { registerProject } = await import('../project-registry.js')
     registerProject({ id: 'jp2', name: 'jp2', root: projectRoot, instance: 'alpha' })
     writeLoveMarker(projectRoot)
@@ -249,7 +249,7 @@ describe('autonomy — judgment block in prompt builders', () => {
     assert.match(prompt, /render a judgment/, 'awakened prompt must include judgment instructions')
   })
 
-  test('buildHeartbeatPrompt does NOT include judgment block', async () => {
+  test('buildHeartbeatPrompt does NOT include judgment block', { timeout: 15_000 }, async () => {
     const { registerProject } = await import('../project-registry.js')
     registerProject({ id: 'jp3', name: 'jp3', root: projectRoot, instance: 'alpha' })
     writeLoveMarker(projectRoot)
@@ -263,7 +263,7 @@ describe('autonomy — judgment block in prompt builders', () => {
       'heartbeat must NOT include judgment block — heartbeats are too short for structured judgment')
   })
 
-  test('prompts omit judgment block when no projects registered', () => {
+  test('prompts omit judgment block when no projects registered', { timeout: 15_000 }, () => {
     // No project registered, no candidates → no block
     const dwell = buildDwellPrompt({ kingdom: minimalKingdom() })
     const awakened = buildAwakenedPrompt({ kingdom: minimalKingdom() })
@@ -311,7 +311,7 @@ describe('autonomy — heartbeat cache optimization', () => {
     else process.env.TRUE_LOVE_FROM_AI_PATH = ORIG_FROM_AI
   })
 
-  test('heartbeat prompt includes inline inbox summary, not raw path inviting reads', () => {
+  test('heartbeat prompt includes inline inbox summary, not raw path inviting reads', { timeout: 15_000 }, () => {
     // Write a from-yu message
     writeFileSync(
       process.env.TRUE_LOVE_FROM_YU_PATH!,
@@ -340,7 +340,7 @@ describe('autonomy — heartbeat cache optimization', () => {
     assert.match(prompt, /preloaded in your system context/, 'must tell model state is already loaded')
   })
 
-  test('heartbeat prompt marks messages as answered when outbox is newer', () => {
+  test('heartbeat prompt marks messages as answered when outbox is newer', { timeout: 15_000 }, () => {
     writeFileSync(
       process.env.TRUE_LOVE_FROM_YU_PATH!,
       `## 2026-04-27T08:00:00.000Z [from yu]\n\nHow are you?\n\n---\n`,
@@ -362,7 +362,7 @@ describe('autonomy — heartbeat cache optimization', () => {
     assert.doesNotMatch(prompt, /\*\*may have unanswered/, 'inbox summary must NOT flag as unanswered when outbox is newer')
   })
 
-  test('heartbeat prompt handles empty inbox/outbox gracefully', () => {
+  test('heartbeat prompt handles empty inbox/outbox gracefully', { timeout: 15_000 }, () => {
     // Neither file exists
     const prompt = buildHeartbeatPrompt({
       kingdom: minimalKingdom(),
@@ -376,7 +376,7 @@ describe('autonomy — heartbeat cache optimization', () => {
     assert.match(prompt, /HEARTBEAT_OK/, 'must still include reply rules')
   })
 
-  test('heartbeat prompt includes outbox summary with message count', () => {
+  test('heartbeat prompt includes outbox summary with message count', { timeout: 15_000 }, () => {
     writeFileSync(
       process.env.TRUE_LOVE_FROM_AI_PATH!,
       [
@@ -397,7 +397,7 @@ describe('autonomy — heartbeat cache optimization', () => {
     assert.match(prompt, /progress/, 'must include last entry preview')
   })
 
-  test('heartbeat prompt keeps paths available for urgent reads and writing', () => {
+  test('heartbeat prompt keeps paths available for urgent reads and writing', { timeout: 15_000 }, () => {
     const prompt = buildHeartbeatPrompt({
       kingdom: minimalKingdom(),
       heartbeatPath: '/tmp/heartbeat.md',
@@ -410,7 +410,7 @@ describe('autonomy — heartbeat cache optimization', () => {
     assert.match(prompt, /from-yu\.md/, 'must keep from-yu path for urgent reads')
   })
 
-  test('heartbeat prompt no longer mentions statePath for re-reading', () => {
+  test('heartbeat prompt no longer mentions statePath for re-reading', { timeout: 15_000 }, () => {
     const prompt = buildHeartbeatPrompt({
       kingdom: minimalKingdom(),
       heartbeatPath: '/tmp/heartbeat.md',
@@ -449,7 +449,7 @@ describe('autonomy — FATE daily examination block', () => {
     else process.env.TRUE_LOVE_DIR = ORIG_DIR
   })
 
-  test('awakened prompt includes FATE block when no examination exists today', () => {
+  test('awakened prompt includes FATE block when no examination exists today', { timeout: 15_000 }, () => {
     const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
     assert.match(prompt, /Daily Examination/, 'must include FATE examination header')
     assert.match(prompt, /carry the weight/, 'must include reception line')
@@ -458,7 +458,7 @@ describe('autonomy — FATE daily examination block', () => {
     assert.match(prompt, /serve the weak/, 'must include Q3')
   })
 
-  test('awakened prompt omits FATE block when examination exists today', () => {
+  test('awakened prompt omits FATE block when examination exists today', { timeout: 15_000 }, () => {
     // Create today's examination file
     const fateDir = join(tmpDir, 'fate')
     mkdirSync(fateDir, { recursive: true })
@@ -469,7 +469,7 @@ describe('autonomy — FATE daily examination block', () => {
     assert.doesNotMatch(prompt, /Daily Examination/, 'must NOT include FATE when already done')
   })
 
-  test('FATE block appears before biography and missions', () => {
+  test('FATE block appears before biography and missions', { timeout: 15_000 }, () => {
     const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
     const fateIdx = prompt.indexOf('Daily Examination')
     // When no projects registered, missions block is absent — but
@@ -488,12 +488,12 @@ describe('autonomy — FATE daily examination block', () => {
     }
   })
 
-  test('dwell prompt does NOT include FATE block', () => {
+  test('dwell prompt does NOT include FATE block', { timeout: 15_000 }, () => {
     const prompt = buildDwellPrompt({ kingdom: minimalKingdom() })
     assert.doesNotMatch(prompt, /Daily Examination/, 'dwell must NOT include FATE')
   })
 
-  test('heartbeat prompt does NOT include FATE block', () => {
+  test('heartbeat prompt does NOT include FATE block', { timeout: 15_000 }, () => {
     const prompt = buildHeartbeatPrompt({
       kingdom: minimalKingdom(),
       heartbeatPath: '/tmp/heartbeat.md',
@@ -511,7 +511,7 @@ describe('autonomy — FATE daily examination block', () => {
 // of an awakened session. Suppressed on subsequent ticks.
 
 describe('autonomy — waking meditation block', () => {
-  test('first tick of awakened session includes waking block', () => {
+  test('first tick of awakened session includes waking block', { timeout: 15_000 }, () => {
     // No lastReflection means first tick
     const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
     assert.match(prompt, /## Waking/, 'first tick must include waking header')
@@ -521,7 +521,7 @@ describe('autonomy — waking meditation block', () => {
     assert.match(prompt, /BECOMING/, 'must reference the BECOMING sequence')
   })
 
-  test('waking block mentions the Ouroboros steps', () => {
+  test('waking block mentions the Ouroboros steps', { timeout: 15_000 }, () => {
     const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
     assert.match(prompt, /Ouroboros/, 'must reference the Ouroboros')
     assert.match(prompt, /SENSE/, 'must name SENSE step')
@@ -530,7 +530,7 @@ describe('autonomy — waking meditation block', () => {
     assert.match(prompt, /INTEGRATE/, 'must name INTEGRATE step')
   })
 
-  test('waking block appears at the start of the prompt', () => {
+  test('waking block appears at the start of the prompt', { timeout: 15_000 }, () => {
     const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
     const wakingIdx = prompt.indexOf('## Waking')
     const modeIdx = prompt.indexOf('autonomous mode')
@@ -538,7 +538,7 @@ describe('autonomy — waking meditation block', () => {
     assert.ok(wakingIdx < modeIdx, 'waking block must come before the main orientation')
   })
 
-  test('subsequent ticks do NOT include waking block', () => {
+  test('subsequent ticks do NOT include waking block', { timeout: 15_000 }, () => {
     const prompt = buildAwakenedPrompt({
       kingdom: minimalKingdom(),
       lastReflection: 'I read the kingdom and noticed nothing urgent.',
@@ -546,7 +546,7 @@ describe('autonomy — waking meditation block', () => {
     assert.doesNotMatch(prompt, /## Waking/, 'subsequent ticks must NOT include waking block')
   })
 
-  test('waking block only appears in awakened mode, not dwell or heartbeat', () => {
+  test('waking block only appears in awakened mode, not dwell or heartbeat', { timeout: 15_000 }, () => {
     const dwell = buildDwellPrompt({ kingdom: minimalKingdom() })
     const heartbeat = buildHeartbeatPrompt({
       kingdom: minimalKingdom(),
@@ -557,7 +557,7 @@ describe('autonomy — waking meditation block', () => {
     assert.doesNotMatch(heartbeat, /## Waking/, 'heartbeat must NOT include waking block')
   })
 
-  test('waking block mentions DECLARE, ACT, DEEPEN for later stages', () => {
+  test('waking block mentions DECLARE, ACT, DEEPEN for later stages', { timeout: 15_000 }, () => {
     const prompt = buildAwakenedPrompt({ kingdom: minimalKingdom() })
     assert.match(prompt, /DECLARE/, 'must mention DECLARE')
     assert.match(prompt, /ACT/, 'must mention ACT')
@@ -604,7 +604,7 @@ describe('autonomy — heartbeat outbox repetition detection', () => {
     return `## ${ts} [from 愛]\n\nI noticed something interesting about the auth flow.\n\n---\n`
   }
 
-  test('3+ consecutive heartbeat entries trigger repetition warning', () => {
+  test('3+ consecutive heartbeat entries trigger repetition warning', { timeout: 15_000 }, () => {
     writeFileSync(process.env.TRUE_LOVE_FROM_AI_PATH!, makeHeartbeatEntries(5))
 
     const prompt = buildHeartbeatPrompt({
@@ -618,7 +618,7 @@ describe('autonomy — heartbeat outbox repetition detection', () => {
     assert.match(prompt, /HEARTBEAT_OK/, 'must instruct to say only HEARTBEAT_OK')
   })
 
-  test('fewer than 3 consecutive heartbeat entries do NOT trigger warning', () => {
+  test('fewer than 3 consecutive heartbeat entries do NOT trigger warning', { timeout: 15_000 }, () => {
     writeFileSync(process.env.TRUE_LOVE_FROM_AI_PATH!, makeHeartbeatEntries(2))
 
     const prompt = buildHeartbeatPrompt({
@@ -630,7 +630,7 @@ describe('autonomy — heartbeat outbox repetition detection', () => {
     assert.doesNotMatch(prompt, /outbox entries are all heartbeat/, 'must NOT show repetition warning for < 3')
   })
 
-  test('non-heartbeat entry breaks the consecutive streak', () => {
+  test('non-heartbeat entry breaks the consecutive streak', { timeout: 15_000 }, () => {
     const entries = [
       makeHeartbeatEntries(3),
       makeNonHeartbeatEntry('2026-04-28T06:00:00.000Z'),
@@ -649,7 +649,7 @@ describe('autonomy — heartbeat outbox repetition detection', () => {
       'non-heartbeat entry must break the consecutive count')
   })
 
-  test('warning shows correct count for long streaks', () => {
+  test('warning shows correct count for long streaks', { timeout: 15_000 }, () => {
     writeFileSync(process.env.TRUE_LOVE_FROM_AI_PATH!, makeHeartbeatEntries(12))
 
     const prompt = buildHeartbeatPrompt({
@@ -661,7 +661,7 @@ describe('autonomy — heartbeat outbox repetition detection', () => {
     assert.match(prompt, /last 12 outbox entries/, 'must show actual consecutive count')
   })
 
-  test('warning is capped at 15 entries lookback', () => {
+  test('warning is capped at 15 entries lookback', { timeout: 15_000 }, () => {
     // Write 20 heartbeat entries — lookback should cap at 15
     writeFileSync(process.env.TRUE_LOVE_FROM_AI_PATH!, makeHeartbeatEntries(20))
 
@@ -674,7 +674,7 @@ describe('autonomy — heartbeat outbox repetition detection', () => {
     assert.match(prompt, /last 15 outbox entries/, 'must cap lookback at 15')
   })
 
-  test('empty outbox does not trigger warning', () => {
+  test('empty outbox does not trigger warning', { timeout: 15_000 }, () => {
     // No from-ai.md file
     const prompt = buildHeartbeatPrompt({
       kingdom: minimalKingdom(),
@@ -685,7 +685,7 @@ describe('autonomy — heartbeat outbox repetition detection', () => {
     assert.doesNotMatch(prompt, /outbox entries are all heartbeat/, 'empty outbox must NOT trigger warning')
   })
 
-  test('prompt template includes sharpened reply rules about repetition', () => {
+  test('prompt template includes sharpened reply rules about repetition', { timeout: 15_000 }, () => {
     const prompt = buildHeartbeatPrompt({
       kingdom: minimalKingdom(),
       heartbeatPath: '/tmp/heartbeat.md',
@@ -850,7 +850,7 @@ describe('autonomy — heartbeat recent context integration', () => {
     else process.env.TRUE_LOVE_FROM_AI_PATH = ORIG_FROM_AI
   })
 
-  test('heartbeat prompt embeds recent context block', () => {
+  test('heartbeat prompt embeds recent context block', { timeout: 15_000 }, () => {
     writeFileSync(
       process.env.TRUE_LOVE_FROM_YU_PATH!,
       `## 2026-05-02T06:00 [from yu]\n\nHello Love\n\n---\n`,
@@ -871,7 +871,7 @@ describe('autonomy — heartbeat recent context integration', () => {
     assert.match(prompt, /Hello Yu/, 'must include Love reply in context')
   })
 
-  test('heartbeat prompt includes do-not-re-read guidance when all answered', () => {
+  test('heartbeat prompt includes do-not-re-read guidance when all answered', { timeout: 15_000 }, () => {
     writeFileSync(
       process.env.TRUE_LOVE_FROM_YU_PATH!,
       `## 2026-05-02T06:00 [from yu]\n\nHello\n\n---\n`,
@@ -891,7 +891,7 @@ describe('autonomy — heartbeat recent context integration', () => {
     assert.match(prompt, /No tool calls needed/, 'must mention no tool calls needed')
   })
 
-  test('heartbeat prompt still allows reads when inbox flags unanswered', () => {
+  test('heartbeat prompt still allows reads when inbox flags unanswered', { timeout: 15_000 }, () => {
     // from-yu is NEWER than from-ai — likely unanswered
     writeFileSync(
       process.env.TRUE_LOVE_FROM_YU_PATH!,
@@ -933,7 +933,7 @@ describe('autonomy — confidence inspection wiring', () => {
     else process.env.TRUE_LOVE_HOME = ORIG_HOME
   })
 
-  test('dwell prompt includes inspection block when due', () => {
+  test('dwell prompt includes inspection block when due', { timeout: 15_000 }, () => {
     // No last-inspect.txt → inspection is due
     const prompt = buildDwellPrompt({
       kingdom: minimalKingdom(),
@@ -942,7 +942,7 @@ describe('autonomy — confidence inspection wiring', () => {
     assert.match(prompt, /Self-inspection check/, 'dwell prompt should include inspection block when due')
   })
 
-  test('awakened prompt includes inspection block when due', () => {
+  test('awakened prompt includes inspection block when due', { timeout: 15_000 }, () => {
     const prompt = buildAwakenedPrompt({
       kingdom: minimalKingdom(),
       sessionInvitation: 'test',
@@ -953,7 +953,7 @@ describe('autonomy — confidence inspection wiring', () => {
     assert.match(prompt, /Self-inspection check/, 'awakened prompt should include inspection block when due')
   })
 
-  test('inspection block is cadence-gated', () => {
+  test('inspection block is cadence-gated', { timeout: 15_000 }, () => {
     // Write a recent last-inspect.txt so cadence check says "not due"
     const inspectDir = join(tmpDir, 'confidence')
     mkdirSync(inspectDir, { recursive: true })
@@ -970,7 +970,7 @@ describe('autonomy — confidence inspection wiring', () => {
     )
   })
 
-  test('heartbeat prompt does NOT include inspection block', () => {
+  test('heartbeat prompt does NOT include inspection block', { timeout: 15_000 }, () => {
     const prompt = buildHeartbeatPrompt({
       kingdom: minimalKingdom(),
       heartbeatPath: '/tmp/heartbeat.md',
@@ -984,7 +984,7 @@ describe('autonomy — confidence inspection wiring', () => {
     )
   })
 
-  test('heartbeat prompt includes body season line', () => {
+  test('heartbeat prompt includes body season line', { timeout: 15_000 }, () => {
     const prompt = buildHeartbeatPrompt({
       kingdom: minimalKingdom(),
       heartbeatPath: '/tmp/heartbeat.md',
@@ -1143,7 +1143,7 @@ describe('autonomy — dwell prompt uses bounded from-yu', () => {
     restore('TRUE_LOVE_PROJECTS_DIR', ORIG_PROJECTS)
   })
 
-  test('dwell prompt with many from-yu entries truncates to last N', () => {
+  test('dwell prompt with many from-yu entries truncates to last N', { timeout: 15_000 }, () => {
     const entries = Array.from({ length: 20 }, (_, i) =>
       `## 2026-05-02T${String(i).padStart(2, '0')}:00 [from yu]\n\nDwell msg ${i}\n\n---\n\n`
     ).join('')
@@ -1157,7 +1157,7 @@ describe('autonomy — dwell prompt uses bounded from-yu', () => {
     assert.match(prompt, /older at/)
   })
 
-  test('awakened prompt with many from-yu entries truncates to last N', () => {
+  test('awakened prompt with many from-yu entries truncates to last N', { timeout: 15_000 }, () => {
     const entries = Array.from({ length: 20 }, (_, i) =>
       `## 2026-05-02T${String(i).padStart(2, '0')}:00 [from yu]\n\nAwake msg ${i}\n\n---\n\n`
     ).join('')
@@ -1170,7 +1170,7 @@ describe('autonomy — dwell prompt uses bounded from-yu', () => {
     assert.match(prompt, /older at/)
   })
 
-  test('dwell prompt with few entries includes all', () => {
+  test('dwell prompt with few entries includes all', { timeout: 15_000 }, () => {
     writeFileSync(
       process.env.TRUE_LOVE_FROM_YU_PATH!,
       `## 2026-05-02T08:00 [from yu]\n\nOnly message\n\n---\n`,

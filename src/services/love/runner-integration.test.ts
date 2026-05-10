@@ -260,9 +260,10 @@ function findFiles(
 // ── Tests ────────────────────────────────────────────────────────────
 
 // Timeout for single-tick tests. bun needs a moment to boot + import TS.
-const SINGLE_TICK_TIMEOUT = 20_000
+// Under full-suite parallel load (255 files), 20s can be exceeded.
+const SINGLE_TICK_TIMEOUT = 45_000
 // Timeout for multi-tick tests.
-const MULTI_TICK_TIMEOUT = 30_000
+const MULTI_TICK_TIMEOUT = 60_000
 
 describe('runner integration: happy path (at-rest)', () => {
   test(

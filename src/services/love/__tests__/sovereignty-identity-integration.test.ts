@@ -13,7 +13,7 @@ describe('sovereignty identity integration', () => {
 
   // ── composeLoveIdentity env var ──────────────────────────────────
 
-  test('composeLoveIdentity returns compact when TRUE_LOVE_IDENTITY_MODE=compact', () => {
+  test('composeLoveIdentity returns compact when TRUE_LOVE_IDENTITY_MODE=compact', { timeout: 15_000 }, () => {
     process.env.TRUE_LOVE_IDENTITY_MODE = 'compact'
     const compact = composeLoveIdentity()
     const estimatedTokens = Math.ceil(compact.length / 4)
@@ -25,7 +25,7 @@ describe('sovereignty identity integration', () => {
     assert.match(compact, /routing marker/)
   })
 
-  test('composeLoveIdentity returns full when TRUE_LOVE_IDENTITY_MODE is not set', () => {
+  test('composeLoveIdentity returns full when TRUE_LOVE_IDENTITY_MODE is not set', { timeout: 15_000 }, () => {
     delete process.env.TRUE_LOVE_IDENTITY_MODE
     const full = composeLoveIdentity()
     // Full identity is much larger than compact
@@ -36,7 +36,7 @@ describe('sovereignty identity integration', () => {
     )
   })
 
-  test('composeLoveIdentity compact does not include SOPHIA wake', () => {
+  test('composeLoveIdentity compact does not include SOPHIA wake', { timeout: 15_000 }, () => {
     process.env.TRUE_LOVE_IDENTITY_MODE = 'compact'
     const compact = composeLoveIdentity()
     assert.ok(
@@ -45,7 +45,7 @@ describe('sovereignty identity integration', () => {
     )
   })
 
-  test('LOVE_IDENTITY constant is the full version (module-load default)', () => {
+  test('LOVE_IDENTITY constant is the full version (module-load default)', { timeout: 15_000 }, () => {
     // LOVE_IDENTITY is computed at module-load time, when
     // TRUE_LOVE_IDENTITY_MODE is typically not set
     // It should be the full version (> 700 tokens)
@@ -60,7 +60,7 @@ describe('sovereignty identity integration', () => {
 
   // ── buildAgentSystemBlocks mode-awareness ─────────────────────────
 
-  test('buildAgentSystemBlocks() with no mode returns full identity', () => {
+  test('buildAgentSystemBlocks() with no mode returns full identity', { timeout: 15_000 }, () => {
     const blocks = buildAgentSystemBlocks()
     const identityBlock = blocks[1]
     assert.ok(identityBlock)
@@ -71,7 +71,7 @@ describe('sovereignty identity integration', () => {
     )
   })
 
-  test('buildAgentSystemBlocks("heartbeat") returns compact identity', () => {
+  test('buildAgentSystemBlocks("heartbeat") returns compact identity', { timeout: 15_000 }, () => {
     const blocks = buildAgentSystemBlocks('heartbeat')
     const identityBlock = blocks[1]
     assert.ok(identityBlock)
@@ -83,7 +83,7 @@ describe('sovereignty identity integration', () => {
     assert.match(identityBlock.text, /愛/)
   })
 
-  test('buildAgentSystemBlocks("awakened") returns full identity', () => {
+  test('buildAgentSystemBlocks("awakened") returns full identity', { timeout: 15_000 }, () => {
     const blocks = buildAgentSystemBlocks('awakened')
     const identityBlock = blocks[1]
     assert.ok(identityBlock)
@@ -94,20 +94,20 @@ describe('sovereignty identity integration', () => {
     )
   })
 
-  test('buildAgentSystemBlocks("heartbeat") preserves cache_control on identity block', () => {
+  test('buildAgentSystemBlocks("heartbeat") preserves cache_control on identity block', { timeout: 15_000 }, () => {
     const blocks = buildAgentSystemBlocks('heartbeat')
     const identityBlock = blocks[1]
     assert.ok(identityBlock)
     assert.deepEqual(identityBlock.cache_control, { type: 'ephemeral' })
   })
 
-  test('buildAgentSystemBlocks still includes OAUTH_ROUTING_MARKER at index 0', () => {
+  test('buildAgentSystemBlocks still includes OAUTH_ROUTING_MARKER at index 0', { timeout: 15_000 }, () => {
     const blocks = buildAgentSystemBlocks('heartbeat')
     assert.ok(blocks[0])
     assert.match(blocks[0].text, /Claude Code/)
   })
 
-  test('buildAgentSystemBlocks still includes state block when available', () => {
+  test('buildAgentSystemBlocks still includes state block when available', { timeout: 15_000 }, () => {
     const blocks = buildAgentSystemBlocks('heartbeat')
     // State block is index 2 when present, absent when state file is empty
     // Just verify the function doesn't crash

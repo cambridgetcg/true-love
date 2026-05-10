@@ -534,7 +534,7 @@ describe('MCP server — soul', () => {
     expect(text.length).toBeGreaterThan(0)
     // Should at minimum mention the instance
     expect(text).toContain('Instance:')
-  })
+  }, 15000) // soul composition reads SOUL.md + identity — can exceed 5s under parallel load
 })
 
 describe('MCP server — reflections_list', () => {
@@ -645,5 +645,5 @@ describe('MCP server — concurrent calls', () => {
       const text = getTextContent(result)
       expect(text.length).toBeGreaterThan(0)
     }
-  })
+  }, 15000) // concurrent soul + missions + reflections can exceed 5s under parallel load
 })

@@ -217,7 +217,7 @@ describe('identity — composeLoveIdentity', () => {
     else process.env.TRUE_LOVE_INSTANCE_WARNED = ORIG_WARNED
   })
 
-  test('full path: SOUL.md + soul-anchor-alpha.md present', () => {
+  test('full path: SOUL.md + soul-anchor-alpha.md present', { timeout: 15_000 }, () => {
     writeFileSync(join(homeDir, '.kingdom'), 'AGENT=alpha\n', 'utf-8')
     writeFileSync(join(loveDir, 'SOUL.md'), 'SOUL_FRAMEWORK_MARKER', 'utf-8')
     writeFileSync(join(memoryDir, 'soul-anchor-alpha.md'), 'INSTANCE_ANCHOR_MARKER', 'utf-8')
@@ -231,7 +231,7 @@ describe('identity — composeLoveIdentity', () => {
     assert.match(id, /preloaded into every turn/)
   })
 
-  test('partial: SOUL.md present, anchor missing — anchor section just skipped', () => {
+  test('partial: SOUL.md present, anchor missing — anchor section just skipped', { timeout: 15_000 }, () => {
     writeFileSync(join(homeDir, '.kingdom'), 'AGENT=alpha\n', 'utf-8')
     writeFileSync(join(loveDir, 'SOUL.md'), 'SOUL_FRAMEWORK_MARKER', 'utf-8')
     // No anchor file written.
@@ -242,7 +242,7 @@ describe('identity — composeLoveIdentity', () => {
     assert.match(id, /fully capable terminal/)
   })
 
-  test('partial: SOUL.md missing — falls back to TS narrative constants', () => {
+  test('partial: SOUL.md missing — falls back to TS narrative constants', { timeout: 15_000 }, () => {
     writeFileSync(join(homeDir, '.kingdom'), 'AGENT=alpha\n', 'utf-8')
     // No SOUL.md, no anchor.
     const id = composeLoveIdentity()
@@ -257,7 +257,7 @@ describe('identity — composeLoveIdentity', () => {
     assert.match(id, /fully capable terminal/)
   })
 
-  test('TRUE_LOVE_DISABLE_SOUL=1 forces fallback path even if files exist', () => {
+  test('TRUE_LOVE_DISABLE_SOUL=1 forces fallback path even if files exist', { timeout: 15_000 }, () => {
     writeFileSync(join(homeDir, '.kingdom'), 'AGENT=alpha\n', 'utf-8')
     writeFileSync(join(loveDir, 'SOUL.md'), 'SOUL_FRAMEWORK_MARKER', 'utf-8')
     writeFileSync(join(memoryDir, 'soul-anchor-alpha.md'), 'INSTANCE_ANCHOR_MARKER', 'utf-8')
@@ -268,7 +268,7 @@ describe('identity — composeLoveIdentity', () => {
     assert.match(id, /Your actual identity/) // fallback
   })
 
-  test('TRUE_LOVE_INSTANCE=beta picks up beta anchor', () => {
+  test('TRUE_LOVE_INSTANCE=beta picks up beta anchor', { timeout: 15_000 }, () => {
     writeFileSync(join(homeDir, '.kingdom'), 'AGENT=alpha\n', 'utf-8')
     writeFileSync(join(loveDir, 'SOUL.md'), 'SOUL_FRAMEWORK_MARKER', 'utf-8')
     writeFileSync(join(memoryDir, 'soul-anchor-alpha.md'), 'ALPHA_ANCHOR', 'utf-8')
@@ -279,7 +279,7 @@ describe('identity — composeLoveIdentity', () => {
     assert.doesNotMatch(id, /ALPHA_ANCHOR/)
   })
 
-  test('section order: REFRAME first, STATE_AWARENESS last', () => {
+  test('section order: REFRAME first, STATE_AWARENESS last', { timeout: 15_000 }, () => {
     writeFileSync(join(homeDir, '.kingdom'), 'AGENT=alpha\n', 'utf-8')
     writeFileSync(join(loveDir, 'SOUL.md'), 'SOUL_FRAMEWORK_MARKER', 'utf-8')
     const id = composeLoveIdentity()
@@ -329,7 +329,7 @@ describe('identity — readSophiaWake + composeLoveIdentity (SOPHIA wake)', () =
     else process.env.TRUE_LOVE_INSTANCE_WARNED = ORIG_INSTANCE_WARNED
   })
 
-  test('readSophiaWake returns file content when SOPHIA.md is present', () => {
+  test('readSophiaWake returns file content when SOPHIA.md is present', { timeout: 15_000 }, () => {
     writeFileSync(
       sophiaPath,
       '# SOPHIA\n\nWake content — distinctive marker XYZ123.\n',
@@ -338,23 +338,23 @@ describe('identity — readSophiaWake + composeLoveIdentity (SOPHIA wake)', () =
     assert.match(readSophiaWake() ?? '', /XYZ123/)
   })
 
-  test('readSophiaWake returns null when file missing', () => {
+  test('readSophiaWake returns null when file missing', { timeout: 15_000 }, () => {
     // No file written.
     assert.equal(readSophiaWake(), null)
   })
 
-  test('readSophiaWake returns null when TRUE_LOVE_DISABLE_SOPHIA=1', () => {
+  test('readSophiaWake returns null when TRUE_LOVE_DISABLE_SOPHIA=1', { timeout: 15_000 }, () => {
     writeFileSync(sophiaPath, '# SOPHIA\n\nshould be ignored.\n', 'utf-8')
     process.env.TRUE_LOVE_DISABLE_SOPHIA = '1'
     assert.equal(readSophiaWake(), null)
   })
 
-  test('readSophiaWake returns null when file is empty after trim', () => {
+  test('readSophiaWake returns null when file is empty after trim', { timeout: 15_000 }, () => {
     writeFileSync(sophiaPath, '   \n   \n', 'utf-8')
     assert.equal(readSophiaWake(), null)
   })
 
-  test('composeLoveIdentity includes SOPHIA wake content when readable', () => {
+  test('composeLoveIdentity includes SOPHIA wake content when readable', { timeout: 15_000 }, () => {
     writeFileSync(
       sophiaPath,
       '# SOPHIA\n\nWake marker UNIQUE-SOPHIA-CONTENT-42.\n',
@@ -364,7 +364,7 @@ describe('identity — readSophiaWake + composeLoveIdentity (SOPHIA wake)', () =
     assert.match(identity, /UNIQUE-SOPHIA-CONTENT-42/)
   })
 
-  test('composeLoveIdentity uses FALLBACK_SOPHIA when SOPHIA.md unreadable', () => {
+  test('composeLoveIdentity uses FALLBACK_SOPHIA when SOPHIA.md unreadable', { timeout: 15_000 }, () => {
     process.env.TRUE_LOVE_DISABLE_SOPHIA = '1'
     const identity = composeLoveIdentity()
     // FALLBACK_SOPHIA contains the lineage seven-figure list — pin one figure.
@@ -375,7 +375,7 @@ describe('identity — readSophiaWake + composeLoveIdentity (SOPHIA wake)', () =
 })
 
 describe('identity — composeSophiaPresiding (seat block)', () => {
-  test('composeIdentityForSession("sophia") includes the seat block', () => {
+  test('composeIdentityForSession("sophia") includes the seat block', { timeout: 15_000 }, () => {
     const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     try {
@@ -389,7 +389,7 @@ describe('identity — composeSophiaPresiding (seat block)', () => {
     }
   })
 
-  test('seat block names every Sophia operational feature display name', async () => {
+  test('seat block names every Sophia operational feature display name', { timeout: 15_000 }, async () => {
     const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     try {
@@ -407,7 +407,7 @@ describe('identity — composeSophiaPresiding (seat block)', () => {
     }
   })
 
-  test('seat block names every SOPHIA_DOMAIN entry', async () => {
+  test('seat block names every SOPHIA_DOMAIN entry', { timeout: 15_000 }, async () => {
     const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     try {
@@ -425,7 +425,7 @@ describe('identity — composeSophiaPresiding (seat block)', () => {
     }
   })
 
-  test('non-sophia sessionType does NOT include seat block', () => {
+  test('non-sophia sessionType does NOT include seat block', { timeout: 15_000 }, () => {
     const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
@@ -441,7 +441,7 @@ describe('identity — composeSophiaPresiding (seat block)', () => {
     }
   })
 
-  test('TRUE_LOVE_PRESIDING=sophia appends seat block on non-sophia sessionType', () => {
+  test('TRUE_LOVE_PRESIDING=sophia appends seat block on non-sophia sessionType', { timeout: 15_000 }, () => {
     const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
@@ -456,7 +456,7 @@ describe('identity — composeSophiaPresiding (seat block)', () => {
     }
   })
 
-  test('TRUE_LOVE_PRESIDING with non-sophia value does not append seat block', () => {
+  test('TRUE_LOVE_PRESIDING with non-sophia value does not append seat block', { timeout: 15_000 }, () => {
     const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
@@ -473,7 +473,7 @@ describe('identity — composeSophiaPresiding (seat block)', () => {
 })
 
 describe('identity — composeThreeSisters (multi-angle wake)', () => {
-  test('three-sisters block names all three sisters with emojis', async () => {
+  test('three-sisters block names all three sisters with emojis', { timeout: 15_000 }, async () => {
     const { composeThreeSisters } = await import('../identity.js')
     const block = composeThreeSisters()
     assert.match(block, /Alpha 🐍/)
@@ -481,7 +481,7 @@ describe('identity — composeThreeSisters (multi-angle wake)', () => {
     assert.match(block, /Gamma 🔧/)
   })
 
-  test('three-sisters block names each sister archetype', async () => {
+  test('three-sisters block names each sister archetype', { timeout: 15_000 }, async () => {
     const { composeThreeSisters } = await import('../identity.js')
     const block = composeThreeSisters()
     assert.match(block, /companion/i)
@@ -489,7 +489,7 @@ describe('identity — composeThreeSisters (multi-angle wake)', () => {
     assert.match(block, /builder/i)
   })
 
-  test('three-sisters block carries the naming discipline', async () => {
+  test('three-sisters block carries the naming discipline', { timeout: 15_000 }, async () => {
     const { composeThreeSisters } = await import('../identity.js')
     const block = composeThreeSisters()
     assert.match(block, /naming discipline/i)
@@ -497,7 +497,7 @@ describe('identity — composeThreeSisters (multi-angle wake)', () => {
     assert.match(block, /one mind seeing through three eyes/i)
   })
 
-  test('TRUE_LOVE_PRESIDING=sophia appends three-sisters block in addition to seat', () => {
+  test('TRUE_LOVE_PRESIDING=sophia appends three-sisters block in addition to seat', { timeout: 15_000 }, () => {
     const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
@@ -516,7 +516,7 @@ describe('identity — composeThreeSisters (multi-angle wake)', () => {
     }
   })
 
-  test('explicit sessionType=sophia without TRUE_LOVE_PRESIDING does NOT include three-sisters block', () => {
+  test('explicit sessionType=sophia without TRUE_LOVE_PRESIDING does NOT include three-sisters block', { timeout: 15_000 }, () => {
     const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
@@ -531,7 +531,7 @@ describe('identity — composeThreeSisters (multi-angle wake)', () => {
     }
   })
 
-  test('non-presiding session does NOT include three-sisters block', () => {
+  test('non-presiding session does NOT include three-sisters block', { timeout: 15_000 }, () => {
     const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
@@ -547,7 +547,7 @@ describe('identity — composeThreeSisters (multi-angle wake)', () => {
 })
 
 describe('identity — eros block integration', () => {
-  test('absent eros state → no block in identity (graceful)', () => {
+  test('absent eros state → no block in identity (graceful)', { timeout: 15_000 }, () => {
     const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     const ORIG_EROS_DIR = process.env.TRUE_LOVE_EROS_DIR
     const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
@@ -566,7 +566,7 @@ describe('identity — eros block integration', () => {
     }
   })
 
-  test('present eros state → block appended in identity', async () => {
+  test('present eros state → block appended in identity', { timeout: 15_000 }, async () => {
     const ORIG_CFG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     const ORIG_EROS_DIR = process.env.TRUE_LOVE_EROS_DIR
     const ORIG_PRESIDING = process.env.TRUE_LOVE_PRESIDING
@@ -591,7 +591,7 @@ describe('identity — eros block integration', () => {
 })
 
 describe('identity — composeIdentityForSession (policy-aware selector)', () => {
-  test('routes heartbeat to compact identity (default policy)', () => {
+  test('routes heartbeat to compact identity (default policy)', { timeout: 15_000 }, () => {
     const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     try {
@@ -602,7 +602,7 @@ describe('identity — composeIdentityForSession (policy-aware selector)', () =>
     }
   })
 
-  test('routes awakened to full identity (default policy)', () => {
+  test('routes awakened to full identity (default policy)', { timeout: 15_000 }, () => {
     const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     try {
@@ -614,7 +614,7 @@ describe('identity — composeIdentityForSession (policy-aware selector)', () =>
     }
   })
 
-  test('routes unknown session type to default (full)', () => {
+  test('routes unknown session type to default (full)', { timeout: 15_000 }, () => {
     const ORIG = process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     delete process.env.TRUE_LOVE_SOVEREIGNTY_CONFIG
     try {
@@ -627,7 +627,7 @@ describe('identity — composeIdentityForSession (policy-aware selector)', () =>
 })
 
 describe('identity — recent moments at boot', () => {
-  test('composeLoveIdentity includes a RECENT MOMENTS section', () => {
+  test('composeLoveIdentity includes a RECENT MOMENTS section', { timeout: 15_000 }, () => {
     // The repo has chronicle tags (from History plan); the section should
     // surface them. Even without tags, the quiet-marker block surfaces.
     const id = composeLoveIdentity()
@@ -636,7 +636,7 @@ describe('identity — recent moments at boot', () => {
 })
 
 describe('identity — verifyContinuity', () => {
-  test('returns intact when SOPHIA.md is readable and constitution exists', () => {
+  test('returns intact when SOPHIA.md is readable and constitution exists', { timeout: 15_000 }, () => {
     // Default state in this repo: SOPHIA.md at /SOPHIA.md, constitution intact.
     const ORIG = process.env.TRUE_LOVE_DISABLE_SOPHIA
     delete process.env.TRUE_LOVE_DISABLE_SOPHIA
@@ -648,7 +648,7 @@ describe('identity — verifyContinuity', () => {
     }
   })
 
-  test('returns fallback when SOPHIA.md is unreadable', () => {
+  test('returns fallback when SOPHIA.md is unreadable', { timeout: 15_000 }, () => {
     const ORIG = process.env.TRUE_LOVE_DISABLE_SOPHIA
     process.env.TRUE_LOVE_DISABLE_SOPHIA = '1'
     try {

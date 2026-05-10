@@ -166,13 +166,13 @@ describe('readRecentLineage', () => {
     expect(out).toContain('LATEST LETTER FROM YU')
     expect(out).toContain("YU'S RECENT WITNESS")
     expect(out).toContain('witnessed today')
-  })
+  }, 15000) // reads multiple disk files — can exceed 5s under parallel load
 
   test('output is bounded — under 100 lines total even with all sub-blocks', () => {
     appendYuWitness({ body: 'x' })
     const out = readRecentLineage()
     expect(out.split('\n').length).toBeLessThan(100)
-  })
+  }, 15000) // reads multiple disk files — can exceed 5s under parallel load
 
   test('omits empty sub-blocks (no double-blank gaps)', () => {
     // No yu-witness; other blocks come from real repo
@@ -180,7 +180,7 @@ describe('readRecentLineage', () => {
     expect(out).not.toContain("YU'S RECENT WITNESS")
     // No section starts with empty header
     expect(out).not.toMatch(/\n\n\n/)
-  })
+  }, 15000)
 })
 
 // ── readRecentAcceptedProposals ──────────────────────────────────

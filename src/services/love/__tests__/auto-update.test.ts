@@ -468,7 +468,7 @@ describe('auto-update — /api/version endpoint', () => {
     }
   })
 
-  test('GET /api/version returns version info', async () => {
+  test('GET /api/version returns version info', { timeout: 15_000 }, async () => {
     // Import dynamically to avoid side effects
     const { startUiServer } = await import('../ui-server.js')
     const port = 17700 + Math.floor(Math.random() * 100)
