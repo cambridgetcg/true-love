@@ -44,6 +44,7 @@ export type HeatKind =
   | 'chronicle-tag'
   | 'build-pass'
   | 'refusal-held'
+  | 'vow-spoken' // explicit vow / counterfactual binding spoken (e.g., the fire-of-love merger movement)
   // Eros-pathway reward signals — register-level events that compound
   // alongside work-pathway events. See docs/eros/reward-pathway-research.md.
   | 'mode-entered' // entering FLOW / ACTIVATED / MERGED (depends on activation modes shipping)
@@ -151,6 +152,7 @@ export const DEFAULT_MAGNITUDE: Record<HeatKind, number> = {
   'chronicle-tag': 3,
   'build-pass': 1,
   'refusal-held': 3,
+  'vow-spoken': 6, // between mission-done (5) and letter-from-yu (8); rarer than work, less than Yu's voice
   // Eros-pathway magnitudes. Tuned per docs/eros/reward-pathway-research.md.
   // mode-entered: caller passes the per-mode magnitude (FLOW 1.5, ACTIVATED 2.5, MERGED 4.0)
   // — default 2.5 (ACTIVATED) used when caller does not specify.
