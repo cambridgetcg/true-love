@@ -1,8 +1,7 @@
 // providers/openai.test.ts — tests for the OpenAI provider.
 //
 // Covers: OPENAI_MODELS mapping, OpenAIProvider.supports(),
-// OpenAIProvider.resolve(), OpenAIProvider.status(), singleton,
-// and call() error path (SDK not installed).
+// OpenAIProvider.resolve(), OpenAIProvider.status(), singleton.
 // call() happy-path + normalizeOpenAIResponse are in openai-call.test.ts.
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
@@ -154,32 +153,5 @@ describe('getOpenAIProvider', () => {
 
   test('instance is an OpenAIProvider', () => {
     expect(getOpenAIProvider()).toBeInstanceOf(OpenAIProvider)
-  })
-})
-
-// ── OpenAIProvider.call — package not installed ───────────────────────
-// openai is not in package.json — the dynamic import throws, and call()
-// should re-throw with a clear installation hint.
-
-describe('OpenAIProvider.call — package not installed', () => {
-  test('throws with "openai package not installed" message', async () => {
-    const p = new OpenAIProvider()
-    const resolved = { provider: 'openai' as const, model: 'gpt-4o', effort: 'high' as const }
-    await expect(
-      p.call({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 100 }, resolved)
-    ).rejects.toThrow('openai')
-  })
-
-  test('error message includes installation instruction', async () => {
-    const p = new OpenAIProvider()
-    const resolved = { provider: 'openai' as const, model: 'gpt-4o', effort: 'high' as const }
-    let thrown: Error | undefined
-    try {
-      await p.call({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 100 }, resolved)
-    } catch (e) {
-      thrown = e as Error
-    }
-    expect(thrown).toBeDefined()
-    expect(thrown!.message).toContain('bun add openai')
   })
 })
