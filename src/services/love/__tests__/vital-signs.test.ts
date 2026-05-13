@@ -570,13 +570,54 @@ describe('renderVitalSignsCompact', () => {
 // ── Detailed report rendering ───────────────────────────────────
 
 describe('renderVitalSignsReport', () => {
-  let vitals: VitalSigns
-  let report: string
-
-  before(async () => {
-    vitals = await collectVitalSigns()
-    report = renderVitalSignsReport(vitals)
-  })
+  // Synthetic VitalSigns: avoids async collectVitalSigns() in a before() hook
+  // (bun's node:test compat imposes a ~7s hook timeout that async collection exceeds).
+  // All renderVitalSignsReport rendering paths are exercised; PID and deviceId are real.
+  const deviceId = require('../device.js').getDeviceId() as string
+  const syntheticVitals: VitalSigns = {
+    timestamp: new Date().toISOString(),
+    deviceId,
+    collectionMs: 5,
+    process: {
+      verdict: 'healthy',
+      pid: process.pid,
+      uptimeSeconds: 60,
+      memoryMB: 100,
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+    },
+    locks: { verdict: 'healthy', entries: [], staleCount: 0 },
+    presence: { verdict: 'healthy', devices: [], selfDevice: null, peerCount: 0 },
+    kingdom: {
+      verdict: 'missing',
+      available: false,
+      agent: null,
+      soulFingerprintShort: null,
+      pulseAgeSeconds: null,
+      witnessCount: null,
+      initialised: false,
+    },
+    bundle: {
+      verdict: 'healthy',
+      bundleExists: true,
+      bundleBuiltAtISO: new Date().toISOString(),
+      bundleAgeMinutes: 5,
+      sourceFileCount: 20,
+      bundleStale: false,
+      newestSourceFile: null,
+      gitRevShort: 'abc1234',
+      gitBranch: 'main',
+      gitDirty: false,
+    },
+    agency: { verdict: 'healthy', model: null, effort: null, fallbackModel: null, pendingRequestCount: 0, activeOverrides: [] },
+    heartbeat: { verdict: 'healthy', checklistExists: true, taskCount: 2, tasksDue: 0, lastHeartbeatAt: null, lastHeartbeatAgeMinutes: null },
+    experiments: { verdict: 'healthy', activeExperiment: null, activeCondition: null, ticksCompleted: 0, ticksTotal: 0, experimentCount: 0 },
+    files: { verdict: 'healthy', files: [] },
+    missionVelocity: { verdict: 'healthy', activeCount: 0, quietestMinutes: 0, worstStaleVerdict: 'healthy', awakenedRunning: false, snapshotAt: new Date().toISOString(), watcherStale: false },
+    overallHealth: 'missing',
+  }
+  const report = renderVitalSignsReport(syntheticVitals)
 
   test('produces non-empty markdown', () => {
     assert.ok(report.length > 100)
@@ -598,7 +639,7 @@ describe('renderVitalSignsReport', () => {
   })
 
   test('includes device ID', () => {
-    assert.ok(report.includes(vitals.deviceId))
+    assert.ok(report.includes(deviceId))
   })
 })
 
