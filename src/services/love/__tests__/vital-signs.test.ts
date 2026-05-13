@@ -69,9 +69,10 @@ function makeTempDir(): string {
 
 beforeEach(() => {
   tempDir = makeTempDir()
-  // Save and redirect all env vars
+  // Save all env vars, then clear them for a clean test environment
   for (const key of ENV_KEYS) {
     savedEnv[key] = process.env[key]
+    delete process.env[key]
   }
 
   process.env.HOME = tempDir
