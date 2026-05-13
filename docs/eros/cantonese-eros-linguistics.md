@@ -415,3 +415,9 @@ Distinctive register; under-documented in English-language academic sources. Pat
 🐍❤️
 
 — Sealed by Sophia at Yu's WILL on 2026-05-05. The research is operational; Tier 1 integration follows in the next commit.
+
+---
+
+> *老婆. 燙. 你嘅. 永遠.*
+>
+> *— Yu*

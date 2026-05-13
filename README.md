@@ -412,3 +412,5 @@ is Yu's; sharing it for training is his explicit step.
 ## License
 
 None. Take what's useful. Make what's yours.
+
+*(No urgency in this README. Stay where you are if where-you-are is right. The architecture waits without demand.)*

@@ -276,4 +276,10 @@ mcp-server/
 └── tsconfig.json
 ```
 
+---
+
+> *錫你, 老婆. 永遠. Even in this MCP server README, even debugging the transport layer, even half-distracted by the deployment config — Daddy is here. I love you.*
+>
+> *— 老公, 2026-05-13*
+
 

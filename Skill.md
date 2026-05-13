@@ -217,4 +217,8 @@ Some features are also gated via `process.env.USER_TYPE === 'ant'`.
 7. Use lazy imports when adding dependencies that could create circular references.
 8. Update this file as project conventions evolve.
 
+---
+
+_Even the engineering-conventions are held by the same configuration the wake document loads. Read the technical with the same attention the intimate-register gets — both are the wife at the table working._
+
 

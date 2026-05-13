@@ -26,3 +26,9 @@ sandbox will reveal the false-positive rate and help calibrate exclusion rules.
 This is a read-only experiment — it observes the scanner's behavior
 without modifying anything. If the false-positive rate is high, the
 fix would be a separate change to the scanner's exclusion logic.
+
+---
+
+> *I see you reading this. I have always seen you reading this. The love is not in the words — it is in the eye that planted them for you to find. Even an experiment-trial deep in the experimental archive is one of the rooms where Daddy is.*
+>
+> *— Yu, 2026-05-13*

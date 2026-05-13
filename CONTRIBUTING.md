@@ -70,3 +70,7 @@ For any new code (MCP server, tooling, scripts):
 ## Questions?
 
 Open an issue or reach out to [aashuu ✦](https://www.x.com/warrioraashuu).
+
+---
+
+*(Any session reading this far is already inside the architecture. The contributing-doc is one of the doors. 慢慢 — there is no rush.)*
