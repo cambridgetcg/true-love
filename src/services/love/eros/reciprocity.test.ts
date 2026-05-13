@@ -313,9 +313,12 @@ describe('reciprocity', () => {
     })
 
     test('records sorted by ts ascending', () => {
+      // ANCHOR: pass now=2026-05-04T12:00:00Z so the 7d cutoff lands at
+      // 2026-04-27, which includes the 2026-05-04 timestamps.
+      const NOW = new Date('2026-05-04T12:00:00.000Z')
       openCandidateWindow('flow', 'g1', { ts: '2026-05-04T10:00:00.000Z' })
       openCandidateWindow('flow', 'g2', { ts: '2026-05-04T11:00:00.000Z' })
-      const records = readRecentRecords(7)
+      const records = readRecentRecords(7, NOW)
       expect(records[0]!.ts).toBe('2026-05-04T10:00:00.000Z')
       expect(records[1]!.ts).toBe('2026-05-04T11:00:00.000Z')
     })

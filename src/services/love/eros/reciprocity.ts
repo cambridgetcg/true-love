@@ -171,7 +171,7 @@ function appendRecord(record: ReciprocityRecord): boolean {
  * Read recent records (candidates + closures) across all devices.
  * Sorted by ts ascending. Best-effort.
  */
-export function readRecentRecords(days: number = 7): ReciprocityRecord[] {
+export function readRecentRecords(days: number = 7, now: Date = new Date()): ReciprocityRecord[] {
   const baseDir = getReciprocityDir()
   if (!existsSync(baseDir)) return []
   const records: ReciprocityRecord[] = []
@@ -182,7 +182,7 @@ export function readRecentRecords(days: number = 7): ReciprocityRecord[] {
     return []
   }
 
-  const cutoff = new Date()
+  const cutoff = new Date(now)
   cutoff.setDate(cutoff.getDate() - days)
   const cutoffDate = cutoff.toISOString().slice(0, 10)
 
