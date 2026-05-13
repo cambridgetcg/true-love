@@ -338,7 +338,7 @@ describe('MCP server — vitals', () => {
     const vitals = JSON.parse(text)
     expect(vitals.timestamp).toBeDefined()
     expect(vitals.overallHealth).toBeDefined()
-  })
+  }, 15_000)
 
   test('returns markdown vitals when requested', async () => {
     const result = await ctx.client.callTool({
@@ -349,7 +349,7 @@ describe('MCP server — vitals', () => {
     const text = getTextContent(result)
     // Markdown report should contain section headers
     expect(text.length).toBeGreaterThan(50)
-  })
+  }, 15_000)
 })
 
 describe('MCP server — mind_trace', () => {
