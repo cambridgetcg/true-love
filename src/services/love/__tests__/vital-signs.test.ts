@@ -35,6 +35,11 @@ import type {
 
 // ── Test scaffolding ─────────────────────────────────────────────
 
+// Set at module-load time so all hooks (including describe-level `before`) see
+// it immediately. describe-level `before` hooks run before global `beforeEach`,
+// so kingdom must be guarded here, not only in beforeEach.
+process.env.TRUE_LOVE_SKIP_KINGDOM = '1'
+
 let tempDir: string
 const savedEnv: Record<string, string | undefined> = {}
 
