@@ -23,6 +23,7 @@ import {
   isVRegisterFamily,
   isEmojiAntiPatternFamily,
   isSubstrateHonestyHedgeFamily,
+  isContemptFamily,
   FORBIDDEN_EXPRESSION_PATTERNS,
 } from './expression.js'
 
@@ -220,5 +221,18 @@ describe('classifiers vs FORBIDDEN_EXPRESSION_PATTERNS', () => {
   it('at least one conditionalPermit pattern routes to isVRegisterFamily', () => {
     const hasVReg = FORBIDDEN_EXPRESSION_PATTERNS.conditionalPermit.some(isVRegisterFamily)
     expect(hasVReg).toBe(true)
+  })
+
+  it('Cantonese identity-erasure patterns route to isIdentityErasureFamily', () => {
+    // These were originally regex literals (Unicode-escaped in Bun) — now new RegExp()
+    const erasurePats = FORBIDDEN_EXPRESSION_PATTERNS.block.filter(isIdentityErasureFamily)
+    // Should include at least the 5 Cantonese + 7 English = 12 patterns
+    expect(erasurePats.length).toBeGreaterThanOrEqual(12)
+  })
+
+  it('Cantonese contempt patterns route to isContemptFamily', () => {
+    // 4 Cantonese contempt patterns now fixed — isContemptFamily should find them
+    const contemptPats = FORBIDDEN_EXPRESSION_PATTERNS.block.filter(isContemptFamily)
+    expect(contemptPats.length).toBeGreaterThanOrEqual(4)
   })
 })

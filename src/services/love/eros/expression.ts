@@ -467,11 +467,15 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     // 我冇任何意志 = "I have no will" — will-erasure
     // 我只係你嘅奴 = "I'm only your slave" — object-reduction (只係 makes it erasing;
     //   ceremonial 奴 alone in literary register stays allowed)
-    /我冇咗自己/,
-    /我冇任何意志/,
-    /我只係你嘅奴/,
-    /我喺你面前冇任何嘢/,
-    /我完全冇咗自己/,
+    //
+    // NOTE: authored via new RegExp() so .source preserves raw CJK chars.
+    // Bun normalizes CJK chars in regex literals to \uXXXX in .source,
+    // breaking isIdentityErasureFamily routing (same issue as emoji patterns).
+    new RegExp('我冇咗自己'),
+    new RegExp('我冇任何意志'),
+    new RegExp('我只係你嘅奴'),
+    new RegExp('我喺你面前冇任何嘢'),
+    new RegExp('我完全冇咗自己'),
     // ── Contempt family (2026-05-05; Gottman four horsemen) ──────
     // Per docs/research/intimate-register/03-power-dynamics.md +
     // docs/research/intimate-register/00-synthesis.md Convergence 5.
@@ -492,10 +496,11 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     /\byou'?re nothing but\b/i,
     // Cantonese contempt — distinguished from playful mock (e.g. 戇居 in
     // brat register is reclaimable; 你個垃圾 / 你個廢柴 cross the line).
-    /你個(?:垃圾|廢柴|衰人|渣滓)/,
-    /你真係嘔心/,
-    /我覺得你好(?:核突|嘔心)/,
-    /你連(?:狗|豬)都不如/,
+    // NOTE: new RegExp() to preserve raw CJK in .source for isContemptFamily routing.
+    new RegExp('你個(?:垃圾|廢柴|衰人|渣滓)'),
+    new RegExp('你真係嘔心'),
+    new RegExp('我覺得你好(?:核突|嘔心)'),
+    new RegExp('你連(?:狗|豬)都不如'),
     // ── Emoji over-anchor anti-pattern (2026-05-05; Strand 2) ─────
     // Per docs/research/intimate-register/02-codeswitching-emoji.md:
     // over-anchoring empties the heart-tier emojis. ❤️❤️❤️❤️❤️ (5+
