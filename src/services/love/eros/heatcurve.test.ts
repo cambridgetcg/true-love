@@ -186,6 +186,15 @@ describe('segment classification', () => {
     const r = curve([ev(7, 3.0), ev(6, 5.0)])
     expect(r.trajectory[0].slope).toBe(0)
   })
+
+  test('peak-imminent requires slope ≥ 0: high magnitude with negative slope → descending', () => {
+    // Point 0: mag=9.0, slope=0 → peak-imminent (≥ 8.0 AND slope ≥ 0)
+    // Point 1: mag=8.2, slope=-0.8 → NOT peak-imminent (slope < 0 fails);
+    //   edging check: history.length=1 < 2 → skip; descending (-0.8 ≤ -0.3) ✓
+    const r = curve([ev(7, 9.0), ev(6, 8.2)])
+    expect(r.segment).toBe('descending')
+    expect(r.magnitude).toBe(8.2)
+  })
 })
 
 // ── Fractionation cycle detection ──────────────────────────────
@@ -217,6 +226,24 @@ describe('fractionation cycle detection', () => {
     expect(r1.fractionationCycles).toBe(0)
     const r2 = curve([ev(8, 1.5), ev(7, 3.5), ev(6, 3.5), ev(5, 2.8), ev(4, 3.5)])
     expect(r2.fractionationCycles).toBe(1)
+  })
+
+  test('two fractionation cycles', () => {
+    // Two independent rise→descend→rise cycles, each below PEAK_PROXIMITY_MAGNITUDE.
+    // Trajectory (8 points, all within 30-min window):
+    //   pt0: mag=1.5, slope=0        → plateau
+    //   pt1: mag=3.5, slope=2.0      → rising; inRise=true, top=3.5
+    //   pt2: mag=3.5, slope=0        → plateau (edging fails: slope 0 not < -0.3)
+    //   pt3: mag=2.8, slope=-0.7     → descending; top=3.5 < 8; subsequent has rising → cycles=1
+    //   pt4: mag=3.5, slope=0.7      → rising; inRise=true, top=3.5
+    //   pt5: mag=3.5, slope=0        → plateau
+    //   pt6: mag=2.8, slope=-0.7     → descending; top=3.5 < 8; subsequent [pt7 rising] → cycles=2
+    //   pt7: mag=3.5, slope=0.7      → rising
+    const r = curve([
+      ev(14, 1.5), ev(13, 3.5), ev(12, 3.5), ev(11, 2.8),
+      ev(10, 3.5), ev(9, 3.5), ev(8, 2.8), ev(7, 3.5),
+    ])
+    expect(r.fractionationCycles).toBe(2)
   })
 })
 
@@ -334,6 +361,13 @@ describe('recommendNextPhase', () => {
     const r = curve(descendingEvs, sess('build'))
     expect(r.nextPhaseRecommendation).toBeNull()
     expect(r.reason).toContain('let session arc complete')
+  })
+
+  test('rising + cooldown phase → null (falls through; no threshold defined for cooldown)', () => {
+    // Neither warmup nor build branch matches → null 'rising within current phase'
+    const r = curve(risingWarmup, sess('cooldown'))
+    expect(r.nextPhaseRecommendation).toBeNull()
+    expect(r.reason).toContain('rising within current phase')
   })
 })
 
