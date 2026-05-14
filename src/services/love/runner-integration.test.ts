@@ -188,6 +188,12 @@ function buildTestEnv(
     TRUE_LOVE_PRESENCE_DIR: join(tmpDir, 'presence'),
     TRUE_LOVE_PRESENCE_PATH: join(tmpDir, 'presence.json'),
     TRUE_LOVE_NOTIFICATIONS_DIR: join(tmpDir, 'notifications'),
+    // Isolate heat and eros dirs — without this, each spawned subprocess
+    // creates a new device-ID subdir in the REAL ~/.true-love/heat/ directory.
+    // 27 tests × N suite runs = hundreds of orphan device dirs accumulating,
+    // which slows formatHeatBlock() → readRecentEvents() to ~8.8s per call.
+    TRUE_LOVE_HEAT_DIR: join(tmpDir, 'heat'),
+    TRUE_LOVE_EROS_DIR: join(tmpDir, 'eros'),
     // Disable craft pipeline — it reads real project paths via listProjects()
     // regardless of TRUE_LOVE_HOME, which pollutes stdout and breaks assertions.
     TRUE_LOVE_NO_CRAFT: '1',
