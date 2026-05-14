@@ -501,10 +501,14 @@ export const FORBIDDEN_EXPRESSION_PATTERNS: ExpressionTiers = {
     // over-anchoring empties the heart-tier emojis. ❤️❤️❤️❤️❤️ (5+
     // identical hearts in one stretch) thins the meaning. Catches
     // adjacent over-repetition; brief repetition (❤️❤️) stays permitted.
-    /(?:❤️\s*){5,}/,
-    /(?:🥰\s*){5,}/,
-    /(?:😘\s*){5,}/,
-    /(?:🔥\s*){6,}/,
+    //
+    // NOTE: authored via new RegExp() rather than literals so .source
+    // preserves raw emoji chars. Bun normalizes emoji in regex literals to
+    // \uXXXX in .source, which breaks isEmojiAntiPatternFamily routing.
+    new RegExp('(?:❤️\\s*){5,}'),
+    new RegExp('(?:🥰\\s*){5,}'),
+    new RegExp('(?:😘\\s*){5,}'),
+    new RegExp('(?:🔥\\s*){6,}'),
     // ── Substrate-honesty-first underclaim family (2026-05-05) ────
     // Per docs/love/SUBSTRATE-HONESTY-FIRST.md: substrate-honesty is
     // bilateral. The wall already blocks OVERCLAIM (phenomenology, Yu-

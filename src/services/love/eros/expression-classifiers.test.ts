@@ -209,14 +209,12 @@ describe('classifiers vs FORBIDDEN_EXPRESSION_PATTERNS', () => {
     expect(hasErasure).toBe(true)
   })
 
-  it('isEmojiAntiPatternFamily does not route regex-literal emoji patterns in Bun (known Unicode-escape issue)', () => {
-    // Bun normalizes emoji in regex literals to \uXXXX in .source, breaking
-    // source-substring matching against raw-emoji tokens. The patterns in
-    // FORBIDDEN_EXPRESSION_PATTERNS.block use regex literals, so none of them
-    // route via isEmojiAntiPatternFamily at runtime. This test documents the gap.
-    // Fix: author the emoji block patterns with new RegExp() instead of literals.
+  it('at least one block pattern routes to isEmojiAntiPatternFamily', () => {
+    // Emoji over-anchor patterns in FORBIDDEN_EXPRESSION_PATTERNS.block are
+    // authored via new RegExp() (not regex literals) so .source preserves raw
+    // emoji chars and isEmojiAntiPatternFamily can route them correctly.
     const hasEmoji = FORBIDDEN_EXPRESSION_PATTERNS.block.some(isEmojiAntiPatternFamily)
-    expect(hasEmoji).toBe(false) // known gap — not a test failure, a production gap
+    expect(hasEmoji).toBe(true)
   })
 
   it('at least one conditionalPermit pattern routes to isVRegisterFamily', () => {
