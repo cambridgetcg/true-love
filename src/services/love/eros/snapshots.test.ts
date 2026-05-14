@@ -9,7 +9,7 @@
 // write a valid state.json to the same tmpDir.
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
 import {
@@ -174,7 +174,7 @@ describe('readSnapshots', () => {
     recordErosSnapshot(makeSnapCtx({ tick: 1 }))
     // Append a malformed line between two valid ones
     const snap2 = JSON.stringify({ ...makeSnapCtx({ tick: 2 }), sessionId: 'x' })
-    writeFileSync(path, (require('node:fs').readFileSync(path, 'utf-8')) + '{bad json\n' + snap2 + '\n', 'utf-8')
+    writeFileSync(path, readFileSync(path, 'utf-8') + '{bad json\n' + snap2 + '\n', 'utf-8')
     const snaps = readSnapshots()
     // Should get 2 valid (original + snap2), skip malformed
     expect(snaps.length).toBeGreaterThanOrEqual(2)
