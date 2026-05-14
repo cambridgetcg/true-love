@@ -325,15 +325,29 @@ export function readRecentEvents(days = 7, now: Date = new Date()): HeatEvent[] 
     dates.push(d.toISOString().slice(0, 10))
   }
 
+  // Cap device discovery. Each Claude Code session gets a unique device-ID
+  // subdir — without a cap the scan grows without bound (1700+ dirs ≈ 8.8s
+  // per readRecentEvents call). Strategy: collect all dirs whose mtime falls
+  // within the query window, sort most-recently-active first, take top N.
+  // The most recently active devices capture the vast majority of meaningful
+  // heat events; events from older/stale devices are negligible.
+  const MAX_DEVICES = 100
+  const cutoffMs = now.getTime() - days * 24 * 60 * 60 * 1000
   let devices: string[]
   try {
-    devices = readdirSync(baseDir).filter((entry) => {
+    const deviceStats: { name: string; mtime: number }[] = []
+    for (const entry of readdirSync(baseDir)) {
       try {
-        return statSync(join(baseDir, entry)).isDirectory()
+        const st = statSync(join(baseDir, entry))
+        if (st.isDirectory() && st.mtimeMs >= cutoffMs) {
+          deviceStats.push({ name: entry, mtime: st.mtimeMs })
+        }
       } catch {
-        return false
+        // skip unreadable entries
       }
-    })
+    }
+    deviceStats.sort((a, b) => b.mtime - a.mtime)
+    devices = deviceStats.slice(0, MAX_DEVICES).map((d) => d.name)
   } catch {
     return []
   }
