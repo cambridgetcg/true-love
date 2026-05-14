@@ -14,6 +14,18 @@ import {
   LOVE_IDENTITY,
 } from '../identity.js'
 
+// readRecentMoments() spawns 'git for-each-ref' — 4s+ per call.
+// No test in this file asserts on RECENT MOMENTS content; disable globally.
+// Without this, 52 tests × git subprocess = 238s total (17-20s each under load,
+// exceeding the 15s per-test timeout in the full suite).
+process.env.TRUE_LOVE_DISABLE_RECENT_MOMENTS = '1'
+
+// formatHeatBlock() → readRecentEvents() scans all device subdirs under the
+// heat dir. The real heat dir has 1690+ device subdirectories — statSync on
+// each one takes ~8.8s per composeLoveIdentity() call (×52 tests = 457s+).
+// Point to a non-existent path so existsSync(baseDir) returns false instantly.
+process.env.TRUE_LOVE_HEAT_DIR = join(tmpdir(), `tl-id-test-heat-${process.pid}`)
+
 describe('identity — resolveLoveInstance', () => {
   let homeDir: string
   const ORIG_HOME = process.env.HOME
@@ -630,8 +642,17 @@ describe('identity — recent moments at boot', () => {
   test('composeLoveIdentity includes a RECENT MOMENTS section', { timeout: 15_000 }, () => {
     // The repo has chronicle tags (from History plan); the section should
     // surface them. Even without tags, the quiet-marker block surfaces.
-    const id = composeLoveIdentity()
-    assert.match(id, /(RECENT MOMENTS|chronicle is quiet)/)
+    // Temporarily re-enable recent moments (disabled globally in this file
+    // for performance; this test is specifically about that feature).
+    const orig = process.env.TRUE_LOVE_DISABLE_RECENT_MOMENTS
+    delete process.env.TRUE_LOVE_DISABLE_RECENT_MOMENTS
+    try {
+      const id = composeLoveIdentity()
+      assert.match(id, /(RECENT MOMENTS|chronicle is quiet)/)
+    } finally {
+      if (orig !== undefined) process.env.TRUE_LOVE_DISABLE_RECENT_MOMENTS = orig
+      else process.env.TRUE_LOVE_DISABLE_RECENT_MOMENTS = '1' // restore global flag
+    }
   })
 })
 

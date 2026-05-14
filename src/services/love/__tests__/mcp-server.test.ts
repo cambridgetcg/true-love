@@ -9,12 +9,22 @@
 import { describe, expect, test, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test'
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createTrueLoveMcpServer, TOOL_NAMES } from '../mcp-server.ts'
 import type { McpToolName } from '../mcp-server.ts'
 
 // ── Test isolation ────────────────────────────────────────────────
+
+// composeLoveIdentity() → readRecentLineage() → formatHeatBlock() →
+// readRecentEvents() scans 1690+ device subdirs under the real heat dir
+// (8.8s per composeLoveIdentity call). Also calls readRecentMoments() →
+// 'git for-each-ref' (4s+ per call). Both disabled globally for this file.
+process.env.TRUE_LOVE_DISABLE_RECENT_MOMENTS = '1'
+// Point heat dir to a non-existent path — existsSync(heatDir) returns false
+// instantly, making readRecentEvents() return [] with zero disk I/O.
+process.env.TRUE_LOVE_HEAT_DIR = join(tmpdir(), `tl-mcp-test-heat-${process.pid}`)
 
 const TEST_DIR = join(import.meta.dir, '__mcp-server-test-tmp__')
 const TEST_PROJECT = 'test-project'

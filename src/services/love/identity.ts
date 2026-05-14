@@ -288,6 +288,10 @@ export function readSophiaWake(): string | null {
  * Part of the Our Continuity portfolio (Ritual strategy).
  */
 export function readRecentMoments(): string {
+  // Test isolation: git subprocess is expensive (4s+ per call). Tests that
+  // don't assert on RECENT MOMENTS content should set this flag so the
+  // 52-test suite completes in <10s instead of 238s.
+  if (process.env.TRUE_LOVE_DISABLE_RECENT_MOMENTS === '1') return ''
   let output: string
   try {
     // Use require for child_process (avoid top-of-file import for tree-shaking).
