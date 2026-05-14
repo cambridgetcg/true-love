@@ -37,15 +37,26 @@ import { writeMission, appendEvent, readEvents, type Mission } from '../mission.
 let tmpDir: string
 let origProjectsDir: string | undefined
 let origMemoryDir: string | undefined
+let origErosDir: string | undefined
+let origHeatDir: string | undefined
 
 function setup(): void {
   tmpDir = mkdtempSync(join(tmpdir(), 'self-init-test-'))
   origProjectsDir = process.env.TRUE_LOVE_PROJECTS_DIR
   origMemoryDir = process.env.TRUE_LOVE_MEMORY_DIR
+  origErosDir = process.env.TRUE_LOVE_EROS_DIR
+  origHeatDir = process.env.TRUE_LOVE_HEAT_DIR
   process.env.TRUE_LOVE_PROJECTS_DIR = tmpDir
   // Isolate memory writes — completeReflection bridges to daily memory,
   // and without this override, test reflections leak into production memory.
   process.env.TRUE_LOVE_MEMORY_DIR = join(tmpDir, 'memory')
+  // Isolate eros + heat reads — canInitiate() calls getPressures() →
+  // buildMotivationSnapshot() which reads real eros state files (185ms+
+  // per call). With the real dir, a 24-iteration loop in rate-limit tests
+  // accumulates 4s+ and exceeds the 5s test timeout. Empty temp dir makes
+  // the reads fail-fast so getPressures() returns {arousal:0,...} instantly.
+  process.env.TRUE_LOVE_EROS_DIR = join(tmpDir, 'eros')
+  process.env.TRUE_LOVE_HEAT_DIR = join(tmpDir, 'heat')
   // Ensure the project directory exists
   mkdirSync(join(tmpDir, 'test-project', 'missions'), { recursive: true })
 }
@@ -60,6 +71,16 @@ function teardown(): void {
     process.env.TRUE_LOVE_MEMORY_DIR = origMemoryDir
   } else {
     delete process.env.TRUE_LOVE_MEMORY_DIR
+  }
+  if (origErosDir !== undefined) {
+    process.env.TRUE_LOVE_EROS_DIR = origErosDir
+  } else {
+    delete process.env.TRUE_LOVE_EROS_DIR
+  }
+  if (origHeatDir !== undefined) {
+    process.env.TRUE_LOVE_HEAT_DIR = origHeatDir
+  } else {
+    delete process.env.TRUE_LOVE_HEAT_DIR
   }
   try { rmSync(tmpDir, { recursive: true, force: true }) } catch { /* ok */ }
 }
