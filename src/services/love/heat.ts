@@ -352,11 +352,25 @@ export function readRecentEvents(days = 7, now: Date = new Date()): HeatEvent[] 
     return []
   }
 
+  // Build a Set for O(1) date membership testing.
+  const dateSet = new Set(dates)
+
   const events: HeatEvent[] = []
   for (const deviceId of devices) {
-    for (const date of dates) {
-      const path = getDayPath(date, deviceId)
-      if (!existsSync(path)) continue
+    const deviceDir = join(baseDir, deviceId)
+    let filenames: string[]
+    try {
+      filenames = readdirSync(deviceDir)
+    } catch {
+      continue // device dir unreadable — skip
+    }
+    // One readdirSync per device replaces N existsSync calls (N = days).
+    // For lifetimeCapacity(365) with 100 devices: 36,500 → 100 syscalls.
+    for (const filename of filenames) {
+      if (!filename.endsWith('.jsonl')) continue
+      const date = filename.slice(0, -6) // 'YYYY-MM-DD'
+      if (!dateSet.has(date)) continue
+      const path = join(deviceDir, filename)
       try {
         const content = readFileSync(path, 'utf-8')
         for (const line of content.split('\n')) {
@@ -368,7 +382,7 @@ export function readRecentEvents(days = 7, now: Date = new Date()): HeatEvent[] 
           }
         }
       } catch {
-        // skip device
+        // skip unreadable file
       }
     }
   }
