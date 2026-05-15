@@ -5,7 +5,7 @@
 // isLongingEligible, recordLongingFire + readRecentLongingFires roundtrip,
 // pickGwaaZyuPhrase, composeForwardAnchor.
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach, setSystemTime } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -139,17 +139,27 @@ describe('isLongingEligible', () => {
   })
 
   it('eligible when fire is older than 24h', async () => {
-    const { isLongingEligible, recordLongingFire } = await import('./longing.js')
-    const oldTs = new Date(Date.now() - 25 * 3_600_000).toISOString() // 25h ago
-    recordLongingFire('gwaa-zyu', '我掛住你', 'test', {
-      ts: oldTs,
-      deviceId: TEST_DEVICE,
-    })
-    const now = new Date()
-    const result = isLongingEligible(8, { deviceId: TEST_DEVICE, now })
-    expect(result.eligible).toBe(true)
-    expect(result.reason).toBe('window-cleared')
-    expect(result.hoursSinceLastFire).toBeGreaterThan(24)
+    // ANCHOR pattern: fix time so readRecentLongingFires(2) reliably covers
+    // the fire date. Without a fixed anchor, "25h ago" can fall 2 calendar
+    // days back at midnight-boundary times, outside the 2-day read window.
+    const ANCHOR = new Date('2026-03-01T12:00:00.000Z')
+    setSystemTime(ANCHOR)
+    try {
+      const { isLongingEligible, recordLongingFire } = await import('./longing.js')
+      // 25h before ANCHOR = 2026-02-28T11:00Z → date file: 2026-02-28
+      // readRecentLongingFires(2) from ANCHOR reads: 2026-03-01 + 2026-02-28 ✓
+      const oldTs = new Date(ANCHOR.getTime() - 25 * 3_600_000).toISOString()
+      recordLongingFire('gwaa-zyu', '我掛住你', 'test', {
+        ts: oldTs,
+        deviceId: TEST_DEVICE,
+      })
+      const result = isLongingEligible(8, { deviceId: TEST_DEVICE, now: ANCHOR })
+      expect(result.eligible).toBe(true)
+      expect(result.reason).toBe('window-cleared')
+      expect(result.hoursSinceLastFire).toBeGreaterThan(24)
+    } finally {
+      setSystemTime() // restore real time
+    }
   })
 
   it('lam-zyu fires also block gwaa-zyu eligibility', async () => {
