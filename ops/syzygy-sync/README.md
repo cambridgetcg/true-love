@@ -65,10 +65,79 @@ Idempotent — safe to re-run after adding repos to `repos.conf`.
 
 ## What it does NOT do
 
-- No auto-rebase on diverged branches (you handle it manually)
+- No auto-rebase on diverged branches (you handle it manually — see next section)
 - No auto-push of uncommitted work
 - No force-push, ever
 - No coordination with concurrent editing — that's `~/.gua/`'s job (per global `CLAUDE.md`)
+
+## Conflict resolution (when divergence happens)
+
+The protocol detects divergence and **refuses to auto-merge — by design.** When it happens — rare; usually only if both devices commit between 10-min sync cycles without one having pulled — you'll see:
+
+- macOS notification: *"X branches diverged — manual merge needed"*
+- `/tmp/syzygy-sync.log` entry: `X: DIVERGED (local=... remote=... base=...) — manual merge needed`
+- That repo stops syncing until you resolve. Other repos continue normally.
+
+### Standard recovery (~30 seconds, one device)
+
+Pick the device whose work you want **on top of history**. In the affected repo on that device:
+
+```bash
+cd ~/Desktop/<repo>
+git fetch origin
+git pull --rebase origin main
+```
+
+`--rebase` replays YOUR local commits on top of the remote ones, keeping history linear. If there are file-level conflicts, git pauses on each:
+
+```bash
+# Edit the conflict markers <<<<<<<, =======, >>>>>>> in each file,
+# then:
+git add <resolved-files>
+git rebase --continue
+# Repeat until rebase completes.
+```
+
+When clean:
+
+```bash
+git push origin main
+```
+
+(The post-commit hook would also push on your next commit, but explicit `git push` closes the divergence immediately for the other device's next sync.)
+
+### If you prefer a merge commit (preserves both timelines)
+
+```bash
+git fetch origin
+git merge origin/main      # creates a merge commit; pauses on conflicts
+# Resolve conflicts, git add, git commit
+git push origin main
+```
+
+Merge commits read better in `git log --graph`; rebases read cleaner in plain `git log`. Either is correct — pick the one you prefer per repo.
+
+### If your local commits are throwaway
+
+```bash
+git fetch origin
+git reset --hard origin/main   # DESTROYS your local commits
+# (no push needed; already in sync with origin)
+```
+
+Use this only if you're certain the local work is disposable. There is no undo.
+
+### Prevention
+
+- **Run `~/.gua/` concurrent-sessions** when actively working from multiple devices (per global `CLAUDE.md` — `gua session init` + `gua locks check <file>` before edits).
+- **At session start, `git pull --ff-only`** in the repo you're about to work in. The 10-min timer does this implicitly; if you've been away from a device >10 min, its local clone is already current.
+- **Commit often.** Divergence requires both sides to have unpushed commits simultaneously. Short-lived uncommitted work narrows that window.
+
+### Never
+
+- `git push --force` (or `--force-with-lease`) on `main` of a syzygy repo. Other devices have history-dependent state; force-push corrupts their next ff-pull.
+- `git rebase` on commits already pushed to codeberg (same reason).
+- Run `syzygy-sync.sh` with a partial rebase / merge in progress — the script skips that case automatically, but don't override.
 
 ## Logs
 
