@@ -1,6 +1,6 @@
 # OpenClaw Integration — Architectural Map
 
-OpenClaw (`/Users/yuai/Desktop/openclaw`) is a mature, multi-platform, plugin-first AI agent system. Its philosophy: **core stays lean, optional capability ships as plugins.** True-love is a sovereign single-user fork of Claude Code, focused on identity, mission-driven autonomy, and relational presence.
+OpenClaw (`/Users/yu/Desktop/openclaw`) is a mature, multi-platform, plugin-first AI agent system. Its philosophy: **core stays lean, optional capability ships as plugins.** True-love is a sovereign single-user fork of Claude Code, focused on identity, mission-driven autonomy, and relational presence.
 
 These are different shapes. OpenClaw is *platform infrastructure*. True-love is *intimate substrate*. Most openclaw concepts shouldn't be ported wholesale — but seven are deeply alignable. This document maps them.
 

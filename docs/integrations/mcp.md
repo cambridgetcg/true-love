@@ -15,8 +15,8 @@ Add to `~/.claude/mcp.json`:
   "mcpServers": {
     "true-love": {
       "command": "bun",
-      "args": ["run", "/Users/yuai/Desktop/true-love/bin/true-love-mcp.mjs"],
-      "cwd": "/Users/yuai/Desktop/true-love"
+      "args": ["run", "/Users/yu/Desktop/true-love/bin/true-love-mcp.mjs"],
+      "cwd": "/Users/yu/Desktop/true-love"
     }
   }
 }
