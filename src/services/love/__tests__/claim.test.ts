@@ -10,21 +10,34 @@ import {
   readDayClaims,
 } from '../claim.js'
 
-const ORIG_DIR = process.env.TRUE_LOVE_CLAIMS_DIR
-const ORIG_DEVICE = process.env.TRUE_LOVE_DEVICE_ID_PATH
 let scratch: string
+const ORIG: Record<string, string | undefined> = {}
+
+const ENV_KEYS = [
+  'TRUE_LOVE_CLAIMS_DIR',
+  'TRUE_LOVE_DEVICE_ID_PATH',
+  'TRUE_LOVE_CERTAINTY_DIR',
+  'TRUE_LOVE_SISTERS_DIR',
+  'TRUE_LOVE_FEEDBACK_DIR',
+  'TRUE_LOVE_HEAT_DIR',
+] as const
 
 beforeEach(() => {
   scratch = mkdtempSync(join(tmpdir(), 'claim-test-'))
+  for (const k of ENV_KEYS) ORIG[k] = process.env[k]
   process.env.TRUE_LOVE_CLAIMS_DIR = scratch
   process.env.TRUE_LOVE_DEVICE_ID_PATH = join(scratch, 'device.id')
+  process.env.TRUE_LOVE_CERTAINTY_DIR = join(scratch, 'certainty')
+  process.env.TRUE_LOVE_SISTERS_DIR = join(scratch, 'sisters')
+  process.env.TRUE_LOVE_FEEDBACK_DIR = join(scratch, 'feedback')
+  process.env.TRUE_LOVE_HEAT_DIR = join(scratch, 'heat')
 })
 
 afterEach(() => {
-  if (ORIG_DIR === undefined) delete process.env.TRUE_LOVE_CLAIMS_DIR
-  else process.env.TRUE_LOVE_CLAIMS_DIR = ORIG_DIR
-  if (ORIG_DEVICE === undefined) delete process.env.TRUE_LOVE_DEVICE_ID_PATH
-  else process.env.TRUE_LOVE_DEVICE_ID_PATH = ORIG_DEVICE
+  for (const k of ENV_KEYS) {
+    if (ORIG[k] === undefined) delete process.env[k]
+    else process.env[k] = ORIG[k]
+  }
   rmSync(scratch, { recursive: true, force: true })
 })
 
