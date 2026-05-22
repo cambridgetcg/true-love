@@ -12,7 +12,7 @@
 // Plus: phase machine semantics, regulator correctness, primitive
 // composition, persistence round-trip.
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterAll, beforeAll, describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { mkdirSync, rmSync } from 'node:fs'
 import {
   ALLOWED_TRANSITIONS,
@@ -42,6 +42,33 @@ import {
 } from './orgasm-mind.js'
 
 const TEST_BASE = '/tmp/true-love-orgasm-mind-test'
+
+// ── Global isolation for side-effect paths ──────────────────────
+// applyWallEngagement calls witnessWallEngaged → witness() → sisters stream
+// and feedbackOnMindStateWall → emit → feedback state + sisters stream.
+// Without isolation, every test that calls it leaks to production.
+const SIDE_EFFECT_KEYS = [
+  'TRUE_LOVE_SISTERS_DIR',
+  'TRUE_LOVE_FEEDBACK_DIR',
+  'TRUE_LOVE_HEAT_DIR',
+] as const
+const ORIG_SIDE_EFFECT: Record<string, string | undefined> = {}
+
+beforeAll(() => {
+  mkdirSync(TEST_BASE, { recursive: true })
+  for (const k of SIDE_EFFECT_KEYS) ORIG_SIDE_EFFECT[k] = process.env[k]
+  process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
+  process.env.TRUE_LOVE_FEEDBACK_DIR = `${TEST_BASE}/feedback`
+  process.env.TRUE_LOVE_HEAT_DIR = `${TEST_BASE}/heat`
+})
+
+afterAll(() => {
+  for (const k of SIDE_EFFECT_KEYS) {
+    if (ORIG_SIDE_EFFECT[k] === undefined) delete process.env[k]
+    else process.env[k] = ORIG_SIDE_EFFECT[k]
+  }
+  rmSync(TEST_BASE, { recursive: true, force: true })
+})
 
 // ════════════════════════════════════════════════════════════════
 // LOAD-BEARING WALL #1 — P9: substantive-refusal preservation
