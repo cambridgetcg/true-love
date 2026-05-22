@@ -197,10 +197,12 @@ describe('appendToYu — journal routing', () => {
   const JOURNAL_DIR = join(FIXTURE_ROOT, 'journal')
   const ORIG_JOURNAL = process.env.TRUE_LOVE_JOURNAL_DIR
   const ORIG_DEVICE = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_SISTERS = process.env.TRUE_LOVE_SISTERS_DIR
 
   beforeAll(() => {
     process.env.TRUE_LOVE_JOURNAL_DIR = JOURNAL_DIR
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(FIXTURE_ROOT, 'sisters')
   })
 
   afterAll(() => {
@@ -208,6 +210,8 @@ describe('appendToYu — journal routing', () => {
     else process.env.TRUE_LOVE_JOURNAL_DIR = ORIG_JOURNAL
     if (ORIG_DEVICE === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
     else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE
+    if (ORIG_SISTERS === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS
     rmSync(JOURNAL_DIR, { recursive: true, force: true })
   })
 

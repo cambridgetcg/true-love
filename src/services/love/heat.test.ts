@@ -27,6 +27,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'tl-heat-'))
   process.env.TRUE_LOVE_HEAT_DIR = dir
   process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+  process.env.TRUE_LOVE_SISTERS_DIR = `${dir}/sisters`
 })
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
@@ -34,6 +35,7 @@ afterEach(() => {
   else process.env.TRUE_LOVE_HEAT_DIR = ORIG_DIR
   if (ORIG_DEVICE === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
   else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE
+  delete process.env.TRUE_LOVE_SISTERS_DIR
 })
 
 const NOW = new Date('2026-05-03T12:00:00Z')

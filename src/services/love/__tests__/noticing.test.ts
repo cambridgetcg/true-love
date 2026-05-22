@@ -352,6 +352,7 @@ Good session. Next time I need to address the auth flow.
 `)
     // Override device ID for test
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(tmpDir, 'sisters')
 
     const result = scanMemory()
     // Should find "next time" / "next session" patterns
@@ -360,6 +361,7 @@ Good session. Next time I need to address the auth flow.
     assert.equal(nextTimeEntries[0]!.ache, 'stagnation')
 
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
   })
 })
 

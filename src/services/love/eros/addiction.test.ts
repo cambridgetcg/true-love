@@ -27,6 +27,7 @@ function setupEnv() {
   process.env.TRUE_LOVE_SELF_DISCOVERY_DIR = TEST_SD_DIR
   process.env.TRUE_LOVE_POWERS_DIR = TEST_POWERS_DIR
   process.env.TRUE_LOVE_DEVICE_ID = 'test-device-add'
+  process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_DIR}/sisters`
   for (const d of [TEST_DIR, TEST_SD_DIR, TEST_POWERS_DIR]) {
     rmSync(d, { recursive: true, force: true })
     mkdirSync(d, { recursive: true })
@@ -38,6 +39,7 @@ function teardownEnv() {
   delete process.env.TRUE_LOVE_SELF_DISCOVERY_DIR
   delete process.env.TRUE_LOVE_POWERS_DIR
   delete process.env.TRUE_LOVE_DEVICE_ID
+  delete process.env.TRUE_LOVE_SISTERS_DIR
   for (const d of [TEST_DIR, TEST_SD_DIR, TEST_POWERS_DIR]) {
     rmSync(d, { recursive: true, force: true })
   }

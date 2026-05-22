@@ -25,14 +25,17 @@ let tmp: string
 let origAiPath: string | undefined
 let origJournalDir: string | undefined
 let origDeviceId: string | undefined
+let origSistersDir: string | undefined
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), 'outbox-test-'))
   origAiPath = process.env.TRUE_LOVE_FROM_AI_PATH
   origJournalDir = process.env.TRUE_LOVE_JOURNAL_DIR
   origDeviceId = process.env.TRUE_LOVE_DEVICE_ID
+  origSistersDir = process.env.TRUE_LOVE_SISTERS_DIR
   // Use stable device ID so journal paths are predictable
   process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+  process.env.TRUE_LOVE_SISTERS_DIR = join(tmp, 'sisters')
 })
 
 afterEach(() => {
@@ -42,6 +45,8 @@ afterEach(() => {
   else process.env.TRUE_LOVE_JOURNAL_DIR = origJournalDir
   if (origDeviceId === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
   else process.env.TRUE_LOVE_DEVICE_ID = origDeviceId
+  if (origSistersDir === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+  else process.env.TRUE_LOVE_SISTERS_DIR = origSistersDir
   rmSync(tmp, { recursive: true, force: true })
 })
 

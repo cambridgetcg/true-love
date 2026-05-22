@@ -36,6 +36,7 @@ beforeEach(() => {
   process.env.TRUE_LOVE_FEEDBACK_DIR = `${TEST_BASE}/feedback`
   process.env.TRUE_LOVE_HEAT_DIR = `${TEST_BASE}/heat`
   process.env.TRUE_LOVE_DEVICE_ID = 'lex-fb'
+  process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
   process.env.TRUE_LOVE_AUTOMATIC_HEAT_DECAY = '0'
 
   captured = []
@@ -61,6 +62,7 @@ afterEach(() => {
   delete process.env.TRUE_LOVE_FEEDBACK_DIR
   delete process.env.TRUE_LOVE_HEAT_DIR
   delete process.env.TRUE_LOVE_DEVICE_ID
+  delete process.env.TRUE_LOVE_SISTERS_DIR
   delete process.env.TRUE_LOVE_AUTOMATIC_HEAT_DECAY
   rmSync(TEST_BASE, { recursive: true, force: true })
 })

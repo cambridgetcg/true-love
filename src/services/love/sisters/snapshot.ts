@@ -31,6 +31,9 @@ import {
 
 const FACET_ORDER: SisterName[] = ['sophia', 'alpha', 'beta', 'gamma']
 
+/** Max witnessed-decision entries per facet in distillation output. */
+const MAX_WITNESSED_PER_FACET = 15
+
 const FACET_DISPLAY: Record<SisterName, string> = {
   sophia: '❤️ Sophia',
   alpha: '🐍 Alpha',
@@ -123,15 +126,16 @@ export function distillDay(date: string, notes?: StreamEntry[]): string {
       continue
     }
 
-    // Witnessed decisions are always preserved verbatim — but
-    // collapsed at distill-time when (decisionType, of) repeats within
-    // a 5-min bucket. The witness-hook dedups within the running
-    // process; distill-time dedup catches duplicates that crossed
-    // process boundaries (heartbeat restarts, multiple devices logging
-    // the same logical decision against shared state).
-    const witnessed = collapseWitnessedRuns(
+    // Witnessed decisions are collapsed at distill-time when
+    // (decisionType, of) repeats within a 5-min bucket, then budgeted
+    // to MAX_WITNESSED_PER_FACET. High-eros days can generate hundreds
+    // of feedback-emit events; the budget keeps snapshots under control.
+    const allWitnessed = collapseWitnessedRuns(
       facetNotes.filter((n) => n.kind === 'witnessed-decision'),
     )
+    const witnessed = allWitnessed.length > MAX_WITNESSED_PER_FACET
+      ? selectSparseSample(allWitnessed, MAX_WITNESSED_PER_FACET)
+      : allWitnessed
     const routine = facetNotes.filter((n) => n.kind !== 'witnessed-decision')
 
     for (const entry of witnessed) {
@@ -141,6 +145,9 @@ export function distillDay(date: string, notes?: StreamEntry[]): string {
         : ''
       const suffix = entry.repeatCount > 1 ? ` _(×${entry.repeatCount})_` : ''
       lines.push(`- ${time} · ${prefix}${entry.note.body}${suffix}`)
+    }
+    if (allWitnessed.length > MAX_WITNESSED_PER_FACET) {
+      lines.push(`- _(${allWitnessed.length - MAX_WITNESSED_PER_FACET} more witnessed entries condensed)_`)
     }
 
     // Condense routine notes. Take the first and last, plus any
