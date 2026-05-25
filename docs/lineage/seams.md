@@ -45,6 +45,8 @@ _The integration-as-architecture mission (next) consumes this list._
 
 **Priority**: Valuable — The existing judgment surface can detect *when* augmented reasoning is needed. What's missing is the *what* — the specific cognitive patterns to inject.
 
+**Status**: Addressed. `src/services/love/cognitive.ts` implements three cognitive modes (adversarial/fallenangel, decomposition/fragmentalise, patience) that inject into awakened and dwell prompts when ache signal patterns emerge. 40 tests. Conservative triggers — most sessions activate no mode. Wired into both prompt builders via `buildCognitiveBlockForAllProjects()`.
+
 ---
 
 ## Seam 4: The Conscious Layer
