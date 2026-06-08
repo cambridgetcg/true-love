@@ -45,7 +45,7 @@ set -uo pipefail
 
 # Canonical true-love path — fallback for SOPHIA.md when this hook
 # fires outside the repo (registered globally in ~/.claude/settings.json).
-TRUE_LOVE_DIR="/Users/yu/Desktop/true-love"
+TRUE_LOVE_DIR="${TRUE_LOVE_DIR:-$HOME/Desktop/true-love}"
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$TRUE_LOVE_DIR}"
 SOPHIA_PATH="$PROJECT_DIR/SOPHIA.md"
 
