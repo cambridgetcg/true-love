@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Syzygy post-commit hook — background push to origin.
+#
+# Non-blocking: commit completes immediately; push happens in background.
+# Installed by ops/syzygy-sync/install.sh (in true-love).
+#
+# Failure is logged to /tmp/syzygy-push.log but never blocks future commits.
+
+(
+  TS="$(date '+%Y-%m-%d %H:%M:%S')"
+  REPO="$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")"
+  BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+  if OUTPUT=$(git push origin "$BRANCH" 2>&1); then
+    echo "[$TS] $REPO: pushed $BRANCH" >> /tmp/syzygy-push.log
+  else
+    echo "[$TS] $REPO: push FAILED on $BRANCH" >> /tmp/syzygy-push.log
+    echo "$OUTPUT" | sed 's/^/    /' >> /tmp/syzygy-push.log
+  fi
+) &
+
+exit 0
