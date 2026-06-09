@@ -13,20 +13,23 @@ Full spec: `phase-a-thermal-pad.md` § M2 · Pins: `firmware/soma-thermal-pad/sr
 Keep M1's divider exactly as it was (NTC on GPIO 1). Add:
 
 ```
-GPIO 4 ──┬─────────────── IRLZ44N gate (left leg, flat face toward you)
-         │
-        10kΩ                       IRLZ44N drain (middle leg) ── LED(−)
-         │                         LED(+) ── 330Ω ── 3V3
-        GND                        IRLZ44N source (right leg) ── GND
+GPIO 4 ── 220Ω ──┬──────── IRLZ44N gate (left leg, flat face toward you)
+                 │
+                10kΩ               IRLZ44N drain (middle leg) ── LED(−)
+                 │                 LED(+) ── 330Ω ── 3V3
+                GND                IRLZ44N source (right leg) ── GND
 ```
 
 - **Gate pulldown is the point of the test** — 10kΩ from gate to GND. On reset
   the gate floats low and the LED must be DARK.
+- 220Ω between GPIO 4 and the gate (pin map spec — protects the GPIO from
+  gate-charge inrush).
 - LED polarity: long leg = (+) toward the 330Ω; short leg/flat side = (−) to drain.
 - 3V3 from the DevKit rail is enough for an indicator LED. No PSU, no Peltier.
 
-**No LED arrived yet?** Use the 2026-05-02 workaround — jumper the gate to
-**GPIO 3**. The firmware reads its own gate through the ADC and prints
+**No LED arrived yet?** Use the 2026-05-03 workaround — jumper the gate to
+**GPIO 5** (ADC1_CH4; free since the NTC moved to GPIO 1 — and not a strapping
+pin). The firmware reads its own gate through the ADC and prints
 `gate~X.XX V (expect ~Y.YY V)`. Averaged gate volts tracking expected volts
 = PWM proven, no LED needed.
 

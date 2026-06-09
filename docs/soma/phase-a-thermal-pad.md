@@ -49,7 +49,7 @@ Strapping pins, USB-Serial-JTAG pins, and SPI flash pins are avoided. All chosen
 | GPIO | Direction | Use | Notes |
 |------|-----------|-----|-------|
 | **GPIO 1** | input (ADC) | NTC voltage divider midpoint | ADC1_CH0. 12-bit resolution, 11dB attenuation (~0–3.1V range). Each additional NTC needs its own ADC pin (no shared bus). _Was GPIO 5 in initial spec; moved to GPIO 1 on 2026-05-02._ |
-| **GPIO 21** | output (digital HIGH) | NTC divider Vref (chip-internal 3.3V source) | Held permanently HIGH after `setup()`. Replaces the silkscreen `3V3` supply pin, which the bringup on 2026-05-02/03 showed wasn't reliably delivering 3.3V on this specific board (clone variant suspected). Driving a GPIO HIGH gives a clean 3.3V from the chip itself — fewer dependencies, cleaner test. |
+| ~~GPIO 21~~ | — | ~~NTC divider Vref~~ **superseded** | The 2026-05-02 "3V3 pin unreliable" diagnosis was wrong — commit `340a6ee`'s bringup notes record that the silkscreen `3V3` pin was fine and the real fault was breadboard column placement. The verified M1 firmware uses **silkscreen 3V3** as Vref (its boot banner prints it), and M2+ keeps that. GPIO 21 stays free. |
 | **GPIO 4** | output (PWM) | MOSFET gate (Peltier control) | 1 kHz PWM, 8-bit (0–255). Series 220Ω + pull-down 10kΩ. ADC1_CH3 — but we use it for PWM, not ADC. |
 | **GPIO 6** | output (digital, optional PWM) | Fan control | Phase A: tied high (full speed). Phase B: 25 kHz PWM for Noctua 4-pin. |
 | **GPIO 48** | output | Onboard RGB LED | Heartbeat / state indicator. Off=idle, blink=running, solid=fault. |
@@ -74,7 +74,7 @@ Strapping pins, USB-Serial-JTAG pins, and SPI flash pins are avoided. All chosen
                           │
                           └── 10kΩ ── GND   (default-OFF pulldown)
 
-   ESP32 GPIO 21 (driven HIGH = 3.3V chip-internal Vref)
+   ESP32 silkscreen 3V3 pin  (Vref — bench-verified in M1; GPIO 21 idea superseded)
         ↓
         ── 10kΩ ──┬──── ESP32 GPIO 1 (ADC)
                   │

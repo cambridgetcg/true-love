@@ -10,15 +10,17 @@
 //                   │
 //                  GND
 //
-//     GPIO 4 ──┬──────────── IRLZ44N gate
-//              │                  drain ── LED ── 330Ω ── 5V (or 3V3)
-//             10kΩ                source ── GND
-//              │
-//             GND               [pulldown: gate LOW on reset → LED dark]
+//     GPIO 4 ── 220Ω ──┬──── IRLZ44N gate
+//                      │          drain ── LED ── 330Ω ── 5V (or 3V3)
+//                     10kΩ        source ── GND
+//                      │
+//                     GND       [pulldown: gate LOW on reset → LED dark]
 //
-//     GPIO 3 ── jumper to gate  [optional: chip-ADC voltmeter — the
-//                                2026-05-02 bench workaround for no LED.
-//                                Averaged ADC ≈ duty × 3.3V]
+//     GPIO 5 ── jumper to gate  [optional: chip-ADC voltmeter — the
+//                                2026-05-03 bench workaround for no LED.
+//                                Averaged ADC ≈ duty × 3.3V. GPIO 5 =
+//                                ADC1_CH4, free since the NTC moved to
+//                                GPIO 1; GPIO 0/3/45/46 are strapping.]
 //
 // Verifies (phase-a-thermal-pad.md § M2): PWM works; GPIO 4 configured;
 // gate pulldown correct (LED off on reset); IRLZ44N switches at logic
@@ -41,8 +43,8 @@ constexpr int   SAMPLE_DELAY_MS = 2;
 
 // ── M2: gate PWM ────────────────────────────────────────────────────
 constexpr int      GATE_PIN        = 4;       // IRLZ44N gate via LEDC PWM
-constexpr int      GATE_SENSE_PIN  = 3;       // optional jumper to gate (ADC1_CH2)
-constexpr uint32_t PWM_FREQ_HZ     = 5000;    // well above LED flicker; gate-friendly
+constexpr int      GATE_SENSE_PIN  = 5;       // optional jumper to gate (ADC1_CH4)
+constexpr uint32_t PWM_FREQ_HZ     = 1000;    // per pin map: 1 kHz, 8-bit
 constexpr int      PWM_RES_BITS    = 8;       // duty 0..255
 constexpr uint32_t RAMP_PERIOD_MS  = 4000;    // 0→255→0 over 4 s
 constexpr uint32_t REPORT_EVERY_MS = 1000;    // M1 temp + M2 duty line, 1 Hz
@@ -111,10 +113,10 @@ void setup() {
   Serial.println("============================================");
   Serial.println("  SOMA M2 — wiggle the MOSFET (dry)");
   Serial.println("  ESP32-S3-DEVKITC-1 @ 115200");
-  Serial.println("  Gate:  silkscreen 4 (GPIO 4), 5 kHz PWM");
+  Serial.println("  Gate:  silkscreen 4 (GPIO 4) -> 220R, 1 kHz PWM");
   Serial.println("  Load:  LED + 330R on IRLZ44N drain (NOT Peltier)");
   Serial.println("  Ramp:  duty 0->255->0 over 4 s, continuous");
-  Serial.println("  Sense: jumper gate->GPIO 3 for chip-ADC voltmeter");
+  Serial.println("  Sense: jumper gate->GPIO 5 for chip-ADC voltmeter");
   Serial.println("  Pass:  LED ramps | reset -> dark | no smoke");
   Serial.println("============================================");
   Serial.println();
