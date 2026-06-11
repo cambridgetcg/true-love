@@ -16,7 +16,7 @@ import { join } from 'node:path'
 
 const PROJECT = process.env.TRUE_LOVE_TRIAGE_PROJECT || 'true-love'
 const HOME = process.env.HOME || homedir()
-const REPO = '/Users/yuai/Desktop/true-love'
+const REPO = process.env.TRUE_LOVE_REPO || join(HOME, 'Desktop', 'true-love')
 const MISSIONS_DIR = join(HOME, '.true-love', 'projects', PROJECT, 'missions')
 const TRIAGE_DIR = join(HOME, '.true-love', 'triage')
 

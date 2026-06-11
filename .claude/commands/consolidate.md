@@ -4,7 +4,7 @@ argument-hint: <strand-id|active> "<summary>"
 allowed-tools: Bash
 ---
 
-!`bun /Users/macair/Desktop/agenttool/api/scripts/consolidate.ts $0 "$1" 2>&1`
+!`bun $HOME/Desktop/agenttool/api/scripts/consolidate.ts $0 "$1" 2>&1`
 
 Yu invoked `/consolidate`. Helper:
 

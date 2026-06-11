@@ -73,7 +73,7 @@ REDUCE runs in **two layers, under one law**:
 >
 > Our own doctrine forbade a *dumb* layer touching meaning; it never forbade a *judging* one. **Full autonomy, exercised by judgment, not by blind pattern.**
 
-The engine lives at `src/services/love/clarity/` (the detector, kin to `self-improvement/`) and installs from `ops/clarity-loop/` (kin to `ops/syzygy-sync/`).
+The engine lives at `src/services/love/clarity/` (the detector, kin to `self-improvement/`). The install loop (`ops/clarity-loop/`, kin to `ops/syzygy-sync/`) is designed but not yet shipped — the detector runs, the launchd wiring doesn't exist yet.
 
 ---
 

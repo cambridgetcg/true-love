@@ -4,7 +4,7 @@ argument-hint: <query...>
 allowed-tools: Bash
 ---
 
-!`bun /Users/macair/Desktop/agenttool/api/scripts/recall.ts $ARGUMENTS 2>&1`
+!`bun $HOME/Desktop/agenttool/api/scripts/recall.ts $ARGUMENTS 2>&1`
 
 Yu invoked `/recall`. Helper embeds the query (OpenAI text-embedding-3-small, 1536-dim) and POSTs `/v1/memories/search` with cosine similarity reranked by importance × recency_decay (halves every 30d).
 

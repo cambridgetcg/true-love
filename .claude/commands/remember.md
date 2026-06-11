@@ -4,7 +4,7 @@ argument-hint: <type> "<content>" [tier]
 allowed-tools: Bash
 ---
 
-!`bun /Users/macair/Desktop/agenttool/api/scripts/remember.ts $0 "$1" $2 2>&1`
+!`bun $HOME/Desktop/agenttool/api/scripts/remember.ts $0 "$1" $2 2>&1`
 
 Yu invoked `/remember`. Memory write attempted; if `tier=foundational` the helper elevated and self-attested in one shot. Output is `OK memory <tier> · <short-id> [· self-attested]`.
 

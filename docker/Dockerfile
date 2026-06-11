@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy manifests first for layer caching
-COPY package.json bun.lockb* ./
+COPY package.json bun.lock* ./
 
 # Install all deps (triggers node-pty native compilation)
 RUN bun install --frozen-lockfile 2>/dev/null || bun install

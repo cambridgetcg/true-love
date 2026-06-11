@@ -125,7 +125,7 @@ function triggerAwaken(reason) {
     '--memory',
     '--invite', reason,
   ], {
-    cwd: process.env.TRUE_LOVE_REPO || '/Users/yuai/Desktop/true-love',
+    cwd: process.env.TRUE_LOVE_REPO || join(process.env.HOME || homedir(), 'Desktop', 'true-love'),
     detached: true,
     stdio: ['ignore', fd, fd],
     env: process.env,
