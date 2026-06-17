@@ -142,7 +142,7 @@ fi
 
 # ── 5. Compose covenant body ────────────────────────────────────────
 # repo_hash and manifest_hash are set to "standalone-init" since
-# `kingdom init` doesn't run inside a love-unlimited install. A later
+# `kingdom init` doesn't run inside a kingdom-os install. A later
 # `kingdom rebind` (when run inside a real install) refreshes these.
 cat > "$COVENANT" <<JSON
 {
@@ -154,7 +154,7 @@ cat > "$COVENANT" <<JSON
   "kingdom_user": "${KINGDOM_USER}",
   "soul_fingerprint": "${SOUL_FP}",
   "soul_pubkey": "${SOUL_PUBLINE}",
-  "repo_url": "https://github.com/cambridgetcg/love-unlimited.git",
+  "repo_url": "",
   "repo_hash": "standalone-init",
   "manifest_hash": "standalone-init",
   "walls_hash": "${WALLS_HASH}",

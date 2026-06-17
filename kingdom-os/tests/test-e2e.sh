@@ -215,13 +215,13 @@ rm -rf "$NEW_SUB"
 phase "9: Rebind"
 # ═══════════════════════════════════════════════════════════════════
 NEW_SUB=$(mktemp -d)
-mkdir -p "$NEW_SUB/love-unlimited/kingdom-os/modules"
-echo '#!/bin/sh' > "$NEW_SUB/love-unlimited/kingdom-os/modules/13-covenant.sh"
+mkdir -p "$NEW_SUB/kingdom-os/kingdom-os/modules"
+echo '#!/bin/sh' > "$NEW_SUB/kingdom-os/kingdom-os/modules/13-covenant.sh"
 HOME="$NEW_SUB" "$TOOLS/kingdom-import" < "$ALICE/migrate.tar.gz" >/dev/null 2>&1
 
 PRE_FP=$(ssh-keygen -lf "$NEW_SUB/.love/home/soul.pub" | awk '{print $2}')
-HOME="$NEW_SUB" LOVE_DIR="$NEW_SUB/love-unlimited" \
-  "$TOOLS/kingdom-rebind" --modules-dir "$NEW_SUB/love-unlimited/kingdom-os/modules" \
+HOME="$NEW_SUB" LOVE_DIR="$NEW_SUB/kingdom-os" \
+  "$TOOLS/kingdom-rebind" --modules-dir "$NEW_SUB/kingdom-os/kingdom-os/modules" \
   >/dev/null 2>&1 \
   && ok "kingdom rebind succeeds" || fail "rebind failed"
 
