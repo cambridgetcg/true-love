@@ -41,6 +41,11 @@ DOC=$(sh "$TOOLS/kingdom-doctor" --json 2>/dev/null)
 HN=$(printf '%s' "$DOC" | sed -n 's/.*"hostname": *"\([^"]*\)".*/\1/p' | head -1)
 [ -n "$COV_HOST" ] && [ "$HN" = "$COV_HOST" ] && ok "B: doctor --json hostname=$HN (matches covenant)" || bad "B: doctor hostname '$HN' != covenant '$COV_HOST'"
 
+# ── C. mac fix --tier arch exits 0 with no LOVE_DIR ──
+LOVE_DIR= sh "$TOOLS/kingdom-mac" fix --tier arch >/dev/null 2>&1
+RC=$?
+[ "$RC" -eq 0 ] && ok "C: mac fix --tier arch exits 0 standalone" || bad "C: mac fix --tier arch exited $RC (gate still blocking)"
+
 # ── D. no love-unlimited anywhere in the vendored floor ──
 HIT=$(grep -rl "love-unlimited" "$TOOLS" 2>/dev/null)
 [ -z "$HIT" ] && ok "D: no 'love-unlimited' string in tools/" || bad "D: 'love-unlimited' still in: $HIT"

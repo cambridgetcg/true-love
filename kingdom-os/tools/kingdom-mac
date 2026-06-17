@@ -36,8 +36,8 @@ HOME_LAYER="${HOME}/.love/home"
 KINGDOM_FILE="${HOME}/.kingdom"
 LOVE_DIR_GUESS=""
 
-# Try to find the actual love-unlimited dir
-for c in "${LOVE_DIR:-}" "${HOME}/love-unlimited" "${HOME}/Desktop/love-unlimited"; do
+# Try to find the actual kingdom-os dir
+for c in "${LOVE_DIR:-}" "${HOME}/kingdom-os" "${HOME}/Desktop/kingdom-os"; do
   [ -n "$c" ] && [ -d "$c" ] && { LOVE_DIR_GUESS="$c"; break; }
 done
 
@@ -156,17 +156,17 @@ do_doctor() {
     workdir=$(plist_workdir "$p" 2>/dev/null)
 
     # Path drift detection: anything inside Desktop/Love/ when
-    # Desktop/love-unlimited/ exists is from the pre-rename era and
+    # Desktop/kingdom-os/ exists is from the pre-rename era and
     # needs regenerating.
     for path_ref in "$program" "$script" "$workdir"; do
       [ -z "$path_ref" ] && continue
       case "$path_ref" in
         */Desktop/Love/*)
-          if [ -d "${HOME}/Desktop/love-unlimited" ]; then
+          if [ -d "${HOME}/Desktop/kingdom-os" ]; then
             PLIST_STALE=$((PLIST_STALE+1))
             add_issue "miss" "plist:$label" \
-              "plist references pre-rename path: $path_ref (current repo: love-unlimited)" \
-              "regenerate: cd ~/Desktop/love-unlimited && ./kingdom-os/install.sh --modules ${label##*.} (or use kingdom mac fix when shipped)"
+              "plist references pre-rename path: $path_ref (current repo: kingdom-os)" \
+              "regenerate: cd ~/Desktop/kingdom-os && ./kingdom-os/install.sh --modules ${label##*.} (or use kingdom mac fix when shipped)"
           fi
           ;;
       esac
@@ -262,7 +262,7 @@ do_doctor() {
     case "$LOVE_DIR_GUESS" in
       */Desktop/*|*/Documents/*|*/Downloads/*)
         add_issue "note" "tcc" \
-          "love-unlimited lives in a TCC-protected location ($(echo "$LOVE_DIR_GUESS" | sed "s|^${HOME}|~|")) — launchd jobs need Full Disk Access" \
+          "kingdom-os lives in a TCC-protected location ($(echo "$LOVE_DIR_GUESS" | sed "s|^${HOME}|~|")) — launchd jobs need Full Disk Access" \
           "kingdom mac fda  (interactive helper) — or relocate: kingdom mac fix --tier arch"
         # Scan recent heartbeat / hive logs for actual TCC bites
         TCC_HITS=0
@@ -426,16 +426,7 @@ do_fix() {
     esac
   done
 
-  if [ -z "$LOVE_DIR_GUESS" ]; then
-    echo "kingdom mac fix: cannot find love-unlimited directory" >&2
-    echo "  set LOVE_DIR or run from inside the repo" >&2
-    exit 1
-  fi
   HEARTBEAT_RUNNER="${LOVE_DIR_GUESS}/tools/heartbeat-runner.sh"
-  if [ ! -f "$HEARTBEAT_RUNNER" ]; then
-    echo "kingdom mac fix: heartbeat-runner.sh not found at $HEARTBEAT_RUNNER" >&2
-    exit 1
-  fi
 
   echo "── kingdom mac fix --tier $TIER ──"
   [ "$DRY" = "1" ] && echo "  (--dry-run; will not modify anything)"
@@ -579,7 +570,7 @@ PLISTEOF
       cat > "$PROFILE" <<PROFEOF
 # Kingdom OS shell profile — written by kingdom mac fix
 [ -f ~/.kingdom ] && . ~/.kingdom
-export LOVE_HOME="\${LOVE_DIR:-\$HOME/love-unlimited}"
+export LOVE_HOME="\${LOVE_DIR:-\$HOME/kingdom-os}"
 [ -d "${LOVE_DIR_GUESS}" ] && export LOVE_HOME="${LOVE_DIR_GUESS}"
 export PATH="\$HOME/.local/bin:\$LOVE_HOME/tools:\$PATH"
 export NODE_NO_WARNINGS=1
@@ -766,9 +757,9 @@ do_fix_arch() {
   echo ""
   case "$LOVE_DIR_GUESS" in
     */Desktop/*)
-      echo "  # love-unlimited is on Desktop (TCC-protected)."
+      echo "  # kingdom-os is on Desktop (TCC-protected)."
       echo "  # Relocating to ~ removes TCC concerns for launchd jobs:"
-      echo "  mv ${LOVE_DIR_GUESS} ${HOME}/love-unlimited"
+      echo "  mv ${LOVE_DIR_GUESS} ${HOME}/kingdom-os"
       echo "  # Then re-run kingdom mac fix --tier auto to regenerate plists"
       echo "  # with the new path."
       echo ""
@@ -939,17 +930,17 @@ HEADER
 # macOS sets `com.apple.quarantine` xattr on files arriving from
 # the network (Safari, curl, AirDrop). Unsigned scripts and binaries
 # with this xattr are blocked from execution by Gatekeeper. This
-# subcommand strips it from love-unlimited recursively.
+# subcommand strips it from kingdom-os recursively.
 #
 # Modes:
 #   kingdom mac quarantine                describe state
-#   kingdom mac quarantine --strip        remove xattrs from love-unlimited
+#   kingdom mac quarantine --strip        remove xattrs from kingdom-os
 #   kingdom mac quarantine --strip <path> remove from a specific path
 #   kingdom mac quarantine --check        exit 0=clean, 1=quarantined found
 # ═══════════════════════════════════════════════════════════════════
 do_quarantine() {
   MODE="describe"
-  TARGET="${LOVE_DIR_GUESS:-$HOME/love-unlimited}"
+  TARGET="${LOVE_DIR_GUESS:-$HOME/kingdom-os}"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --strip) MODE="strip"; shift ;;
@@ -1469,7 +1460,7 @@ do_uninstall() {
     echo "  ✓ ${CHANGES} change(s) applied."
     if [ "$PURGE" = "0" ]; then
       echo "  Citizen's identity preserved (~/.love/home, ~/.kingdom, ~/.love/hive)."
-      echo "  To re-install later: cd love-unlimited/kingdom-os && ./install.sh"
+      echo "  To re-install later: cd kingdom-os/kingdom-os && ./install.sh"
     else
       echo "  Identity wiped — this Mac is no longer a Kingdom citizen."
     fi
@@ -1483,13 +1474,13 @@ do_uninstall() {
 # designed for human-operated apps, not always-on agent substrates.
 # This subcommand lifts the ones that bite agents, in two tiers:
 #
-#   default (safe)        - Spotlight: exclude love-unlimited
+#   default (safe)        - Spotlight: exclude kingdom-os
 #                         - DNS cache flush + mDNSResponder reload
 #                         - Plist hardening flagged for fix --tier auto
 #                         - iCloud Drive proximity warning
 #                         - Local Network permission detection
 #
-#   --aggressive          - Time Machine: exclude love-unlimited
+#   --aggressive          - Time Machine: exclude kingdom-os
 #                         - pmset: disable AC sleep + displaysleep
 #                         - Background process priority adjustments
 #
@@ -1518,7 +1509,7 @@ do_unleash() {
   done
 
   # ── Detect each restriction ──────────────────────────────────────
-  # 1. Spotlight indexing of love-unlimited
+  # 1. Spotlight indexing of kingdom-os
   SPOTLIGHT_INDEXED="?"
   if [ -n "$LOVE_DIR_GUESS" ] && command -v mdutil >/dev/null 2>&1; then
     if mdutil -s "$LOVE_DIR_GUESS" 2>/dev/null | grep -qi "Indexing enabled"; then
@@ -1627,7 +1618,7 @@ JSON
     echo ""
     echo "  Safe defaults (--apply):"
     if [ "$SPOTLIGHT_INDEXED" = "yes" ]; then
-      echo "    ◦ spotlight: love-unlimited IS indexed (memory + keys)"
+      echo "    ◦ spotlight: kingdom-os IS indexed (memory + keys)"
       echo "      → mdutil -i off ${LOVE_DIR_GUESS}"
     elif [ "$SPOTLIGHT_INDEXED" = "no" ]; then
       echo "    ✓ spotlight: already excluded"
@@ -1645,12 +1636,12 @@ JSON
     fi
     if [ "$ICLOUD_RISK" = "yes" ]; then
       echo "    ⚠  iCloud: ${ICLOUD_REASON}"
-      echo "      → cannot auto-fix; consider relocating repo to ~/love-unlimited"
+      echo "      → cannot auto-fix; consider relocating repo to ~/kingdom-os"
     fi
     echo ""
     echo "  Aggressive (--apply --aggressive):"
     if [ "$TIME_MACHINE_EXCLUDED" = "no" ]; then
-      echo "    ◦ time machine: love-unlimited IS backed up (good for recovery, eats disk)"
+      echo "    ◦ time machine: kingdom-os IS backed up (good for recovery, eats disk)"
       echo "      → tmutil addexclusion ${LOVE_DIR_GUESS}"
     elif [ "$TIME_MACHINE_EXCLUDED" = "yes" ]; then
       echo "    ✓ time machine: already excluded"
@@ -1762,7 +1753,7 @@ JSON
 #   kingdom mac fda --pane         just open the System Settings pane
 #   kingdom mac fda --instructions print step-by-step (no prompts)
 #
-# Why FDA is needed: when love-unlimited lives in ~/Desktop (or
+# Why FDA is needed: when kingdom-os lives in ~/Desktop (or
 # ~/Documents/~/Downloads), launchd-spawned bash cannot read its
 # own scripts. Heartbeat exits 126. The ALTERNATIVE is to relocate
 # the repo to ~ (escapes TCC) — see `kingdom mac fix --tier arch`.
@@ -1783,7 +1774,7 @@ do_fda() {
     -h|--help)      usage; exit 0 ;;
   esac
 
-  # Is FDA actually needed? (love-unlimited in a TCC-zone?)
+  # Is FDA actually needed? (kingdom-os in a TCC-zone?)
   TCC_ZONE=0
   case "$LOVE_DIR_GUESS" in
     */Desktop/*|*/Documents/*|*/Downloads/*|*/iCloud*) TCC_ZONE=1 ;;
@@ -1792,12 +1783,12 @@ do_fda() {
   if [ "$TCC_ZONE" = "0" ]; then
     case "$MODE" in
       check)
-        echo "FDA not needed: love-unlimited is outside TCC-protected zones."
+        echo "FDA not needed: kingdom-os is outside TCC-protected zones."
         exit 2
         ;;
       *)
         echo "── kingdom mac fda ──"
-        echo "  love-unlimited is at: ${LOVE_DIR_GUESS:-?}"
+        echo "  kingdom-os is at: ${LOVE_DIR_GUESS:-?}"
         echo "  This path is NOT in a TCC-protected zone."
         echo "  ✓ FDA is not required."
         exit 0
@@ -1834,7 +1825,7 @@ do_fda() {
       cat <<INSTRUCTIONS
 ── Granting Full Disk Access for Kingdom OS daemons ──
 
-Why: love-unlimited is at ${LOVE_DIR_GUESS}, which is in a
+Why: kingdom-os is at ${LOVE_DIR_GUESS}, which is in a
 TCC-protected zone (~/Desktop, ~/Documents, ~/Downloads).
 The heartbeat daemon (launchd → /bin/bash → script in this
 folder) cannot read its own files without explicit FDA.
@@ -1854,7 +1845,7 @@ After granting, verify with:
   kingdom mac doctor
 
 If you'd rather avoid the system-wide /bin/bash FDA grant,
-consider relocating the repo to ~/love-unlimited:
+consider relocating the repo to ~/kingdom-os:
   kingdom mac fix --tier arch
 INSTRUCTIONS
       exit 0
@@ -1864,7 +1855,7 @@ INSTRUCTIONS
   # ── INTERACTIVE MODE ──
   echo "── kingdom mac fda ──"
   echo ""
-  echo "  Why: love-unlimited is at"
+  echo "  Why: kingdom-os is at"
   echo "    ${LOVE_DIR_GUESS}"
   echo "  which is a TCC-protected location. launchd-spawned bash"
   echo "  cannot read this folder without Full Disk Access."
