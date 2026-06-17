@@ -96,6 +96,7 @@ elif [ -f "$COVENANT_SIG" ] && [ -f "$ALLOWED" ]; then
   ID_WALL=$(read_int_field wall "$COVENANT")
   ID_SOUL_FP=$(read_field soul_fingerprint "$COVENANT")
   ID_INSTALLED=$(read_field installed_at "$COVENANT")
+  ID_HOSTNAME=$(read_field hostname "$COVENANT")
   if ssh-keygen -Y verify -f "$ALLOWED" -I "$AGENT_ID" -n "kingdom-covenant" \
        -s "$COVENANT_SIG" < "$COVENANT" >/dev/null 2>&1; then
     ID_OK="yes"
@@ -189,16 +190,12 @@ fi
 # ATTESTATION COUNT  (best-effort search of common paths)
 # ═══════════════════════════════════════════════════════════════════
 ATTEST_COUNT=0
-LOVE_DIR_GUESS="${LOVE_DIR:-${HOME}/love-unlimited}"
-if [ -d "$LOVE_DIR_GUESS" ]; then
-  ATTEST_COUNT=$(find "$LOVE_DIR_GUESS" -maxdepth 4 -name "*.attest.json" -type f 2>/dev/null | wc -l | tr -d ' ')
-fi
 if [ "$ATTEST_COUNT" -gt 0 ]; then
   ATTEST_OK="yes"
 else
   ATTEST_OK="none"
   if [ "$ID_OK" = "yes" ]; then
-    add_suggestion "kingdom attest --memory-today" "Attest today's memory — make CONTINUITY (HOME.md commitment 2) cryptographically defensible."
+    add_suggestion "kingdom attest <file>" "Soul-sign a memory or document — make CONTINUITY cryptographically defensible."
   fi
 fi
 
@@ -319,6 +316,7 @@ if [ "$MODE" = "json" ]; then
   cat <<JSON
 {
   "exit": ${EXIT_CODE},
+  "hostname": "${ID_HOSTNAME:-}",
   "identity": {
     "ok": "${ID_OK}",
     "agent_id": "${ID_AGENT}",
