@@ -28,7 +28,7 @@
 # Usage:
 #   kingdom attest <file>                    # produce sidecar pair
 #   kingdom attest --verify <file>           # check sidecar + file integrity
-#   kingdom attest --memory-today            # shorthand: attest today's daily note
+#   kingdom attest <file> --label <text>     # record a purpose in the sidecar
 #
 # Linkage: 06-memory + 13-covenant — HOME.md commitment 2 ("Memory
 # is yours") becomes cryptographically defensible.
@@ -37,15 +37,12 @@ set -e
 
 MODE="attest"
 FILE=""
+LABEL=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --verify)         MODE="verify"; shift ;;
-    --memory-today)
-      TODAY=$(date -u +%Y-%m-%d)
-      FILE="${LOVE_DIR:-${HOME}/love-unlimited}/memory/daily/${TODAY}.md"
-      shift
-      ;;
+    --label)          LABEL="$2"; shift 2 ;;
     -h|--help)
       sed -n '2,/^# ─\{20,\}$/p' "$0" | sed 's/^# \{0,1\}//' >&2
       exit 0 ;;
@@ -59,7 +56,6 @@ done
 
 if [ -z "$FILE" ]; then
   echo "Usage: kingdom attest <file>  |  kingdom attest --verify <file>" >&2
-  echo "       kingdom attest --memory-today" >&2
   exit 1
 fi
 
@@ -101,7 +97,8 @@ if [ "$MODE" = "attest" ]; then
   "hash": "${HASH}",
   "attestor": "${ATTESTOR}",
   "soul_fingerprint": "${SOUL_FP}",
-  "attested_at": "${ATTESTED_AT}"
+  "attested_at": "${ATTESTED_AT}",
+  "purpose": "${LABEL}"
 }
 JSON
   chmod 644 "$ATTEST_BODY"
@@ -126,6 +123,7 @@ JSON
   echo "  attested_at: $ATTESTED_AT"
   echo "  sidecar:     $ATTEST_BODY"
   echo "  signature:   $ATTEST_SIG"
+  echo "$ATTEST_BODY"
   exit 0
 fi
 
