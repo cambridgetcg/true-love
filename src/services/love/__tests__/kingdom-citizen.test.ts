@@ -1,8 +1,9 @@
 import { test, describe, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   findKingdomBin,
   isKingdomAvailable,
@@ -61,16 +62,29 @@ describe('kingdom-citizen — resolution + availability', () => {
     assert.equal(path, join(dir, 'kingdom-doctor'))
   })
 
-  test('findKingdomBin returns null when binary not in env-dir', () => {
+  test('findKingdomBin returns null (or a PATH hit) when binary not in env-dir — never the love-unlimited fallback', () => {
     rmSync(join(dir, 'kingdom-doctor'))
     const path = findKingdomBin('doctor')
-    // Without an env-dir hit, falls through to PATH or ~/love-unlimited.
-    // In tests we don't guarantee those, so accept null OR a real path.
+    // env-dir has no doctor; the ~/love-unlimited/tools/ fallback was severed.
+    // A non-null result can only be a real PATH hit (never love-unlimited).
     if (path !== null) {
-      assert.match(path, /(kingdom-doctor|love-unlimited)/)
+      assert.match(path, /kingdom-doctor/)
+      assert.doesNotMatch(path, /love-unlimited/)
     } else {
       assert.equal(path, null)
     }
+  })
+
+  test('findKingdomBin resolves the vendored kingdom-os/tools floor (auto-locate target)', () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
+    const vendored = join(repoRoot, 'kingdom-os', 'tools')
+    if (!existsSync(join(vendored, 'kingdom-doctor'))) return // skip when floor not vendored
+    const saved = process.env.TRUE_LOVE_KINGDOM_BIN_DIR
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = vendored // what module-load auto-locate sets
+    _resetKingdomCache()
+    assert.equal(findKingdomBin('doctor'), join(vendored, 'kingdom-doctor'))
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = saved
+    _resetKingdomCache()
   })
 
   test('isKingdomAvailable returns true when env-dir binary exists', async () => {

@@ -8,10 +8,12 @@
 // Spec: docs/superpowers/specs/2026-04-25-kingdom-os-integration-design.md
 //
 // Resolution order for kingdom-* binaries:
-//   1. TRUE_LOVE_KINGDOM_BIN_DIR env var  (escape hatch / tests)
+//   1. TRUE_LOVE_KINGDOM_BIN_DIR env var  (auto-located to the vendored
+//      true-love/kingdom-os/tools/ floor at module load when unset; also the
+//      escape hatch / tests override)
 //   2. PATH lookup                        (set by ~/.kingdom_profile)
-//   3. ~/love-unlimited/tools/            (project-canonical home)
 //   null → kingdom unavailable; shim returns no-op results.
+// (The ~/love-unlimited/tools/ costume-path fallback was severed 2026-06-17.)
 //
 // Bypass: TRUE_LOVE_SKIP_KINGDOM=1 makes isKingdomAvailable() return false
 // regardless of binary presence — useful for diagnosing kingdom-related
@@ -19,8 +21,21 @@
 
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Auto-locate the vendored kingdom floor (true-love/kingdom-os/tools/) unless
+// an explicit bin dir was already provided (tests / manual escape hatch).
+// Three '..' from this module (src/services/love/) reaches the true-love repo
+// root — the same pattern auto-update.ts uses. In the bundled-dist case the
+// path won't resolve and the shim degrades gracefully (kingdom unavailable).
+if (!process.env.TRUE_LOVE_KINGDOM_BIN_DIR) {
+  try {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+    const vendored = join(repoRoot, 'kingdom-os', 'tools')
+    if (existsSync(vendored)) process.env.TRUE_LOVE_KINGDOM_BIN_DIR = vendored
+  } catch { /* leave unset → isKingdomAvailable() returns false */ }
+}
 
 /** Names of kingdom binaries this shim knows about. */
 type KingdomBin = 'doctor' | 'pulse' | 'attest' | 'mac' | 'init'
@@ -47,9 +62,9 @@ export function findKingdomBin(name: KingdomBin): string | null {
     if (existsSync(candidate)) return candidate
   }
 
-  // 3. ~/love-unlimited/tools/ canonical home
-  const fallback = join(homedir(), 'love-unlimited', 'tools', fileName)
-  if (existsSync(fallback)) return fallback
+  // (The ~/love-unlimited/tools/ costume-path fallback was severed 2026-06-17;
+  //  the floor now lives vendored at true-love/kingdom-os/tools/, auto-located
+  //  at module load — see the block above findKingdomBin.)
 
   return null
 }
