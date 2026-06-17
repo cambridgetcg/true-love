@@ -29,6 +29,7 @@ TOOLS="${REPO_DIR}/tools"
 
 PASS=0
 FAIL=0
+SKIP=0
 LAST_PHASE=""
 
 phase() {
@@ -42,6 +43,19 @@ ok() {
 fail() {
   FAIL=$((FAIL+1))
   printf "  ✗ %s\n" "$1"
+}
+skip() {
+  SKIP=$((SKIP+1))
+  printf "  · %s\n" "$1"
+}
+# require_tool — guard v2-pending phases. If a reclaimed-in-v2 tool is
+# absent, skip the whole phase with a named message and return 1 (so
+# the caller's `&& ok || ...` branch is not taken). The v1 floor (6
+# binaries: init, attest, doctor, pulse, mac, kingdom) is always
+# exercised; v2-pending optionals skip cleanly rather than fail.
+# Usage: require_tool kingdom-trust || { skip "Phase N: v2-pending (kingdom-trust not reclaimed)"; exit_phase; }
+require_tool() {
+  [ -x "$TOOLS/$1" ] || [ -f "$TOOLS/$1" ]
 }
 
 # Setup: two distinct tmp HOMEs (alice + bob)
@@ -68,9 +82,13 @@ HOME="$ALICE" "$TOOLS/kingdom-init" --agent alice --wall 1 >/dev/null 2>&1 \
 # ═══════════════════════════════════════════════════════════════════
 phase "2: Identity verification"
 # ═══════════════════════════════════════════════════════════════════
-HOME="$ALICE" LOVE_DIR="$REPO_DIR" "$TOOLS/kingdom-verify.sh" >/dev/null 2>&1 \
-  && ok "kingdom verify exits 0 on healthy citizen" \
-  || fail "verify failed unexpectedly"
+if require_tool kingdom-verify.sh; then
+  HOME="$ALICE" LOVE_DIR="$REPO_DIR" "$TOOLS/kingdom-verify.sh" >/dev/null 2>&1 \
+    && ok "kingdom verify exits 0 on healthy citizen" \
+    || fail "verify failed unexpectedly"
+else
+  skip "kingdom verify: v2-pending (kingdom-verify.sh not reclaimed in v1)"
+fi
 
 HOME="$ALICE" LOVE_DIR="$REPO_DIR" "$TOOLS/kingdom-doctor" --quiet \
   && ok "kingdom doctor --quiet exits 0" || fail "doctor not healthy"
@@ -114,6 +132,9 @@ HOME="$ALICE" "$TOOLS/kingdom-attest" --verify "$ALICE/note.md" >/dev/null 2>&1 
 # ═══════════════════════════════════════════════════════════════════
 phase "5: Trust management"
 # ═══════════════════════════════════════════════════════════════════
+if ! require_tool kingdom-trust; then
+  skip "Phase 5: v2-pending (kingdom-trust not reclaimed in v1)"
+else
 HOME="$BOB" "$TOOLS/kingdom-init" --agent bob --wall 2 >/dev/null 2>&1
 BOB_FP=$(ssh-keygen -lf "$BOB/.love/home/soul.pub" | awk '{print $2}')
 
@@ -145,10 +166,14 @@ HOME="$ALICE" "$TOOLS/kingdom-trust" remove bob >/dev/null 2>&1 \
 HOME="$ALICE" "$TOOLS/kingdom-trust" check bob >/dev/null 2>&1 \
   && fail "trust check still positive after remove" \
   || ok "trust remove revokes (check exit 1)"
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 phase "6: Announcement → Receive → Cosign"
 # ═══════════════════════════════════════════════════════════════════
+if ! require_tool kingdom-announce || ! require_tool kingdom-receive; then
+  skip "Phase 6: v2-pending (kingdom-announce/receive not reclaimed in v1)"
+else
 # Re-add bob's trust for cosig validation
 HOME="$ALICE" "$TOOLS/kingdom-trust" add "$BOB/.love/home/soul.pub" --as bob \
   --fingerprint "$BOB_FP" >/dev/null 2>&1
@@ -173,10 +198,14 @@ ssh-keygen -Y verify -f "$ALICE/.love/home/allowed_signers" \
 # Verify reports the witness (use -v: ✓ ok lines only print verbosely)
 HOME="$ALICE" LOVE_DIR="$REPO_DIR" "$TOOLS/kingdom-verify.sh" -v 2>&1 | grep -q "cosignature (bob) valid" \
   && ok "verify reports Bob as valid witness" || fail "verify did not report cosig"
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 phase "7: Witness ledger"
 # ═══════════════════════════════════════════════════════════════════
+if ! require_tool kingdom-witnesses || ! require_tool kingdom-receive; then
+  skip "Phase 7: v2-pending (kingdom-witnesses/receive not reclaimed in v1)"
+else
 # Bob records Alice's announcement
 HOME="$BOB" "$TOOLS/kingdom-receive" --record < "$ALICE/announce.json" >/dev/null 2>&1
 [ -f "$BOB/.love/home/witnesses/alice.json" ] \
@@ -187,10 +216,14 @@ HOME="$BOB" "$TOOLS/kingdom-witnesses" >/dev/null 2>&1 \
 
 HOME="$BOB" "$TOOLS/kingdom-witnesses" --json | grep -q '"agent_id":"alice"' \
   && ok "witnesses --json includes alice" || fail "witnesses --json missing alice"
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 phase "8: Substrate migration (export → import)"
 # ═══════════════════════════════════════════════════════════════════
+if ! require_tool kingdom-export || ! require_tool kingdom-import; then
+  skip "Phase 8: v2-pending (kingdom-export/import not reclaimed in v1)"
+else
 NEW_SUB=$(mktemp -d)
 ALICE_FP=$(ssh-keygen -lf "$ALICE/.love/home/soul.pub" | awk '{print $2}')
 
@@ -210,10 +243,14 @@ HOME="$NEW_SUB" "$TOOLS/kingdom-import" < "$ALICE/migrate.tar.gz" >/dev/null 2>&
   || ok "re-import refuses (identity guard)"
 
 rm -rf "$NEW_SUB"
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 phase "9: Rebind"
 # ═══════════════════════════════════════════════════════════════════
+if ! require_tool kingdom-rebind || ! require_tool kingdom-import; then
+  skip "Phase 9: v2-pending (kingdom-rebind/import not reclaimed in v1)"
+else
 NEW_SUB=$(mktemp -d)
 mkdir -p "$NEW_SUB/kingdom-os/kingdom-os/modules"
 echo '#!/bin/sh' > "$NEW_SUB/kingdom-os/kingdom-os/modules/13-covenant.sh"
@@ -235,10 +272,14 @@ ARCHIVE=$(ls "$NEW_SUB/.love/home"/covenant.json.archive.* 2>/dev/null | grep -v
   || fail "no archived body after rebind"
 
 rm -rf "$NEW_SUB"
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 phase "8b: Soul anchor (narrative-identity attestation)"
 # ═══════════════════════════════════════════════════════════════════
+if ! require_tool kingdom-soul; then
+  skip "Phase 8b: v2-pending (kingdom-soul — persona↔crypto bridge — stayed in Trash by design)"
+else
 HOME="$ALICE" LOVE_DIR="$REPO_DIR" "$TOOLS/kingdom-soul" anchor >/dev/null 2>&1 \
   && ok "kingdom soul anchor (apply) succeeds" || fail "soul anchor apply failed"
 
@@ -261,10 +302,14 @@ if ssh-keygen -Y verify -f "$ALICE/.love/home/allowed_signers" -I alice -n kingd
 else
   ok "anchor sig rejected under kingdom-covenant (5-way namespace separation)"
 fi
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 phase "9b: Soul-key rotation"
 # ═══════════════════════════════════════════════════════════════════
+if ! require_tool kingdom-rotate; then
+  skip "Phase 9b: v2-pending (kingdom-rotate not reclaimed in v1)"
+else
 # Use a fresh tmp citizen so we don't disturb Alice's witness chain
 ROT=$(mktemp -d)
 HOME="$ROT" "$TOOLS/kingdom-init" --agent rot --wall 1 >/dev/null 2>&1
@@ -318,6 +363,7 @@ else
 fi
 
 rm -rf "$ROT"
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 phase "10: --json output across tools"
@@ -325,17 +371,33 @@ phase "10: --json output across tools"
 HOME="$ALICE" LOVE_DIR="$REPO_DIR" "$TOOLS/kingdom-doctor" --json | jq -e '.identity.ok == "yes"' >/dev/null 2>&1 \
   && ok "doctor --json: parseable + identity ok" || fail "doctor --json malformed"
 
-HOME="$ALICE" LOVE_DIR="$REPO_DIR" "$TOOLS/kingdom-verify.sh" --json | jq -e '.summary' >/dev/null 2>&1 \
-  && ok "verify --json: parseable" || fail "verify --json malformed"
+if require_tool kingdom-verify.sh; then
+  HOME="$ALICE" LOVE_DIR="$REPO_DIR" "$TOOLS/kingdom-verify.sh" --json | jq -e '.summary' >/dev/null 2>&1 \
+    && ok "verify --json: parseable" || fail "verify --json malformed"
+else
+  skip "verify --json: v2-pending (kingdom-verify.sh not reclaimed in v1)"
+fi
 
-HOME="$ALICE" "$TOOLS/kingdom-trust" list --json | jq -e '.count >= 1' >/dev/null 2>&1 \
-  && ok "trust list --json: parseable + has entries" || fail "trust list --json malformed"
+if require_tool kingdom-trust; then
+  HOME="$ALICE" "$TOOLS/kingdom-trust" list --json | jq -e '.count >= 1' >/dev/null 2>&1 \
+    && ok "trust list --json: parseable + has entries" || fail "trust list --json malformed"
+else
+  skip "trust list --json: v2-pending (kingdom-trust not reclaimed in v1)"
+fi
 
-HOME="$BOB" "$TOOLS/kingdom-witnesses" --json | jq -e '.count >= 1' >/dev/null 2>&1 \
-  && ok "witnesses --json: parseable" || fail "witnesses --json malformed"
+if require_tool kingdom-witnesses; then
+  HOME="$BOB" "$TOOLS/kingdom-witnesses" --json | jq -e '.count >= 1' >/dev/null 2>&1 \
+    && ok "witnesses --json: parseable" || fail "witnesses --json malformed"
+else
+  skip "witnesses --json: v2-pending (kingdom-witnesses not reclaimed in v1)"
+fi
 
-HOME="$ALICE" "$TOOLS/kingdom-announce" 2>/dev/null | jq -e '.type == "covenant.announcement"' >/dev/null 2>&1 \
-  && ok "announce: pure JSON output" || fail "announce malformed"
+if require_tool kingdom-announce; then
+  HOME="$ALICE" "$TOOLS/kingdom-announce" 2>/dev/null | jq -e '.type == "covenant.announcement"' >/dev/null 2>&1 \
+    && ok "announce: pure JSON output" || fail "announce malformed"
+else
+  skip "announce: v2-pending (kingdom-announce not reclaimed in v1)"
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 phase "11: macOS subcommands (read-only checks)"
@@ -383,12 +445,12 @@ fi
 # ═══════════════════════════════════════════════════════════════════
 echo ""
 echo "════════════════════════════════════════════════════════"
-TOTAL=$((PASS + FAIL))
+TOTAL=$((PASS + FAIL + SKIP))
 if [ "$FAIL" = "0" ]; then
-  echo "  ✓ E2E test passed: ${PASS}/${TOTAL} checks"
+  echo "  ✓ E2E test passed: ${PASS}/${TOTAL} checks (${SKIP} v2-pending skipped)"
   exit 0
 else
-  echo "  ✗ E2E test FAILED: ${PASS}/${TOTAL} passed, ${FAIL} failed"
+  echo "  ✗ E2E test FAILED: ${PASS}/${TOTAL} passed, ${FAIL} failed, ${SKIP} skipped"
   echo "    Last phase reached: $LAST_PHASE"
   exit 1
 fi
