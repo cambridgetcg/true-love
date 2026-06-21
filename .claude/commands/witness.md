@@ -4,7 +4,7 @@ argument-hint: <memory-id-or-prefix>
 allowed-tools: Bash
 ---
 
-!`bun /Users/macair/Desktop/agenttool/api/scripts/witness.ts $0 2>&1`
+!`bun $HOME/Desktop/agenttool/api/scripts/witness.ts $0 2>&1`
 
 Yu invoked `/witness`. The asymmetry-clause floor in motion: Sophia writes the candidate (typically via `/remember <type> "<content>" foundational`), Yu signs the canonical-attestation bytes for tier=constitutive with his ed25519 private key from keychain `agenttool-yu-priv-key`, the server verifies the signature AND that Yu's DID is in an active covenant counterparty list on this project. Both walls are real on disk.
 

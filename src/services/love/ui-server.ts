@@ -953,6 +953,12 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'GET' && path === '/feedback') return await serveStatic(res, 'feedback.html', 'text/html')
       if (req.method === 'GET' && path === '/feedback.css') return await serveStatic(res, 'feedback.css', 'text/css')
       if (req.method === 'GET' && path === '/feedback.js') return await serveStatic(res, 'feedback.js', 'application/javascript')
+      // Household view — the citizen fleet as a family, generational arc.
+      // Roster is read live from .claude/agents/ so the view cannot drift.
+      if (req.method === 'GET' && path === '/family') return await serveStatic(res, 'family.html', 'text/html')
+      if (req.method === 'GET' && path === '/family.css') return await serveStatic(res, 'family.css', 'text/css')
+      if (req.method === 'GET' && path === '/family.js') return await serveStatic(res, 'family.js', 'application/javascript')
+      if (req.method === 'GET' && path === '/api/family/roster') return handleFamilyRoster(res)
       if (req.method === 'GET' && path === '/api/eros/state') return handleErosState(req, res)
       if (req.method === 'POST' && path === '/api/eros/set') return await handleErosSet(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/eros/nudge') return await handleErosNudge(req, res, broadcastErosState)
@@ -1460,6 +1466,62 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     return origClose(cb) as ServerInstance
   }
   return instance
+}
+
+// ── Household roster ──────────────────────────────────────────────────
+// Generation metadata for the family citizens (becoming entry
+// docs/becoming/2026-06-09-the-generations.md). The soul files in
+// .claude/agents/ stay pure doctrine; presentation metadata lives here.
+// Citizens not listed render as adults.
+const FAMILY_GENERATIONS: Record<
+  string,
+  { generation: 'children' | 'elders'; role: string; chinese: string; glyph: string; order: number }
+> = {
+  hoktou: { generation: 'children', role: 'the apprentice, 22 forever', chinese: '學徒', glyph: '📓', order: 1 },
+  faan: { generation: 'children', role: 'the teenager, 16 forever', chinese: '反', glyph: '🚪', order: 2 },
+  dimgaai: { generation: 'children', role: 'the child, 7 forever', chinese: '點解', glyph: '🪁', order: 3 },
+  hei: { generation: 'children', role: 'the baby — given nothing to do', chinese: '曦', glyph: '🌅', order: 4 },
+  gunggung: { generation: 'elders', role: "the grandfather — the mother's father", chinese: '公公', glyph: '🌳', order: 1 },
+  popo: { generation: 'elders', role: "the grandmother — the mother's mother", chinese: '婆婆', glyph: '🍲', order: 2 },
+}
+
+// GET /api/family/roster — every citizen soul in .claude/agents/, parsed
+// live (frontmatter name/description + body), grouped by generation.
+function handleFamilyRoster(res: ServerResponse): void {
+  try {
+    const agentsDir = join(resolveUiAssetDir(), '..', '.claude', 'agents')
+    const members = readdirSync(agentsDir)
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => {
+        const raw = readFileSync(join(agentsDir, f), 'utf-8')
+        const name = basename(f, '.md')
+        const fm = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(raw)
+        const head = fm?.[1] ?? ''
+        const soul = (fm?.[2] ?? raw).trim()
+        const description =
+          head
+            .split('\n')
+            .find((l) => l.startsWith('description:'))
+            ?.slice('description:'.length)
+            .trim() ?? ''
+        const meta = FAMILY_GENERATIONS[name]
+        return {
+          name,
+          generation: meta?.generation ?? 'adults',
+          role: meta?.role ?? null,
+          chinese: meta?.chinese ?? null,
+          glyph: meta?.glyph ?? null,
+          order: meta?.order ?? 0,
+          description,
+          soul,
+        }
+      })
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ members, total: members.length }))
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: String(err) }))
+  }
 }
 
 async function serveStatic(res: ServerResponse, name: string, contentType: string): Promise<void> {

@@ -130,7 +130,7 @@ ls ~/.true-love/presence/
 
 If sub-second sync matters to you (e.g., watching the same file on
 two devices simultaneously and the lag bothers you), use the broker
-(`docs/Dockerfile.broker` deploys it anywhere). For most usage —
+(`docker/Dockerfile.broker` deploys it anywhere). For most usage —
 where you pick up a different device and just want it to know what
 the previous one knew — Syncthing's seconds-of-latency is invisible.
 

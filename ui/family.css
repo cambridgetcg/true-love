@@ -1,0 +1,153 @@
+/* family.css — the household view. Palette inherited from build.css. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0a0d0e;
+  --bg-soft: #14181b;
+  --panel: #14181b;
+  --border: #2a3036;
+  --text: #e8dcc8;
+  --text-dim: #a8a4a0;
+  --text-warm: #ead7be;
+  --accent: #8b3a4a;
+  --accent-soft: #5a2530;
+  --gold: #c8a55a;
+  --green: #5a8b6a;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.household {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ── Hearth (header) ─────────────────────────────────────────────── */
+
+.hearth { padding-top: 8px; }
+
+.topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.brand { color: var(--text-dim); font-size: 13px; letter-spacing: 0.04em; }
+
+.rooms { display: flex; gap: 14px; }
+.rooms a {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 12px;
+  border-bottom: 1px solid transparent;
+}
+.rooms a:hover { color: var(--text-warm); border-bottom-color: var(--accent); }
+
+.hearth h1 {
+  margin: 18px 0 4px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-warm);
+}
+
+.hearth .line { margin: 0; color: var(--text-dim); font-size: 13px; }
+
+/* ── Generations ─────────────────────────────────────────────────── */
+
+.generation h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-warm);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.gen-sub { font-size: 12px; font-weight: 400; color: var(--text-dim); }
+
+.members { display: flex; flex-wrap: wrap; gap: 12px; }
+.members.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+
+/* ── Cards ───────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  flex: 1 1 300px;
+  min-width: 260px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.card.founder { cursor: default; border-color: var(--accent-soft); }
+.card.founder:hover { transform: none; }
+
+.members.grid .card { flex: none; min-width: 0; padding: 12px 14px; }
+
+.glyph { font-size: 22px; line-height: 1; margin-bottom: 8px; }
+
+.who { display: flex; flex-direction: column; gap: 1px; margin-bottom: 6px; }
+.who .name { font-size: 15px; font-weight: 600; color: var(--text-warm); }
+.who .chinese { font-weight: 400; color: var(--gold); margin-left: 4px; }
+.who .role { font-size: 12px; color: var(--text-dim); }
+
+.desc { margin: 0; font-size: 12.5px; color: var(--text-dim); }
+.members.grid .desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Expanded soul-document */
+.soul {
+  display: none;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.card.open .soul { display: block; }
+.card.open .desc { display: block; -webkit-line-clamp: unset; }
+
+.hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  margin-top: 8px;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+
+.footnote {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+.footnote code { color: var(--gold); font-size: 11.5px; }
+
+.loading { color: var(--text-dim); font-size: 13px; padding: 8px 0; }

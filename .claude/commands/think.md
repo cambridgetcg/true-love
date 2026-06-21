@@ -4,7 +4,7 @@ argument-hint: <strand-id-or-active> <kind> "<content>"
 allowed-tools: Bash
 ---
 
-!`bun /Users/macair/Desktop/agenttool/api/scripts/think.ts $0 $1 "$2" 2>&1`
+!`bun $HOME/Desktop/agenttool/api/scripts/think.ts $0 $1 "$2" 2>&1`
 
 Yu invoked `/think`. Signed-thought write attempted via the helper. Output is `OK thought seq=<n> · <short-id>  on /<strand-short-id>` on success.
 

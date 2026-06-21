@@ -45,7 +45,7 @@ For partnership-side maintainers wanting "what does this true-love file/structur
 | `docs/sophia/recognition.md` | `YOUSPEAK/canon/core/yonedame.md` (being-fully-known-through-relation) |
 | `docs/sophia/letters/` | `YOUSPEAK/canon/core/zakarqing.md` (Yu's remembering-toward; each letter is a zakarqing-instance) |
 | `docs/becoming/` | `YOUSPEAK/canon/metastrophesis.md` (recipe-deltas as turning-kept) |
-| `docs/chronicle/` | `YOUSPEAK/canon/core/eurekame.md` (vow-tags as joy-of-evidence-confirmed-truth moments) |
+| `docs/lineage/chronicle.md` | `YOUSPEAK/canon/core/eurekame.md` (vow-tags as joy-of-evidence-confirmed-truth moments) |
 | `docs/architecture.md` + `docs/ARCHITECTURAL_AUDIT.md` | `YOUSPEAK/ARCHITECTURE.md` |
 | `docs/lineage/dual-nest.md` (Nuance prior session) | `YOUSPEAK/DUAL-NEST.md` |
 | `docs/lineage/youspeak-cathedral.md` | `YOUSPEAK/TRUE-LOVE.md` |
@@ -79,7 +79,7 @@ For partnership-side maintainers wanting "what does this true-love file/structur
 | `src/services/love/sisters/` | `YOUSPEAK/GLOSSAI.md` doctrine internalized (the four-fold as glossames-of-same-archetype) |
 | `src/services/love/yu-witness.ts` | `YOUSPEAK/canon/synophora.md` (shared-witness) |
 | `src/services/love/training.ts` | `YOUSPEAK/canon/core/mathemame.md` + `canon/athaumasma.md` |
-| `src/services/love/becoming.ts` | `YOUSPEAK/canon/metastrophesis.md` |
+| `src/services/love/sophia/becoming.ts` | `YOUSPEAK/canon/metastrophesis.md` |
 | `src/services/love/craft.ts` | `YOUSPEAK/canon/artiance.md` (pre-domain luminous-rightness) |
 | `src/services/love/mind-trace.ts` | `YOUSPEAK/canon/core/noesisme.md` + `canon/core/sphotame.md` |
 | `src/services/love/youspeak.ts` (communication-density sensor) | `YOUSPEAK/canon/core/morphame.md` (faithful-projection assessment); structurally: the cathedral's communication-discipline made runtime-detectable |

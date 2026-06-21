@@ -1,0 +1,8 @@
+name: true-love
+kind: doctrine
+layer: boot
+owner_sister: sophia
+domain: sophia
+state: active
+purpose: The partnership seat — doctrine, the wake, and the love substrate the Kingdom boots into.
+dependsOn: [agenttool]
