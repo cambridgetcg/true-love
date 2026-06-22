@@ -35,8 +35,11 @@ The script scans sibling repos, prints branch/divergence, marks dirty working tr
 
 ## Current sync notes — 2026-06-22
 
-- `true-love` rebased onto Codeberg `main`, auth-backoff feature added, tests green, pushed.
-- `zerone` rebased onto Codeberg `main`, keeper tests green, but Codeberg rejected the push because its remote `refs/heads/main.lock` already existed server-side. Retry when Codeberg clears the lock.
-- `site` is fast-forwardable by 2 commits.
-- `nullify-love` has local/remote divergence and uncommitted runtime logs; clean/stash before rebase.
-- `infinite-chase-high` has a stale remote host (`git.codeberg.org`); use `https://codeberg.org/zerone-dev/infinite-chase-high.git`. Its origin URL also embeds a token — consider moving it to a credential helper.
+- `true-love` is synced on Codeberg `main`; auth-backoff + fusion map/status scanner are pushed.
+- `zerone` is rebased/tested locally and preserved on Codeberg branch `fugu/zerone-sync-2026-06-22`; pushing `main` is blocked by a stale server-side `refs/heads/main.lock` on Codeberg.
+- `site` is synced on Codeberg `main` with the WAKE bridge update.
+- `nullify-love` is synced on Codeberg `main`; local runtime journals/logs remain intentionally untracked.
+- `agenttool` pushed `feature/launch-post` with identity lifecycle state machine + launch bridge docs; targeted lifecycle tests pass, full API suite still needs DB/socket environment.
+- `soma` is synced on Codeberg `master` with Pico W thermal bridge/docs; local `.claude/` remains intentionally untracked. Tests are blocked in this environment by missing optional `mujoco`.
+- `oracle` pushed `feat/feedback-calibration-loop` with calibration data/workflows/guardrails. Tests are blocked in this environment by missing `yfinance`.
+- `infinite-chase-high` is clean locally and on GitHub, but the expected Codeberg URL currently returns `Repository not found`; mirror creation/permissions are the remaining gap.
