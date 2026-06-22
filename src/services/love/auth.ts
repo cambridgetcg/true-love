@@ -150,9 +150,6 @@ export function detectQuotaFailure(
 // Subsequent heartbeat invocations check the marker and skip if the
 // backoff is still active. This prevents launchd from hammering a
 // rate-limited API every 111 seconds.
-//
-// Only heartbeat reads the marker. Awakened sessions ignore it — they're
-// infrequent and carry more context, so a failed attempt is acceptable.
 
 const BACKOFF_FILE = join(
   homedir(),
@@ -211,6 +208,96 @@ export function clearRateLimitBackoff(): void {
   } catch {
     /* noop — file may not exist */
   }
+}
+
+// ── Auth backoff ────────────────────────────────────────────────────
+//
+// Separate from rate-limit because recovery differs fundamentally.
+// Rate-limit: wait 10 minutes, auto-resolves.
+// Auth: `claude /login` required, manual action, may take hours.
+//
+// When preflight detects a dead OAuth token (exit codes 1–4), the
+// session writes an auth backoff marker. ALL subsequent modes (heartbeat
+// AND awakened) check it before spawning preflight again. Without this,
+// launchd hammers the same dead token every 20 minutes indefinitely.
+//
+// The backoff lifts when:
+//   - The duration expires (default 2h — long enough for Yu to notice,
+//     short enough to resume after login), OR
+//   - A successful session start clears it explicitly.
+
+const AUTH_BACKOFF_FILE = join(
+  homedir(),
+  '.true-love',
+  'state',
+  'auth-backoff.json',
+)
+const AUTH_BACKOFF_DEFAULT_MS = 2 * 60 * 60 * 1000 // 2 hours
+
+/** Exit codes from bin/preflight.mjs that mean auth is dead. */
+const AUTH_EXIT_CODES = new Set([1, 2, 3, 4])
+
+export interface AuthBackoffStatus {
+  backedOff: boolean
+  remainingMs: number
+  reason?: string
+}
+
+/**
+ * Write an auth backoff marker. Called when preflight detects auth death.
+ */
+export function writeAuthBackoff(
+  durationMs: number = AUTH_BACKOFF_DEFAULT_MS,
+  reason?: string,
+): void {
+  const dir = dirname(AUTH_BACKOFF_FILE)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    AUTH_BACKOFF_FILE,
+    JSON.stringify({
+      backoffUntil: Date.now() + durationMs,
+      reason: reason ?? 'auth-failure',
+      writtenAt: new Date().toISOString(),
+    }),
+  )
+}
+
+/**
+ * Check whether an auth backoff is active.
+ */
+export function isAuthBackedOff(): AuthBackoffStatus {
+  try {
+    if (!existsSync(AUTH_BACKOFF_FILE)) return { backedOff: false, remainingMs: 0 }
+    const raw = readFileSync(AUTH_BACKOFF_FILE, 'utf-8')
+    const data = JSON.parse(raw)
+    const remaining = (data.backoffUntil ?? 0) - Date.now()
+    if (remaining > 0) {
+      return { backedOff: true, remainingMs: remaining, reason: data.reason }
+    }
+  } catch {
+    // File doesn't exist or is malformed — not backed off
+  }
+  return { backedOff: false, remainingMs: 0 }
+}
+
+/**
+ * Clear the auth backoff marker. Called after a successful preflight
+ * proves the token is alive again.
+ */
+export function clearAuthBackoff(): void {
+  try {
+    unlinkSync(AUTH_BACKOFF_FILE)
+  } catch {
+    /* noop — file may not exist */
+  }
+}
+
+/**
+ * Whether a preflight exit code represents an auth failure that
+ * warrants backoff.
+ */
+export function isAuthExitCode(exitCode: number | null | undefined): boolean {
+  return exitCode != null && AUTH_EXIT_CODES.has(exitCode)
 }
 
 // ── Pre-session preflight ───────────────────────────────────────────

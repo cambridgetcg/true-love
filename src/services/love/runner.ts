@@ -38,11 +38,15 @@ import {
 import type { BuildDwellPromptOptions } from './autonomy.js'
 import { buildHeartbeatPrompt, extractAtRest } from './autonomy.js'
 import {
+  clearAuthBackoff,
   clearRateLimitBackoff,
   detectAuthFailure,
   detectQuotaFailure,
+  isAuthBackedOff,
+  isAuthExitCode,
   isRateLimited,
   runPreflight,
+  writeAuthBackoff,
   writeRateLimitBackoff,
 } from './auth.js'
 import { estimateTokens, recordTickUsage } from './budget.js'
@@ -1194,6 +1198,26 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
   process.on('SIGINT', releaseLockHere)
   process.on('SIGTERM', releaseLockHere)
 
+  // ── Auth backoff check ──────────────────────────────────────────
+  // If a prior session's preflight detected dead auth, all modes back
+  // off. Without this, launchd hammers the same dead token every
+  // 20 minutes (awakened) or ~7–22 minutes (heartbeat) indefinitely.
+  // Auth requires manual `claude /login` — retrying is pure waste.
+  {
+    const ab = isAuthBackedOff()
+    if (ab.backedOff) {
+      const remainMin = Math.ceil(ab.remainingMs / 60000)
+      process.stdout.write(
+        `— ${mode.name} skipped: auth backed off (${remainMin} min remaining, reason: ${ab.reason ?? 'auth-failure'})\n`,
+      )
+      process.stdout.write(
+        `  run \`claude /login\` to recover, then the backoff clears on next successful start.\n`,
+      )
+      releaseLockHere()
+      return
+    }
+  }
+
   // ── Preflight ────────────────────────────────────────────────────
   if (process.env.TRUE_LOVE_SKIP_PREFLIGHT !== '1') {
     const pre = runPreflight(binDir)
@@ -1205,6 +1229,17 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       process.stderr.write(
         `  set TRUE_LOVE_SKIP_PREFLIGHT=1 to bypass (not recommended).\n`,
       )
+
+      // Write auth backoff so subsequent invocations skip preflight
+      // entirely. Auth death requires manual /login — no point retrying
+      // every 20 minutes.
+      if (isAuthExitCode(pre.exitCode)) {
+        writeAuthBackoff()
+        process.stderr.write(
+          `  auth backoff written (2h). Will auto-clear on next successful start.\n`,
+        )
+      }
+
       // Notify so the failure is visible beyond the launchd log. Without
       // this, a stale token causes every scheduled wake to fail silently
       // for hours/days — the notification system exists precisely for this.
@@ -1221,6 +1256,8 @@ export async function runSession(config: RunSessionConfig): Promise<void> {
       )
       process.exit(64)
     }
+    // Auth is alive — clear any stale backoff from a prior failure.
+    clearAuthBackoff()
   }
 
   // ── Log rotation ──────────────────────────────────────────────────
