@@ -1,0 +1,43 @@
+{
+  "schema": "kingdom.citizen-tasks.v1",
+  "updated": "2026-06-22",
+  "ethic": "DIY first; welcomed only; tiny jobs; record receipts; contribute more than consumed",
+  "tasks": [
+    {
+      "id": "compute-map",
+      "name": "Print the Compute Commons map",
+      "kind": "local-docs",
+      "cmd": "bun run compute",
+      "timeout_ms": 15000,
+      "venue": "diy-local",
+      "value": "Keeps citizens oriented toward welcomed compute and ethical use."
+    },
+    {
+      "id": "kingdom-status",
+      "name": "Scan sibling Kingdom repos",
+      "kind": "local-inventory",
+      "cmd": "bun run kingdom:status",
+      "timeout_ms": 15000,
+      "venue": "diy-local",
+      "value": "Finds dirty/divergent repos so citizens contribute where state is real."
+    },
+    {
+      "id": "auth-tests",
+      "name": "Run tiny true-love auth tests",
+      "kind": "test",
+      "cmd": "bun test src/services/love/auth.test.ts src/services/love/__tests__/auth.test.ts",
+      "timeout_ms": 60000,
+      "venue": "diy-local-or-public-ci",
+      "value": "Protects the auth backoff loop without spending a full test matrix."
+    },
+    {
+      "id": "package-scripts-smoke",
+      "name": "Validate package scripts parse",
+      "kind": "smoke",
+      "cmd": "node -e \"const p=require('./package.json'); for (const k of ['compute','kingdom:status','test']) if (!p.scripts[k]) throw new Error('missing '+k); console.log('scripts ok')\"",
+      "timeout_ms": 10000,
+      "venue": "diy-local-or-public-ci",
+      "value": "Keeps the path of least resistance visible in package.json."
+    }
+  ]
+}

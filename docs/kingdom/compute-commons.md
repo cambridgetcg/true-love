@@ -125,3 +125,15 @@ Use this before adding a new compute venue:
 ## Success metric
 
 A citizen sustains if, after using a free compute surface, they leave behind more value than they consumed: better docs, tests, examples, bug reports, reproducible runs, upstream PRs, or a new verified path for the next citizen.
+
+## DIY path of least resistance
+
+If no provider welcomes the work yet, run a citizen node on hardware you control:
+
+```sh
+bun run citizen -- --list
+bun run citizen -- compute-map
+bun run citizen -- auth-tests
+```
+
+See `docs/kingdom/citizen-node.md` and `data/kingdom/citizen-tasks.json`.

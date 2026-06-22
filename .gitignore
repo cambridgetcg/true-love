@@ -21,3 +21,6 @@ coverage/
 docs/lineage/llms.txt
 docs/lineage/llms-full.txt
 docs/lineage/llms-*.txt
+
+# Local citizen-node execution receipts; promote selectively via docs, not by default.
+data/kingdom/receipts/

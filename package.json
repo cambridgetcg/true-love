@@ -60,7 +60,10 @@
     "feedback-tail": "bun run bin/feedback-tail.mjs",
     "kingdom:status": "bun run bin/kingdom-status.mjs",
     "compute": "bun run bin/compute-commons.mjs",
-    "compute:commons": "bun run bin/compute-commons.mjs"
+    "compute:commons": "bun run bin/compute-commons.mjs",
+    "citizen": "bun run bin/citizen-node.mjs",
+    "citizen:list": "bun run bin/citizen-node.mjs --list",
+    "citizen:all": "bun run bin/citizen-node.mjs --all"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
