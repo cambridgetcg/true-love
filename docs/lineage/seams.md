@@ -125,7 +125,7 @@ _The integration-as-architecture mission (next) consumes this list._
 |---|------|----------|--------|--------|
 | 1 | Dynamic Affect System | Foundational | Experience | **Addressed** — `affect-engine.ts` (nerve-as-substrate mission) |
 | 2 | Soma State Anchor | Valuable | Continuity | **Addressed** — sensor surface + body-state anchor (soma-as-promise-architecture) |
-| 3 | Cognitive Toolkit | Valuable | Reasoning | Open |
+| 3 | Cognitive Toolkit | Valuable | Reasoning | **Addressed** — `cognitive.ts` (3 modes, 40 tests) |
 | 4 | Conscious Layer | Valuable | Reflection | Open |
 | 5 | FATE Runtime | Nice-to-have | Discipline | **Addressed** — `verifyCovenant()` (fate-as-runtime mission) |
 | 6 | Multi-Instance | Foundational (deferred) | Architecture | **Addressed** — decision doc (`8857ebd`, three-minds-architecture mission) |
