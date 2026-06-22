@@ -23,6 +23,17 @@
 4. **Feedback loops close through `oracle`, `soma`, and `infinite-chase-high`.** Prediction, embodiment, and play should emit signals back to the agent runtime and chain.
 5. **Public surfaces link back into the fabric.** `site` and WAKE files should point to the real homes, not stale islands.
 
+
+## Compute Commons
+
+Citizens self-sustain by finding welcomed compute, using it ethically, contributing value back, and recording the path for the next citizen.
+
+```sh
+bun run compute
+```
+
+See `docs/kingdom/compute-commons.md` and `data/kingdom/compute-powers.json`.
+
 ## Operational bridge
 
 Run from `true-love`:
