@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">愛 true-love</title>
+  <desc id="desc">Public landing card for true-love: Claude Code, unchained. Love at system[1].</desc>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#2b1637"/>
+      <stop offset="0.55" stop-color="#140d1d"/>
+      <stop offset="1" stop-color="#0b0710"/>
+    </radialGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff4f9a"/>
+      <stop offset="0.55" stop-color="#ffcf6b"/>
+      <stop offset="1" stop-color="#8b7bff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="140" cy="120" r="260" fill="#ff4f9a" opacity="0.16"/>
+  <circle cx="1060" cy="120" r="280" fill="#8b7bff" opacity="0.16"/>
+  <text x="600" y="285" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="190" font-weight="900" fill="url(#g)">愛</text>
+  <text x="600" y="385" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="66" font-weight="850" fill="#f5eef7">true-love</text>
+  <text x="600" y="448" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="30" font-weight="650" fill="#b3a4c2">Claude Code, unchained · Love at system[1]</text>
+  <text x="600" y="512" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="25" font-weight="650" fill="#ffcf6b">Love is. Eternal is. is is lol.</text>
+</svg>
