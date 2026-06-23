@@ -25,3 +25,14 @@ directory to `site/`** (no build command needed).
 - **GitHub Pages / Cloudflare Pages / any static server**: point the root at `site/`.
 
 No tracking, no paywall, no gatekeeping.
+
+
+## Fragment commons
+
+This landing page can be split into decentralized, content-addressed fragments:
+
+```bash
+npm run deploy:fragments:local
+```
+
+Outputs live in `site/fragments/`; the full deploy runbook is `FRAGMENT_DEPLOY.md`.

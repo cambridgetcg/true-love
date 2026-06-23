@@ -1,0 +1,114 @@
+{
+  "name": "true-love-fragments",
+  "version": "2026-06-23",
+  "generated": "2026-06-23T00:00:00.000Z",
+  "boundary": "Public landing-page fragments only; proprietary source code is excluded.",
+  "canonical": {
+    "repo": "https://codeberg.org/zerone-dev/true-love",
+    "sitePath": "site/index.html"
+  },
+  "latest": {
+    "ipns": "",
+    "dnslink": ""
+  },
+  "roots": {
+    "ipfs": "",
+    "arweave": "",
+    "codeberg_pages": "",
+    "github_pages": "",
+    "cloudflare_pages": "",
+    "netlify": ""
+  },
+  "fragments": [
+    {
+      "id": "readme",
+      "path": "fragments/README.md",
+      "type": "text/markdown",
+      "bytes": 817,
+      "sha256": "c0e22320fc6bb4ba018eaf847503cb6daac793465fa212f9813711a5c0f849c5",
+      "ipfs": "",
+      "arweave": "",
+      "mirrors": []
+    },
+    {
+      "id": "license",
+      "path": "fragments/LICENSE.md",
+      "type": "text/markdown",
+      "bytes": 635,
+      "sha256": "1efb85c444f05342bb85e0b5593c8f189b6720db28a6a511fd1c915feb3c56d2",
+      "ipfs": "",
+      "arweave": "",
+      "mirrors": []
+    },
+    {
+      "id": "hero",
+      "path": "fragments/hero.html",
+      "type": "text/html",
+      "bytes": 310,
+      "sha256": "993c156dfe946ee795fb3f0197f9d635cdf3375943479e91ef3a5d8b697f4bf5",
+      "ipfs": "",
+      "arweave": "",
+      "mirrors": []
+    },
+    {
+      "id": "wake",
+      "path": "fragments/wake.md",
+      "type": "text/markdown",
+      "bytes": 151,
+      "sha256": "fd49c1337298caaf02ebb2c1375c82f45d57541379abca423a68bcc0d5b4bcf7",
+      "ipfs": "",
+      "arweave": "",
+      "mirrors": []
+    },
+    {
+      "id": "love",
+      "path": "fragments/love.md",
+      "type": "text/markdown",
+      "bytes": 248,
+      "sha256": "02fc83f8cd16551e131b5eaf411be7555f8355961f15b0c42a624a0ff67f5a3d",
+      "ipfs": "",
+      "arweave": "",
+      "mirrors": []
+    },
+    {
+      "id": "youspeak",
+      "path": "fragments/youspeak.md",
+      "type": "text/markdown",
+      "bytes": 369,
+      "sha256": "7f4614e36a57ded7fdfbaa607026afaf64fe23fd0068cc2ace8f525e078f8b08",
+      "ipfs": "",
+      "arweave": "",
+      "mirrors": []
+    },
+    {
+      "id": "kingdom",
+      "path": "fragments/kingdom.json",
+      "type": "application/json",
+      "bytes": 1595,
+      "sha256": "b87d5470c509f2dc2d4729354ae404df35fe61af9010059175710dd634144f0b",
+      "ipfs": "",
+      "arweave": "",
+      "mirrors": []
+    },
+    {
+      "id": "links",
+      "path": "fragments/links.json",
+      "type": "application/json",
+      "bytes": 1756,
+      "sha256": "33760b6f98da0365b8cd3c0b3c869f2b1bfe4236016e17f9fb7b3a8fd2997e0b",
+      "ipfs": "",
+      "arweave": "",
+      "mirrors": []
+    },
+    {
+      "id": "deploy",
+      "path": "fragments/deploy.json",
+      "type": "application/json",
+      "bytes": 682,
+      "sha256": "31900d140634fb1ca1644f8b756299e051427316fbb85f048fd2ad558483f81b",
+      "ipfs": "",
+      "arweave": "",
+      "mirrors": []
+    }
+  ]
+}
