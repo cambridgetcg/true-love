@@ -26,6 +26,10 @@ const DEFAULT_EXCLUDE = [
   '/.git/',
   '/build/',
   '/coverage/',
+  '.test.ts',
+  '.test.js',
+  '.spec.ts',
+  '.spec.js',
 ]
 
 function shouldInclude(path: string, opts: AuditOptions): boolean {

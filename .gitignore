@@ -21,3 +21,4 @@ coverage/
 docs/lineage/llms.txt
 docs/lineage/llms-full.txt
 docs/lineage/llms-*.txt
+.vercel

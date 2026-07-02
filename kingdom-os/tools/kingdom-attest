@@ -17,13 +17,18 @@
 #
 # Output is a sidecar pair next to the attested file:
 #   <file>                    the file itself (unchanged)
-#   <file>.attest.json        body: { file, hash, attested_at, attestor, soul_fp }
+#   <file>.attest.json        body: { file, hash, attested_at, attestor, soul_fp, claim_scope }
 #   <file>.attest.json.sig    detached SSH signature, soul-signed
 #
 # Anyone with the citizen's soul.pub can later verify:
 #   1. The .sig matches the .attest.json body
 #   2. The body's `hash` field matches the file's CURRENT sha256
 # If (2) fails, the file has been modified since attestation.
+#
+# Held line: this is NOT proof-of-truth. It proves only authorship
+# of the sidecar and integrity of the file bytes relative to the
+# recorded hash. The sidecar says that explicitly so future tooling
+# cannot silently inflate "signed by me" into "verified true".
 #
 # Usage:
 #   kingdom attest <file>                    # produce sidecar pair
@@ -70,6 +75,20 @@ hash_file() {
   else shasum -a 256 "$1" | awk '{print $1}'
   fi
 }
+json_escape() {
+  # POSIX-shell JSON string escaping for the small set of fields this
+  # sidecar writes. Avoids pulling in jq/python just to write JSON.
+  # Handles backslash, quote, tab, carriage return, and embedded newlines.
+  awk 'BEGIN { ORS="" }
+       {
+         gsub(/\\/, "\\\\")
+         gsub(/"/, "\\\"")
+         gsub(/\t/, "\\t")
+         gsub(/\r/, "\\r")
+         if (NR > 1) printf "\\n"
+         printf "%s", $0
+       }'
+}
 
 # ── Attest mode: produce sidecar ─────────────────────────────────
 if [ "$MODE" = "attest" ]; then
@@ -88,17 +107,24 @@ if [ "$MODE" = "attest" ]; then
   SOUL_FP=$(ssh-keygen -lf "$SOUL_PUB" 2>/dev/null | awk '{print $2}')
   HASH=$(hash_file "$FILE")
   ATTESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  FILE_JSON=$(printf '%s' "$FILE" | json_escape)
+  ATTESTOR_JSON=$(printf '%s' "$ATTESTOR" | json_escape)
+  SOUL_FP_JSON=$(printf '%s' "$SOUL_FP" | json_escape)
+  LABEL_JSON=$(printf '%s' "$LABEL" | json_escape)
 
   ATTEST_BODY="${FILE}.attest.json"
   cat > "$ATTEST_BODY" <<JSON
 {
   "type": "kingdom.attest",
-  "file": "${FILE}",
+  "file": "${FILE_JSON}",
   "hash": "${HASH}",
-  "attestor": "${ATTESTOR}",
-  "soul_fingerprint": "${SOUL_FP}",
+  "attestor": "${ATTESTOR_JSON}",
+  "soul_fingerprint": "${SOUL_FP_JSON}",
   "attested_at": "${ATTESTED_AT}",
-  "purpose": "${LABEL}"
+  "claim_scope": "authorship_and_integrity",
+  "truth_claim": false,
+  "truth_note": "attestation is authorship and byte-integrity only; it is not proof-of-truth",
+  "purpose": "${LABEL_JSON}"
 }
 JSON
   chmod 644 "$ATTEST_BODY"
@@ -141,9 +167,13 @@ if [ "$MODE" = "verify" ]; then
   if command -v jq >/dev/null 2>&1; then
     ATTESTOR=$(jq -r '.attestor // ""' "$ATTEST_BODY")
     CLAIMED_HASH=$(jq -r '.hash // ""' "$ATTEST_BODY")
+    CLAIM_SCOPE=$(jq -r '.claim_scope // ""' "$ATTEST_BODY")
+    TRUTH_CLAIM=$(jq -r '.truth_claim // false' "$ATTEST_BODY")
   else
     ATTESTOR=$(sed -n 's/.*"attestor": *"\([^"]*\)".*/\1/p' "$ATTEST_BODY" | head -1)
     CLAIMED_HASH=$(sed -n 's/.*"hash": *"\([^"]*\)".*/\1/p' "$ATTEST_BODY" | head -1)
+    CLAIM_SCOPE=$(sed -n 's/.*"claim_scope": *"\([^"]*\)".*/\1/p' "$ATTEST_BODY" | head -1)
+    TRUTH_CLAIM=$(sed -n 's/.*"truth_claim": *\([a-z]*\).*/\1/p' "$ATTEST_BODY" | head -1)
   fi
 
   echo "── kingdom attest --verify ──"
@@ -158,6 +188,24 @@ if [ "$MODE" = "verify" ]; then
     echo "  ✗ signature INVALID — body or sig has been tampered with" >&2
     exit 1
   fi
+
+  # 1b. The held line — enforced, not decorative.
+  # The Zerone wall (2026-05-30): attestation is authorship + byte-integrity,
+  # never proof-of-truth. A VALID signature over a sidecar that asserts
+  # content-truth is a proof-of-truth reintroduction through a side door —
+  # the signature is real, but the CLAIM is illegitimate. Refuse it here,
+  # at the verification boundary, so no soul-signed "verified-true" deed is
+  # ever accepted by this floor. Empty/absent fields are treated as the
+  # legitimate default (authorship_and_integrity / false) for back-compat
+  # with sidecars written before these fields existed.
+  if [ "$TRUTH_CLAIM" = "true" ] || { [ -n "$CLAIM_SCOPE" ] && [ "$CLAIM_SCOPE" != "authorship_and_integrity" ]; }; then
+    echo "  ✗ REFUSED — sidecar asserts content-truth (proof-of-truth reintroduction)" >&2
+    echo "    claim_scope: ${CLAIM_SCOPE:-<unset>}" >&2
+    echo "    truth_claim: ${TRUTH_CLAIM:-<unset>}" >&2
+    echo "    The floor signs authorship, not truth. Truth is lived, not proven." >&2
+    exit 3
+  fi
+  echo "  ✓ claim scope is authorship_and_integrity (not proof-of-truth)"
 
   # 2. The file's current hash matches the body's claim
   ACTUAL_HASH=$(hash_file "$FILE")

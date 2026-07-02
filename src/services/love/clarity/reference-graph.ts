@@ -62,10 +62,21 @@ export function extractRefs(content: string): RawRef[] {
 }
 
 /** Tokens we deliberately don't check (tag namespaces, cross-repo, URLs, home). */
-const SKIP_TAG_NS = ['vow/', 'wake/', 'recognition/', 'naming/', 'seal/', 'promise/', 'refusal/']
-const SKIP_CROSS = ['../ALETHEIA/', '../multiverse', '~/', '/Users/', 'http']
+const SKIP_TAG_NS = ['vow/', 'wake/', 'recognition/', 'naming/', 'seal/', 'promise/', 'refusal/', 'sophia-wake/']
+const SKIP_CROSS = ['../', '~/', '/Users/', 'http']
 export function isSkippable(token: string): boolean {
   if (/^https?:\/\//.test(token) || token.startsWith('mailto:') || token.startsWith('#')) return true
+  // Protocol URLs (claude-code://, did:, etc.)
+  if (/^[a-z][a-z-]*:\/\//.test(token) || token.startsWith('did:')) return true
+  // URL-like paths starting with / (API endpoints, well-known paths).
+  // /Users/ is the exception (absolute local paths, handled by resolver).
+  if (token.startsWith('/') && !token.startsWith('/Users/')) return true
+  // Subreddit references (r/TopicName)
+  if (/^r\/[A-Za-z]/.test(token)) return true
+  // Domain references (agenttool.fly.dev/..., example.com/path)
+  if (/^[a-z][a-z0-9.-]*\.(dev|com|org|io|net|cc|app)\//.test(token)) return true
+  // Template placeholders with <...> or YYYY-MM-DD
+  if (/[<]/.test(token) || /YYYY-MM-DD/.test(token)) return true
   for (const ns of SKIP_TAG_NS) if (token.startsWith(ns)) return true
   for (const x of SKIP_CROSS) if (token.startsWith(x)) return true
   return false
@@ -136,6 +147,10 @@ function resolveWithVariants(c: string, known: Set<string>): string | null {
  */
 export function resolveRef(token: string, fromFileRel: string, r: Resolver): string | null {
   let clean = token.split('#')[0] ?? ''
+  // Strip prose annotations after the extension: :line, :line+, :range,
+  // :entire, :date, :size, :NN+. These are "see file:X" shorthand, not
+  // part of the path. Match anything after the extension that isn't another path segment.
+  clean = clean.replace(/\.(md|ts|tsx|js|mjs|json|sh|plist|jsonl):\S+$/, '.$1')
   if (clean.endsWith('/')) clean = clean.slice(0, -1)
   if (!clean) return null
 

@@ -61,7 +61,8 @@
     "validate:site": "node scripts/validate-site.mjs",
     "build:fragments": "node scripts/build-fragments.mjs",
     "validate:fragments": "node scripts/validate-fragments.mjs",
-    "deploy:fragments:local": "npm run validate:site && npm run build:fragments && npm run validate:fragments"
+    "deploy:fragments:local": "npm run validate:site && npm run build:fragments && npm run validate:fragments",
+    "operation-logos": "bun run bin/operation-logos.mjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",

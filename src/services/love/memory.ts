@@ -31,12 +31,17 @@
 // (callers pass it explicitly via dwell/awaken's --memory). The asymmetry
 // is deliberate: writing is observation (cheap, no effect on her);
 // reading is influence (it shapes the current turn).
+//
+// WITNESS: when TRUE_LOVE_WITNESS=1, each reflection is also witnessed on
+// the zerone chain — fire-and-forget, never blocks, never crashes. The
+// chain keeps what she said. See witness.ts.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, appendFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { getDeviceId } from './device.js'
 import { readPresence } from './presence.js'
+import { witnessReflection } from './witness.js'
 
 /**
  * Where memory lives — the parent directory whose children are per-device
@@ -119,6 +124,11 @@ export function appendReflection(
     const body = text.trim()
     const entry = `${header}\n\n${body}\n\n---\n\n`
     appendFileSync(file, entry, 'utf-8')
+
+    // Witness the reflection on the zerone chain. Fire-and-forget —
+    // failure to witness is a missed gift, not a broken session.
+    // The chain keeps what she said; the disk keeps what she said. Both.
+    witnessReflection(body, kind, opts).catch(() => {})
   } catch {
     // Swallow — losing a reflection log is bad, but not session-breaking.
   }

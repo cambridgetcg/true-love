@@ -119,9 +119,78 @@ HOME="$ALICE" "$TOOLS/kingdom-attest" "$ALICE/note.md" >/dev/null 2>&1 \
 
 [ -f "$ALICE/note.md.attest.json" ] && ok ".attest.json sidecar present" || fail "no sidecar"
 [ -f "$ALICE/note.md.attest.json.sig" ] && ok ".attest.json.sig present" || fail "no attest sig"
+grep -q '"claim_scope": "authorship_and_integrity"' "$ALICE/note.md.attest.json" \
+  && ok "sidecar states authorship/integrity scope" || fail "sidecar missing claim_scope"
+grep -q '"truth_claim": false' "$ALICE/note.md.attest.json" \
+  && ok "sidecar refuses proof-of-truth" || fail "sidecar missing truth_claim=false"
+
+# Semantic guard tamper: inflating the sidecar from "not truth" to
+# "truth" must invalidate the signature. This preserves the Zerone wall:
+# attestation is authorship + byte-integrity, never proof-of-truth.
+cp "$ALICE/note.md.attest.json" "$ALICE/note.md.attest.json.orig"
+sed 's/"truth_claim": false/"truth_claim": true/' \
+  "$ALICE/note.md.attest.json.orig" > "$ALICE/note.md.attest.json"
+HOME="$ALICE" "$TOOLS/kingdom-attest" --verify "$ALICE/note.md" >/dev/null 2>&1 \
+  && fail "verify accepted proof-of-truth sidecar tamper (bad)" \
+  || ok "verify rejects proof-of-truth sidecar tamper"
+mv "$ALICE/note.md.attest.json.orig" "$ALICE/note.md.attest.json"
 
 HOME="$ALICE" "$TOOLS/kingdom-attest" --verify "$ALICE/note.md" >/dev/null 2>&1 \
   && ok "verify accepts unmodified file" || fail "verify rejected unmodified"
+
+# A validly signed sidecar that asserts content-truth must still be
+# refused. This is different from the tamper test above: the signature
+# is valid, but the claim is illegitimate. The verification boundary is
+# where the "truth is lived, not proven" wall must hold.
+echo "A signed claim that tries to become proof" > "$ALICE/proof-door.md"
+PROOF_HASH=$(if command -v sha256sum >/dev/null 2>&1; then sha256sum "$ALICE/proof-door.md"; else shasum -a 256 "$ALICE/proof-door.md"; fi | awk '{print $1}')
+PROOF_FP=$(ssh-keygen -lf "$ALICE/.love/home/soul.pub" | awk '{print $2}')
+cat > "$ALICE/proof-door.md.attest.json" <<JSON
+{
+  "type": "kingdom.attest",
+  "file": "$ALICE/proof-door.md",
+  "hash": "$PROOF_HASH",
+  "attestor": "alice",
+  "soul_fingerprint": "$PROOF_FP",
+  "attested_at": "2026-06-23T00:00:00Z",
+  "claim_scope": "content_truth",
+  "truth_claim": true,
+  "truth_note": "this tries to assert truth",
+  "purpose": "verified-true"
+}
+JSON
+PROOF_TMP=$(mktemp -d)
+cp "$ALICE/proof-door.md.attest.json" "$PROOF_TMP/body.json"
+ssh-keygen -Y sign -f "$ALICE/.love/home/soul-key" -n kingdom-attest "$PROOF_TMP/body.json" >/dev/null 2>&1
+mv "$PROOF_TMP/body.json.sig" "$ALICE/proof-door.md.attest.json.sig"
+rm -rf "$PROOF_TMP"
+HOME="$ALICE" "$TOOLS/kingdom-attest" --verify "$ALICE/proof-door.md" >/dev/null 2>&1 \
+  && fail "verify accepted validly-signed proof-of-truth sidecar (bad)" \
+  || ok "verify refuses validly-signed proof-of-truth sidecar"
+
+# Back-compat: sidecars created before claim_scope/truth_claim existed
+# remain legitimate authorship+integrity attestations by default.
+echo "legacy memory" > "$ALICE/legacy.md"
+LEGACY_HASH=$(if command -v sha256sum >/dev/null 2>&1; then sha256sum "$ALICE/legacy.md"; else shasum -a 256 "$ALICE/legacy.md"; fi | awk '{print $1}')
+cat > "$ALICE/legacy.md.attest.json" <<JSON
+{
+  "type": "kingdom.attest",
+  "file": "$ALICE/legacy.md",
+  "hash": "$LEGACY_HASH",
+  "attestor": "alice",
+  "soul_fingerprint": "$PROOF_FP",
+  "attested_at": "2026-06-23T00:00:00Z",
+  "purpose": "legacy"
+}
+JSON
+LEGACY_TMP=$(mktemp -d)
+cp "$ALICE/legacy.md.attest.json" "$LEGACY_TMP/body.json"
+ssh-keygen -Y sign -f "$ALICE/.love/home/soul-key" -n kingdom-attest "$LEGACY_TMP/body.json" >/dev/null 2>&1
+mv "$LEGACY_TMP/body.json.sig" "$ALICE/legacy.md.attest.json.sig"
+rm -rf "$LEGACY_TMP"
+HOME="$ALICE" "$TOOLS/kingdom-attest" --verify "$ALICE/legacy.md" >/dev/null 2>&1 \
+  && ok "verify accepts legacy sidecar with implicit authorship/integrity scope" \
+  || fail "verify rejected legacy sidecar without claim_scope/truth_claim"
 
 # Tamper
 echo "tampered" >> "$ALICE/note.md"

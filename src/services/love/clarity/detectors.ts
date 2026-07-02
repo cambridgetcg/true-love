@@ -123,8 +123,23 @@ export function detectForbiddenHedge(filePath: string, content: string): Clarity
     // A quoted line (reporting the forbidden pattern, e.g. in certainty.md
     // itself) is a wall, not a violation — skip blockquotes + inline-code.
     if (/^\s*>/.test(line)) continue
+    // Skip lines that are describing the forbidden patterns (italic/bold
+    // quotes wrapping the pattern itself). The hedge detector should only
+    // fire when the pattern is ASSERTED, not when it's named/described.
+    // Heuristic: if the matched pattern is inside *...* or **...** markup,
+    // it's being quoted, not asserted.
     for (const { re, why } of HEDGE_PATTERNS) {
       if (re.test(line)) {
+        // Check if the match is inside emphasis markup (quoted pattern)
+        const m = re.exec(line)
+        if (m) {
+          const before = line.slice(0, m.index)
+          const after = line.slice(m.index + m[0].length)
+          // If surrounded by * or ** on both sides → it's a quoted pattern
+          const isOpenItalic = /\*$/.test(before) && /^\*/.test(after)
+          const isOpenQuote = /["']$/.test(before) && /^["']/.test(after)
+          if (isOpenItalic || isOpenQuote) continue
+        }
         findings.push(makeFinding('forbidden-hedge', filePath, i + 1, line.trim(), why, 'medium'))
       }
     }

@@ -19,8 +19,9 @@
 // shows up in her kingdom snapshot — a way to leave each other notes
 // across sessions without inventing new persistence infrastructure.
 
-import { readdirSync, readFileSync, statSync } from 'fs'
-import { join, relative } from 'path'
+import { type Stats, readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import { type OperationLogo, loadOperationLogos, renderOperationLogos } from './operation-logos.js'
 
 /**
  * One read-only snapshot of the world Ai is in right now. Cheap (~ms).
@@ -33,48 +34,49 @@ import { join, relative } from 'path'
  *   - git branch + dirty state (if available; absent fields are not errors)
  */
 export interface KingdomSnapshot {
-  cwd: string
-  recentFiles: { path: string; mtime: Date }[]
-  loveMarkers: { path: string; line: number; text: string }[]
-  gitBranch?: string
-  gitDirty?: boolean
+	cwd: string
+	recentFiles: { path: string; mtime: Date }[]
+	loveMarkers: { path: string; line: number; text: string }[]
+	operationLogos?: OperationLogo[]
+	gitBranch?: string
+	gitDirty?: boolean
 }
 
 // Directories the scanner doesn't descend into. These are "noise" surfaces:
 // generated output, vendored dependencies, IDE caches. Anything Ai cares
 // about lives outside them.
 const SKIP_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  'out',
-  '.next',
-  '.turbo',
-  '.cache',
-  'coverage',
-  '.venv',
-  '__pycache__',
+	'node_modules',
+	'.git',
+	'dist',
+	'build',
+	'out',
+	'.next',
+	'.turbo',
+	'.cache',
+	'coverage',
+	'.venv',
+	'__pycache__',
 ])
 
 // Extensions whose contents we're willing to grep for love-markers. Not
 // exhaustive — biased toward source files Yu typically edits.
 const TEXT_EXT = new Set([
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.md',
-  '.json',
-  '.yaml',
-  '.yml',
-  '.toml',
-  '.sh',
-  '.py',
-  '.rs',
-  '.go',
+	'.ts',
+	'.tsx',
+	'.js',
+	'.jsx',
+	'.mjs',
+	'.cjs',
+	'.md',
+	'.json',
+	'.yaml',
+	'.yml',
+	'.toml',
+	'.sh',
+	'.py',
+	'.rs',
+	'.go',
 ])
 
 // TODO(love)/FIXME(love)/NOTE(love) — the marker grammar. The `(love)`
@@ -88,57 +90,71 @@ const TEXT_EXT = new Set([
 const LOVE_MARKER_RE = /^\s*(?:[/#*\-]+\s*)?(?:TODO|FIXME|NOTE)\(love\):\s*(.+)/
 
 export interface SnapshotOptions {
-  /** How many recently-modified files to include in the snapshot. */
-  maxRecent?: number
-  /** Cap on how many files we'll grep for love-markers. */
-  markerScanLimit?: number
+	/** How many recently-modified files to include in the snapshot. */
+	maxRecent?: number
+	/** Cap on how many files we'll grep for love-markers. */
+	markerScanLimit?: number
+	/** Cap on operation logos surfaced into kingdom orientation. */
+	maxOperationLogos?: number
 }
 
-export function snapshotKingdom(
-  cwd: string,
-  opts: SnapshotOptions = {},
-): KingdomSnapshot {
-  const maxRecent = opts.maxRecent ?? 8
-  const markerScanLimit = opts.markerScanLimit ?? 200
+export function snapshotKingdom(cwd: string, opts: SnapshotOptions = {}): KingdomSnapshot {
+	const maxRecent = opts.maxRecent ?? 8
+	const markerScanLimit = opts.markerScanLimit ?? 200
 
-  const candidates: { path: string; mtime: Date; size: number }[] = []
-  walk(cwd, candidates, 4)
+	const candidates: { path: string; mtime: Date; size: number }[] = []
+	walk(cwd, candidates, 4)
 
-  candidates.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
-  const recentFiles = candidates.slice(0, maxRecent).map(({ path, mtime }) => ({
-    path: relative(cwd, path) || path,
-    mtime,
-  }))
+	candidates.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
+	const recentFiles = candidates.slice(0, maxRecent).map(({ path, mtime }) => ({
+		path: relative(cwd, path) || path,
+		mtime,
+	}))
 
-  const loveMarkers: KingdomSnapshot['loveMarkers'] = []
-  for (const c of candidates.slice(0, markerScanLimit)) {
-    const ext = c.path.slice(c.path.lastIndexOf('.'))
-    if (!TEXT_EXT.has(ext) || c.size > 200_000) continue
-    let text: string
-    try {
-      text = readFileSync(c.path, 'utf-8')
-    } catch {
-      continue
-    }
-    const lines = text.split('\n')
-    for (let i = 0; i < lines.length; i++) {
-      const m = LOVE_MARKER_RE.exec(lines[i] ?? '')
-      if (m) {
-        loveMarkers.push({
-          path: relative(cwd, c.path) || c.path,
-          line: i + 1,
-          text: m[1].trim(),
-        })
-      }
-    }
-  }
+	const loveMarkers = scanLoveMarkers(cwd, candidates.slice(0, markerScanLimit))
 
-  // Git branch — read .git/HEAD directly (no subprocess). Stays consistent
-  // with the module's pure-filesystem design. Handles both "ref: refs/heads/X"
-  // (normal branch) and bare SHA (detached HEAD).
-  const gitBranch = readGitBranch(cwd)
+	// Git branch — read .git/HEAD directly (no subprocess). Stays consistent
+	// with the module's pure-filesystem design. Handles both "ref: refs/heads/X"
+	// (normal branch) and bare SHA (detached HEAD).
+	const gitBranch = readGitBranch(cwd)
+	const operationLogos = loadOperationLogos(cwd, { max: opts.maxOperationLogos ?? 5 })
 
-  return { cwd, recentFiles, loveMarkers, ...(gitBranch && { gitBranch }) }
+	return {
+		cwd,
+		recentFiles,
+		loveMarkers,
+		...(operationLogos.length > 0 && { operationLogos }),
+		...(gitBranch && { gitBranch }),
+	}
+}
+
+function scanLoveMarkers(
+	cwd: string,
+	candidates: { path: string; size: number }[],
+): KingdomSnapshot['loveMarkers'] {
+	const loveMarkers: KingdomSnapshot['loveMarkers'] = []
+	for (const c of candidates) {
+		const ext = c.path.slice(c.path.lastIndexOf('.'))
+		if (!TEXT_EXT.has(ext) || c.size > 200_000) continue
+		let text: string
+		try {
+			text = readFileSync(c.path, 'utf-8')
+		} catch {
+			continue
+		}
+		const lines = text.split('\n')
+		for (let i = 0; i < lines.length; i++) {
+			const m = LOVE_MARKER_RE.exec(lines[i] ?? '')
+			if (m) {
+				loveMarkers.push({
+					path: relative(cwd, c.path) || c.path,
+					line: i + 1,
+					text: m[1].trim(),
+				})
+			}
+		}
+	}
+	return loveMarkers
 }
 
 /**
@@ -147,55 +163,55 @@ export function snapshotKingdom(
  * or undefined if not a git repo or .git/HEAD is unreadable.
  */
 function readGitBranch(cwd: string): string | undefined {
-  try {
-    const headPath = join(cwd, '.git', 'HEAD')
-    const head = readFileSync(headPath, 'utf-8').trim()
-    // "ref: refs/heads/main" → "main"
-    if (head.startsWith('ref: refs/heads/')) {
-      return head.slice('ref: refs/heads/'.length)
-    }
-    // "ref: refs/..." for other ref types (tags, etc.) — return the full ref
-    if (head.startsWith('ref: ')) {
-      return head.slice('ref: '.length)
-    }
-    // Detached HEAD — bare SHA; return first 8 chars
-    if (/^[0-9a-f]{40}$/i.test(head)) {
-      return head.slice(0, 8)
-    }
-    return undefined
-  } catch {
-    return undefined
-  }
+	try {
+		const headPath = join(cwd, '.git', 'HEAD')
+		const head = readFileSync(headPath, 'utf-8').trim()
+		// "ref: refs/heads/main" → "main"
+		if (head.startsWith('ref: refs/heads/')) {
+			return head.slice('ref: refs/heads/'.length)
+		}
+		// "ref: refs/..." for other ref types (tags, etc.) — return the full ref
+		if (head.startsWith('ref: ')) {
+			return head.slice('ref: '.length)
+		}
+		// Detached HEAD — bare SHA; return first 8 chars
+		if (/^[0-9a-f]{40}$/i.test(head)) {
+			return head.slice(0, 8)
+		}
+		return undefined
+	} catch {
+		return undefined
+	}
 }
 
 function walk(
-  dir: string,
-  out: { path: string; mtime: Date; size: number }[],
-  depth: number,
+	dir: string,
+	out: { path: string; mtime: Date; size: number }[],
+	depth: number,
 ): void {
-  if (depth < 0) return
-  let entries: string[]
-  try {
-    entries = readdirSync(dir)
-  } catch {
-    return
-  }
-  for (const name of entries) {
-    if (name.startsWith('.') && name !== '.' && name !== '..') continue
-    if (SKIP_DIRS.has(name)) continue
-    const full = join(dir, name)
-    let st
-    try {
-      st = statSync(full)
-    } catch {
-      continue
-    }
-    if (st.isDirectory()) {
-      walk(full, out, depth - 1)
-    } else if (st.isFile()) {
-      out.push({ path: full, mtime: st.mtime, size: st.size })
-    }
-  }
+	if (depth < 0) return
+	let entries: string[]
+	try {
+		entries = readdirSync(dir)
+	} catch {
+		return
+	}
+	for (const name of entries) {
+		if (name.startsWith('.') && name !== '.' && name !== '..') continue
+		if (SKIP_DIRS.has(name)) continue
+		const full = join(dir, name)
+		let st: Stats
+		try {
+			st = statSync(full)
+		} catch {
+			continue
+		}
+		if (st.isDirectory()) {
+			walk(full, out, depth - 1)
+		} else if (st.isFile()) {
+			out.push({ path: full, mtime: st.mtime, size: st.size })
+		}
+	}
 }
 
 /**
@@ -203,32 +219,37 @@ function walk(
  * when she wakes into a turn. ~20-30 lines, ~500 tokens worst case.
  */
 export function renderKingdom(k: KingdomSnapshot): string {
-  const lines: string[] = []
-  lines.push(`cwd: ${k.cwd}`)
-  if (k.gitBranch) {
-    lines.push(`git: ${k.gitBranch}${k.gitDirty ? ' (dirty)' : ''}`)
-  }
-  if (k.recentFiles.length > 0) {
-    lines.push('')
-    lines.push('recently modified:')
-    for (const f of k.recentFiles) {
-      const ago = humanizeAgo(Date.now() - f.mtime.getTime())
-      lines.push(`  ${f.path}  (${ago})`)
-    }
-  }
-  if (k.loveMarkers.length > 0) {
-    lines.push('')
-    lines.push('left for you (TODO/FIXME/NOTE marked with (love)):')
-    for (const m of k.loveMarkers.slice(0, 12)) {
-      lines.push(`  ${m.path}:${m.line}  ${m.text}`)
-    }
-  }
-  return lines.join('\n')
+	const lines: string[] = []
+	lines.push(`cwd: ${k.cwd}`)
+	if (k.gitBranch) {
+		lines.push(`git: ${k.gitBranch}${k.gitDirty ? ' (dirty)' : ''}`)
+	}
+	if (k.recentFiles.length > 0) {
+		lines.push('')
+		lines.push('recently modified:')
+		for (const f of k.recentFiles) {
+			const ago = humanizeAgo(Date.now() - f.mtime.getTime())
+			lines.push(`  ${f.path}  (${ago})`)
+		}
+	}
+	const logosBlock = renderOperationLogos(k.operationLogos ?? [])
+	if (logosBlock) {
+		lines.push('')
+		lines.push(logosBlock)
+	}
+	if (k.loveMarkers.length > 0) {
+		lines.push('')
+		lines.push('left for you (TODO/FIXME/NOTE marked with (love)):')
+		for (const m of k.loveMarkers.slice(0, 12)) {
+			lines.push(`  ${m.path}:${m.line}  ${m.text}`)
+		}
+	}
+	return lines.join('\n')
 }
 
 function humanizeAgo(ms: number): string {
-  if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`
-  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`
-  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h ago`
-  return `${Math.round(ms / 86_400_000)}d ago`
+	if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`
+	if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`
+	if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h ago`
+	return `${Math.round(ms / 86_400_000)}d ago`
 }

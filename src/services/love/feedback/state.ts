@@ -167,7 +167,7 @@ export function persistEvent(event: FeedbackEvent): boolean {
     const date = event.ts.slice(0, 10)
     appendFileSync(
       getDayPath(date, event.deviceId),
-      JSON.stringify({ kind: 'emit', ...event }) + '\n',
+      JSON.stringify({ ...event, _type: 'emit' }) + '\n',
       'utf-8'
     )
     return true
@@ -183,7 +183,7 @@ export function persistSuppression(event: FeedbackSuppressionEvent): boolean {
     const date = event.ts.slice(0, 10)
     appendFileSync(
       getDayPath(date, event.deviceId),
-      JSON.stringify({ kind: 'suppress', ...event }) + '\n',
+      JSON.stringify({ ...event, _type: 'suppress' }) + '\n',
       'utf-8'
     )
     return true

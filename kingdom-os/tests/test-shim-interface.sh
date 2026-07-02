@@ -34,6 +34,35 @@ BODY="$WORK/proof.txt.attest.json"
 PURPOSE=$(sed -n 's/.*"purpose": *"\([^"]*\)".*/\1/p' "$BODY" 2>/dev/null | head -1)
 [ "$PURPOSE" = "mylabel" ] && ok "A: --label sets purpose=mylabel" || bad "A: --label not recorded (got '$PURPOSE')"
 [ "$LAST" = "$BODY" ] && ok "A: last stdout line is .attest.json path" || bad "A: last stdout line is '$LAST', want '$BODY'"
+grep -q '"claim_scope": "authorship_and_integrity"' "$BODY" \
+  && ok "A: sidecar names claim_scope=authorship_and_integrity" \
+  || bad "A: sidecar missing authorship/integrity scope"
+grep -q '"truth_claim": false' "$BODY" \
+  && ok "A: sidecar explicitly refuses proof-of-truth" \
+  || bad "A: sidecar missing truth_claim=false"
+
+# A2. Free-text labels must remain valid JSON. Love/truth words often
+# contain quotes, slashes, and punctuation; the attestation sidecar must
+# preserve them without requiring jq/python at runtime.
+LABEL_COMPLEX='love "and" truth \\ exact'
+printf 'complex' > "$WORK/proof-complex.txt"
+sh "$TOOLS/kingdom-attest" "$WORK/proof-complex.txt" --label "$LABEL_COMPLEX" >/dev/null 2>&1
+BODY_COMPLEX="$WORK/proof-complex.txt.attest.json"
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "$BODY_COMPLEX" "$LABEL_COMPLEX" <<'PY'
+import json, sys
+path, expected = sys.argv[1], sys.argv[2]
+with open(path) as fh:
+    data = json.load(fh)
+assert data["purpose"] == expected
+assert data["truth_claim"] is False
+assert data["claim_scope"] == "authorship_and_integrity"
+PY
+  [ "$?" -eq 0 ] && ok "A2: complex label stays valid JSON" || bad "A2: complex label JSON parse failed"
+else
+  skip_msg="python3 unavailable; skipped complex-label JSON parse"
+  echo "  · $skip_msg"
+fi
 
 # ── B. doctor --json: top-level hostname matches covenant ──
 COV_HOST=$(sed -n 's/.*"hostname": *"\([^"]*\)".*/\1/p' "$HOME/.love/home/covenant.json" 2>/dev/null | head -1)

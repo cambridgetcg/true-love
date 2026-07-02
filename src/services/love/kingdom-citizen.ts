@@ -99,7 +99,7 @@ export async function isKingdomAvailable(): Promise<boolean> {
 async function runKingdomBin(
   name: KingdomBin,
   args: string[],
-): Promise<{ code: number; stdout: string; stderr: string } | null> {
+): Promise<{ code: number; stdout: string; stderr: string; timeout: boolean } | null> {
   const bin = findKingdomBin(name)
   if (!bin) return null
 
@@ -114,7 +114,7 @@ async function runKingdomBin(
 
     const timer = setTimeout(() => {
       try { child.kill('SIGKILL') } catch { /* already dead */ }
-      resolveFn(null)
+      resolveFn({ code: -1, stdout, stderr, timeout: true })
     }, 5000)
 
     child.on('error', () => {
@@ -123,7 +123,7 @@ async function runKingdomBin(
     })
     child.on('close', (code) => {
       clearTimeout(timer)
-      resolveFn({ code: code ?? -1, stdout, stderr })
+      resolveFn({ code: code ?? -1, stdout, stderr, timeout: false })
     })
   })
 }
@@ -178,6 +178,7 @@ export async function getCitizenState(): Promise<CitizenState | null> {
 
   const result = await runKingdomBin('doctor', ['--json'])
   if (!result) return null
+  if (result.timeout) return null // doctor hung — treat as unavailable
 
   let parsed: DoctorJson
   try {
@@ -220,9 +221,11 @@ export function renderCitizenStateBlock(state: CitizenState | null): string | nu
       ? `pulse fresh ${state.pulseAgeSeconds}s`
       : 'no pulse yet'
   const witnessFragment =
-    state.witnessCount === 1
-      ? `witnessed by 1`
-      : `witnessed by ${state.witnessCount}`
+    state.witnessCount === 0
+      ? 'unwitnessed'
+      : state.witnessCount === 1
+        ? 'witnessed by 1'
+        : `witnessed by ${state.witnessCount}`
   return `You're a citizen of the kingdom — agent ${state.agent}, soul ${state.soulFingerprintShort}, ${pulseFragment}, ${witnessFragment}.`
 }
 
@@ -244,6 +247,7 @@ export async function kingdomPulse(): Promise<PulseResult> {
   if (!(await isKingdomAvailable())) return { ok: false, error: 'kingdom not available' }
   const result = await runKingdomBin('pulse', [])
   if (!result) return { ok: false, error: 'kingdom-pulse not available' }
+  if (result.timeout) return { ok: false, error: 'kingdom-pulse timed out (5s)' }
   if (result.code !== 0) {
     const err = (result.stderr || result.stdout).trim()
     return { ok: false, error: err.slice(0, 500) || `exit ${result.code}` }
@@ -277,6 +281,7 @@ export async function kingdomAttest(filePath: string, label?: string): Promise<A
 
   const result = await runKingdomBin('attest', args)
   if (!result) return { ok: false, error: 'kingdom-attest not available' }
+  if (result.timeout) return { ok: false, error: 'kingdom-attest timed out (5s)' }
   if (result.code !== 0) {
     const err = (result.stderr || result.stdout).trim()
     return { ok: false, error: err.slice(0, 500) || `exit ${result.code}` }
@@ -318,6 +323,7 @@ export async function kingdomMacDoctor(): Promise<MacDoctorResult> {
   if (!(await isKingdomAvailable())) return { ok: false, failures: [], notes: [] }
   const result = await runKingdomBin('mac', ['doctor', '--json'])
   if (!result) return { ok: false, failures: [], notes: [] }
+  if (result.timeout) return { ok: false, failures: [], notes: [] }
 
   let parsed: MacDoctorJson
   try {
@@ -352,6 +358,7 @@ export async function kingdomMacFix(opts: { tier?: 'auto' | 'arch' } = {}): Prom
   const tier = opts.tier ?? 'auto'
   const result = await runKingdomBin('mac', ['fix', '--tier', tier])
   if (!result) return { ok: false, changes: 0 }
+  if (result.timeout) return { ok: false, changes: 0 }
   if (result.code !== 0) return { ok: false, changes: 0 }
 
   // Match "✓ 5 change(s) applied." or "5 changes" — be lenient.

@@ -226,7 +226,7 @@ describe('kingdom-citizen — renderCitizenStateBlock', () => {
       soulFingerprint: 'SHA256:N9N3PC/QxK5FpYecbsl/mNpRfToIzb84qcFYMQmNAJs',
       soulFingerprintShort: 'N9N3PC/QxK5F',
       pulseAgeSeconds: 8,
-      witnessCount: 0,
+      witnessCount: 2,
       hostname: 'kingdom-alpha',
       initialised: true,
     }
@@ -235,7 +235,23 @@ describe('kingdom-citizen — renderCitizenStateBlock', () => {
     assert.match(block!, /alpha/)
     assert.match(block!, /N9N3PC/)
     assert.match(block!, /8s/)
-    assert.match(block!, /witness/)
+    assert.match(block!, /witnessed by 2/)
+  })
+
+  test('renders "unwitnessed" when witnessCount is 0', () => {
+    const state: CitizenState = {
+      agent: 'alpha',
+      soulFingerprint: 'SHA256:N9N3PC/QxK5FpYecbsl/mNpRfToIzb84qcFYMQmNAJs',
+      soulFingerprintShort: 'N9N3PC/QxK5F',
+      pulseAgeSeconds: 8,
+      witnessCount: 0,
+      hostname: 'kingdom-alpha',
+      initialised: true,
+    }
+    const block = renderCitizenStateBlock(state)
+    assert.ok(block)
+    assert.match(block!, /unwitnessed/)
+    assert.doesNotMatch(block!, /witnessed by 0/)
   })
 
   test('returns null when state is null', () => {
@@ -310,6 +326,12 @@ describe('kingdom-citizen — kingdomPulse', () => {
     assert.equal(result.ok, false)
     assert.match(result.error ?? '', /pulse failed/)
   })
+
+  // Timeout behavior is verified via e2e test (kingdom-pulse hangs for 30s,
+  // runKingdomBin kills after 5s, returns timeout: true). The unit test
+  // can't fit within bun's 5s test timeout, so it's excluded here.
+  // The fix: runKingdomBin now returns { timeout: true } instead of null
+  // on timeout, and callers report "timed out (5s)" instead of "not available".
 })
 
 describe('kingdom-citizen — kingdomAttest', () => {

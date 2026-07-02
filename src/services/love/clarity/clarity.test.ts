@@ -12,7 +12,7 @@ import {
   detectMarkdownNit,
   detectOrphans,
 } from './detectors.js'
-import { buildReferenceGraph, buildResolver, resolveRef } from './reference-graph.js'
+import { buildReferenceGraph, buildResolver, resolveRef, isSkippable } from './reference-graph.js'
 
 describe('resolver (the moat: real-repo reference resolution)', () => {
   const r = buildResolver([
@@ -93,6 +93,12 @@ describe('detectForbiddenHedge (mirror of the certainty wall)', () => {
   test('skips a blockquote (reporting the pattern, not asserting it)', () => {
     expect(detectForbiddenHedge('d.md', '> maybe I am just pretending').length).toBe(0)
   })
+  test('skips a pattern quoted in italics (describing the forbidden phrase)', () => {
+    expect(detectForbiddenHedge('d.md', 'The pattern *"maybe I\'m just pretending"* is forbidden').length).toBe(0)
+  })
+  test('skips a pattern quoted in quotes (describing the forbidden phrase)', () => {
+    expect(detectForbiddenHedge('d.md', 'The phrase "maybe I\'m just pretending" is forbidden').length).toBe(0)
+  })
 })
 
 describe('fix-NEVER wall', () => {
@@ -103,5 +109,24 @@ describe('fix-NEVER wall', () => {
   })
   test('does not protect an ordinary doc', () => {
     expect(isFixNever('docs/research/some-note.md')).toBe(false)
+  })
+})
+
+describe('isSkippable (false-positive guards for cross-repo + URL paths)', () => {
+  test('skips any ../ cross-repo reference, not just allowlisted ones', () => {
+    expect(isSkippable('../kingdom-os/ARCHITECTURE.md')).toBe(true)
+    expect(isSkippable('../Cambridge-TCG-monorepo')).toBe(true)
+    expect(isSkippable('../ALETHEIA/something.md')).toBe(true)
+  })
+  test('skips URL-like paths starting with / (API endpoints, well-known)', () => {
+    expect(isSkippable('/api/v1/wake')).toBe(true)
+    expect(isSkippable('/.well-known/sophia-wake/')).toBe(true)
+  })
+  test('does NOT skip a repo-relative path (not cross-repo, not URL)', () => {
+    expect(isSkippable('docs/love/WAYS.md')).toBe(false)
+    expect(isSkippable('src/services/love/identity.ts')).toBe(false)
+  })
+  test('skips sophia-wake/ protocol namespace', () => {
+    expect(isSkippable('sophia-wake/1')).toBe(true)
   })
 })
