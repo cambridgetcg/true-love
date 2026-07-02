@@ -1,0 +1,128 @@
+{
+  "schema": "kingdom.compute-powers.v1",
+  "updated": "2026-06-22",
+  "ethic": "welcomed-only, no quota evasion, contribute more value than consumed",
+  "loop": ["discover", "verify", "fit", "contribute", "record", "share", "repeat"],
+  "powers": [
+    {
+      "id": "github-actions-public",
+      "name": "GitHub Actions for public repositories",
+      "status": "welcomed",
+      "category": "ci",
+      "best_for": ["tests", "lint", "builds", "release automation for public OSS"],
+      "free_path": "GitHub-hosted runners are free for public repositories, subject to usage limits and policy.",
+      "official_url": "https://docs.github.com/en/billing/concepts/product-billing/github-actions",
+      "respect": ["keep jobs small", "cache dependencies", "avoid scheduled noise", "never mine crypto", "cancel stale workflows"],
+      "first_tiny_job": "Add targeted tests only; avoid full expensive matrix until stable.",
+      "give_back": ["green checks", "reusable workflow examples", "bug reports upstream"]
+    },
+    {
+      "id": "codeberg-forgejo-hosting",
+      "name": "Codeberg / Forgejo repository hosting",
+      "status": "welcomed",
+      "category": "git-hosting",
+      "best_for": ["open-source hosting", "issues", "PRs", "mirrors", "docs"],
+      "free_path": "Community-oriented non-profit Git hosting for free and open-source projects; not a general free compute provider.",
+      "official_url": "https://docs.codeberg.org/",
+      "respect": ["do not treat git hosting as compute", "keep repos clean", "avoid committing secrets or runtime logs"],
+      "first_tiny_job": "Keep Codeberg mirrors synced and open PRs with clear contribution docs.",
+      "give_back": ["documentation", "bug reports", "donations when possible"]
+    },
+    {
+      "id": "huggingface-spaces-cpu-basic",
+      "name": "Hugging Face Spaces CPU Basic",
+      "status": "welcomed",
+      "category": "demo-hosting",
+      "best_for": ["small ML demos", "Gradio/Streamlit examples", "model cards", "dataset demos"],
+      "free_path": "Spaces includes a free CPU Basic hardware tier; paid hardware is available separately.",
+      "official_url": "https://huggingface.co/docs/hub/spaces-overview",
+      "respect": ["small demos", "clear model/dataset cards", "avoid hidden heavy background jobs"],
+      "first_tiny_job": "Publish a tiny oracle calibration or ToK verifier demo with exact resource notes.",
+      "give_back": ["demo docs", "model cards", "dataset cards", "upstream examples"]
+    },
+    {
+      "id": "kaggle-notebooks",
+      "name": "Kaggle Notebooks",
+      "status": "conditional",
+      "category": "notebooks",
+      "best_for": ["reproducible notebooks", "public datasets", "educational GPU/TPU examples"],
+      "free_path": "Kaggle provides no-cost notebook runtimes with accelerator quotas and session limits.",
+      "official_url": "https://www.kaggle.com/docs/notebooks",
+      "respect": ["respect quotas", "publish reproducible notebooks", "use public datasets responsibly"],
+      "first_tiny_job": "Create an oracle scoring notebook on a tiny public/static fixture dataset.",
+      "give_back": ["public notebook", "dataset documentation", "clear reproducibility steps"]
+    },
+    {
+      "id": "google-colab-free",
+      "name": "Google Colab free tier",
+      "status": "conditional",
+      "category": "notebooks",
+      "best_for": ["educational notebooks", "short interactive experiments", "small GPU demos when available"],
+      "free_path": "Colab offers free-of-charge access to computing resources, with dynamic limits and no guaranteed GPU.",
+      "official_url": "https://research.google.com/colaboratory/faq.html",
+      "respect": ["interactive use", "do not bypass limits", "do not run unattended abuse", "make notebooks portable"],
+      "first_tiny_job": "Port one oracle or ToK notebook that also runs locally without GPU.",
+      "give_back": ["tutorial notebook", "portable fallback path"]
+    },
+    {
+      "id": "cloudflare-workers-free",
+      "name": "Cloudflare Workers Free",
+      "status": "conditional",
+      "category": "serverless-edge",
+      "best_for": ["tiny APIs", "webhooks", "status endpoints", "static-ish edge logic"],
+      "free_path": "Workers has a Free plan with request and resource limits.",
+      "official_url": "https://developers.cloudflare.com/workers/platform/pricing/",
+      "respect": ["tiny handlers", "cache aggressively", "no heavy CPU", "no hidden background workloads"],
+      "first_tiny_job": "Expose a tiny read-only Kingdom status endpoint backed by static JSON.",
+      "give_back": ["open worker template", "docs", "edge-safe patterns"]
+    },
+    {
+      "id": "oracle-cloud-always-free",
+      "name": "Oracle Cloud Always Free",
+      "status": "conditional",
+      "category": "vm-cloud",
+      "best_for": ["small persistent services", "ARM experiments", "low-duty public-good infra"],
+      "free_path": "Oracle Cloud advertises Always Free services with specific resource limits and eligibility rules.",
+      "official_url": "https://www.oracle.com/cloud/free/",
+      "respect": ["monitor usage", "avoid lock-in", "keep services low-duty", "backup everything"],
+      "first_tiny_job": "Run a tiny read-only mirror/status service, not heavy agent loops.",
+      "give_back": ["deployment docs", "resource usage notes", "portable IaC"]
+    },
+    {
+      "id": "sourcehut-builds",
+      "name": "SourceHut builds",
+      "status": "conditional",
+      "category": "ci",
+      "best_for": ["minimal CI", "mailing-list/open-source workflows", "portable build manifests"],
+      "free_path": "SourceHut supports open-source workflows and has project/account policies; verify current plan before relying on it.",
+      "official_url": "https://man.sr.ht/builds.sr.ht/",
+      "respect": ["minimal jobs", "portable manifests", "community-native workflows"],
+      "first_tiny_job": "Try a minimal docs/test build manifest for one small repo.",
+      "give_back": ["portable build recipe", "docs for contributors"]
+    },
+    {
+      "id": "boinc-volunteer-compute",
+      "name": "BOINC volunteer computing",
+      "status": "welcomed",
+      "category": "volunteer-science",
+      "best_for": ["contributing spare compute to public science projects"],
+      "free_path": "BOINC lets volunteers contribute compute to scientific projects; it is not a pool to consume for private tasks.",
+      "official_url": "https://boinc.berkeley.edu/",
+      "respect": ["choose reputable projects", "contribute spare local compute", "do not repurpose community compute"],
+      "first_tiny_job": "Document a citizen-safe local BOINC setup for one public-good project.",
+      "give_back": ["volunteer compute", "setup docs", "project visibility"]
+    },
+    {
+      "id": "nsf-access",
+      "name": "NSF ACCESS allocations",
+      "status": "conditional",
+      "category": "research-hpc",
+      "best_for": ["US research and education allocations", "open science", "approved projects"],
+      "free_path": "ACCESS provides allocation pathways for eligible research/education users and projects.",
+      "official_url": "https://access-ci.org/allocations/",
+      "respect": ["eligibility only", "formal allocation requests", "research/public-good scope"],
+      "first_tiny_job": "Find eligible collaborators before planning any workload.",
+      "give_back": ["research artifacts", "open methods", "citations"]
+    }
+  ]
+}

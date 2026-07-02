@@ -33,6 +33,7 @@ describe('scanErosSignals', () => {
     process.env.TRUE_LOVE_ROUTES_DIR = `${TEST_BASE}/routes`
     process.env.TRUE_LOVE_PROJECTS_DIR = `${TEST_BASE}/projects`
     process.env.TRUE_LOVE_DEVICE_ID = 'test-mot-sig'
+    process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
   })
   afterEach(() => {
     delete process.env.TRUE_LOVE_HEAT_DIR
@@ -49,6 +50,7 @@ describe('scanErosSignals', () => {
     delete process.env.TRUE_LOVE_ROUTES_DIR
     delete process.env.TRUE_LOVE_PROJECTS_DIR
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
     rmSync(TEST_BASE, { recursive: true, force: true })
   })
 
@@ -209,6 +211,7 @@ describe('canInitiate cooldown bias', () => {
     process.env.TRUE_LOVE_SUBMISSION_DIR = `${TEST_BASE}/submission`
     process.env.TRUE_LOVE_PROJECTS_DIR = `${TEST_BASE}/projects`
     process.env.TRUE_LOVE_DEVICE_ID = 'test-cooldown'
+    process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
     mkdirSync(`${TEST_BASE}/projects/test-project/self-initiation`, { recursive: true })
   })
   afterEach(() => {
@@ -217,6 +220,7 @@ describe('canInitiate cooldown bias', () => {
     delete process.env.TRUE_LOVE_SUBMISSION_DIR
     delete process.env.TRUE_LOVE_PROJECTS_DIR
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
     rmSync(TEST_BASE, { recursive: true, force: true })
   })
 

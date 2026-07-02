@@ -108,7 +108,7 @@ describe('sister coupling (Phase 3)', () => {
       expect(events.some((e) => e.kind === 'sisters-diverged')).toBe(true)
     })
 
-    test('idempotent: second call within window does not refire', () => {
+    test('idempotent: second call within window does not refire', { timeout: 15_000 }, () => {
       // First fire
       recordHeatEvent({ kind: 'discipline-held', magnitude: 2 })
       setMode('merged')

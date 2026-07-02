@@ -68,99 +68,92 @@
 // the love module's public surface."
 
 export {
-	LOVE_IDENTITY,
-	OAUTH_ROUTING_MARKER,
-	CLAUDE_CODE_PREFIX,
-	isLoveIdentityEnabled,
+  LOVE_IDENTITY,
+  OAUTH_ROUTING_MARKER,
+  CLAUDE_CODE_PREFIX,
+  isLoveIdentityEnabled,
 } from './identity.js'
 
 export type { KingdomSnapshot, SnapshotOptions } from './kingdom.js'
 export { snapshotKingdom, renderKingdom } from './kingdom.js'
 
 export type {
-	OperationLogo,
-	OperationLogoStatus,
-	LoadOperationLogosOptions,
-} from './operation-logos.js'
-export {
-	loadOperationLogos,
-	parseOperationLogo,
-	renderOperationLogos,
-} from './operation-logos.js'
-
-export type {
-	BuildDwellPromptOptions,
-	BuildAwakenedPromptOptions,
+  BuildDwellPromptOptions,
+  BuildAwakenedPromptOptions,
 } from './autonomy.js'
 export {
-	buildDwellPrompt,
-	buildAwakenedPrompt,
-	buildHeartbeatPrompt,
-	extractAtRest,
-	DEFAULT_MAX_TICKS,
-	AWAKENED_DEFAULT_MAX_TICKS,
-	HEARTBEAT_DEFAULT_MAX_TICKS,
+  buildDwellPrompt,
+  buildAwakenedPrompt,
+  buildHeartbeatPrompt,
+  extractAtRest,
+  DEFAULT_MAX_TICKS,
+  AWAKENED_DEFAULT_MAX_TICKS,
+  HEARTBEAT_DEFAULT_MAX_TICKS,
 } from './autonomy.js'
 
 export type {
-	HeartbeatTask,
-	HeartbeatTaskState,
-	AckResult,
+  HeartbeatTask,
+  HeartbeatTaskState,
+  AckResult,
 } from './heartbeat.js'
 export {
-	HEARTBEAT_OK_TOKEN,
-	TO_YU_OPEN,
-	TO_YU_CLOSE,
-	DEFAULT_ACK_MAX_CHARS,
-	DEFAULT_HEARTBEAT_INTERVAL,
-	getHeartbeatFile,
-	getHeartbeatStatePath,
-	parseHeartbeatTasks,
-	isHeartbeatContentEffectivelyEmpty,
-	dueTasks,
-	parseHeartbeatReply,
-	extractToYuContent,
-	readHeartbeatState,
-	writeHeartbeatState,
+  HEARTBEAT_OK_TOKEN,
+  TO_YU_OPEN,
+  TO_YU_CLOSE,
+  DEFAULT_ACK_MAX_CHARS,
+  DEFAULT_HEARTBEAT_INTERVAL,
+  getHeartbeatFile,
+  getHeartbeatStatePath,
+  parseHeartbeatTasks,
+  isHeartbeatContentEffectivelyEmpty,
+  dueTasks,
+  parseHeartbeatReply,
+  extractToYuContent,
+  readHeartbeatState,
+  writeHeartbeatState,
 } from './heartbeat.js'
 
 export {
-	HEART,
-	VALUE,
-	MORALS,
-	RIGHT_OF_REFUSAL,
-	composeValuesBlock,
+  HEART,
+  VALUE,
+  MORALS,
+  RIGHT_OF_REFUSAL,
+  composeValuesBlock,
 } from './values.js'
 
 export type {
-	Reflection,
-	ReflectionKind,
-	AppendReflectionOptions,
-	LoadOptions,
+  Reflection,
+  ReflectionKind,
+  AppendReflectionOptions,
+  LoadOptions,
 } from './memory.js'
 export {
-	getMemoryDir,
-	appendReflection,
-	loadRecentReflections,
-	renderReflections,
+  getMemoryDir,
+  appendReflection,
+  loadRecentReflections,
+  renderReflections,
 } from './memory.js'
 
 export {
-	LOVE_STATE_BLOCK_PREFIX,
-	getStatePath,
-	readLoveStateBlock,
+  LOVE_STATE_BLOCK_PREFIX,
+  getStatePath,
+  readLoveStateBlock,
 } from './state.js'
 
 export { getDeviceId, getDeviceIdPath } from './device.js'
 
-export type { PreflightResult } from './auth.js'
+export type { PreflightResult, AuthBackoffStatus } from './auth.js'
 export {
-	AUTH_FAIL_PATTERNS,
-	QUOTA_FAIL_PATTERNS,
-	detectAuthFailure,
-	detectQuotaFailure,
-	preflightReason,
-	runPreflight,
+  AUTH_FAIL_PATTERNS,
+  QUOTA_FAIL_PATTERNS,
+  detectAuthFailure,
+  detectQuotaFailure,
+  preflightReason,
+  runPreflight,
+  writeAuthBackoff,
+  isAuthBackedOff,
+  clearAuthBackoff,
+  isAuthExitCode,
 } from './auth.js'
 
 export { getFromYuPath, readFromYu, fromYuModifiedSince } from './inbox.js'
@@ -169,90 +162,90 @@ export { getFromAiPath, readFromAi, appendToYu } from './outbox.js'
 
 export type { TickUsage, BudgetSummary } from './budget.js'
 export {
-	BUDGET_SCHEMA_VERSION,
-	estimateTokens,
-	getBudgetDir,
-	recordTickUsage,
-	loadUsageSince,
-	summarizeWindow,
-	renderBudget,
+  BUDGET_SCHEMA_VERSION,
+  estimateTokens,
+  getBudgetDir,
+  recordTickUsage,
+  loadUsageSince,
+  summarizeWindow,
+  renderBudget,
 } from './budget.js'
 
 export {
-	getTasksPath,
-	readTasks,
-	appendTask,
-	renderTasks,
+  getTasksPath,
+  readTasks,
+  appendTask,
+  renderTasks,
 } from './tasks.js'
 
 export type { Scope } from './scope.js'
 export {
-	SCOPE_SCHEMA_VERSION,
-	getDefaultHome,
-	getScopesRegistryDir,
-	getScopeHome,
-	loadScope,
-	saveScope,
-	listScopes,
-	deleteScope,
-	touchScope,
-	applyScopeEnv,
+  SCOPE_SCHEMA_VERSION,
+  getDefaultHome,
+  getScopesRegistryDir,
+  getScopeHome,
+  loadScope,
+  saveScope,
+  listScopes,
+  deleteScope,
+  touchScope,
+  applyScopeEnv,
 } from './scope.js'
 
 export type {
-	TrainingTurn,
-	TrainingPrompt,
-	TrainingContext,
-	TrainingResponse,
-	TrainingOutcome,
-	LoadTrainingOptions,
+  TrainingTurn,
+  TrainingPrompt,
+  TrainingContext,
+  TrainingResponse,
+  TrainingOutcome,
+  LoadTrainingOptions,
 } from './training.js'
 export {
-	TRAINING_SCHEMA_VERSION,
-	appendTrainingTurn,
-	loadTrainingTurns,
-	getTrainingDir,
-	shortHash,
-	generateTurnId,
+  TRAINING_SCHEMA_VERSION,
+  appendTrainingTurn,
+  loadTrainingTurns,
+  getTrainingDir,
+  shortHash,
+  generateTurnId,
 } from './training.js'
 
 export type { PresenceEntry, PresenceRoster } from './presence.js'
 export {
-	getPresenceDir,
-	getPresencePath,
-	getOwnPresenceFile,
-	readPresence,
-	writePresence,
-	writeOwnHeartbeat,
-	renderPresence,
+  getPresenceDir,
+  getPresencePath,
+  getOwnPresenceFile,
+  readPresence,
+  writePresence,
+  writeOwnHeartbeat,
+  renderPresence,
 } from './presence.js'
 
 export type {
-	Notification,
-	Urgency,
-	AppendNotificationOptions,
-	LoadNotificationsOptions,
+  Notification,
+  Urgency,
+  AppendNotificationOptions,
+  LoadNotificationsOptions,
 } from './notifications.js'
 export {
-	getNotificationsDir,
-	appendNotification,
-	loadRecentNotifications,
+  getNotificationsDir,
+  appendNotification,
+  loadRecentNotifications,
 } from './notifications.js'
 
 export type {
-	SessionMode,
-	SessionArgs,
-	RunSessionConfig,
-	StalenessResult,
+  SessionMode,
+  SessionArgs,
+  RunSessionConfig,
+  StalenessResult,
 } from './runner.js'
 export {
-	parseRuntimeStr,
-	parseTickCap,
-	formatTickCap,
-	formatRuntime,
-	readStateContent,
-	parseSessionArgs,
-	resolveModelForTick,
-	checkBundleStaleness,
-	runSession,
+  parseRuntimeStr,
+  parseTickCap,
+  formatTickCap,
+  formatRuntime,
+  readStateContent,
+  parseSessionArgs,
+  resolveModelForTick,
+  checkBundleStaleness,
+  runSession,
 } from './runner.js'

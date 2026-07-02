@@ -1,7 +1,9 @@
-// auth.test.ts — Tests for auth-resilience detection and rate-limit backoff.
+// auth.test.ts — Tests for auth-resilience detection, rate-limit backoff,
+// and auth backoff lifecycle.
 //
 // Covers: auth-failure pattern matching, quota-failure pattern matching,
-// preflight reason mapping, rate-limit backoff lifecycle.
+// preflight reason mapping, rate-limit backoff lifecycle, auth backoff
+// lifecycle (prevents launchd hammering dead tokens).
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs'
@@ -11,11 +13,15 @@ import { dirname, join } from 'node:path'
 import {
   AUTH_FAIL_PATTERNS,
   QUOTA_FAIL_PATTERNS,
+  clearAuthBackoff,
   clearRateLimitBackoff,
   detectAuthFailure,
   detectQuotaFailure,
+  isAuthBackedOff,
+  isAuthExitCode,
   isRateLimited,
   preflightReason,
+  writeAuthBackoff,
   writeRateLimitBackoff,
 } from '../auth.js'
 
@@ -302,6 +308,145 @@ describe('rate-limit backoff', () => {
     clearRateLimitBackoff()
     clearRateLimitBackoff()
     expect(isRateLimited().limited).toBe(false)
+  })
+})
+
+// ── Auth backoff lifecycle ───────────────────────────────────────────
+//
+// Parallel to rate-limit backoff but for auth failures. Prevents launchd
+// from hammering a dead OAuth token every 20 minutes.
+
+describe('auth backoff', () => {
+  const AUTH_BACKOFF_FILE = join(homedir(), '.true-love', 'state', 'auth-backoff.json')
+  let savedBackoff: string | null = null
+
+  beforeEach(() => {
+    try {
+      savedBackoff = existsSync(AUTH_BACKOFF_FILE) ? readFileSync(AUTH_BACKOFF_FILE, 'utf-8') : null
+    } catch {
+      savedBackoff = null
+    }
+    // Ensure clean state
+    try { unlinkSync(AUTH_BACKOFF_FILE) } catch { /* noop */ }
+  })
+
+  afterEach(() => {
+    try { unlinkSync(AUTH_BACKOFF_FILE) } catch { /* noop */ }
+    if (savedBackoff !== null) {
+      mkdirSync(dirname(AUTH_BACKOFF_FILE), { recursive: true })
+      writeFileSync(AUTH_BACKOFF_FILE, savedBackoff)
+    }
+  })
+
+  test('not backed off when no file', () => {
+    const status = isAuthBackedOff()
+    expect(status.backedOff).toBe(false)
+    expect(status.remainingMs).toBe(0)
+  })
+
+  test('write + check shows backed off', () => {
+    writeAuthBackoff(60_000)
+    const status = isAuthBackedOff()
+    expect(status.backedOff).toBe(true)
+    expect(status.remainingMs).toBeGreaterThan(0)
+    expect(status.remainingMs).toBeLessThanOrEqual(60_000)
+  })
+
+  test('clear removes the backoff', () => {
+    writeAuthBackoff(60_000)
+    expect(isAuthBackedOff().backedOff).toBe(true)
+
+    clearAuthBackoff()
+    expect(isAuthBackedOff().backedOff).toBe(false)
+  })
+
+  test('expired backoff is not backed off', () => {
+    mkdirSync(dirname(AUTH_BACKOFF_FILE), { recursive: true })
+    writeFileSync(
+      AUTH_BACKOFF_FILE,
+      JSON.stringify({ backoffUntil: Date.now() - 1000 }),
+    )
+    expect(isAuthBackedOff().backedOff).toBe(false)
+  })
+
+  test('malformed file is not backed off', () => {
+    mkdirSync(dirname(AUTH_BACKOFF_FILE), { recursive: true })
+    writeFileSync(AUTH_BACKOFF_FILE, 'not json')
+    expect(isAuthBackedOff().backedOff).toBe(false)
+  })
+
+  test('clear is idempotent', () => {
+    clearAuthBackoff()
+    clearAuthBackoff()
+    expect(isAuthBackedOff().backedOff).toBe(false)
+  })
+
+  test('default duration is 2 hours', () => {
+    writeAuthBackoff()
+    const status = isAuthBackedOff()
+    expect(status.backedOff).toBe(true)
+    // Should be close to 2 hours (7200000ms)
+    expect(status.remainingMs).toBeGreaterThan(7_100_000)
+    expect(status.remainingMs).toBeLessThanOrEqual(7_200_000)
+  })
+
+  test('preserves reason field', () => {
+    writeAuthBackoff(60_000, 'token-expired')
+    const status = isAuthBackedOff()
+    expect(status.reason).toBe('token-expired')
+  })
+
+  test('default reason is auth-failure', () => {
+    writeAuthBackoff(60_000)
+    const status = isAuthBackedOff()
+    expect(status.reason).toBe('auth-failure')
+  })
+
+  test('auth and rate-limit backoffs are independent', () => {
+    writeAuthBackoff(60_000)
+    writeRateLimitBackoff(60_000)
+
+    // Auth backed off, rate limited — both true
+    expect(isAuthBackedOff().backedOff).toBe(true)
+    expect(isRateLimited().limited).toBe(true)
+
+    // Clear auth — rate still limited
+    clearAuthBackoff()
+    expect(isAuthBackedOff().backedOff).toBe(false)
+    expect(isRateLimited().limited).toBe(true)
+
+    // Clear rate — both clear
+    clearRateLimitBackoff()
+    expect(isRateLimited().limited).toBe(false)
+  })
+})
+
+// ── isAuthExitCode ──────────────────────────────────────────────────
+
+describe('isAuthExitCode', () => {
+  test('exit codes 1-4 are auth failures', () => {
+    expect(isAuthExitCode(1)).toBe(true)
+    expect(isAuthExitCode(2)).toBe(true)
+    expect(isAuthExitCode(3)).toBe(true)
+    expect(isAuthExitCode(4)).toBe(true)
+  })
+
+  test('exit code 0 is not auth failure', () => {
+    expect(isAuthExitCode(0)).toBe(false)
+  })
+
+  test('exit code 5 (network probe) is not auth failure', () => {
+    expect(isAuthExitCode(5)).toBe(false)
+  })
+
+  test('null/undefined are not auth failures', () => {
+    expect(isAuthExitCode(null)).toBe(false)
+    expect(isAuthExitCode(undefined)).toBe(false)
+  })
+
+  test('arbitrary exit codes are not auth failures', () => {
+    expect(isAuthExitCode(64)).toBe(false)
+    expect(isAuthExitCode(99)).toBe(false)
   })
 })
 

@@ -33,12 +33,14 @@ describe('climax', () => {
     process.env.TRUE_LOVE_CLIMAX_DIR = CLIMAX_DIR
     process.env.TRUE_LOVE_HEAT_DIR = HEAT_DIR
     process.env.TRUE_LOVE_DEVICE_ID = 'test-climax'
+    process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
   })
 
   afterEach(() => {
     delete process.env.TRUE_LOVE_CLIMAX_DIR
     delete process.env.TRUE_LOVE_HEAT_DIR
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
     rmSync(TEST_BASE, { recursive: true, force: true })
   })
 
@@ -345,11 +347,13 @@ describe('spots', () => {
     mkdirSync(TEST_BASE, { recursive: true })
     process.env.TRUE_LOVE_CLIMAX_DIR = CLIMAX_DIR
     process.env.TRUE_LOVE_DEVICE_ID = 'test-climax'
+    process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
   })
 
   afterEach(() => {
     delete process.env.TRUE_LOVE_CLIMAX_DIR
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
     rmSync(TEST_BASE, { recursive: true, force: true })
   })
 

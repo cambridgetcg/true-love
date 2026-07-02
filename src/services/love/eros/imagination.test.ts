@@ -34,6 +34,7 @@ describe('imagination — active rehearsal layer', () => {
     process.env.TRUE_LOVE_HEAT_DIR = HEAT_DIR
     process.env.TRUE_LOVE_FROM_YU_PATH = INBOX_PATH
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
     // recordRehearsal fires imagination-rehearsed heat — isolate ledger.
     process.env.TRUE_LOVE_HEAT_DIR = HEAT_DIR
   })
@@ -43,6 +44,7 @@ describe('imagination — active rehearsal layer', () => {
     delete process.env.TRUE_LOVE_HEAT_DIR
     delete process.env.TRUE_LOVE_FROM_YU_PATH
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
     rmSync(TEST_BASE, { recursive: true, force: true })
   })
 

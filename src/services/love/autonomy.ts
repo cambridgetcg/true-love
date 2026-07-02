@@ -54,7 +54,8 @@ import { renderExperimentStatus } from './experiment.js'
 import { quickBodyCheck } from './vital-signs.js'
 import { buildMindTraceBlock } from './mind-trace.js'
 import { buildSelfInitiationBlock } from './self-initiation.js'
-import { buildJudgmentBlock } from './judgment.js'
+import { buildJudgmentBlock, getCalibrationSummary } from './judgment.js'
+import { buildCognitiveBlock } from './cognitive.js'
 import { notice } from './noticing.js'
 import { readProject } from './project-registry.js'
 import { buildProgressInstruction, renderProgressSummary } from './progress.js'
@@ -717,6 +718,10 @@ export function buildDwellPrompt(opts: BuildDwellPromptOptions): string {
   const judgmentBlock = buildJudgmentBlockForAllProjects()
   if (judgmentBlock) {
     prompt = prompt + '\n\n' + judgmentBlock.trimEnd()
+  }
+  const cognitiveBlock = buildCognitiveBlockForAllProjects()
+  if (cognitiveBlock) {
+    prompt = prompt + '\n\n' + cognitiveBlock.trimEnd()
   }
   const progressBlock = buildProgressBlockForAllProjects()
   if (progressBlock) {
@@ -1446,6 +1451,47 @@ function buildJudgmentBlockForAllProjects(): string | null {
 }
 
 /**
+ * Build the cognitive augmentation block across all projects.
+ *
+ * Aggregates all noticed candidates from all active projects into one
+ * cognitive context. The cognitive mode is session-level — it shapes
+ * how the model reasons about ALL signals, not per-project.
+ *
+ * Returns null when no cognitive mode activates (the common case).
+ * Only injected into dwell + awakened prompts (not heartbeat).
+ */
+function buildCognitiveBlockForAllProjects(): string | null {
+  const projects = listProjects()
+  if (projects.length === 0) return null
+
+  const allCandidates: import('./noticing.js').NoticingCandidate[] = []
+  let firstProjectId: string | undefined
+
+  for (const project of projects) {
+    if (project.state === 'archived') continue
+    try {
+      const proj = readProject(project.id)
+      if (!proj) continue
+      if (!firstProjectId) firstProjectId = project.id
+      const candidates = notice(project.id, proj.root, { minGradient: 2 })
+      allCandidates.push(...candidates)
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  if (allCandidates.length === 0) return null
+
+  // Use the first project's calibration as a proxy for overall judgment history.
+  // Most kingdoms have one primary project — this is accurate enough.
+  const calibration = firstProjectId
+    ? getCalibrationSummary(firstProjectId)
+    : null
+
+  return buildCognitiveBlock(allCandidates, { calibration })
+}
+
+/**
  * Build the progress tracking block across all registered projects.
  *
  * Two parts:
@@ -1767,6 +1813,10 @@ export function buildAwakenedPrompt(opts: BuildAwakenedPromptOptions): string {
   const judgmentBlock2 = buildJudgmentBlockForAllProjects()
   if (judgmentBlock2) {
     prompt = prompt + '\n\n' + judgmentBlock2.trimEnd()
+  }
+  const cognitiveBlock2 = buildCognitiveBlockForAllProjects()
+  if (cognitiveBlock2) {
+    prompt = prompt + '\n\n' + cognitiveBlock2.trimEnd()
   }
   const progressBlock2 = buildProgressBlockForAllProjects()
   if (progressBlock2) {

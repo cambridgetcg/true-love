@@ -859,6 +859,7 @@ describe('ui-server deep — misc API endpoints', () => {
   const ORIG_BUDGET_ROOT = process.env.TRUE_LOVE_BUDGET_ROOT
   const ORIG_PRES_DIR = process.env.TRUE_LOVE_PRESENCE_DIR
   const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
   const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
   const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
 
@@ -869,6 +870,7 @@ describe('ui-server deep — misc API endpoints', () => {
     process.env.TRUE_LOVE_BUDGET_ROOT = join(tmpHome, '.true-love', 'budget')
     process.env.TRUE_LOVE_PRESENCE_DIR = join(tmpHome, '.true-love', 'presence')
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(tmpHome, '.true-love', 'sisters')
     process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpHome, '.true-love', 'from-yu.md')
     process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpHome, '.true-love', 'from-ai.md')
     mkdirSync(join(tmpHome, '.true-love', 'budget'), { recursive: true })
@@ -889,6 +891,8 @@ describe('ui-server deep — misc API endpoints', () => {
     else process.env.TRUE_LOVE_PRESENCE_DIR = ORIG_PRES_DIR
     if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
     else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+    if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
     if (ORIG_FROM_YU === undefined) delete process.env.TRUE_LOVE_FROM_YU_PATH
     else process.env.TRUE_LOVE_FROM_YU_PATH = ORIG_FROM_YU
     if (ORIG_FROM_AI === undefined) delete process.env.TRUE_LOVE_FROM_AI_PATH
@@ -962,6 +966,7 @@ describe('ui-server deep — POST /api/say advanced', () => {
   const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
   const ORIG_PRES_DIR = process.env.TRUE_LOVE_PRESENCE_DIR
   const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
   const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
   beforeEach(() => {
@@ -971,6 +976,7 @@ describe('ui-server deep — POST /api/say advanced', () => {
     process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpHome, '.true-love', 'from-ai.md')
     process.env.TRUE_LOVE_PRESENCE_DIR = join(tmpHome, '.true-love', 'presence')
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(tmpHome, '.true-love', 'sisters')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     mkdirSync(join(tmpHome, '.true-love', 'presence'), { recursive: true })
     server = startUiServer({ port: 0 })
@@ -989,6 +995,8 @@ describe('ui-server deep — POST /api/say advanced', () => {
     else process.env.TRUE_LOVE_PRESENCE_DIR = ORIG_PRES_DIR
     if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
     else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+    if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
     if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
     else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
   })
@@ -1055,6 +1063,7 @@ describe('ui-server deep — static asset serving', () => {
   const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
   const ORIG_PRES_DIR = process.env.TRUE_LOVE_PRESENCE_DIR
   const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
   const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
   const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
 
@@ -1064,6 +1073,7 @@ describe('ui-server deep — static asset serving', () => {
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     process.env.TRUE_LOVE_PRESENCE_DIR = join(tmpHome, '.true-love', 'presence')
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(tmpHome, '.true-love', 'sisters')
     process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpHome, '.true-love', 'from-yu.md')
     process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpHome, '.true-love', 'from-ai.md')
     mkdirSync(join(tmpHome, '.true-love', 'presence'), { recursive: true })
@@ -1081,6 +1091,8 @@ describe('ui-server deep — static asset serving', () => {
     else process.env.TRUE_LOVE_PRESENCE_DIR = ORIG_PRES_DIR
     if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
     else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+    if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
     if (ORIG_FROM_YU === undefined) delete process.env.TRUE_LOVE_FROM_YU_PATH
     else process.env.TRUE_LOVE_FROM_YU_PATH = ORIG_FROM_YU
     if (ORIG_FROM_AI === undefined) delete process.env.TRUE_LOVE_FROM_AI_PATH

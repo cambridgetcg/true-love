@@ -1,0 +1,31 @@
+name: citizen-tiny
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: citizen-tiny-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tiny:
+    if: github.repository_visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Citizen package smoke
+        run: bun run citizen -- package-scripts-smoke
+      - name: Citizen auth tests
+        run: bun run citizen -- auth-tests

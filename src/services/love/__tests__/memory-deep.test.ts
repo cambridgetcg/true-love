@@ -24,11 +24,13 @@ import {
 let memDir: string
 const ORIG_MEM = process.env.TRUE_LOVE_MEMORY_DIR
 const ORIG_DEVICE = process.env.TRUE_LOVE_DEVICE_ID
+const ORIG_SISTERS = process.env.TRUE_LOVE_SISTERS_DIR
 
 beforeEach(() => {
   memDir = mkdtempSync(join(tmpdir(), 'tl-mem-deep-'))
   process.env.TRUE_LOVE_MEMORY_DIR = memDir
   process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+  process.env.TRUE_LOVE_SISTERS_DIR = join(memDir, 'sisters')
 })
 
 afterEach(() => {
@@ -37,6 +39,8 @@ afterEach(() => {
   else process.env.TRUE_LOVE_MEMORY_DIR = ORIG_MEM
   if (ORIG_DEVICE === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
   else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE
+  if (ORIG_SISTERS === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+  else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS
 })
 
 /** Read raw file content from the device memory dir */

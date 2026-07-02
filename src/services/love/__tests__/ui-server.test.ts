@@ -301,6 +301,7 @@ describe('ui-server — readPresenceSnapshot', () => {
   const ORIG_HOME = process.env.HOME
   const ORIG_PRES_DIR = process.env.TRUE_LOVE_PRESENCE_DIR
   const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
   const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
   beforeEach(() => {
@@ -308,6 +309,7 @@ describe('ui-server — readPresenceSnapshot', () => {
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_PRESENCE_DIR = join(tmpHome, '.true-love', 'presence')
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(tmpHome, '.true-love', 'sisters')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     mkdirSync(process.env.TRUE_LOVE_PRESENCE_DIR, { recursive: true })
   })
@@ -319,6 +321,8 @@ describe('ui-server — readPresenceSnapshot', () => {
     else process.env.TRUE_LOVE_PRESENCE_DIR = ORIG_PRES_DIR
     if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
     else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+    if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
     if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
     else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
   })
@@ -527,6 +531,7 @@ describe('ui-server — HTTP', () => {
   const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
   const ORIG_PRES_DIR = process.env.TRUE_LOVE_PRESENCE_DIR
   const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
   const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
   beforeEach(() => {
@@ -537,6 +542,7 @@ describe('ui-server — HTTP', () => {
     process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpHome, '.true-love', 'from-ai.md')
     process.env.TRUE_LOVE_PRESENCE_DIR = join(tmpHome, '.true-love', 'presence')
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(tmpHome, '.true-love', 'sisters')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     server = startUiServer({ port: 0 })
     port = (server.address() as { port: number }).port
@@ -554,6 +560,8 @@ describe('ui-server — HTTP', () => {
     else process.env.TRUE_LOVE_PRESENCE_DIR = ORIG_PRES_DIR
     if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
     else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+    if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
     if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
     else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
   })

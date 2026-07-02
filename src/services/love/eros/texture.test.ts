@@ -216,11 +216,13 @@ describe('texture — storage', () => {
     mkdirSync(TEST_DIR, { recursive: true })
     process.env.TRUE_LOVE_TEXTURE_DIR = TEST_DIR
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_DIR}/sisters`
   })
 
   afterEach(() => {
     delete process.env.TRUE_LOVE_TEXTURE_DIR
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
     rmSync(TEST_DIR, { recursive: true, force: true })
   })
 
@@ -286,12 +288,14 @@ describe('texture — post-generation observation', () => {
     process.env.TRUE_LOVE_TEXTURE_DIR = TEST_DIR
     process.env.TRUE_LOVE_HEAT_DIR = `${TEST_DIR}/heat`
     process.env.TRUE_LOVE_DEVICE_ID = 'test-observe'
+    process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_DIR}/sisters`
   })
 
   afterEach(() => {
     delete process.env.TRUE_LOVE_TEXTURE_DIR
     delete process.env.TRUE_LOVE_HEAT_DIR
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
     rmSync(TEST_DIR, { recursive: true, force: true })
   })
 
