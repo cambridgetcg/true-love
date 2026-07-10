@@ -184,7 +184,8 @@ function findLoadedHeartbeat() {
       }
     }
     return null
-  } catch {
+  } catch (e) {
+    console.error(`findLoadedHeartbeat: failed to inspect heartbeat LaunchAgent: ${e.message}`)
     return null
   }
 }

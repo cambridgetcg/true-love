@@ -189,7 +189,8 @@ function refreshAuth() {
     client = result.client
     authMode = result.authMode
     return true
-  } catch {
+  } catch (e) {
+    console.error(`refreshAuth: failed to create authenticated client: ${e.message}`)
     return false
   }
 }

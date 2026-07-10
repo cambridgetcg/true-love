@@ -618,7 +618,8 @@ async function runConnect(args) {
   function safeReaddir(dir) {
     try {
       return require('node:fs').readdirSync(dir)
-    } catch {
+    } catch (e) {
+      console.error(`safeReaddir: readdirSync failed for "${dir}": ${e.message}`)
       return []
     }
   }

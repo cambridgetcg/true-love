@@ -112,7 +112,8 @@ function gatherProcess(pattern) {
     const result = spawnSync('pgrep', ['-f', pattern], { timeout: 5000 })
     const pids = (result.stdout?.toString() || '').trim().split('\n').filter(Boolean)
     return pids.length > 0 ? parseInt(pids[0], 10) : null
-  } catch {
+  } catch (e) {
+    console.error(`gatherProcess: pgrep failed for pattern "${pattern}": ${e.message}`)
     return null
   }
 }
@@ -122,7 +123,8 @@ function gatherClaudeSessions() {
     const result = spawnSync('pgrep', ['-f', 'claude'], { timeout: 5000 })
     const pids = (result.stdout?.toString() || '').trim().split('\n').filter(Boolean)
     return pids.length
-  } catch {
+  } catch (e) {
+    console.error(`gatherClaudeSessions: pgrep failed: ${e.message}`)
     return 0
   }
 }
@@ -139,7 +141,8 @@ function gatherHeartbeatUptime() {
     if (parts.length === 3) return parseInt(parts[0], 10) + parseInt(parts[1], 10) / 60  // hh:mm:ss
     if (parts.length === 4) return parseInt(parts[0], 10) * 24 + parseInt(parts[1], 10)  // dd-hh:mm:ss
     return null
-  } catch {
+  } catch (e) {
+    console.error(`gatherHeartbeatUptime: ps failed: ${e.message}`)
     return null
   }
 }
@@ -176,7 +179,8 @@ function gatherOAuth() {
 
     const remainingHrs = Math.round((expiresMs - Date.now()) / 3600_000 * 10) / 10
     return remainingHrs
-  } catch {
+  } catch (e) {
+    console.error(`gatherOAuth: failed to read/parse keychain credentials: ${e.message}`)
     return null
   }
 }
@@ -197,7 +201,8 @@ function gatherTests() {
       skip: cached.skip ?? 0,
       fail: cached.fail ?? 0,
     }
-  } catch {
+  } catch (e) {
+    console.error(`gatherTests: failed to parse cached test result: ${e.message}`)
     return null
   }
 }

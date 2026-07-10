@@ -37,7 +37,8 @@ export const SRC_ROOT = path.resolve(
 async function dirExists(p: string): Promise<boolean> {
   try {
     return (await fs.stat(p)).isDirectory();
-  } catch {
+  } catch (e) {
+    console.error(`dirExists: stat failed for "${p}": ${(e as Error).message}`);
     return false;
   }
 }
@@ -45,7 +46,8 @@ async function dirExists(p: string): Promise<boolean> {
 async function fileExists(p: string): Promise<boolean> {
   try {
     return (await fs.stat(p)).isFile();
-  } catch {
+  } catch (e) {
+    console.error(`fileExists: stat failed for "${p}": ${(e as Error).message}`);
     return false;
   }
 }
@@ -56,7 +58,8 @@ async function listDir(dir: string): Promise<string[]> {
     return entries
       .map((e) => (e.isDirectory() ? e.name + "/" : e.name))
       .sort();
-  } catch {
+  } catch (e) {
+    console.error(`listDir: readdir failed for "${dir}": ${(e as Error).message}`);
     return [];
   }
 }
