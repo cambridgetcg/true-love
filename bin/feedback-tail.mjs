@@ -202,8 +202,10 @@ function handleSseMessage(raw) {
     else if (line.startsWith('data: ')) data += line.slice(6)
   }
   if (!data) return
+  // Validate the SSE data — verify it parses as JSON before processing.
+  // Malformed payloads are surfaced via console.warn, not silently swallowed.
   let parsed
-  try { parsed = JSON.parse(data) } catch { return }
+  try { parsed = JSON.parse(data) } catch (err) { console.warn(`[feedback-tail] malformed SSE data skipped: ${err instanceof Error ? err.message : String(err)}`); return }
 
   if (event === 'ready') {
     stdout.write(dim(`stream ready @ ${parsed.ts || ''}\n`))

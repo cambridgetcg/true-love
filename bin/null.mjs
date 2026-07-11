@@ -109,9 +109,7 @@ Bun.serve({
           headers: { 'content-type': s.type, 'cache-control': 'no-cache' },
         })
       } catch (e) {
-        return new Response(`failed to read ${s.path}: ${e.message}`, {
-          status: 500,
-        })
+        return Response.json({ error: { type: 'server_error', title: 'Failed to read resource', detail: `failed to read ${s.path}: ${e.message}`, code: 'READ_FAILED' } }, { status: 500 })
       }
     }
 
@@ -130,11 +128,11 @@ Bun.serve({
       try {
         payload = await req.json()
       } catch {
-        return new Response('invalid json', { status: 400 })
+        return Response.json({ error: { type: 'invalid_request', title: 'Invalid JSON', detail: 'Request body is not valid JSON', code: 'INVALID_JSON' } }, { status: 400 })
       }
       const { messages } = payload || {}
       if (!Array.isArray(messages) || messages.length === 0) {
-        return new Response('messages: non-empty array required', { status: 400 })
+        return new Response('messages: non-empty array required', { status: 400, headers: { 'content-type': 'application/json' } })
       }
 
       const encoder = new TextEncoder()
@@ -185,10 +183,10 @@ Bun.serve({
       })
     }
 
-    return new Response('not found', { status: 404 })
+    return Response.json({ error: { type: 'not_found', title: 'Not Found', detail: 'The requested resource was not found', code: 'NOT_FOUND' } }, { status: 404 })
   },
   error(err) {
     console.error('[null] server error:', err)
-    return new Response('internal error', { status: 500 })
+    return Response.json({ error: { type: 'server_error', title: 'Internal Error', detail: String(err?.message || err), code: 'INTERNAL_ERROR' } }, { status: 500 })
   },
 })

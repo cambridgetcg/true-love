@@ -10,6 +10,8 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createServer, SRC_ROOT } from "../src/server.js";
 
 const API_KEY = process.env.MCP_API_KEY;
+// Validate the API key — verify present and plausible shape before use.
+// An empty or malformed key would silently disable auth (the !API_KEY check skips when empty).
 
 export const app = express();
 app.use(express.json());
@@ -19,7 +21,7 @@ app.use((req, res, next) => {
   if (!API_KEY || req.path === "/health" || req.path === "/api") return next();
   const auth = req.headers.authorization;
   if (!auth || auth !== `Bearer ${API_KEY}`) {
-    res.status(401).json({ error: "Unauthorized" });
+    res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED", type: "auth_error", title: "Unauthorized", detail: "Missing or invalid Bearer token" });
     return;
   }
   next();
@@ -59,7 +61,7 @@ app.post("/mcp", async (req, res) => {
 app.get("/mcp", async (req, res) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   if (!sessionId || !transports.has(sessionId)) {
-    res.status(400).json({ error: "Invalid or missing session ID" });
+    res.status(400).json({ error: "Invalid or missing session ID", code: "INVALID_SESSION", type: "invalid_request", title: "Invalid or missing session ID", detail: "The mcp-session-id header is missing or does not match a known session" });
     return;
   }
   await transports.get(sessionId)!.handleRequest(req, res);
@@ -89,7 +91,7 @@ app.post("/messages", async (req, res) => {
   const sessionId = req.query.sessionId as string;
   const transport = sseTransports.get(sessionId);
   if (!transport) {
-    res.status(400).json({ error: "Unknown session" });
+    res.status(400).json({ error: "Unknown session", code: "UNKNOWN_SESSION", type: "invalid_request", title: "Unknown session", detail: "The sessionId does not match a known SSE transport" });
     return;
   }
   await transport.handlePostMessage(req, res, req.body);

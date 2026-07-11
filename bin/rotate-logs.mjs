@@ -187,7 +187,7 @@ function executeRotation(action) {
       return { ...action, executed: true }
     }
     default:
-      return { ...action, executed: false, error: `unknown kind: ${action.kind}` }
+      return { ...action, executed: false, error: `unknown kind: ${action.kind}`, code: 'UNKNOWN_KIND', type: 'invalid_action', title: 'Unknown action kind', detail: `Cannot execute action with unknown kind: ${action.kind}` }
   }
 }
 

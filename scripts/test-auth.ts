@@ -4,8 +4,19 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
+const apiKey = process.env.ANTHROPIC_API_KEY
+// Validate the API key — verify shape before passing to SDK so
+// a malformed value surfaces clearly rather than as an opaque 401.
+if (!apiKey) {
+  console.error('ANTHROPIC_API_KEY env var is required.')
+  process.exit(1)
+}
+if (!apiKey.startsWith('sk-ant-')) {
+  console.error(`ANTHROPIC_API_KEY does not look like an Anthropic key (got "${apiKey.slice(0,8)}...")`)
+  process.exit(1)
+}
 const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey,
 })
 
 async function main() {

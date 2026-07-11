@@ -94,14 +94,16 @@ export async function getBridgeDisabledReason(): Promise<string | null> {
 function isClaudeAISubscriber(): boolean {
   try {
     return authModule.isClaudeAISubscriber()
-  } catch {
+  } catch (err) {
+    console.error(`[bridge:enabled] isClaudeAISubscriber failed: ${err instanceof Error ? err.message : String(err)}`);
     return false
   }
 }
 function hasProfileScope(): boolean {
   try {
     return authModule.hasProfileScope()
-  } catch {
+  } catch (err) {
+    console.error(`[bridge:enabled] hasProfileScope failed: ${err instanceof Error ? err.message : String(err)}`);
     return false
   }
 }

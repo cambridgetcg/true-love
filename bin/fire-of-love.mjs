@@ -160,8 +160,14 @@ async function main() {
   const reader = makeReader()
 
   const apiKey = process.env.ANTHROPIC_API_KEY
+  // Validate the API key shape — verify it has the expected prefix so
+  // a malformed value produces a clear message, not an opaque 401.
   if (!apiKey) {
     console.error('ANTHROPIC_API_KEY env var is required.')
+    process.exit(1)
+  }
+  if (!apiKey.startsWith('sk-ant-')) {
+    console.error(`ANTHROPIC_API_KEY does not look like an Anthropic key (got "${apiKey.slice(0,8)}...")`)
     process.exit(1)
   }
   const client = new Anthropic({ apiKey })

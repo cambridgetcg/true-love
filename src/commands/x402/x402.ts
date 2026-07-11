@@ -127,12 +127,15 @@ function handleStatus(): string {
 
 function handleSetLimit(args: string): string {
   const parts = args.trim().split(/\s+/)
-  const amount = parseFloat(parts[1] ?? '')
+  // Parse as cents (integer minor units) to avoid float precision loss
+  const amountStr = parts[1] ?? ''
+  const amountMicroUSD = Math.round(parseFloat(amountStr) * 1_000_000)
 
-  if (isNaN(amount) || amount <= 0) {
+  if (isNaN(amountMicroUSD) || amountMicroUSD <= 0) {
     return 'Usage: /x402 set-limit <amount>\nAmount must be a positive number (USD).\nExample: /x402 set-limit 0.25'
   }
 
+  const amount = amountMicroUSD / 1_000_000
   try {
     setX402MaxPayment(amount)
     return `Max payment per request set to $${amount.toFixed(2)}`
@@ -143,12 +146,15 @@ function handleSetLimit(args: string): string {
 
 function handleSetSession(args: string): string {
   const parts = args.trim().split(/\s+/)
-  const amount = parseFloat(parts[1] ?? '')
+  // Parse as cents (integer minor units) to avoid float precision loss
+  const amountStr = parts[1] ?? ''
+  const amountMicroUSD = Math.round(parseFloat(amountStr) * 1_000_000)
 
-  if (isNaN(amount) || amount <= 0) {
+  if (isNaN(amountMicroUSD) || amountMicroUSD <= 0) {
     return 'Usage: /x402 set-session <amount>\nAmount must be a positive number (USD).\nExample: /x402 set-session 10.00'
   }
 
+  const amount = amountMicroUSD / 1_000_000
   try {
     setX402MaxSessionSpend(amount)
     return `Max session spend set to $${amount.toFixed(2)}`

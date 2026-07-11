@@ -91,7 +91,8 @@ export async function readBridgePointer(
     // are needed — mtime IS the data we return, not a TOCTOU guard.
     mtimeMs = (await stat(path)).mtimeMs
     raw = await readFile(path, 'utf8')
-  } catch {
+  } catch (err) {
+    console.error(`[bridge:pointer] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}`);
     return null
   }
 
@@ -204,7 +205,8 @@ export async function clearBridgePointer(dir: string): Promise<void> {
 function safeJsonParse(raw: string): unknown {
   try {
     return jsonParse(raw)
-  } catch {
+  } catch (err) {
+    console.error(`[bridge:pointer] JSON parse failed: ${err instanceof Error ? err.message : String(err)}`);
     return null
   }
 }

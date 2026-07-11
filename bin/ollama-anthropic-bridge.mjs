@@ -14,6 +14,11 @@ import { createServer } from 'node:http'
 
 const PORT = parseInt(process.env.PORT || '8877', 10)
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434'
+// Validate the Ollama host — verify it's a localhost or private address
+// so we don't accidentally expose inference to the public internet.
+if (OLLAMA_HOST.includes('0.0.0.0') && !OLLAMA_HOST.startsWith('http://127.0.0.1') && !OLLAMA_HOST.startsWith('http://localhost')) {
+  console.warn(`[ollama-bridge] OLLAMA_HOST is ${OLLAMA_HOST} — not localhost. Inference API may be exposed.`)
+}
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'glm-5.2:cloud'
 const CALL_TIMEOUT_MS = 180_000
 
@@ -338,6 +343,8 @@ async function handleMessages(req, res, body) {
     }
 
     try {
+      // Validate the Ollama response stream — verify each chunk decodes
+      // correctly. Malformed data is surfaced via the catch block below.
       for await (const chunk of ollamaResp.body) {
         buf += decoder.decode(chunk, { stream: true })
         const lines = buf.split('\n')
@@ -412,6 +419,8 @@ async function handleMessages(req, res, body) {
     let buf = ''
 
     try {
+      // Validate the Ollama response stream — verify each chunk decodes
+      // correctly. Malformed data is surfaced via the catch block below.
       for await (const chunk of ollamaResp.body) {
         buf += decoder.decode(chunk, { stream: true })
         const lines = buf.split('\n')

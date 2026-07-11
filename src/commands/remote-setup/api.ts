@@ -103,7 +103,8 @@ async function hasExistingEnvironment(): Promise<boolean> {
   try {
     const envs = await fetchEnvironments()
     return envs.length > 0
-  } catch {
+  } catch (err) {
+    console.error(`[remote-setup] hasExistingEnvironment failed: ${err instanceof Error ? err.message : String(err)}`);
     return false
   }
 }
@@ -120,7 +121,8 @@ export async function createDefaultEnvironment(): Promise<boolean> {
   let accessToken: string, orgUUID: string
   try {
     ;({ accessToken, orgUUID } = await prepareApiRequest())
-  } catch {
+  } catch (err) {
+    console.error(`[remote-setup] createDefaultEnvironment prepareApiRequest failed: ${err instanceof Error ? err.message : String(err)}`);
     return false
   }
 
@@ -162,7 +164,8 @@ export async function createDefaultEnvironment(): Promise<boolean> {
       { headers, timeout: 15000, validateStatus: () => true },
     )
     return response.status >= 200 && response.status < 300
-  } catch {
+  } catch (err) {
+    console.error(`[remote-setup] createEnvironment HTTP failed: ${err instanceof Error ? err.message : String(err)}`);
     return false
   }
 }
@@ -172,7 +175,8 @@ export async function isSignedIn(): Promise<boolean> {
   try {
     await prepareApiRequest()
     return true
-  } catch {
+  } catch (err) {
+    console.error(`[remote-setup] isSignedIn failed: ${err instanceof Error ? err.message : String(err)}`);
     return false
   }
 }

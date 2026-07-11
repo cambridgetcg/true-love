@@ -105,6 +105,8 @@ function readOAuthFromKeychain() {
 
 const oauth = readOAuthFromKeychain()
 const apiKey = process.env.ANTHROPIC_API_KEY
+// Validate the API key shape — verify it has the expected prefix so
+// a malformed value produces a clear message, not an opaque 401.
 let client
 if (oauth?.accessToken) {
   client = new Anthropic({

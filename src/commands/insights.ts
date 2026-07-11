@@ -74,7 +74,8 @@ const getRunningRemoteHosts: () => Promise<string[]> =
           return workspaces
             .filter(w => w.latest_build?.status === 'running')
             .map(w => w.name)
-        } catch {
+        } catch (err) {
+          console.error(`[insights] getRunningWorkspaces failed: ${err instanceof Error ? err.message : String(err)}`);
           return []
         }
       }
@@ -955,7 +956,8 @@ async function loadCachedFacets(
       return null
     }
     return parsed
-  } catch {
+  } catch (err) {
+    console.error(`[insights] loadFacets failed: ${err instanceof Error ? err.message : String(err)}`);
     return null
   }
 }
@@ -980,7 +982,8 @@ async function loadCachedSessionMeta(
   try {
     const content = await readFile(metaPath, { encoding: 'utf-8' })
     return jsonParse(content)
-  } catch {
+  } catch (err) {
+    console.error(`[insights] loadSessionMeta failed for ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
     return null
   }
 }
@@ -2758,7 +2761,8 @@ async function scanAllSessions(): Promise<LiteSessionInfo[]> {
   let dirents: Awaited<ReturnType<typeof readdir>>
   try {
     dirents = await readdir(projectsDir, { withFileTypes: true })
-  } catch {
+  } catch (err) {
+    console.error(`[insights] scanAllSessions readdir failed: ${err instanceof Error ? err.message : String(err)}`);
     return []
   }
 
@@ -2868,7 +2872,8 @@ export async function generateUsageReport(options?: {
       batch.map(async sessionInfo => {
         try {
           return await loadAllLogsFromSessionFile(sessionInfo.path)
-        } catch {
+        } catch (err) {
+          console.error(`[insights] loadAllLogsFromSessionFile failed for ${sessionInfo.path}: ${err instanceof Error ? err.message : String(err)}`);
           return []
         }
       }),
