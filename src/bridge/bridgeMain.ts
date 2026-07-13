@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import { randomUUID } from 'crypto'
+import { addSecureJitter } from '../utils/secureRandom.js'
 import { hostname, tmpdir } from 'os'
 import { basename, join, resolve } from 'path'
 import { getRemoteSessionUrl } from '../constants/product.js'
@@ -1611,9 +1612,9 @@ export function isServerError(err: unknown): boolean {
   )
 }
 
-/** Add ±25% jitter to a delay value. */
+/** Add ±25% jitter to a delay value using a cryptographically secure source. */
 function addJitter(ms: number): number {
-  return Math.max(0, ms + ms * 0.25 * (2 * Math.random() - 1))
+  return addSecureJitter(ms, 0.25)
 }
 
 function formatDelay(ms: number): string {

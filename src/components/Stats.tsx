@@ -17,6 +17,7 @@ import { getGlobalConfig } from '../utils/config.js';
 import { formatDuration, formatNumber } from '../utils/format.js';
 import { generateHeatmap } from '../utils/heatmap.js';
 import { renderModelName } from '../utils/model/model.js';
+import { secureRandom } from '../utils/secureRandom.js';
 import { copyAnsiToClipboard } from '../utils/screenshotClipboard.js';
 import { aggregateClaudeCodeStatsForRange, type ClaudeCodeStats, type DailyModelTokens, type StatsDateRange } from '../utils/stats.js';
 import { resolveThemeSetting } from '../utils/systemTheme.js';
@@ -710,7 +711,7 @@ function generateFunFactoid(stats: ClaudeCodeStats, totalTokens: number): string
   if (factoids.length === 0) {
     return '';
   }
-  const randomIndex = Math.floor(Math.random() * factoids.length);
+  const randomIndex = Math.floor(secureRandom() * factoids.length);
   return factoids[randomIndex]!;
 }
 function ModelsTab(t0) {

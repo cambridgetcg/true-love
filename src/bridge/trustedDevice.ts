@@ -46,7 +46,13 @@ const readStoredToken = memoize((): string | undefined => {
   // Env var takes precedence for testing/canary.
   const envToken = process.env.CLAUDE_TRUSTED_DEVICE_TOKEN
   if (envToken) {
-    return envToken
+    // Validate format — trusted device tokens are opaque strings but must be
+    // non-empty and within a reasonable length to prevent header injection
+    // or accidental misuse (e.g. a stray newline from a misconfigured .env).
+    if (envToken.length > 0 && envToken.length <= 4096 && !envToken.includes('\n') && !envToken.includes('\r')) {
+      return envToken
+    }
+    logForDebugging(`[trustedDevice] CLAUDE_TRUSTED_DEVICE_TOKEN env var rejected: invalid format (len=${envToken.length})`)
   }
   return getSecureStorage().read()?.trustedDeviceToken
 })

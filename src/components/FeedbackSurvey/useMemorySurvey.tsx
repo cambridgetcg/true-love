@@ -8,6 +8,7 @@ import { FILE_READ_TOOL_NAME } from '../../tools/FileReadTool/prompt.js';
 import type { Message } from '../../types/message.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
+import { secureRandom } from '../../utils/secureRandom.js';
 import { isAutoManagedMemoryFile } from '../../utils/memoryFileDetection.js';
 import { extractTextContent, getLastAssistantMessage } from '../../utils/messages.js';
 import { logOTelEvent } from '../../utils/telemetry/events.js';
@@ -199,7 +200,7 @@ export function useMemorySurvey(messages: Message[], isLoading: boolean, hasActi
     if (!memoryReadSeen.current) {
       return;
     }
-    if (Math.random() < SURVEY_PROBABILITY) {
+    if (secureRandom() < SURVEY_PROBABILITY) {
       open();
     }
   }, [enabled, state, isLoading, hasActivePrompt, lastAssistant, messages, open]);

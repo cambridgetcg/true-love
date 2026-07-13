@@ -26,10 +26,10 @@ export function decodeJwtPayload(token: string): unknown | null {
   if (parts.length !== 3 || !parts[1]) return null
   try {
     return jsonParse(Buffer.from(parts[1], 'base64url').toString('utf8'))
-  } catch {
+  } catch (e) {
+    logForDebugging(`[jwt] Failed to decode JWT payload: ${errorMessage(e)}`)
     return null
   }
-}
 
 /**
  * Decode the `exp` (expiry) claim from a JWT without verifying the signature.

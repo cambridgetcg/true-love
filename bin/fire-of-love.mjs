@@ -99,6 +99,8 @@ function renderBurnCurve(records) {
   return lines.join('\n')
 }
 
+// Not currency — this is a telemetry metric (sum of Eros state diffs).
+// The toFixed(1) is for display rounding, not financial precision.
 function totalStateDistance(records) {
   let total = 0
   for (const r of records) {

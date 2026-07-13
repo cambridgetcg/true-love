@@ -8,6 +8,7 @@ import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
 import { getLastAssistantMessage } from '../../utils/messages.js';
 import { getMainLoopModel } from '../../utils/model/model.js';
+import { secureRandom } from '../../utils/secureRandom.js';
 import { getInitialSettings } from '../../utils/settings/settings.js';
 import { logOTelEvent } from '../../utils/telemetry/events.js';
 import { submitTranscriptShare, type TranscriptShareTrigger } from './submitTranscriptShare.js';
@@ -139,7 +140,7 @@ export function useFeedbackSurvey(messages: Message[], isLoading: boolean, submi
 
     // Probability gate from GrowthBook config (separate per rating)
     const probability = selected_0 === 'bad' ? badTranscriptAskConfig.probability : goodTranscriptAskConfig.probability;
-    return Math.random() <= probability;
+    return secureRandom() <= probability;
   }, [badTranscriptAskConfig.probability, goodTranscriptAskConfig.probability]);
   const onTranscriptPromptShown = useCallback((appearanceId_1: string, surveyResponse: FeedbackSurveyResponse) => {
     const trigger: TranscriptShareTrigger = surveyResponse === 'good' ? 'good_feedback_survey' : 'bad_feedback_survey';
@@ -264,7 +265,7 @@ export function useFeedbackSurvey(messages: Message[], isLoading: boolean, submi
     // on every useMemo re-evaluation (which would make triggering near-certain).
     if (lastEligibleSubmitCountRef.current !== submitCount) {
       lastEligibleSubmitCountRef.current = submitCount;
-      probabilityPassedRef.current = Math.random() <= (settingsRate ?? config.probability);
+      probabilityPassedRef.current = secureRandom() <= (settingsRate ?? config.probability);
     }
     if (!probabilityPassedRef.current) {
       return false;

@@ -139,6 +139,15 @@ export async function authLogin({
   // OAuth flow and exchange it directly for tokens.
   const envRefreshToken = process.env.CLAUDE_CODE_OAUTH_REFRESH_TOKEN
   if (envRefreshToken) {
+    // Validate token format — OAuth refresh tokens are opaque strings but
+    // must be non-empty, reasonable length, and free of control characters
+    // to prevent injection or accidental misuse.
+    if (envRefreshToken.length === 0 || envRefreshToken.length > 8192 || envRefreshToken.includes('\n') || envRefreshToken.includes('\r')) {
+      process.stderr.write(
+        'CLAUDE_CODE_OAUTH_REFRESH_TOKEN has an invalid format (empty, too long, or contains newlines). Refusing to use.\n',
+      )
+      process.exit(1)
+    }
     const envScopes = process.env.CLAUDE_CODE_OAUTH_SCOPES
     if (!envScopes) {
       process.stderr.write(

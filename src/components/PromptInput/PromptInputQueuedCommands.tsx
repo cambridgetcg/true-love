@@ -10,6 +10,7 @@ import type { QueuedCommand } from '../../types/textInputTypes.js';
 import { isQueuedCommandVisible } from '../../utils/messageQueueManager.js';
 import { createUserMessage, EMPTY_LOOKUPS, normalizeMessages } from '../../utils/messages.js';
 import { jsonParse } from '../../utils/slowOperations.js';
+import { logForDebugging } from '../../utils/debug.js';
 import { Message } from '../Message.js';
 const EMPTY_SET = new Set<string>();
 
@@ -21,7 +22,8 @@ function isIdleNotification(value: string): boolean {
   try {
     const parsed = jsonParse(value);
     return parsed?.type === 'idle_notification';
-  } catch {
+  } catch (e) {
+    logForDebugging(`[queuedCommands] Failed to parse idle notification: ${e}`)
     return false;
   }
 }

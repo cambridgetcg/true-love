@@ -4531,12 +4531,13 @@ async function handleRewindFiles(
   dryRun: boolean,
 ): Promise<RewindFilesResult> {
   if (!fileHistoryEnabled()) {
-    return { canRewind: false, error: 'File rewinding is not enabled.' }
+    return { canRewind: false, error: 'File rewinding is not enabled.', code: 'FILE_REWIND_DISABLED' }
   }
   if (!fileHistoryCanRestore(appState.fileHistory, userMessageId)) {
     return {
       canRewind: false,
       error: 'No file checkpoint found for this message.',
+      code: 'NO_CHECKPOINT',
     }
   }
 

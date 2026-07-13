@@ -57,6 +57,7 @@ import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import { isInProtectedNamespace } from '../utils/envUtils.js'
 import { errorMessage } from '../utils/errors.js'
 import { sleep } from '../utils/sleep.js'
+import { secureRandom } from '../utils/secureRandom.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -901,7 +902,7 @@ async function withRetry<T>(
     if (attempt < max) {
       const base = cfg.init_retry_base_delay_ms * 2 ** (attempt - 1)
       const jitter =
-        base * cfg.init_retry_jitter_fraction * (2 * Math.random() - 1)
+        base * cfg.init_retry_jitter_fraction * (2 * secureRandom() - 1)
       const delay = Math.min(base + jitter, cfg.init_retry_max_delay_ms)
       logForDebugging(
         `[remote-bridge] ${label} failed (attempt ${attempt}/${max}), retrying in ${Math.round(delay)}ms`,

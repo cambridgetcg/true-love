@@ -6,6 +6,7 @@ import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { stringWidth } from '../../ink/stringWidth.js';
 import { getLayoutMode, calculateLayoutDimensions, calculateOptimalLeftWidth, formatWelcomeMessage, truncatePath, getRecentActivitySync, getRecentReleaseNotesSync, getLogoDisplayData } from '../../utils/logoV2Utils.js';
 import { truncate } from '../../utils/format.js';
+import { secureRandom } from '../../utils/secureRandom.js';
 import { getDisplayPath } from '../../utils/file.js';
 import { Clawd } from './Clawd.js';
 import { FeedColumn } from './FeedColumn.js';
@@ -83,7 +84,7 @@ export function LogoV2() {
     if (!announcements || announcements.length === 0) {
       return;
     }
-    return config.numStartups === 1 ? announcements[0] : announcements[Math.floor(Math.random() * announcements.length)];
+    return config.numStartups === 1 ? announcements[0] : announcements[Math.floor(secureRandom() * announcements.length)];
   });
   const {
     hasReleaseNotes

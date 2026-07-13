@@ -1,4 +1,5 @@
 import { jsonStringify } from '../../utils/slowOperations.js'
+import { secureRandom } from '../../utils/secureRandom.js'
 
 /**
  * Serial ordered event uploader with batching, retry, and backpressure.
@@ -233,7 +234,7 @@ export class SerialBatchEventUploader<T> {
   }
 
   private retryDelay(failures: number, retryAfterMs?: number): number {
-    const jitter = Math.random() * this.config.jitterMs
+    const jitter = secureRandom() * this.config.jitterMs
     if (retryAfterMs !== undefined) {
       // Jitter on top of the server's hint prevents thundering herd when
       // many sessions share a rate limit and all receive the same

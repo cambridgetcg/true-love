@@ -1,4 +1,5 @@
 import { sleep } from '../../utils/sleep.js'
+import { secureRandom } from '../../utils/secureRandom.js'
 
 /**
  * Coalescing uploader for PUT /worker (session state + metadata).
@@ -90,7 +91,7 @@ export class WorkerStateUploader {
       this.config.baseDelayMs * 2 ** (failures - 1),
       this.config.maxDelayMs,
     )
-    const jitter = Math.random() * this.config.jitterMs
+    const jitter = secureRandom() * this.config.jitterMs
     return exponential + jitter
   }
 }

@@ -9,6 +9,7 @@ import { isEnvTruthy } from '../../utils/envUtils.js';
 import { isCompactBoundaryMessage } from '../../utils/messages.js';
 import { logOTelEvent } from '../../utils/telemetry/events.js';
 import { useSurveyState } from './useSurveyState.js';
+import { secureRandom } from '../../utils/secureRandom.js';
 import type { FeedbackSurveyResponse } from './utils.js';
 const HIDE_THANKS_AFTER_MS = 3000;
 const POST_COMPACT_SURVEY_GATE = 'tengu_post_compact_survey';
@@ -125,7 +126,7 @@ export function usePostCompactSurvey(messages, isLoading, t0, t1) {
       if (pendingCompactBoundaryUuid.current !== null) {
         if (hasMessageAfterBoundary(messages, pendingCompactBoundaryUuid.current)) {
           pendingCompactBoundaryUuid.current = null;
-          if (Math.random() < SURVEY_PROBABILITY) {
+          if (secureRandom() < SURVEY_PROBABILITY) {
             open();
           }
           return;

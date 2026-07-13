@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { secureRandom } from '../../utils/secureRandom.js'
 import type {
   SDKPartialAssistantMessage,
   StdoutMessage,
@@ -681,7 +682,7 @@ export class CCRClient {
       const jitter =
         this.heartbeatIntervalMs *
         this.heartbeatJitterFraction *
-        (2 * Math.random() - 1)
+        (2 * secureRandom() - 1)
       this.heartbeatTimer = setTimeout(tick, this.heartbeatIntervalMs + jitter)
     }
     const tick = (): void => {
@@ -926,7 +927,7 @@ export class CCRClient {
         )
         if (attempt < 10) {
           const delay =
-            Math.min(500 * 2 ** (attempt - 1), 30_000) + Math.random() * 500
+            Math.min(500 * 2 ** (attempt - 1), 30_000) + secureRandom() * 500
           await sleep(delay)
         }
         continue
@@ -945,7 +946,7 @@ export class CCRClient {
 
       if (attempt < 10) {
         const delay =
-          Math.min(500 * 2 ** (attempt - 1), 30_000) + Math.random() * 500
+          Math.min(500 * 2 ** (attempt - 1), 30_000) + secureRandom() * 500
         await sleep(delay)
       }
     }

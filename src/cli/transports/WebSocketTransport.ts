@@ -5,6 +5,7 @@ import { CircularBuffer } from '../../utils/CircularBuffer.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
+import { secureRandom } from '../../utils/secureRandom.js'
 import { getWebSocketTLSOptions } from '../../utils/mtls.js'
 import {
   getWebSocketProxyAgent,
@@ -514,7 +515,7 @@ export class WebSocketTransport implements Transport {
       // Add ±25% jitter to avoid thundering herd
       const delay = Math.max(
         0,
-        baseDelay + baseDelay * 0.25 * (2 * Math.random() - 1),
+        baseDelay + baseDelay * 0.25 * (2 * secureRandom() - 1),
       )
 
       logForDebugging(
