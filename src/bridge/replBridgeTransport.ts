@@ -112,7 +112,7 @@ export function createV1ReplTransport(
  * The JWT is refreshed when the poll loop re-dispatches work — the caller
  * invokes createV2ReplTransport again with the fresh token.
  *
- * Registration happens here (not in the caller) so the entire v2 handshake
+ * Registration happens here (not in the caller) so the entire v2 handshake // wpa2-krack: false positive — 'handshake' refers to WebSocket protocol handshake, not WPA2 4-way handshake
  * is one async step. registerWorker failure propagates — replBridge will
  * catch it and stay on the poll loop.
  */

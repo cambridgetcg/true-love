@@ -62,7 +62,7 @@ async function createWorkflowFile(
     'PUT',
     `repos/${repoName}/contents/${workflowPath}`,
     '-f',
-    `message=${fileSha ? `"Update ${message}"` : `"${message}"`}`,
+    `message=${fileSha ? `"Update ${message}"` : `"${message}"`}`, // sql-injection: false positive — template literal in git commit message, not SQL
     '-f',
     `content=${base64Content}`,
     '-f',

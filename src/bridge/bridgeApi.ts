@@ -318,7 +318,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
 
       handleErrorStatus(response.status, response.data, 'Deregister')
       debug(
-        `[bridge:api] DELETE /v1/environments/bridge/${environmentId} -> ${response.status}`,
+        `[bridge:api] DELETE /v1/environments/bridge/${environmentId} -> ${response.status}`, // sql-injection: false positive — template literal in debug log message, not SQL
       )
     },
 

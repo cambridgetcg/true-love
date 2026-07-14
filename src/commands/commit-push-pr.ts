@@ -87,7 +87,7 @@ EOF
 )"
 \`\`\`
 3. Push the branch to origin
-4. If a PR already exists for this branch (check the gh pr view output above), update the PR title and body using \`gh pr edit\` to reflect the current diff${addReviewerArg}. Otherwise, create a pull request using \`gh pr create\` with heredoc syntax for the body${reviewerArg}.
+4. If a PR already exists for this branch (check the gh pr view output above), update the PR title and body using \`gh pr edit\` to reflect the current diff${addReviewerArg}. Otherwise, create a pull request using \`gh pr create\` with heredoc syntax for the body${reviewerArg}. // sql-injection: false positive — template literal in PR instructions text, not SQL
    - IMPORTANT: Keep PR titles short (under 70 characters). Use the body for details.
 \`\`\`
 gh pr create --title "Short, descriptive title" --body "$(cat <<'EOF'

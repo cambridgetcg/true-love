@@ -126,7 +126,7 @@ export function registerMcpAddCommand(mcp: Command): void {
 
         // Check if the command looks like a URL (likely incorrect usage)
         const looksLikeUrl =
-          actualCommand.startsWith('http://') ||
+          actualCommand.startsWith('http://') || // insecure-protocol: false positive — URL protocol check for MCP server command, not network connection
           actualCommand.startsWith('https://') ||
           actualCommand.startsWith('localhost') ||
           actualCommand.endsWith('/sse') ||

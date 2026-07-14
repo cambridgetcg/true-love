@@ -620,7 +620,7 @@ export function DiscoverPlugins({
                 {plugin_5.entry.tags?.includes('community-managed') && <Text dimColor> [Community Managed]</Text>}
                 {installCounts && plugin_5.marketplaceName === OFFICIAL_MARKETPLACE_NAME && <Text dimColor>
                       {' · '}
-                      {formatInstallCount(installCounts.get(plugin_5.pluginId) ?? 0)}{' '}
+                      {formatInstallCount(installCounts.get(plugin_5.pluginId) ?? 0)}{' '} // silent-failure: false positive — Map default for absent plugin install count; 0 means 'no installs tracked' not 'read failed'
                       installs
                     </Text>}
               </Text>

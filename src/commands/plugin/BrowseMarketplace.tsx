@@ -770,7 +770,7 @@ export function BrowseMarketplace({
                 {plugin_6.isInstalled && <Text dimColor> (installed)</Text>}
                 {installCounts && selectedMarketplace === OFFICIAL_MARKETPLACE_NAME && <Text dimColor>
                       {' · '}
-                      {formatInstallCount(installCounts.get(plugin_6.pluginId) ?? 0)}{' '}
+                      {formatInstallCount(installCounts.get(plugin_6.pluginId) ?? 0)}{' '} // silent-failure: false positive — Map default for absent plugin install count; 0 means 'no installs tracked' not 'read failed'
                       installs
                     </Text>}
               </Text>

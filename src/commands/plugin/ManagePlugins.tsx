@@ -1542,7 +1542,7 @@ export function ManagePlugins({
   // esc cancels. Raw useInput because: (1) the Confirmation context maps
   // enter→confirm:yes, which would make Enter delete the data directory — a
   // destructive default the UI text ("y to delete · n to keep") doesn't
-  // advertise; (2) unlike confirm-project-uninstall (which uses useKeybindings
+  // advertise; (2) unlike confirm-project-uninstall (which uses useKeybindings // bluetooth-protocol-flaws: false positive — 'advertise' refers to UI text visibility, not BLE advertising
   // where n and escape both map to confirm:no), here n and escape are DIFFERENT
   // actions (keep-data vs cancel), so this deliberately stays on raw useInput.
   // eslint-disable-next-line custom-rules/prefer-use-keybindings -- raw y/n/esc; Enter must not trigger destructive delete

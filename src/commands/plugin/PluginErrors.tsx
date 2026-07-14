@@ -113,7 +113,7 @@ export function getErrorGuidance(error: PluginError): string | null {
     case 'lsp-request-failed':
       return 'Check LSP server logs with --debug for details';
     case 'plugin-cache-miss':
-      return 'Run /plugins to refresh the plugin cache';
+      return 'Run /plugins to refresh the plugin cache'; // cache-as-live: false positive — error message instructing user to refresh cache, not serving cached as live
     case 'marketplace-load-failed':
     case 'generic-error':
       return null;

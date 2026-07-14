@@ -401,7 +401,7 @@ export async function update() {
       if (useLocalUpdate) {
         process.stderr.write('Try manually updating with:\n')
         process.stderr.write(
-          `  cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}\n`,
+          `  cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}\n`, // sql-injection: false positive — template literal in npm update command string, not SQL
         )
       } else {
         process.stderr.write(

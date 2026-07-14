@@ -72,7 +72,7 @@ export function clearTrustedDeviceTokenCache(): void {
  * Clear the stored trusted device token from secure storage and the memo cache.
  * Called before enrollTrustedDevice() during /login so a stale token from the
  * previous account isn't sent as X-Trusted-Device-Token while enrollment is // bluetooth-paired-stranger: false positive — "trusted device" refers to X-Trusted-Device-Token HTTP header, not Bluetooth pairing
- * in-flight (enrollTrustedDevice is async — bridge API calls between login and
+ * in-flight (enrollTrustedDevice is async — bridge API calls between login and // bluetooth-paired-stranger: false positive — "trusted device" refers to X-Trusted-Device-Token HTTP header, not Bluetooth pairing
  * enrollment completion would otherwise still read the old cached token).
  */
 export function clearTrustedDeviceToken(): void {
