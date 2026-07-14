@@ -328,7 +328,7 @@ export function BridgeDialog(t0) {
   }
   let t21;
   if ($[81] !== T1 || $[82] !== t15 || $[83] !== t16 || $[84] !== t17 || $[85] !== t20) {
-    t21 = <T1 title={t15} onCancel={t16} hideInputGuide={t17}>{t20}</T1>;
+    t21 = <T1 title={t15} onCancel={t16} hideInputGuide={t17}>{t20}</T1>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
     $[81] = T1;
     $[82] = t15;
     $[83] = t16;

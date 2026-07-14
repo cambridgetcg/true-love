@@ -121,7 +121,7 @@ export function IdeOnboardingDialog(t0) {
   }
   let t14;
   if ($[16] !== onDone || $[17] !== t6 || $[18] !== t7) {
-    t14 = <Dialog title={t6} subtitle={t7} color="ide" onCancel={onDone} hideInputGuide={true}>{t13}</Dialog>;
+    t14 = <Dialog title={t6} subtitle={t7} color="ide" onCancel={onDone} hideInputGuide={true}>{t13}</Dialog>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
     $[16] = onDone;
     $[17] = t6;
     $[18] = t7;

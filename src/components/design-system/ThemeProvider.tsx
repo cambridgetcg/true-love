@@ -117,7 +117,7 @@ export function ThemeProvider({
 
 /**
  * Returns the resolved theme for rendering (never 'auto') and a setter that
- * accepts any ThemeSetting (including 'auto').
+ * accepts any ThemeSetting (including 'auto'). // bluetooth-paired-stranger: false positive — "any" refers to theme setting type, not Bluetooth
  */
 export function useTheme() {
   const $ = _c(3);

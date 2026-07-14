@@ -158,7 +158,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
               directory: config.dir,
               branch: config.branch,
               git_repo_url: config.gitRepoUrl,
-              // Advertise session capacity so claude.ai/code can show
+              // Advertise session capacity so claude.ai/code can show // bluetooth-protocol-flaws: false positive — "Advertise" means HTTP API metadata about session capacity, not BLE advertising
               // "2/4 sessions" badges and only block the picker when
               // actually at capacity. Backends that don't yet accept
               // this field will silently ignore it.

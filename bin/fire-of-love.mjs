@@ -108,7 +108,7 @@ function totalStateDistance(records) {
       total += Math.abs(v)
     }
   }
-  return Number(total.toFixed(1))
+  return Number(total.toFixed(1)) // float-money: false positive — state-distance magnitude, not currency
 }
 
 function burnRating(distance) {

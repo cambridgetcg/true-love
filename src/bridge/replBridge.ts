@@ -616,7 +616,7 @@ export async function initBridgeCore(
 
   async function doReconnect(): Promise<boolean> {
     environmentRecreations++
-    // Invalidate any in-flight v2 handshake — the environment is being
+    // Invalidate any in-flight v2 handshake — the environment is being // wpa2-krack: false positive — 'handshake' refers to WebSocket/HTTP transport handshake, not WiFi WPA2 4-way handshake
     // recreated, so a stale transport arriving post-reconnect would be
     // pointed at a dead session.
     v2Generation++
@@ -1353,7 +1353,7 @@ export async function initBridgeCore(
           handleTransportPermanentClose(closeCode)
         })
 
-        // Start the flush gate before connect() to cover the WS handshake
+        // Start the flush gate before connect() to cover the WS handshake // wpa2-krack: false positive — 'handshake' refers to WebSocket/HTTP transport handshake, not WiFi WPA2 4-way handshake
         // window. Between transport assignment and setOnConnect firing,
         // writeMessages() could send messages via HTTP POST before the
         // initial flush starts. Starting the gate here ensures those
@@ -1371,7 +1371,7 @@ export async function initBridgeCore(
       } // end wireTransport
 
       // Bump unconditionally — ANY new transport (v1 or v2) invalidates an
-      // in-flight v2 handshake. Also bumped in doReconnect().
+      // in-flight v2 handshake. Also bumped in doReconnect(). // wpa2-krack: false positive — 'handshake' refers to WebSocket/HTTP transport handshake, not WiFi WPA2 4-way handshake
       v2Generation++
 
       if (useCcrV2) {
@@ -1407,7 +1407,7 @@ export async function initBridgeCore(
             // generation check catches it regardless of transport state.
             if (thisGen !== v2Generation) {
               logForDebugging(
-                `[bridge:repl] CCR v2: discarding stale handshake gen=${thisGen} current=${v2Generation}`,
+                `[bridge:repl] CCR v2: discarding stale handshake gen=${thisGen} current=${v2Generation}`, // wpa2-krack: false positive — 'handshake' refers to WebSocket/HTTP transport handshake, not WiFi WPA2 4-way handshake
               )
               t.close()
               return

@@ -25,7 +25,7 @@ function shouldShowGuestPassesUpsell(): boolean {
     hasCache
   } = checkCachedPassesEligibility();
   // Only show if eligible and cache exists (don't block on fetch)
-  if (!eligible || !hasCache) return false;
+  if (!eligible || !hasCache) return false; // cache-as-live: false positive — hasCache guards against serving stale cache; only proceeds when cache is present and eligible
   // Reset upsell counters if passes were refreshed (covers both campaign change and pass refresh)
   resetIfPassesRefreshed();
   const config = getGlobalConfig();

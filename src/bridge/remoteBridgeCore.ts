@@ -323,7 +323,7 @@ export async function initEnvLessBridgeCore(
       // so truthiness doesn't mean valid. Pass the stale token to onAuth401
       // so handleOAuth401Error's keychain-comparison can detect parallel refresh.
       const stale = getAccessToken()
-      if (onAuth401) await onAuth401(stale ?? '')
+      if (onAuth401) await onAuth401(stale ?? '') // silent-failure: false positive — null-coalescing on auth token; '' means "no token" sentinel, not failed read
       return getAccessToken() ?? stale
     },
     onRefresh: (sid, oauthToken) => {
@@ -542,7 +542,7 @@ export async function initEnvLessBridgeCore(
       // Pass the stale token so handleOAuth401Error's keychain-comparison
       // can detect if another tab already refreshed.
       const stale = getAccessToken()
-      if (onAuth401) await onAuth401(stale ?? '')
+      if (onAuth401) await onAuth401(stale ?? '') // silent-failure: false positive — null-coalescing on auth token; '' means "no token" sentinel, not failed read
       const oauthToken = getAccessToken() ?? stale
       if (!oauthToken || tornDown) {
         if (!tornDown) {
@@ -592,7 +592,7 @@ export async function initEnvLessBridgeCore(
 
   wireTransportCallbacks()
 
-  // Start flushGate BEFORE connect so writeMessages() during handshake
+  // Start flushGate BEFORE connect so writeMessages() during handshake // wpa2-krack: false positive — 'handshake' refers to WebSocket/HTTP transport handshake, not WiFi WPA2 4-way handshake
   // queues instead of racing the history POST.
   if (initialMessages && initialMessages.length > 0) {
     flushGate.start()
@@ -697,7 +697,7 @@ export async function initEnvLessBridgeCore(
     // wake); an uncaught throw here would skip transport.close + telemetry.
     if (status === 401 && onAuth401) {
       try {
-        await onAuth401(token ?? '')
+        await onAuth401(token ?? '') // silent-failure: false positive — null-coalescing on auth token; '' means "no token" sentinel, not failed read
         token = getAccessToken()
         status = await archiveSession(
           sessionId,

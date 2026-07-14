@@ -14,7 +14,7 @@ type DialogProps = {
   children: React.ReactNode;
   onCancel: () => void;
   color?: keyof Theme;
-  hideInputGuide?: boolean;
+  hideInputGuide?: boolean; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop for hiding input guide hints, not Bluetooth HID
   hideBorder?: boolean;
   /** Custom input guide content. Receives exitState for Ctrl+C/D pending display. */
   inputGuide?: (exitState: ExitState) => React.ReactNode;
@@ -35,7 +35,7 @@ export function Dialog(t0) {
     children,
     onCancel,
     color: t1,
-    hideInputGuide,
+    hideInputGuide, // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop for hiding input guide hints, not Bluetooth HID
     hideBorder,
     inputGuide,
     isCancelActive: t2
@@ -101,11 +101,11 @@ export function Dialog(t0) {
     t8 = $[15];
   }
   let t9;
-  if ($[16] !== defaultInputGuide || $[17] !== exitState || $[18] !== hideInputGuide || $[19] !== inputGuide) {
-    t9 = !hideInputGuide && <Box marginTop={1}><Text dimColor={true} italic={true}>{inputGuide ? inputGuide(exitState) : defaultInputGuide}</Text></Box>;
+  if ($[16] !== defaultInputGuide || $[17] !== exitState || $[18] !== hideInputGuide || $[19] !== inputGuide) { // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop for hiding input guide hints, not Bluetooth HID
+    t9 = !hideInputGuide && <Box marginTop={1}><Text dimColor={true} italic={true}>{inputGuide ? inputGuide(exitState) : defaultInputGuide}</Text></Box>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop for hiding input guide hints, not Bluetooth HID
     $[16] = defaultInputGuide;
     $[17] = exitState;
-    $[18] = hideInputGuide;
+    $[18] = hideInputGuide; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop for hiding input guide hints, not Bluetooth HID
     $[19] = inputGuide;
     $[20] = t9;
   } else {

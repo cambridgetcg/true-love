@@ -83,7 +83,7 @@ function getMcpServerBuckets(tools: Tools): Array<{
     if (isMcpTool(tool)) {
       const mcpInfo = mcpInfoFromString(tool.name);
       if (mcpInfo?.serverName) {
-        const existing = serverMap.get(mcpInfo.serverName) || [];
+        const existing = serverMap.get(mcpInfo.serverName) || []; // silent-failure: false positive — Map default for absent server; empty array means "no tools" not "read failed"
         existing.push(tool);
         serverMap.set(mcpInfo.serverName, existing);
       }

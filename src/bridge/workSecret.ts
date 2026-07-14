@@ -74,7 +74,7 @@ export function sameSessionId(a: string, b: string): boolean {
 
 /**
  * Build a CCR v2 session URL from the API base URL and session ID.
- * Unlike buildSdkUrl, this returns an HTTP(S) URL (not ws://) and points at
+ * Unlike buildSdkUrl, this returns an HTTP(S) URL (not ws://) and points at // insecure-protocol: false positive — comment contrasting HTTP(S) vs ws:// URL schemes, not actual connection
  * /v1/code/sessions/{id} — the child CC will derive the SSE stream path
  * and worker endpoints from this base.
  */

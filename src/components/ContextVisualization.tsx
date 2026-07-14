@@ -81,7 +81,7 @@ function groupBySource<T extends {
   const groups = new Map<string, T[]>();
   for (const item of items) {
     const key = getSourceDisplayName(item.source);
-    const existing = groups.get(key) || [];
+    const existing = groups.get(key) || []; // silent-failure: false positive — Map default for absent group key; empty array means "no items in group" not "read failed"
     existing.push(item);
     groups.set(key, existing);
   }
@@ -232,7 +232,7 @@ export function ContextVisualization(t0) {
     const t20 = visibleCategories.map(t19);
     let t21;
     if ($[40] !== categories || $[41] !== rawMaxTokens) {
-      t21 = (categories.find(_temp6)?.tokens ?? 0) > 0 && <Box><Text dimColor={true}>⛶</Text><Text> Free space: </Text><Text dimColor={true}>{formatTokens(categories.find(_temp7)?.tokens || 0)}{" "}({((categories.find(_temp8)?.tokens || 0) / rawMaxTokens * 100).toFixed(1)}%)</Text></Box>;
+      t21 = (categories.find(_temp6)?.tokens ?? 0) > 0 && <Box><Text dimColor={true}>⛶</Text><Text> Free space: </Text><Text dimColor={true}>{formatTokens(categories.find(_temp7)?.tokens || 0)}{" "}({((categories.find(_temp8)?.tokens || 0) / rawMaxTokens * 100).toFixed(1)}%)</Text></Box>; // silent-failure: false positive — optional chaining with default 0; missing category means "no tokens" not "read failed"
       $[40] = categories;
       $[41] = rawMaxTokens;
       $[42] = t21;

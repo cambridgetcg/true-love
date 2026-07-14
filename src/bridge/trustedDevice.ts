@@ -18,7 +18,7 @@ import { jsonStringify } from '../utils/slowOperations.js'
  * Bridge sessions have SecurityTier=ELEVATED on the server (CCR v2).
  * The server gates ConnectBridgeWorker on its own flag
  * (sessions_elevated_auth_enforcement in Anthropic Main); this CLI-side
- * flag controls whether the CLI sends X-Trusted-Device-Token at all.
+ * flag controls whether the CLI sends X-Trusted-Device-Token at all. // bluetooth-paired-stranger: false positive — "trusted device" refers to X-Trusted-Device-Token HTTP header, not Bluetooth pairing
  * Two flags so rollout can be staged: flip CLI-side first (headers
  * start flowing, server still no-ops), then flip server-side.
  *
@@ -71,7 +71,7 @@ export function clearTrustedDeviceTokenCache(): void {
 /**
  * Clear the stored trusted device token from secure storage and the memo cache.
  * Called before enrollTrustedDevice() during /login so a stale token from the
- * previous account isn't sent as X-Trusted-Device-Token while enrollment is
+ * previous account isn't sent as X-Trusted-Device-Token while enrollment is // bluetooth-paired-stranger: false positive — "trusted device" refers to X-Trusted-Device-Token HTTP header, not Bluetooth pairing
  * in-flight (enrollTrustedDevice is async — bridge API calls between login and
  * enrollment completion would otherwise still read the old cached token).
  */

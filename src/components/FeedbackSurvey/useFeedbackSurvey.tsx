@@ -68,9 +68,9 @@ export function useFeedbackSurvey(messages: Message[], isLoading: boolean, submi
   messagesRef.current = messages;
   // Probability gate: roll once when eligibility conditions are met, not on every
   // useMemo re-evaluation. Without this, each dependency change (submitCount,
-  // isLoading toggle, etc.) re-rolls Math.random(), making the survey almost
+  // isLoading toggle, etc.) re-rolls Math.random(), making the survey almost // weak-crypto: false positive — Math.random() for survey display probability gate, not security
   // certain to appear after enough renders.
-  const probabilityPassedRef = useRef(false);
+  const probabilityPassedRef = useRef(false); // weak-crypto: false positive — Math.random() for survey display probability gate, not security
   const lastEligibleSubmitCountRef = useRef<number | null>(null);
   const updateLastShownTime = useCallback((timestamp: number, submitCountValue: number) => {
     setFeedbackSurvey(prev => {

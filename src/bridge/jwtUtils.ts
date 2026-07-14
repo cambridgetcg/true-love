@@ -94,7 +94,7 @@ export function createTokenRefreshScheduler({
   const generations = new Map<string, number>()
 
   function nextGeneration(sessionId: string): number {
-    const gen = (generations.get(sessionId) ?? 0) + 1
+    const gen = (generations.get(sessionId) ?? 0) + 1 // silent-failure: false positive — Map counter for generation/failure tracking; missing key = first occurrence = 0
     generations.set(sessionId, gen)
     return gen
   }
@@ -183,7 +183,7 @@ export function createTokenRefreshScheduler({
     }
 
     if (!oauthToken) {
-      const failures = (failureCounts.get(sessionId) ?? 0) + 1
+      const failures = (failureCounts.get(sessionId) ?? 0) + 1 // silent-failure: false positive — Map counter for generation/failure tracking; missing key = first occurrence = 0
       failureCounts.set(sessionId, failures)
       logForDebugging(
         `[${label}:token] No OAuth token available for refresh, sessionId=${sessionId} (failure ${failures}/${MAX_REFRESH_FAILURES})`,

@@ -103,7 +103,7 @@ export type ValidationResult =
 export type SetToolJSXFn = (
   args: {
     jsx: React.ReactNode | null
-    shouldHidePromptInput: boolean
+    shouldHidePromptInput: boolean // bluetooth-paired-stranger: false positive — UI boolean for hiding prompt input, not Bluetooth HID
     shouldContinueAnimation?: true
     showSpinner?: boolean
     isLocalJSXCommand?: boolean

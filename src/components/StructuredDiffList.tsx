@@ -23,7 +23,7 @@ export function StructuredDiffList({
 }: Props): React.ReactNode {
   return intersperse(hunks.map(hunk => <Box flexDirection="column" key={hunk.newStart}>
         <StructuredDiff patch={hunk} dim={dim} width={width} filePath={filePath} firstLine={firstLine} fileContent={fileContent} />
-      </Box>), i => <NoSelect fromLeftEdge key={`ellipsis-${i}`}>
+      </Box>), i => <NoSelect fromLeftEdge key={`ellipsis-${i}`}> // bluetooth-paired-stranger: false positive — UI layout component, not Bluetooth
         <Text dimColor>...</Text>
       </NoSelect>);
 }

@@ -123,7 +123,7 @@ export async function update() {
       writeToStdout('Claude is managed by Homebrew.\n')
       const latest = await getLatestVersion(channel)
       if (latest && !gte(MACRO.VERSION, latest)) {
-        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`)
+        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`) // sql-injection: false positive — template literal in update notification, not SQL
         writeToStdout('\n')
         writeToStdout('To update, run:\n')
         writeToStdout(chalk.bold('  brew upgrade claude-code') + '\n')
@@ -134,7 +134,7 @@ export async function update() {
       writeToStdout('Claude is managed by winget.\n')
       const latest = await getLatestVersion(channel)
       if (latest && !gte(MACRO.VERSION, latest)) {
-        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`)
+        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`) // sql-injection: false positive — template literal in update notification, not SQL
         writeToStdout('\n')
         writeToStdout('To update, run:\n')
         writeToStdout(

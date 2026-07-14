@@ -164,7 +164,7 @@ function banner() {
 }
 
 function connect() {
-  const url = `http://${host}:${port}/api/feedback/stream`
+  const url = `http://${host}:${port}/api/feedback/stream` // insecure-protocol: false positive — http:// for localhost dev tool, not production
   fetch(url, { headers: { Accept: 'text/event-stream' } })
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)

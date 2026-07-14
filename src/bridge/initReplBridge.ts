@@ -470,7 +470,7 @@ export async function initReplBridge(
       ? process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL
       : baseUrl
 
-  // Assistant-mode sessions advertise a distinct worker_type so the web UI
+  // Assistant-mode sessions advertise a distinct worker_type so the web UI // bluetooth-protocol-flaws: false positive — "advertise" means HTTP metadata about worker_type, not BLE advertising
   // can filter them into a dedicated picker. KAIROS guard keeps the
   // assistant module out of external builds entirely.
   let workerType: BridgeWorkerType = 'claude_code'

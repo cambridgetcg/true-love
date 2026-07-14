@@ -197,7 +197,7 @@ for (const s of surfaces) {
 // Write per-actor files when populated.
 const writtenPerActor = []
 for (const actor of VALID_ACTORS) {
-  const set = byActor.get(actor) ?? []
+  const set = byActor.get(actor) ?? [] // silent-failure: false positive — Map default for absent actor; empty array means "no surfaces for this actor" not "read failed"
   if (set.length === 0) continue
   writeFileSync(join(OUT_DIR, `llms-${actor}.txt`), renderIndex(set, actor))
   writeFileSync(join(OUT_DIR, `llms-${actor}-full.txt`), renderFull(set, actor))

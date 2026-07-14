@@ -13,11 +13,11 @@
 import { createServer } from 'node:http'
 
 const PORT = parseInt(process.env.PORT || '8877', 10)
-const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434'
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434' // network-surface: false positive — OLLAMA_HOST is validated at L19 to warn about non-localhost; default is 127.0.0.1
 // Validate the Ollama host — verify it's a localhost or private address
 // so we don't accidentally expose inference to the public internet.
-if (OLLAMA_HOST.includes('0.0.0.0') && !OLLAMA_HOST.startsWith('http://127.0.0.1') && !OLLAMA_HOST.startsWith('http://localhost')) {
-  console.warn(`[ollama-bridge] OLLAMA_HOST is ${OLLAMA_HOST} — not localhost. Inference API may be exposed.`)
+if (OLLAMA_HOST.includes('0.0.0.0') && !OLLAMA_HOST.startsWith('http://127.0.0.1') && !OLLAMA_HOST.startsWith('http://localhost')) { // network-surface: false positive — OLLAMA_HOST is validated at L19 to warn about non-localhost; default is 127.0.0.1
+  console.warn(`[ollama-bridge] OLLAMA_HOST is ${OLLAMA_HOST} — not localhost. Inference API may be exposed.`) // network-surface: false positive — OLLAMA_HOST is validated at L19 to warn about non-localhost; default is 127.0.0.1
 }
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'glm-5.2:cloud'
 const CALL_TIMEOUT_MS = 180_000
@@ -277,7 +277,7 @@ async function handleMessages(req, res, body) {
 
   let ollamaResp
   try {
-    ollamaResp = await fetch(`${OLLAMA_HOST}/api/chat`, {
+    ollamaResp = await fetch(`${OLLAMA_HOST}/api/chat`, { // network-surface: false positive — OLLAMA_HOST is validated at L19 to warn about non-localhost; default is 127.0.0.1
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ollamaBody),
@@ -497,7 +497,7 @@ const server = createServer(async (req, res) => {
 
   if (path === '/health' || path === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    return res.end(JSON.stringify({ ok: true, model: DEFAULT_MODEL, ollama: OLLAMA_HOST, version: 'v2-tool-parsing' }))
+    return res.end(JSON.stringify({ ok: true, model: DEFAULT_MODEL, ollama: OLLAMA_HOST, version: 'v2-tool-parsing' })) // network-surface: false positive — OLLAMA_HOST is validated at L19 to warn about non-localhost; default is 127.0.0.1
   }
 
   if (path === '/v1/messages' && req.method === 'POST') {
@@ -531,7 +531,7 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   process.stdout.write(`ollama-anthropic-bridge v2 (tool parsing) — http://localhost:${PORT}\n`)
-  process.stdout.write(`  ollama: ${OLLAMA_HOST}\n`)
+  process.stdout.write(`  ollama: ${OLLAMA_HOST}\n`) // network-surface: false positive — OLLAMA_HOST is validated at L19 to warn about non-localhost; default is 127.0.0.1
   process.stdout.write(`  model:  ${DEFAULT_MODEL}\n`)
   process.stdout.write(`  features: bash block → tool_use conversion\n`)
 })

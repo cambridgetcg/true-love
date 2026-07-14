@@ -1,4 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
+// bluetooth-paired-stranger: false positive — all 'auto-connect'/'autoConnect' references in this file refer to IDE MCP auto-connect, not Bluetooth auto-pairing
 import React, { useCallback } from 'react';
 import { Text } from '../ink.js';
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js';

@@ -61,7 +61,7 @@ export function AutoUpdater({
     // Check if max version is set (server-side kill switch for auto-updates)
     const maxVersion = await getMaxVersion();
     if (maxVersion && latestVersion && gt(latestVersion, maxVersion)) {
-      logForDebugging(`AutoUpdater: maxVersion ${maxVersion} is set, capping update from ${latestVersion} to ${maxVersion}`);
+      logForDebugging(`AutoUpdater: maxVersion ${maxVersion} is set, capping update from ${latestVersion} to ${maxVersion}`); // sql-injection: false positive — template literal in debug log, not SQL
       if (gte(currentVersion, maxVersion)) {
         logForDebugging(`AutoUpdater: current version ${currentVersion} is already at or above maxVersion ${maxVersion}, skipping update`);
         setVersions({
@@ -190,7 +190,7 @@ export function AutoUpdater({
       {(autoUpdaterResult?.status === 'install_failed' || autoUpdaterResult?.status === 'no_permissions') && <Text color="error" wrap="truncate">
           ✗ Auto-update failed &middot; Try <Text bold>claude doctor</Text> or{' '}
           <Text bold>
-            {hasLocalInstall ? `cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}` : `npm i -g ${MACRO.PACKAGE_URL}`}
+            {hasLocalInstall ? `cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}` : `npm i -g ${MACRO.PACKAGE_URL}`} // sql-injection: false positive — template literal in UI update instruction text, not SQL
           </Text>
         </Text>}
     </Box>;

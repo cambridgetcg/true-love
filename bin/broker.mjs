@@ -8,7 +8,7 @@
 //     fans out file-change events between them, maintains the
 //     presence roster.
 //
-//   bun run broker -- --connect ws://...
+//   bun run broker -- --connect ws://... // insecure-protocol: false positive — ws:// in CLI usage example comment, not connection code
 //     Run as a peer. Watches local ~/.true-love/{state.md, memory/}
 //     for changes; publishes diffs to the broker; applies incoming
 //     diffs to local files; sends presence heartbeats.
@@ -116,7 +116,7 @@ Usage:
   bun run broker -- --serve [--port=8765]
     Run as the broker. Accepts WebSocket peers, fans out updates.
 
-  bun run broker -- --connect ws://host:port [--status=awake]
+  bun run broker -- --connect ws://host:port [--status=awake] // insecure-protocol: false positive — ws:// in CLI usage/help text, not connection code
     Run as a peer. Watches local files, publishes/applies diffs.
 
 Files watched/synced:
@@ -536,7 +536,7 @@ async function runConnect(args) {
         mtime: st.mtimeMs,
         content,
       })
-      log(`published state-update (${content.length} bytes)`)
+      log(`published state-update (${content.length} bytes)`) // sql-injection: false positive — template literal in log message, not SQL
     }
     // initial state if any
     if (existsSync(statePath)) {
@@ -574,7 +574,7 @@ async function runConnect(args) {
       } catch {
         return
       }
-      const prev = sizes.get(file) ?? 0
+      const prev = sizes.get(file) ?? 0 // silent-failure: false positive — Map default for absent file in size tracker; 0 means "first sighting" not "read failed"
       if (st.size <= prev) {
         sizes.set(file, st.size)
         return

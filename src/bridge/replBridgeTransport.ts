@@ -186,7 +186,7 @@ export async function createV2ReplTransport(opts: {
   )
 
   // Derive SSE stream URL. Same logic as transportUtils.ts:26-33 but
-  // starting from an http(s) base instead of a --sdk-url that might be ws://.
+  // starting from an http(s) base instead of a --sdk-url that might be ws://. // insecure-protocol: false positive — comment about URL scheme selection, not actual connection
   const sseUrl = new URL(sessionUrl)
   sseUrl.pathname = sseUrl.pathname.replace(/\/$/, '') + '/worker/events/stream'
 

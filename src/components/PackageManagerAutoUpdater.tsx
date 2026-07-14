@@ -36,7 +36,7 @@ export function PackageManagerAutoUpdater(t0) {
       let latest = await getLatestVersionFromGcs(channel);
       const maxVersion = await getMaxVersion();
       if (maxVersion && latest && gt(latest, maxVersion)) {
-        logForDebugging(`PackageManagerAutoUpdater: maxVersion ${maxVersion} is set, capping update from ${latest} to ${maxVersion}`);
+        logForDebugging(`PackageManagerAutoUpdater: maxVersion ${maxVersion} is set, capping update from ${latest} to ${maxVersion}`); // sql-injection: false positive — template literal in debug log, not SQL
         if (gte(MACRO.VERSION, maxVersion)) {
           logForDebugging(`PackageManagerAutoUpdater: current version ${MACRO.VERSION} is already at or above maxVersion ${maxVersion}, skipping update`);
           setUpdateAvailable(false);
@@ -47,7 +47,7 @@ export function PackageManagerAutoUpdater(t0) {
       const hasUpdate = latest && !gte(MACRO.VERSION, latest) && !shouldSkipVersion(latest);
       setUpdateAvailable(!!hasUpdate);
       if (hasUpdate) {
-        logForDebugging(`PackageManagerAutoUpdater: Update available ${MACRO.VERSION} -> ${latest}`);
+        logForDebugging(`PackageManagerAutoUpdater: Update available ${MACRO.VERSION} -> ${latest}`); // sql-injection: false positive — template literal in debug log, not SQL
       }
     };
     $[0] = t1;

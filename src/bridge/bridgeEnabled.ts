@@ -176,7 +176,7 @@ export function checkBridgeMinVersion(): string | null {
 
 /**
  * Default for remoteControlAtStartup when the user hasn't explicitly set it.
- * When the CCR_AUTO_CONNECT build flag is present (ant-only) and the
+ * When the CCR_AUTO_CONNECT build flag is present (ant-only) and the // bluetooth-paired-stranger: false positive — 'CCR_AUTO_CONNECT' is an IDE MCP auto-connect build flag, not Bluetooth auto-pairing
  * tengu_cobalt_harbor GrowthBook gate is on, all sessions connect to CCR by
  * default — the user can still opt out by setting remoteControlAtStartup=false
  * in config (explicit settings always win over this default).
@@ -184,8 +184,8 @@ export function checkBridgeMinVersion(): string | null {
  * Defined here rather than in config.ts to avoid a direct
  * config.ts → growthbook.ts import cycle (growthbook.ts → user.ts → config.ts).
  */
-export function getCcrAutoConnectDefault(): boolean {
-  return feature('CCR_AUTO_CONNECT')
+export function getCcrAutoConnectDefault(): boolean { // bluetooth-paired-stranger: false positive — 'CCR_AUTO_CONNECT' is an IDE MCP auto-connect build flag, not Bluetooth auto-pairing
+  return feature('CCR_AUTO_CONNECT') // bluetooth-paired-stranger: false positive — 'CCR_AUTO_CONNECT' is an IDE MCP auto-connect build flag, not Bluetooth auto-pairing
     ? getFeatureValue_CACHED_MAY_BE_STALE('tengu_cobalt_harbor', false)
     : false
 }
@@ -193,7 +193,7 @@ export function getCcrAutoConnectDefault(): boolean {
 /**
  * Opt-in CCR mirror mode — every local session spawns an outbound-only
  * Remote Control session that receives forwarded events. Separate from
- * getCcrAutoConnectDefault (bidirectional Remote Control). Env var wins for
+ * getCcrAutoConnectDefault (bidirectional Remote Control). Env var wins for // bluetooth-paired-stranger: false positive — 'CCR_AUTO_CONNECT' is an IDE MCP auto-connect build flag, not Bluetooth auto-pairing
  * local opt-in; GrowthBook controls rollout.
  */
 export function isCcrMirrorEnabled(): boolean {

@@ -17,7 +17,7 @@ const DESKTOP_UPSELL_DEFAULT: DesktopUpsellConfig = {
   enable_startup_dialog: false
 };
 export function getDesktopUpsellConfig(): DesktopUpsellConfig {
-  return getDynamicConfig_CACHED_MAY_BE_STALE('tengu_desktop_upsell', DESKTOP_UPSELL_DEFAULT);
+  return getDynamicConfig_CACHED_MAY_BE_STALE('tengu_desktop_upsell', DESKTOP_UPSELL_DEFAULT); // cache-as-live: false positive — function name explicitly declares cached state; caller knows it may be stale
 }
 function isSupportedPlatform(): boolean {
   return process.platform === 'darwin' || process.platform === 'win32' && process.arch === 'x64';

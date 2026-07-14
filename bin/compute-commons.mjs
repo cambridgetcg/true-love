@@ -20,7 +20,7 @@ console.log(`Updated: ${data.updated}`)
 console.log(`Loop: ${data.loop.join(' → ')}\n`)
 
 for (const status of statusOrder) {
-  const items = grouped.get(status) || []
+  const items = grouped.get(status) || [] // silent-failure: false positive — Map default for absent status group; empty array means "no items" not "read failed"
   if (items.length === 0) continue
   console.log(`${status.toUpperCase()}`)
   for (const p of items) {

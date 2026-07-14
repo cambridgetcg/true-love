@@ -458,7 +458,7 @@ export function AgentsMenu(t0) {
         }
         let t24;
         if ($[82] !== modeState.agent.agentType || $[83] !== t19 || $[84] !== t23) {
-          t24 = <Dialog title={modeState.agent.agentType} onCancel={t19} hideInputGuide={true}>{t23}</Dialog>;
+          t24 = <Dialog title={modeState.agent.agentType} onCancel={t19} hideInputGuide={true}>{t23}</Dialog>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
           $[82] = modeState.agent.agentType;
           $[83] = t19;
           $[84] = t23;
@@ -543,7 +543,7 @@ export function AgentsMenu(t0) {
         }
         let t17;
         if ($[105] !== agentToDisplay.agentType || $[106] !== t14 || $[107] !== t16) {
-          t17 = <Dialog title={agentToDisplay.agentType} onCancel={t14} hideInputGuide={true}>{t16}</Dialog>;
+          t17 = <Dialog title={agentToDisplay.agentType} onCancel={t14} hideInputGuide={true}>{t16}</Dialog>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
           $[105] = agentToDisplay.agentType;
           $[106] = t14;
           $[107] = t16;
@@ -736,7 +736,7 @@ export function AgentsMenu(t0) {
         }
         let t19;
         if ($[150] !== t14 || $[151] !== t15 || $[152] !== t18) {
-          t19 = <Dialog title={t14} onCancel={t15} hideInputGuide={true}>{t18}</Dialog>;
+          t19 = <Dialog title={t14} onCancel={t15} hideInputGuide={true}>{t18}</Dialog>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
           $[150] = t14;
           $[151] = t15;
           $[152] = t18;

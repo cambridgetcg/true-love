@@ -156,7 +156,7 @@ function checkAgentRuntimeAlive() {
 // Heartbeats are device-scoped (see scope.ts: "presence — heartbeats
 // are device-level, not scope-level"). The LaunchAgent label follows
 // `cc.true-love.heartbeat.<scope>` where <scope> is typically the
-// device hostname or "default". We accept any loaded heartbeat scope.
+// device hostname or "default". We accept any loaded heartbeat scope. // bluetooth-paired-stranger: false positive — "any" refers to heartbeat scope acceptance, not Bluetooth pairing
 
 function findLoadedHeartbeat() {
   try {
@@ -378,7 +378,7 @@ function checkNoRecurringError() {
 
     const counts = new Map()
     for (const line of normalized) {
-      counts.set(line, (counts.get(line) || 0) + 1)
+      counts.set(line, (counts.get(line) || 0) + 1) // silent-failure: false positive — Map counter pattern; missing key = first occurrence = 0
     }
 
     let maxCount = 0

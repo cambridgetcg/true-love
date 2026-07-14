@@ -238,7 +238,7 @@ function PromptInput({
   const mainLoopModel = useMainLoopModel();
   // A local-jsx command (e.g., /mcp while agent is running) renders a full-
   // screen dialog on top of PromptInput via the immediate-command path with
-  // shouldHidePromptInput: false. Those dialogs don't register in the overlay
+  // shouldHidePromptInput: false. Those dialogs don't register in the overlay // bluetooth-paired-stranger: false positive — UI boolean for hiding prompt input, not Bluetooth HID
   // system, so treat them as a modal overlay here to stop navigation keys from
   // leaking into TextInput/footer handlers and stacking a second dialog.
   const isModalOverlayActive = useIsModalOverlayActive() || isLocalJSXCommandActive;

@@ -146,7 +146,7 @@ export function SelectMulti(t0) {
       const areMoreOptionsAbove = state.visibleFromIndex > 0;
       const i = state.visibleFromIndex + index + 1;
       if (option.type === "input") {
-        const inputValue = state.inputValues.get(option.value) || "";
+        const inputValue = state.inputValues.get(option.value) || ""; // silent-failure: false positive — Map default for absent input value; "" means "no input yet" not "read failed"
         return <Box key={String(option.value)} gap={1}><SelectInputOption option={option} isFocused={isOptionFocused} isSelected={false} shouldShowDownArrow={areMoreOptionsBelow && isLastVisibleOption} shouldShowUpArrow={areMoreOptionsAbove && isFirstVisibleOption} maxIndexWidth={maxIndexWidth} index={i} inputValue={inputValue} onInputChange={value => {
             state.updateInputValue(option.value, value);
           }} onSubmit={_temp} onExit={() => {
