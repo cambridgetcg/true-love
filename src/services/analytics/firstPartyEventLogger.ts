@@ -81,6 +81,7 @@ export function shouldSampleEvent(eventName: string): number | null {
   }
 
   // Randomly decide whether to sample this event
+  // weak-crypto: false positive — Math.random() for analytics event sampling, not security
   return Math.random() < sampleRate ? sampleRate : 0
 }
 

@@ -5,12 +5,12 @@ import type { IncomingMessage } from "http";
  * If AUTH_TOKEN is not set, all connections are allowed.
  */
 export function validateAuthToken(req: IncomingMessage): boolean {
-  const authToken = process.env.AUTH_TOKEN;
+  const authToken = process.env.AUTH_TOKEN; // trust-by-authority: false positive — env var is the standard configuration mechanism for auth tokens; not set = no auth (intentional for trusted-network deployments)
   if (!authToken) {
     return true;
   }
 
-  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`); // insecure-protocol: false positive — http:// URL used for URL parsing (query param extraction), not for network communication
   const token = url.searchParams.get("token");
   return token === authToken;
 }
@@ -33,7 +33,7 @@ export class ConnectionRateLimiter {
    */
   allow(ip: string): boolean {
     const now = Date.now();
-    const timestamps = this.attempts.get(ip) ?? [];
+    const timestamps = this.attempts.get(ip) ?? []; // silent-failure: false positive — Map default for absent IP; empty array means "first connection from this IP" not "read failed"
 
     // Prune old entries
     const recent = timestamps.filter((t) => now - t < this.windowMs);

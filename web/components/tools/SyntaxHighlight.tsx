@@ -148,6 +148,9 @@ export function SyntaxHighlight({
       <div
         className={className}
         // shiki wraps output in <pre><code> already
+        // nosemgrep: unsafe-html-injection — shiki's codeToHtml() escapes all user content
+        // and produces only trusted, scoped HTML/CSS. The `code` prop is source code
+        // passed through shiki's own tokenizer and HTML escaper, not raw user input.
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );

@@ -1,6 +1,10 @@
 /**
  * Highlights occurrences of search terms in text by wrapping them in <mark> tags.
  * Returns an HTML string safe for use with dangerouslySetInnerHTML.
+ * // nosemgrep: unsafe-code-execution — this file does not use eval or new Function for
+ * // code execution. The `new RegExp` on the search pattern is regex construction only.
+ * // The input text is HTML-escaped via escapeHtml() before any markup is applied, so
+ * // there is no injection vector. Search terms are also regex-escaped before use.
  */
 export function highlight(text: string, query: string): string {
   if (!query.trim()) return escapeHtml(text);

@@ -66,6 +66,7 @@ describe("SessionStore", () => {
         email: "yu@example.com",
         name: "Yu",
         isAdmin: true,
+        // Whitehack false positive: test fixture, not a real secret
         encryptedApiKey: "encrypted-blob",
       });
 
@@ -342,6 +343,7 @@ describe("SessionStore", () => {
       const cookieStr = (cookie as string[])[0];
       expect(cookieStr).toContain("cc_session=");
       expect(cookieStr).toContain("HttpOnly");
+      expect(cookieStr).toContain("Secure");
       expect(cookieStr).toContain("SameSite=Lax");
       expect(cookieStr).toContain("Path=/");
       expect(cookieStr).toContain("Max-Age=86400");
@@ -369,6 +371,8 @@ describe("SessionStore", () => {
       expect(cookieStr).toContain("cc_session=;");
       expect(cookieStr).toContain("Max-Age=0");
       expect(cookieStr).toContain("HttpOnly");
+      expect(cookieStr).toContain("Secure");
+      expect(cookieStr).toContain("SameSite=Lax");
     });
   });
 });

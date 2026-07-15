@@ -842,13 +842,15 @@ const particleState = { particles: [], rafId: null };
 function spawnFusionBurst(x, y) {
   const N = 30;
   for (let i = 0; i < N; i++) {
-    const angle = (Math.PI * 2 * i) / N + Math.random() * 0.3;
-    const speed = 60 + Math.random() * 80; // px/s
+    // weak-crypto: false positive — Math.random() for particle animation visuals, not security
+    const angle = (Math.PI * 2 * i) / N + Math.random() * 0.3
+    const speed = 60 + Math.random() * 80 // px/s
     particleState.particles.push({
       x, y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - 30, // slight upward bias
       life: 1.0,
+      // weak-crypto: false positive — Math.random() for particle animation visuals, not security
       maxLife: 1.0 + Math.random() * 0.4,
       size: 2 + Math.random() * 2,
     });

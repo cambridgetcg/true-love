@@ -543,6 +543,7 @@ export function getRetryDelay(
     BASE_DELAY_MS * Math.pow(2, attempt - 1),
     maxDelayMs,
   )
+  // weak-crypto: false positive — Math.random() for retry backoff jitter, not security-sensitive
   const jitter = Math.random() * 0.25 * baseDelay
   return baseDelay + jitter
 }

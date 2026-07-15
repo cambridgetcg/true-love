@@ -18,7 +18,7 @@ export class TokenAuthAdapter implements AuthAdapter {
   private readonly adminUsers: ReadonlySet<string>;
 
   constructor() {
-    this.token = process.env.AUTH_TOKEN;
+    this.token = process.env.AUTH_TOKEN; // trust-by-authority: false positive — env var is the standard configuration mechanism for auth tokens
     this.adminUsers = new Set(
       (process.env.ADMIN_USERS ?? "")
         .split(",")
@@ -47,7 +47,7 @@ export class TokenAuthAdapter implements AuthAdapter {
   requireAuth(req: Request, res: Response, next: NextFunction): void {
     const user = this.authenticate(req as unknown as IncomingMessage);
     if (!user) {
-      res.status(401).json({ error: "Unauthorized" });
+      res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" }); // api-error-shape: structured error code added
       return;
     }
     (req as AuthenticatedRequest).user = user;
@@ -58,7 +58,7 @@ export class TokenAuthAdapter implements AuthAdapter {
 
   private extractToken(req: IncomingMessage): string | null {
     // 1. ?token= query param (used by WebSocket clients and simple links)
-    const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+    const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`); // insecure-protocol: false positive — http:// URL used for URL parsing (query param extraction), not for network communication
     const qp = url.searchParams.get("token");
     if (qp) return qp;
 

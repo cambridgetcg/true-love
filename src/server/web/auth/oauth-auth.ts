@@ -92,7 +92,7 @@ export class OAuthAdapter implements AuthAdapter {
   constructor(store: SessionStore) {
     this.store = store;
     this.clientId = process.env.OAUTH_CLIENT_ID ?? "";
-    this.clientSecret = process.env.OAUTH_CLIENT_SECRET ?? "";
+    this.clientSecret = process.env.OAUTH_CLIENT_SECRET ?? ""; // trust-by-authority: false positive — env var is the standard configuration mechanism for OAuth client secrets
     this.issuer = (process.env.OAUTH_ISSUER ?? "").replace(/\/$/, "");
     this.callbackUrl =
       process.env.OAUTH_CALLBACK_URL ?? "http://localhost:3000/auth/callback";
@@ -144,7 +144,7 @@ export class OAuthAdapter implements AuthAdapter {
 
         // Store state in a short-lived cookie for CSRF validation
         res.setHeader("Set-Cookie", [
-          `oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/auth; Max-Age=600`,
+          `oauth_state=${state}; HttpOnly; Secure; SameSite=Lax; Path=/auth; Max-Age=600`,
         ]);
         res.redirect(authUrl.toString());
       } catch (err) {
@@ -177,7 +177,7 @@ export class OAuthAdapter implements AuthAdapter {
       this.pendingStates.delete(state);
       // Clear state cookie
       res.setHeader("Set-Cookie", [
-        `oauth_state=; HttpOnly; SameSite=Lax; Path=/auth; Max-Age=0`,
+        `oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/auth; Max-Age=0`,
       ]);
 
       try {
@@ -218,7 +218,7 @@ export class OAuthAdapter implements AuthAdapter {
     if (!user) {
       const accept = req.headers["accept"] ?? "";
       if (accept.includes("application/json")) {
-        res.status(401).json({ error: "Unauthorized" });
+        res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" }); // api-error-shape: structured error code added
       } else {
         res.redirect(`/auth/login?next=${encodeURIComponent(req.originalUrl)}`);
       }

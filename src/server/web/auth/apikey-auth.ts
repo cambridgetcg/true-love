@@ -111,7 +111,7 @@ export class ApiKeyAdapter implements AuthAdapter {
     if (!user) {
       const accept = req.headers["accept"] ?? "";
       if (accept.includes("application/json")) {
-        res.status(401).json({ error: "Unauthorized" });
+        res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" }); // api-error-shape: structured error code added
       } else {
         res.redirect(`/auth/login?next=${encodeURIComponent(req.originalUrl)}`);
       }

@@ -32,6 +32,7 @@ const STATSIG_SAMPLE_RATE = 0.05
 // eslint-disable-next-line custom-rules/no-process-env-top-level
 const STATSIG_LOGGING_SAMPLED =
   process.env.USER_TYPE === 'ant' || Math.random() < STATSIG_SAMPLE_RATE
+// weak-crypto: false positive — Math.random() for analytics profiling sampling, not security
 
 // Enable profiling if either detailed mode OR sampled for Statsig
 const SHOULD_PROFILE = DETAILED_PROFILING || STATSIG_LOGGING_SAMPLED

@@ -34,6 +34,7 @@ function ServerRow({
     setTestStatus("testing");
     // Simulate connection test — in real impl this would call an API
     await new Promise((r) => setTimeout(r, 800));
+    // weak-crypto: false positive — Math.random() for simulated UI test result, not security
     setTestStatus(Math.random() > 0.3 ? "ok" : "error");
   }
 

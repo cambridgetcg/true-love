@@ -1030,6 +1030,7 @@ async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
     const result = await f()
     const duration = Date.now() - startTime
     // Log only 5% of events to reduce volume
+    // weak-crypto: false positive — Math.random() for analytics event sampling, not security
     if (Math.random() < 0.05) {
       // jsonStringify(undefined) returns undefined, so .length would throw
       const attachmentSizeBytes = result
@@ -1048,6 +1049,7 @@ async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
   } catch (e) {
     const duration = Date.now() - startTime
     // Log only 5% of events to reduce volume
+    // weak-crypto: false positive — Math.random() for analytics event sampling, not security
     if (Math.random() < 0.05) {
       logEvent('tengu_attachment_compute_duration', {
         label,

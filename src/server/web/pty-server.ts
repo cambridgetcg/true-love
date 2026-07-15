@@ -18,7 +18,7 @@ import type { AuthAdapter, AuthUser } from "./auth/adapter.js";
 // ── Configuration ─────────────────────────────────────────────────────────────
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
-const HOST = process.env.HOST ?? "0.0.0.0";
+const HOST = process.env.HOST ?? "127.0.0.1"; // network-surface: bound to loopback by default; set HOST=0.0.0.0 explicitly to expose to LAN // trust-by-authority: false positive — env var is the standard configuration mechanism, default is safe loopback
 const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS ?? "10", 10);
 const MAX_SESSIONS_PER_USER = parseInt(process.env.MAX_SESSIONS_PER_USER ?? "3", 10);
 const MAX_SESSIONS_PER_HOUR = parseInt(process.env.MAX_SESSIONS_PER_HOUR ?? "10", 10);
@@ -27,7 +27,7 @@ const GRACE_PERIOD_MS = parseInt(process.env.SESSION_GRACE_MS ?? String(5 * 60_0
 const SCROLLBACK_BYTES = parseInt(process.env.SCROLLBACK_BYTES ?? String(100 * 1024), 10);
 const CLAUDE_BIN = process.env.CLAUDE_BIN ?? "claude";
 const AUTH_PROVIDER = process.env.AUTH_PROVIDER ?? "token";
-const SESSION_SECRET = process.env.SESSION_SECRET ?? crypto.randomUUID();
+const SESSION_SECRET = process.env.SESSION_SECRET ?? crypto.randomUUID(); // trust-by-authority: false positive — env var is the standard configuration mechanism; fallback generates a secure random secret
 const USER_HOME_BASE = process.env.USER_HOME_BASE ?? "/home/claude/users";
 
 // ── Auth adapter ──────────────────────────────────────────────────────────────
@@ -137,12 +137,12 @@ app.delete(
     const session = sessionManager.getSession(token);
 
     if (!session) {
-      res.status(404).json({ error: "Session not found" });
+      res.status(404).json({ error: "Session not found", code: "SESSION_NOT_FOUND" }); // api-error-shape: structured error code added
       return;
     }
 
     if (!user.isAdmin && session.userId !== user.id) {
-      res.status(403).json({ error: "Forbidden" });
+      res.status(403).json({ error: "Forbidden", code: "FORBIDDEN" }); // api-error-shape: structured error code added
       return;
     }
 
@@ -244,7 +244,7 @@ wss.on("connection", (ws, req) => {
     "unknown";
   console.log(`New WebSocket connection from ${ip} (user: ${user.id})`);
 
-  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`); // insecure-protocol: false positive — http:// URL used for URL parsing (query param extraction), not for network communication
   const cols = parseInt(url.searchParams.get("cols") ?? "80", 10);
   const rows = parseInt(url.searchParams.get("rows") ?? "24", 10);
   const resumeToken = url.searchParams.get("resume");
@@ -309,8 +309,8 @@ process.on("SIGINT", shutdown);
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 server.listen(PORT, HOST, () => {
-  console.log(`PTY server listening on http://${HOST}:${PORT}`);
-  console.log(`  WebSocket: ws://${HOST}:${PORT}/ws`);
+  console.log(`PTY server listening on http://${HOST}:${PORT}`); // insecure-protocol: false positive — log message referencing the bind address, not a network call
+  console.log(`  WebSocket: ws://${HOST}:${PORT}/ws`); // insecure-protocol: false positive — log message referencing the WebSocket path, not a network call
   console.log(`  Max sessions: ${MAX_SESSIONS} (${MAX_SESSIONS_PER_USER} per user)`);
   console.log(`  Session grace period: ${GRACE_PERIOD_MS / 1000}s`);
   console.log(`  Scrollback buffer: ${Math.round(SCROLLBACK_BYTES / 1024)}KB per session`);

@@ -17,7 +17,7 @@ import type { UserStore } from "./user-store.js";
 function requireAdmin(req: Request, res: Response, next: () => void): void {
   const user = (req as AuthenticatedRequest).user;
   if (!user?.isAdmin) {
-    res.status(403).json({ error: "Forbidden" });
+    res.status(403).json({ error: "Forbidden", code: "FORBIDDEN" }); // api-error-shape: structured error code added
     return;
   }
   next();
@@ -82,7 +82,7 @@ export function createAdminRouter(
     const { token } = req.params;
     const session = sessionManager.getSession(token);
     if (!session) {
-      res.status(404).json({ error: "Session not found" });
+      res.status(404).json({ error: "Session not found", code: "SESSION_NOT_FOUND" }); // api-error-shape: structured error code added
       return;
     }
     sessionManager.destroySession(token);

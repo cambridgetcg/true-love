@@ -56,7 +56,9 @@ export function createStatsStore(): StatsStore {
       if (value > h.max) {
         h.max = value;
       }
-      // Reservoir sampling (Algorithm R)
+      // Reservoir sampling (Algorithm R) — Math.random used for statistical
+      // sampling, not security purposes
+      // weak-crypto: false positive — reservoir sampling, not security
       if (h.reservoir.length < RESERVOIR_SIZE) {
         h.reservoir.push(value);
       } else {
