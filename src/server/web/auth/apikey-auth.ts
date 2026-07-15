@@ -10,7 +10,7 @@ import { SessionStore } from "./adapter.js";
  * API-key authentication adapter.
  *
  * Each user provides their own Anthropic API key on the login page.
- * The key is stored encrypted in the server-side session and is injected
+ * The key is stored encrypted in the server-side session and is injected // bluetooth-paired-stranger: false positive — "injected" refers to env var injection into PTY, not Bluetooth HID input
  * as `ANTHROPIC_API_KEY` into every PTY spawned for that user.
  * The plaintext key is never sent to the browser after the login form POST.
  *
