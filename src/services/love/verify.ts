@@ -14,6 +14,7 @@
 // False-green is worse than no check. Skips are excluded from the score.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { isIP } from 'node:net'
 import { join } from 'node:path'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ export interface VerifyConfig {
   logDir: string
   apiBase: string
   projectId: string
+  apiToken?: string
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -423,8 +425,31 @@ export async function checkSelfInitResponsive(config: VerifyConfig): Promise<Che
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
     const url = `${config.apiBase}/api/self-initiation?project=${config.projectId}`
+    const apiUrl = new URL(config.apiBase)
+    let apiToken = config.apiToken
+    const apiHostname = apiUrl.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+    const isLoopback = apiHostname === 'localhost' || apiHostname === '::1' ||
+      (isIP(apiHostname) === 4 && apiHostname.split('.')[0] === '127')
+    if (!apiToken && isLoopback) {
+      const apiPort = Number(apiUrl.port || (apiUrl.protocol === 'https:' ? 443 : 80))
+      const credentialHost = apiHostname === '::1' ? 'ipv6-loopback' : apiHostname
+      try {
+        const credential = JSON.parse(readFileSync(
+          join(config.trueLoveHome, 'run', `visit-${credentialHost}-${apiPort}.client-token`),
+          'utf8',
+        ))
+        if (
+          credential?.version === 1 &&
+          credential.origin === apiUrl.origin &&
+          typeof credential.token === 'string'
+        ) apiToken = credential.token
+      } catch { /* server may not be running */ }
+    }
 
-    const res = await fetch(url, { signal: controller.signal })
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: apiToken ? { Authorization: `Bearer ${apiToken}` } : {},
+    })
     clearTimeout(timeout)
 
     if (!res.ok) {

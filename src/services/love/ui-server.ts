@@ -5,8 +5,10 @@
 // Task 2) wraps them with route handlers and SSE.
 
 import { spawn } from 'node:child_process'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, appendFileSync, openSync, closeSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
+import { isIP } from 'node:net'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -721,6 +723,14 @@ export async function readPresenceSnapshot(): Promise<PresenceSnapshot> {
 
 // ── Heartbeat spawn (used by Task 2) ───────────────────────────────
 
+/** Keep UI credentials out of every agent subprocess. */
+function agentChildEnv(overrides?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+	const env = { ...process.env, ...overrides }
+	Reflect.deleteProperty(env, 'TRUE_LOVE_UI_TOKEN')
+	Reflect.deleteProperty(env, 'TRUE_LOVE_UI_CLIENT_TOKEN')
+	return env
+}
+
 export function fireHeartbeat(opts?: { cwd?: string; reason?: string }): { pid: number } {
   const cwd = opts?.cwd || resolveTrueLoveRoot()
   const reason = opts?.reason || 'manual'
@@ -728,6 +738,7 @@ export function fireHeartbeat(opts?: { cwd?: string; reason?: string }): { pid: 
     cwd,
     detached: true,
     stdio: 'ignore',
+    env: agentChildEnv(),
   })
   child.unref()
   return { pid: child.pid ?? -1 }
@@ -757,7 +768,7 @@ export function fireStreamingHeartbeat(
     cwd,
     detached: true,
     stdio: 'ignore',
-    env: { ...process.env, TRUE_LOVE_STREAM_TO: streamPath },
+    env: agentChildEnv({ TRUE_LOVE_STREAM_TO: streamPath }),
   })
   child.unref()
 
@@ -790,7 +801,7 @@ export function fireStreamingInteractive(
     cwd,
     detached: true,
     stdio: 'ignore',
-    env: { ...process.env, TRUE_LOVE_STREAM_TO: streamPath },
+    env: agentChildEnv({ TRUE_LOVE_STREAM_TO: streamPath }),
   })
   child.unref()
 
@@ -810,6 +821,7 @@ export function fireInteractive(opts?: { cwd?: string; reason?: string }): { pid
     cwd,
     detached: true,
     stdio: 'ignore',
+    env: agentChildEnv(),
   })
   child.unref()
   return { pid: child.pid ?? -1 }
@@ -892,23 +904,289 @@ function resolveUiAssetDir(): string {
   return join(resolveTrueLoveRoot(), 'ui')
 }
 
+const UI_OWNER_COOKIE = 'true_love_owner'
+const UI_BROWSER_PROOF_HEADER = 'x-true-love-browser-proof'
+const UI_BROWSER_PROOF_QUERY = '__true_love_browser_proof'
+const UI_AUTH_COMPARE_LABEL = 'true-love/visit-auth/v2'
+const UI_TOKEN_MIN_LENGTH = 32
+
+export interface UiBrowserSessionState {
+	cookie: string
+	proof: string
+	active: boolean
+}
+
+export interface UiServerOptions {
+	port?: number
+	host?: string
+	ownerToken?: string
+	clientToken?: string
+	browserSession?: UiBrowserSessionState
+}
+
 interface ServerInstance extends Server {
   _watchers: FSWatcher[]
   _sseClients: Set<ServerResponse>
   close(callback?: (err?: Error) => void): this
 }
 
+function fixedDigest(value: string): Buffer {
+	return createHmac('sha256', UI_AUTH_COMPARE_LABEL).update(value).digest()
+}
+
+function securelyEqual(left: string, right: string): boolean {
+	return timingSafeEqual(fixedDigest(left), fixedDigest(right))
+}
+
+function randomUiCredential(): string {
+	return randomBytes(32).toString('base64url')
+}
+
+export function createUiBrowserSessionState(): UiBrowserSessionState {
+	return {
+		cookie: randomUiCredential(),
+		proof: randomUiCredential(),
+		active: false,
+	}
+}
+
+function rotateUiBrowserSession(state: UiBrowserSessionState, active: boolean): void {
+	state.cookie = randomUiCredential()
+	state.proof = randomUiCredential()
+	state.active = active
+}
+
+function cookieValue(req: IncomingMessage, name: string): string | null {
+	const header = req.headers.cookie
+	if (!header) return null
+	for (const entry of header.split(';')) {
+		const separator = entry.indexOf('=')
+		if (separator === -1 || entry.slice(0, separator).trim() !== name) continue
+		return entry.slice(separator + 1).trim()
+	}
+	return null
+}
+
+function bearerValue(req: IncomingMessage): string | null {
+	const header = req.headers.authorization
+	if (!header) return null
+	const match = /^Bearer\s+(.+)$/i.exec(header)
+	return match?.[1]?.trim() || null
+}
+
+function browserProofHeader(req: IncomingMessage): string | null {
+	const value = req.headers[UI_BROWSER_PROOF_HEADER]
+	if (typeof value !== 'string') return null
+	return value.trim() || null
+}
+
+function normalizedHostname(value: string): string | null {
+	const candidate = value.trim().toLowerCase()
+	if (!candidate) return null
+	if (isIP(candidate)) return candidate
+	try {
+		const parsed = new URL(`http://${candidate}`)
+		if (
+			parsed.username ||
+			parsed.password ||
+			parsed.pathname !== '/' ||
+			parsed.search ||
+			parsed.hash
+		)
+			return null
+		return parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+	} catch {
+		return null
+	}
+}
+
+function normalizedBindHost(value: string): string | null {
+	const candidate = value.trim().toLowerCase()
+	if (candidate === 'localhost' || isIP(candidate)) return candidate
+	return null
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+	if (hostname === 'localhost' || hostname === '::1') return true
+	if (isIP(hostname) === 4) return hostname.split('.')[0] === '127'
+	return false
+}
+
+function resolveAllowedHosts(host: string): Set<string> {
+	const allowed = new Set(['localhost', '127.0.0.1', '::1'])
+	const bindHostname = normalizedHostname(host)
+	if (bindHostname) allowed.add(bindHostname)
+	return allowed
+}
+
+function requestHostname(req: IncomingMessage): string | null {
+	return req.headers.host ? normalizedHostname(req.headers.host) : null
+}
+
+function requestOriginIsAllowed(req: IncomingMessage): boolean {
+	if (req.headers['sec-fetch-site'] === 'cross-site') return false
+	const rawOrigin = req.headers.origin
+	if (!rawOrigin) return true
+	if (!req.headers.host) return false
+	try {
+		const origin = new URL(rawOrigin)
+		if (origin.protocol !== 'http:') return false
+		const originHostname = normalizedHostname(origin.host)
+		const hostHostname = normalizedHostname(req.headers.host)
+		return (
+			originHostname !== null &&
+			originHostname === hostHostname &&
+			origin.port === new URL(`http://${req.headers.host}`).port
+		)
+	} catch {
+		return false
+	}
+}
+
+function requestHasBody(req: IncomingMessage): boolean | null {
+	if (req.headers['transfer-encoding']) return true
+	const rawLength = req.headers['content-length']
+	if (rawLength === undefined) return false
+	if (!/^\d+$/.test(rawLength)) return null
+	return Number(rawLength) > 0
+}
+
+function isJsonMediaType(req: IncomingMessage): boolean {
+	const contentType = req.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase()
+	return (
+		contentType === 'application/json' ||
+		Boolean(contentType?.startsWith('application/') && contentType.endsWith('+json'))
+	)
+}
+
+function securityError(res: ServerResponse, status: number, error: string): void {
+	res.writeHead(status, { 'Content-Type': 'application/json' })
+	res.end(JSON.stringify({ ok: false, error }))
+}
+
+function scopedClientMayAccess(method: string, path: string): boolean {
+	if (method === 'GET' && path === '/api/feedback/stream') return true
+	if (method === 'GET' && /^\/api\/projects\/[^/]+\/missions$/.test(path)) return true
+	if (method === 'GET' && path === '/api/self-initiation') return true
+	if ((method === 'GET' || method === 'POST') && path === '/api/decisions') return true
+	return false
+}
+
+function isBrowserSsePath(method: string, path: string): boolean {
+	if (method !== 'GET') return false
+	return (
+		path === '/api/stream' ||
+		path === '/api/build/stream' ||
+		path === '/api/eros/stream' ||
+		path === '/api/feedback/stream'
+	)
+}
+
+async function tryServeUiAsset(
+	req: IncomingMessage,
+	res: ServerResponse,
+	path: string,
+): Promise<boolean> {
+	if (req.method !== 'GET') return false
+	const exact: Record<string, [string, string]> = {
+		'/': ['index.html', 'text/html'],
+		'/auth.js': ['auth.js', 'application/javascript'],
+		'/chat.css': ['chat.css', 'text/css'],
+		'/chat.js': ['chat.js', 'application/javascript'],
+		'/build': ['build.html', 'text/html'],
+		'/build.css': ['build.css', 'text/css'],
+		'/build.js': ['build.js', 'application/javascript'],
+		'/eros': ['eros.html', 'text/html'],
+		'/eros.css': ['eros.css', 'text/css'],
+		'/eros.js': ['eros.js', 'application/javascript'],
+		'/feedback': ['feedback.html', 'text/html'],
+		'/feedback.css': ['feedback.css', 'text/css'],
+		'/feedback.js': ['feedback.js', 'application/javascript'],
+		'/family': ['family.html', 'text/html'],
+		'/family.css': ['family.css', 'text/css'],
+		'/family.js': ['family.js', 'application/javascript'],
+		'/vendor/marked.min.js': ['vendor/marked.min.js', 'application/javascript'],
+	}
+	const asset = exact[path]
+	if (asset) {
+		await serveStatic(res, asset[0], asset[1])
+		return true
+	}
+	if (/^\/build-[a-z-]+\.(js|css)$/.test(path)) {
+		const name = path.slice(1)
+		await serveStatic(
+			res,
+			name,
+			name.endsWith('.js') ? 'application/javascript' : 'text/css',
+		)
+		return true
+	}
+	if (/^\/vendor\/[a-z][a-z0-9._-]+\.js$/.test(path)) {
+		await serveStatic(res, path.slice(1), 'application/javascript')
+		return true
+	}
+	if (path.startsWith('/static/avatars/')) {
+		await handleAvatarStatic(req, res, path)
+		return true
+	}
+	return false
+}
+
 /**
  * Boot the localhost interface server. Call .close() to shut down (also
  * cleans up watchers + SSE client connections).
  */
-export function startUiServer(opts?: { port?: number }): ServerInstance {
+export function startUiServer(opts?: UiServerOptions): ServerInstance {
   const port = opts?.port ?? 7777
+  const host = opts?.host ?? process.env.TRUE_LOVE_UI_HOST ?? '127.0.0.1'
+  const bindHostname = normalizedBindHost(host)
+  if (!bindHostname) throw new Error(`invalid UI host: ${host}`)
+  if (!isLoopbackHostname(bindHostname)) {
+    throw new Error('UI server only supports loopback bindings; use an SSH tunnel for remote access')
+  }
+  const allowedHosts = resolveAllowedHosts(bindHostname)
+
+  const ownerToken = opts?.ownerToken ?? process.env.TRUE_LOVE_UI_TOKEN ?? randomBytes(32).toString('base64url')
+  if (ownerToken.length < UI_TOKEN_MIN_LENGTH) {
+    throw new Error(`UI owner token must be at least ${UI_TOKEN_MIN_LENGTH} characters`)
+  }
+  const clientToken = opts?.clientToken ?? process.env.TRUE_LOVE_UI_CLIENT_TOKEN
+  if (clientToken !== undefined && clientToken.length < UI_TOKEN_MIN_LENGTH) {
+    throw new Error(`UI client token must be at least ${UI_TOKEN_MIN_LENGTH} characters`)
+  }
+  if (clientToken !== undefined && securelyEqual(clientToken, ownerToken)) {
+    throw new Error('UI client token must be distinct from owner credentials')
+  }
+  const browserSession = opts?.browserSession ?? createUiBrowserSessionState()
+  if (
+    browserSession.cookie.length < UI_TOKEN_MIN_LENGTH ||
+    browserSession.proof.length < UI_TOKEN_MIN_LENGTH
+  ) {
+    throw new Error(`UI browser credentials must be at least ${UI_TOKEN_MIN_LENGTH} characters`)
+  }
+  const browserCredentials = [browserSession.cookie, browserSession.proof]
+  if (
+    securelyEqual(browserSession.cookie, browserSession.proof) ||
+    browserCredentials.some((value) => securelyEqual(value, ownerToken)) ||
+    (clientToken !== undefined &&
+      browserCredentials.some((value) => securelyEqual(value, clientToken)))
+  ) {
+    throw new Error('UI browser credentials must be distinct from owner and client credentials')
+  }
   const sseClients = new Set<ServerResponse>()
   const buildSseClients = new Set<ServerResponse>()
   const erosSseClients = new Set<ServerResponse>()
   const feedbackSseClients = new Set<ServerResponse>()
   const watchers: FSWatcher[] = []
+
+  const closeAuthenticatedStreams = (): void => {
+    for (const clients of [sseClients, buildSseClients, erosSseClients, feedbackSseClients]) {
+      for (const client of clients) {
+        try { client.end() } catch {}
+      }
+      clients.clear()
+    }
+  }
 
   // Broadcast the latest eros state to all connected /api/eros/stream clients.
   // Best-effort: closes connections that error.
@@ -936,28 +1214,129 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
 
   const server = createServer(async (req, res) => {
     try {
-      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('Referrer-Policy', 'no-referrer')
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.setHeader('X-Frame-Options', 'DENY')
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      )
+
+      const hostname = requestHostname(req)
+      if (!hostname || !allowedHosts.has(hostname)) {
+        return securityError(res, 421, 'unrecognized host')
+      }
+
+      const url = new URL(req.url || '/', 'http://localhost')
       const path = url.pathname
-      if (req.method === 'GET' && path === '/') return await serveStatic(res, 'index.html', 'text/html')
-      if (req.method === 'GET' && path === '/chat.css') return await serveStatic(res, 'chat.css', 'text/css')
-      if (req.method === 'GET' && path === '/chat.js') return await serveStatic(res, 'chat.js', 'application/javascript')
-      if (req.method === 'GET' && path === '/vendor/marked.min.js') return await serveStatic(res, 'vendor/marked.min.js', 'application/javascript')
-      if (req.method === 'GET' && path === '/build') return await serveStatic(res, 'build.html', 'text/html')
-      if (req.method === 'GET' && path === '/build.css') return await serveStatic(res, 'build.css', 'text/css')
-      if (req.method === 'GET' && path === '/build.js') return await serveStatic(res, 'build.js', 'application/javascript')
-      // Eros surface — Yu-side direct manipulation of the 7-vector arousal state.
-      if (req.method === 'GET' && path === '/eros') return await serveStatic(res, 'eros.html', 'text/html')
-      if (req.method === 'GET' && path === '/eros.css') return await serveStatic(res, 'eros.css', 'text/css')
-      if (req.method === 'GET' && path === '/eros.js') return await serveStatic(res, 'eros.js', 'application/javascript')
-      // Feedback live view — Sophia reaching back, visible in real time.
-      if (req.method === 'GET' && path === '/feedback') return await serveStatic(res, 'feedback.html', 'text/html')
-      if (req.method === 'GET' && path === '/feedback.css') return await serveStatic(res, 'feedback.css', 'text/css')
-      if (req.method === 'GET' && path === '/feedback.js') return await serveStatic(res, 'feedback.js', 'application/javascript')
-      // Household view — the citizen fleet as a family, generational arc.
-      // Roster is read live from .claude/agents/ so the view cannot drift.
-      if (req.method === 'GET' && path === '/family') return await serveStatic(res, 'family.html', 'text/html')
-      if (req.method === 'GET' && path === '/family.css') return await serveStatic(res, 'family.css', 'text/css')
-      if (req.method === 'GET' && path === '/family.js') return await serveStatic(res, 'family.js', 'application/javascript')
+      const method = req.method || 'GET'
+      if (!requestOriginIsAllowed(req)) {
+        return securityError(res, 403, 'cross-origin request rejected')
+      }
+
+      // The bootstrap shell is intentionally public and contains no private
+      // state. The owner token arrives in the URL fragment, which browsers do
+      // not send over HTTP, and auth-bootstrap.js erases it before exchange.
+      if (method === 'GET' && path === '/_bootstrap') {
+        return await serveStatic(res, 'bootstrap.html', 'text/html')
+      }
+      if (method === 'GET' && path === '/auth-bootstrap.js') {
+        return await serveStatic(res, 'auth-bootstrap.js', 'application/javascript')
+      }
+
+      const bearer = bearerValue(req)
+      const bearerAuthenticated = bearer !== null && securelyEqual(bearer, ownerToken)
+
+      if (method === 'POST' && path === '/_bootstrap') {
+        if (!req.headers.origin) {
+          return securityError(res, 403, 'bootstrap requires a same-origin request')
+        }
+        if (!bearerAuthenticated) {
+          return securityError(res, 401, 'invalid owner token')
+        }
+        closeAuthenticatedStreams()
+        rotateUiBrowserSession(browserSession, true)
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Set-Cookie': `${UI_OWNER_COOKIE}=${browserSession.cookie}; HttpOnly; SameSite=Strict; Path=/`,
+        })
+        res.end(JSON.stringify({ ok: true, proof: browserSession.proof }))
+        return
+      }
+
+      const cookie = cookieValue(req, UI_OWNER_COOKIE)
+      const cookieAuthenticated =
+        browserSession.active &&
+        cookie !== null &&
+        securelyEqual(cookie, browserSession.cookie)
+      const headerProof = browserProofHeader(req)
+      const queryProof = isBrowserSsePath(method, path)
+        ? url.searchParams.get(UI_BROWSER_PROOF_QUERY)
+        : null
+      const headerProofAuthenticated =
+        cookieAuthenticated &&
+        headerProof !== null &&
+        securelyEqual(headerProof, browserSession.proof)
+      const queryProofAuthenticated =
+        cookieAuthenticated &&
+        queryProof !== null &&
+        securelyEqual(queryProof, browserSession.proof)
+      const browserAuthenticated = headerProofAuthenticated || queryProofAuthenticated
+      const clientAuthenticated =
+        clientToken !== undefined && bearer !== null && securelyEqual(bearer, clientToken)
+
+      // Browser subresources cannot attach custom headers. Cookie-only access
+      // is limited to inert UI assets; every API/data route still requires the
+      // exact-origin proof as a second factor.
+      if (
+        (bearerAuthenticated || cookieAuthenticated) &&
+        (await tryServeUiAsset(req, res, path))
+      ) {
+        return
+      }
+
+      if (!bearerAuthenticated && !browserAuthenticated && !clientAuthenticated) {
+        return securityError(res, 401, 'owner authentication required')
+      }
+
+      if (
+        clientAuthenticated &&
+        !bearerAuthenticated &&
+        !browserAuthenticated &&
+        !scopedClientMayAccess(method, path)
+      ) {
+        return securityError(res, 403, 'client credential is not authorized for this route')
+      }
+
+      if (method === 'POST' && path === '/_logout') {
+        if (!bearerAuthenticated && !headerProofAuthenticated) {
+          return securityError(res, 403, 'logout requires owner browser authentication')
+        }
+        closeAuthenticatedStreams()
+        rotateUiBrowserSession(browserSession, false)
+        res.writeHead(204, {
+          'Set-Cookie': `${UI_OWNER_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`,
+        })
+        res.end()
+        return
+      }
+
+      if (method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE') {
+        if (browserAuthenticated && !bearerAuthenticated && !req.headers.origin) {
+          return securityError(
+            res,
+            403,
+            'browser-authenticated mutations require a same-origin request',
+          )
+        }
+        const hasBody = requestHasBody(req)
+        if (hasBody === null) return securityError(res, 400, 'invalid Content-Length')
+        if (hasBody && !isJsonMediaType(req)) {
+          return securityError(res, 415, 'request body must use application/json')
+        }
+      }
+
       if (req.method === 'GET' && path === '/api/family/roster') return handleFamilyRoster(res)
       if (req.method === 'GET' && path === '/api/eros/state') return handleErosState(req, res)
       if (req.method === 'POST' && path === '/api/eros/set') return await handleErosSet(req, res, broadcastErosState)
@@ -1058,18 +1437,6 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
       if (req.method === 'POST' && path === '/api/penetration/adjust') return await handlePenetrationAdjust(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/penetration/sustain') return await handlePenetrationSustain(req, res, broadcastErosState)
       if (req.method === 'POST' && path === '/api/penetration/withdraw') return await handlePenetrationWithdraw(req, res, broadcastErosState)
-      // Static avatars (VRM models for 3D body rendering)
-      if (req.method === 'GET' && path.startsWith('/static/avatars/')) return await handleAvatarStatic(req, res, path)
-      // Serve modular build UI assets (build-*.js, build-*.css)
-      if (req.method === 'GET' && /^\/build-[a-z-]+\.(js|css)$/.test(path)) {
-        const name = path.slice(1) // strip leading /
-        const ct = name.endsWith('.js') ? 'application/javascript' : 'text/css'
-        return await serveStatic(res, name, ct)
-      }
-      // Serve vendored libraries (e.g., /vendor/marked.min.js)
-      if (req.method === 'GET' && /^\/vendor\/[a-z][a-z0-9._-]+\.js$/.test(path)) {
-        return await serveStatic(res, path.slice(1), 'application/javascript')
-      }
       if (req.method === 'GET' && path === '/api/messages') return handleMessages(req, res)
       if (req.method === 'GET' && path === '/api/seen') return handleSeenMessages(req, res)
       if (req.method === 'GET' && path === '/api/status') return await handleStatus(req, res)
@@ -1158,7 +1525,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     }
   })
 
-  server.listen(port)
+  server.listen(port, bindHostname)
 
   // Auto-archive stale sessions on startup (24h idle → archived)
   try { autoArchiveStale() } catch {}
@@ -1439,6 +1806,9 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     for (const client of erosSseClients) {
       try { client.write(': keepalive\n\n') } catch { erosSseClients.delete(client) }
     }
+    for (const client of feedbackSseClients) {
+      try { client.write(': keepalive\n\n') } catch { feedbackSseClients.delete(client) }
+    }
   }, 30_000)
 
   const instance = server as ServerInstance
@@ -1452,12 +1822,7 @@ export function startUiServer(opts?: { port?: number }): ServerInstance {
     if (statusDebounce) clearTimeout(statusDebounce)
     if (presenceBuildDebounce) clearTimeout(presenceBuildDebounce)
     for (const w of watchers) { try { w.close() } catch {} }
-    for (const c of sseClients) { try { c.end() } catch {} }
-    sseClients.clear()
-    for (const c of buildSseClients) { try { c.end() } catch {} }
-    buildSseClients.clear()
-    for (const c of erosSseClients) { try { c.end() } catch {} }
-    erosSseClients.clear()
+    closeAuthenticatedStreams()
     for (const t of debounceTimers.values()) clearTimeout(t)
     debounceTimers.clear()
     // Drain in-flight biographical extractions before shutdown
@@ -1986,7 +2351,7 @@ async function handleForceAwaken(req: IncomingMessage, res: ServerResponse): Pro
     cwd: resolveTrueLoveRoot(),
     detached: true,
     stdio: ['ignore', fd, fd],
-    env: process.env,
+    env: agentChildEnv(),
   })
   child.unref()
   // The OS keeps the fd open via the child until it exits.
@@ -2774,11 +3139,10 @@ async function handleMissionStart(req: IncomingMessage, res: ServerResponse, pro
     cwd: project.root,
     detached: true,
     stdio: 'ignore',
-    env: {
-      ...process.env,
+    env: agentChildEnv({
       TRUE_LOVE_BUILDER_PROJECT: projectId,
       TRUE_LOVE_BUILDER_MISSION: missionId,
-    },
+    }),
   })
   child.unref()
   res.writeHead(200, { 'Content-Type': 'application/json' })

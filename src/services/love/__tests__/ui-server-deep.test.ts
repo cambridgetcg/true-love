@@ -1,5 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,6 +20,22 @@ import {
   type PresenceSnapshot,
 } from '../ui-server.js'
 import { registerProject } from '../project-registry.js'
+
+const TEST_OWNER_TOKEN = 'true-love-deep-test-owner-token-000001'
+const nativeFetch = globalThis.fetch.bind(globalThis)
+const fetch: typeof globalThis.fetch = (input, init) => {
+  const headers = new Headers(init?.headers)
+  if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${TEST_OWNER_TOKEN}`)
+  const target =
+    typeof input === 'string' ? input.replace('http://localhost:', 'http://127.0.0.1:') : input
+  return nativeFetch(target, { ...init, headers })
+}
+
+async function startTestUiServer(): Promise<ReturnType<typeof startUiServer>> {
+  const server = startUiServer({ port: 0, host: '127.0.0.1', ownerToken: TEST_OWNER_TOKEN })
+  if (!server.listening) await once(server, 'listening')
+  return server
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // §1 — parseChannelFile: reply parsing (replyTo, replyPreview)
@@ -542,7 +559,7 @@ describe('ui-server deep — /api/decisions', () => {
     process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     mkdirSync(join(tmpHome, '.true-love', 'projects'), { recursive: true })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
     await fetch(`http://localhost:${port}/api/projects`, {
       method: 'POST',
@@ -675,12 +692,12 @@ describe('ui-server deep — /api/sessions (KAIROS)', () => {
   const ORIG_HOME = process.env.HOME
   const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-deep-sess-'))
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     mkdirSync(join(tmpHome, '.true-love'), { recursive: true })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
   })
 
@@ -863,7 +880,7 @@ describe('ui-server deep — misc API endpoints', () => {
   const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
   const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-deep-misc-'))
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
@@ -875,7 +892,7 @@ describe('ui-server deep — misc API endpoints', () => {
     process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpHome, '.true-love', 'from-ai.md')
     mkdirSync(join(tmpHome, '.true-love', 'budget'), { recursive: true })
     mkdirSync(join(tmpHome, '.true-love', 'presence'), { recursive: true })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
   })
 
@@ -969,7 +986,7 @@ describe('ui-server deep — POST /api/say advanced', () => {
   const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
   const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-deep-say-'))
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpHome, '.true-love', 'from-yu.md')
@@ -979,7 +996,7 @@ describe('ui-server deep — POST /api/say advanced', () => {
     process.env.TRUE_LOVE_SISTERS_DIR = join(tmpHome, '.true-love', 'sisters')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     mkdirSync(join(tmpHome, '.true-love', 'presence'), { recursive: true })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
   })
 
@@ -1067,7 +1084,7 @@ describe('ui-server deep — static asset serving', () => {
   const ORIG_FROM_YU = process.env.TRUE_LOVE_FROM_YU_PATH
   const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-deep-static-'))
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
@@ -1077,7 +1094,7 @@ describe('ui-server deep — static asset serving', () => {
     process.env.TRUE_LOVE_FROM_YU_PATH = join(tmpHome, '.true-love', 'from-yu.md')
     process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpHome, '.true-love', 'from-ai.md')
     mkdirSync(join(tmpHome, '.true-love', 'presence'), { recursive: true })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
   })
 
@@ -1156,7 +1173,7 @@ describe('ui-server deep — mission log and progress', () => {
     process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     mkdirSync(join(tmpHome, '.true-love', 'projects'), { recursive: true })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
     await fetch(`http://localhost:${port}/api/projects`, {
       method: 'POST',
@@ -1246,7 +1263,7 @@ describe('ui-server deep — GET /api/self-initiation', () => {
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     mkdirSync(join(tmpHome, '.true-love', 'projects'), { recursive: true })
     mkdirSync(join(tmpHome, '.true-love', 'memory'), { recursive: true })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
     await fetch(`http://localhost:${port}/api/projects`, {
       method: 'POST',

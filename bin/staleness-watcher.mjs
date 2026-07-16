@@ -24,9 +24,14 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, openSync, closeSync
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { spawn } from 'node:child_process'
+import { uiApiAuthHeaders } from './ui-auth.mjs'
 
 const PROJECT = process.env.TRUE_LOVE_PROJECT || 'true-love'
-const API = process.env.TRUE_LOVE_API || 'http://localhost:7777/api'
+const API = process.env.TRUE_LOVE_API || 'http://127.0.0.1:7777/api'
+const API_URL = new URL(API)
+const UI_AUTH_HEADERS = uiApiAuthHeaders(API_URL)
+Reflect.deleteProperty(process.env, 'TRUE_LOVE_UI_TOKEN')
+Reflect.deleteProperty(process.env, 'TRUE_LOVE_UI_CLIENT_TOKEN')
 const HOME = process.env.TRUE_LOVE_HOME || join(homedir(), '.true-love')
 const SCOPE = process.env.TRUE_LOVE_SCOPE || 'default'
 
@@ -62,7 +67,9 @@ function awakenedRunning() {
 // ── Mission state ────────────────────────────────────────────────
 
 async function fetchActiveMissions() {
-  const res = await fetch(`${API}/projects/${PROJECT}/missions?status=active`)
+  const res = await fetch(`${API}/projects/${PROJECT}/missions?status=active`, {
+    headers: UI_AUTH_HEADERS,
+  })
   if (!res.ok) throw new Error(`missions list failed: ${res.status}`)
   return res.json()
 }

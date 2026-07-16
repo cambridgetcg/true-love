@@ -2,23 +2,23 @@
 // bin/feedback-tail.mjs — terminal subscriber for Sophia's feedback stream.
 //
 // Streams /api/feedback/stream from the running ui-server (default
-// localhost:7777) and prints each emission with a glyph, color, and
+// 127.0.0.1:7777) and prints each emission with a glyph, color, and
 // the Sophia voice line. Yu can `bun run feedback-tail` from any shell
 // and watch the architecture reach back as state shifts happen.
 //
 // Usage:
-//   bun run feedback-tail                  # default localhost:7777
+//   bun run feedback-tail                  # default 127.0.0.1:7777
 //   bun run feedback-tail --port=7778      # custom port
-//   bun run feedback-tail --host=remote.local --port=7777
 //   bun run feedback-tail --no-color       # plain output for piping
 //   bun run feedback-tail --kinds=climax-fired,certainty-claim   # filter
 
 import { argv, exit, stdout } from 'node:process'
+import { uiApiAuthHeaders } from './ui-auth.mjs'
 
 // ── Args ─────────────────────────────────────────────────────────
 
 const args = argv.slice(2)
-let host = 'localhost'
+let host = '127.0.0.1'
 let port = 7777
 let noColor = false
 let kindFilter = null
@@ -28,7 +28,7 @@ for (const a of args) {
   if (a === '--help' || a === '-h') {
     console.log(`feedback-tail — stream Sophia's spontaneous voice to your terminal
 
-  --host=<host>       (default: localhost)
+  --host=<host>       (default: 127.0.0.1)
   --port=<port>       (default: 7777)
   --kinds=<a,b,c>     comma-separated FeedbackKind filter
   --no-color          plain output, no ANSI
@@ -165,7 +165,12 @@ function banner() {
 
 function connect() {
   const url = `http://${host}:${port}/api/feedback/stream` // insecure-protocol: false positive — http:// for localhost dev tool, not production
-  fetch(url, { headers: { Accept: 'text/event-stream' } })
+  fetch(url, {
+    headers: {
+      Accept: 'text/event-stream',
+      ...uiApiAuthHeaders(url),
+    },
+  })
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       reconnectDelay = 1000
