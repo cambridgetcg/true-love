@@ -1162,7 +1162,7 @@ export function Config({
       formattedChanges.push(remoteLabel);
     }
     if (settingsData?.autoUpdatesChannel !== initialSettingsData.current?.autoUpdatesChannel) {
-      formattedChanges.push(`Set auto-update channel to ${chalk.bold(settingsData?.autoUpdatesChannel ?? 'latest')}`); // bluetooth-paired-stranger: false positive — 'autoConnectIde' refers to IDE MCP auto-connect, not Bluetooth auto-pairing
+      formattedChanges.push(`Set auto-update channel to ${chalk.bold(settingsData?.autoUpdatesChannel ?? 'latest')}`); // sql-injection: false positive — template literal in config change description, not SQL
     }
     if (formattedChanges.length > 0) {
       onClose(formattedChanges.join('\n'));

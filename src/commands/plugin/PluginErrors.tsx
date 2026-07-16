@@ -51,7 +51,7 @@ export function formatErrorMessage(error: PluginError): string {
     case 'lsp-request-failed':
       return `LSP server "${error.serverName}" ${error.method} failed: ${error.error}`;
     case 'plugin-cache-miss':
-      return `Plugin "${error.plugin}" not cached at ${error.installPath}`;
+      return `Plugin "${error.plugin}" not cached at ${error.installPath}`; // cache-as-live: false positive — error message string describing a cache-miss condition, not serving cached data as live
     case 'generic-error':
       return error.error;
   }

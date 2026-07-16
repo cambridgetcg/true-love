@@ -534,7 +534,7 @@ export function ManagePlugins({
         if (parts.length >= 3) {
           const pluginName = parts[1]!;
           const serverName = parts.slice(2).join(':');
-          const existing = pluginMcpMap.get(pluginName) || [];
+          const existing = pluginMcpMap.get(pluginName) || []; // silent-failure: false positive — Map default for absent plugin in MCP map; empty array means 'no child MCPs' not 'read failed'
           existing.push({
             displayName: serverName,
             client: client_0
@@ -580,7 +580,7 @@ export function ManagePlugins({
           pendingToggle: pendingToggles.get(pluginId)
         },
         originalScope,
-        childMcps: pluginMcpMap.get(state.plugin.name) || []
+        childMcps: pluginMcpMap.get(state.plugin.name) || [] // silent-failure: false positive — Map default for absent plugin; empty array means 'no child MCPs' not 'read failed'
       });
     }
 
@@ -596,7 +596,7 @@ export function ManagePlugins({
       if (matchedPluginIds.has(error.source) || 'plugin' in error && typeof error.plugin === 'string' && matchedPluginNames.has(error.plugin)) {
         continue;
       }
-      const existing_0 = orphanErrorsBySource.get(error.source) || [];
+      const existing_0 = orphanErrorsBySource.get(error.source) || []; // silent-failure: false positive — Map default for absent error source; empty array means 'no orphan errors yet' not 'read failed'
       existing_0.push(error);
       orphanErrorsBySource.set(error.source, existing_0);
     }

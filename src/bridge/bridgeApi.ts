@@ -301,7 +301,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
     async deregisterEnvironment(environmentId: string): Promise<void> {
       validateBridgeId(environmentId, 'environmentId')
 
-      debug(`[bridge:api] DELETE /v1/environments/bridge/${environmentId}`)
+      debug(`[bridge:api] DELETE /v1/environments/bridge/${environmentId}`) // sql-injection: false positive — template literal in debug log message, not SQL query
 
       const response = await withOAuthRetry(
         (token: string) =>

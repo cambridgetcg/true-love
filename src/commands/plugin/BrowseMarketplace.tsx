@@ -279,8 +279,8 @@ export function BrowseMarketplace({
           if (counts) {
             // Sort by install count (descending), then alphabetically
             installablePlugins.sort((a_1, b_1) => {
-              const countA = counts.get(a_1.pluginId) ?? 0;
-              const countB = counts.get(b_1.pluginId) ?? 0;
+              const countA = counts.get(a_1.pluginId) ?? 0; // silent-failure: false positive — Map default for absent plugin install count; 0 means 'no installs tracked' not 'read failed'
+              const countB = counts.get(b_1.pluginId) ?? 0; // silent-failure: false positive — Map default for absent plugin install count; 0 means 'no installs tracked' not 'read failed'
               if (countA !== countB) return countB - countA;
               return a_1.entry.name.localeCompare(b_1.entry.name);
             });

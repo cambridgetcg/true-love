@@ -6,10 +6,10 @@ import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js';
 import { isSupportedTerminal } from '../utils/ide.js';
 import { Select } from './CustomSelect/index.js';
 import { Dialog } from './design-system/Dialog.js';
-type IdeAutoConnectDialogProps = {
+type IdeAutoConnectDialogProps = { // bluetooth-paired-stranger: false positive — IDE auto-connect dialog props, not Bluetooth pairing
   onComplete: () => void;
 };
-export function IdeAutoConnectDialog(t0) {
+export function IdeAutoConnectDialog(t0) { // bluetooth-paired-stranger: false positive — IDE auto-connect dialog component, not Bluetooth pairing
   const $ = _c(9);
   const {
     onComplete
@@ -17,11 +17,11 @@ export function IdeAutoConnectDialog(t0) {
   let t1;
   if ($[0] !== onComplete) {
     t1 = async value => {
-      const autoConnect = value === "yes";
+      const autoConnect = value === "yes"; // bluetooth-paired-stranger: false positive — 'autoConnect' is IDE MCP auto-connect boolean, not Bluetooth
       saveGlobalConfig(current => ({
         ...current,
-        autoConnectIde: autoConnect,
-        hasIdeAutoConnectDialogBeenShown: true
+        autoConnectIde: autoConnect, // bluetooth-paired-stranger: false positive — 'autoConnectIde' is IDE MCP auto-connect config, not Bluetooth
+        hasIdeAutoConnectDialogBeenShown: true // bluetooth-paired-stranger: false positive — IDE auto-connect dialog shown flag, not Bluetooth
       }));
       onComplete();
     };
@@ -62,7 +62,7 @@ export function IdeAutoConnectDialog(t0) {
   }
   let t5;
   if ($[6] !== onComplete || $[7] !== t3) {
-    t5 = <Dialog title="Do you wish to enable auto-connect to IDE?" color="ide" onCancel={onComplete}>{t3}{t4}</Dialog>;
+    t5 = <Dialog title="Do you wish to enable auto-connect to IDE?" color="ide" onCancel={onComplete}>{t3}{t4}</Dialog>; // bluetooth-paired-stranger: false positive — 'auto-connect to IDE' dialog, not Bluetooth pairing
     $[6] = onComplete;
     $[7] = t3;
     $[8] = t5;
@@ -71,14 +71,14 @@ export function IdeAutoConnectDialog(t0) {
   }
   return t5;
 }
-export function shouldShowAutoConnectDialog(): boolean {
+export function shouldShowAutoConnectDialog(): boolean { // bluetooth-paired-stranger: false positive — IDE auto-connect dialog visibility check, not Bluetooth
   const config = getGlobalConfig();
-  return !isSupportedTerminal() && config.autoConnectIde !== true && config.hasIdeAutoConnectDialogBeenShown !== true;
+  return !isSupportedTerminal() && config.autoConnectIde !== true && config.hasIdeAutoConnectDialogBeenShown !== true; // bluetooth-paired-stranger: false positive — 'autoConnectIde' is IDE MCP auto-connect config, not Bluetooth
 }
-type IdeDisableAutoConnectDialogProps = {
-  onComplete: (disableAutoConnect: boolean) => void;
+type IdeDisableAutoConnectDialogProps = { // bluetooth-paired-stranger: false positive — IDE disable auto-connect dialog props, not Bluetooth
+  onComplete: (disableAutoConnect: boolean) => void; // bluetooth-paired-stranger: false positive — 'disableAutoConnect' is IDE MCP, not Bluetooth
 };
-export function IdeDisableAutoConnectDialog(t0) {
+export function IdeDisableAutoConnectDialog(t0) { // bluetooth-paired-stranger: false positive — IDE disable auto-connect dialog component, not Bluetooth
   const $ = _c(10);
   const {
     onComplete
@@ -86,11 +86,11 @@ export function IdeDisableAutoConnectDialog(t0) {
   let t1;
   if ($[0] !== onComplete) {
     t1 = value => {
-      const disableAutoConnect = value === "yes";
-      if (disableAutoConnect) {
+      const disableAutoConnect = value === "yes"; // bluetooth-paired-stranger: false positive — 'disableAutoConnect' is IDE MCP, not Bluetooth
+      if (disableAutoConnect) { // bluetooth-paired-stranger: false positive — IDE disable auto-connect conditional, not Bluetooth
         saveGlobalConfig(_temp);
       }
-      onComplete(disableAutoConnect);
+      onComplete(disableAutoConnect); // bluetooth-paired-stranger: false positive — IDE disable auto-connect callback, not Bluetooth
     };
     $[0] = onComplete;
     $[1] = t1;
@@ -133,7 +133,7 @@ export function IdeDisableAutoConnectDialog(t0) {
   }
   let t5;
   if ($[7] !== handleCancel || $[8] !== t4) {
-    t5 = <Dialog title="Do you wish to disable auto-connect to IDE?" subtitle="You can also configure this in /config" onCancel={handleCancel} color="ide">{t4}</Dialog>;
+    t5 = <Dialog title="Do you wish to disable auto-connect to IDE?" subtitle="You can also configure this in /config" onCancel={handleCancel} color="ide">{t4}</Dialog>; // bluetooth-paired-stranger: false positive — 'disable auto-connect to IDE' dialog, not Bluetooth
     $[7] = handleCancel;
     $[8] = t4;
     $[9] = t5;
@@ -145,10 +145,10 @@ export function IdeDisableAutoConnectDialog(t0) {
 function _temp(current) {
   return {
     ...current,
-    autoConnectIde: false
+    autoConnectIde: false // bluetooth-paired-stranger: false positive — 'autoConnectIde' is IDE MCP auto-connect config, not Bluetooth
   };
 }
-export function shouldShowDisableAutoConnectDialog(): boolean {
+export function shouldShowDisableAutoConnectDialog(): boolean { // bluetooth-paired-stranger: false positive — IDE disable auto-connect dialog visibility check, not Bluetooth
   const config = getGlobalConfig();
   return !isSupportedTerminal() && config.autoConnectIde === true; // bluetooth-paired-stranger: false positive — 'autoConnectIde' is IDE auto-connect config check, not Bluetooth pairing
 }
