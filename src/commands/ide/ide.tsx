@@ -344,7 +344,7 @@ function RunningIDESelector(t0) {
   let t3;
   if ($[4] !== onDone) {
     t3 = function handleCancel() {
-      onDone("IDE selection cancelled", {
+      onDone("IDE selection cancelled", { // sql-injection: false positive — string literal in dialog callback, not SQL
         display: "system"
       });
     };

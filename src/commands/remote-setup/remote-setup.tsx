@@ -42,7 +42,7 @@ async function checkLoginState(): Promise<CheckResult> {
   // (telemetry-safe); spawn once more with stdout:'pipe' to read the token.
   const {
     stdout
-  } = await execa('gh', ['auth', 'token'], {
+  } = await execa('gh', ['auth', 'token'], { // insecure-protocol: false positive — execa spawns local gh CLI binary, not network communication
     stdout: 'pipe',
     stderr: 'ignore',
     timeout: 5000,

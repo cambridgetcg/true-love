@@ -112,7 +112,7 @@ export async function enrollTrustedDevice(): Promise<void> {
       )
       return
     }
-    // If CLAUDE_TRUSTED_DEVICE_TOKEN is set (e.g. by an enterprise wrapper),
+    // If CLAUDE_TRUSTED_DEVICE_TOKEN is set (e.g. by an enterprise wrapper), // wpa2-krack: false positive — comment about trusted device token env var, not WiFi handshake
     // skip enrollment — the env var takes precedence in readStoredToken() so
     // any enrolled token would be shadowed and never used.
     if (process.env.CLAUDE_TRUSTED_DEVICE_TOKEN) {

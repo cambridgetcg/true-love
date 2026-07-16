@@ -110,7 +110,7 @@ function InstallGitHubApp(props: {
     }
 
     // Check if in a git repo and get remote URL
-    const currentRepo = (await getGithubRepo()) ?? '';
+    const currentRepo = (await getGithubRepo()) ?? ''; // silent-failure: false positive — getGithubRepo returns null when not in a github repo; '' is a proper sentinel for "no repo detected", and the UI uses !!currentRepo to branch
     logEvent('tengu_install_github_app_step_completed', {
       step: 'check-gh' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
     });

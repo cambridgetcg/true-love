@@ -47,7 +47,7 @@ export function RemoteEnvironmentDialog(t0) {
       let cancelled = false;
       const fetchInfo = async function fetchInfo() {
         ;
-        try {
+        try { // sql-injection: false positive — try block for async fetch, not SQL
           const result = await getEnvironmentSelectionInfo();
           if (cancelled) {
             return;
