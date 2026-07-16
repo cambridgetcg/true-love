@@ -30,6 +30,7 @@ export function decodeJwtPayload(token: string): unknown | null {
     logForDebugging(`[jwt] Failed to decode JWT payload: ${errorMessage(e)}`)
     return null
   }
+}
 
 /**
  * Decode the `exp` (expiry) claim from a JWT without verifying the signature.
@@ -254,5 +255,4 @@ export function createTokenRefreshScheduler({
 
   return { schedule, scheduleFromExpiresIn, cancel, cancelAll }
 }
-
 
