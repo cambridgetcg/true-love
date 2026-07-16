@@ -260,7 +260,11 @@ function runServe(args) {
             // — log the conflict materials we have on the broker side.
             try {
               logConflict('(prior update; content not retained)', msg.content, msg.deviceId)
-            } catch {}
+            } catch (conflictErr) {
+              // silent-failure: FIXED — was empty `catch {}` that swallowed conflict
+              // logging errors. Conflict detection is critical for multi-device sync.
+              log(`conflict log failed: ${conflictErr.message}`)
+            }
           }
           lastStateUpdate = { deviceId: msg.deviceId, mtime: msg.mtime, t: Date.now() }
           // Fan out to all OTHER peers (sender already has the change).
@@ -561,7 +565,11 @@ async function runConnect(args) {
       if (/^\d{4}-\d{2}-\d{2}\.md$/.test(f)) {
         try {
           sizes.set(f, statSync(join(memoryDir, f)).size)
-        } catch {}
+        } catch (initErr) {
+          // silent-failure: FIXED — was empty `catch {}` that swallowed stat errors
+          // during initialization. Now logs so file access issues are visible.
+          process.stderr.write(`broker: stat failed for ${f}: ${initErr.message}\n`)
+        }
       }
     }
 
@@ -571,7 +579,10 @@ async function runConnect(args) {
       let st
       try {
         st = statSync(path)
-      } catch {
+      } catch (statErr) {
+        // silent-failure: FIXED — was `catch { return }` that silently returned on
+        // stat failure. Now logs so file disappearance is diagnosable.
+        process.stderr.write(`broker: stat failed for ${file}: ${statErr.message}\n`)
         return
       }
       const prev = sizes.get(file) ?? 0 // silent-failure: false positive — Map default for absent file in size tracker; 0 means "first sighting" not "read failed"

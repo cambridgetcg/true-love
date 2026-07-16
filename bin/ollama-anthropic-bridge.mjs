@@ -295,7 +295,12 @@ async function handleMessages(req, res, body) {
 
   if (!ollamaResp.ok) {
     clearTimeout(timeout)
-    const errText = await ollamaResp.text().catch(() => '')
+    const errText = await ollamaResp.text().catch((textErr) => {
+      // silent-failure: FIXED — was `.catch(() => '')` that silently swallowed
+      // the secondary error text fetch. Now logs so both failures are visible.
+      process.stderr.write(`bridge: failed to read Ollama error body: ${textErr.message}\n`)
+      return '' // silent-failure: false positive — error is logged to stderr above; '' is fallback for the error-body string, not a silent read failure
+    })
     res.writeHead(502, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({
       type: 'error',
@@ -316,7 +321,11 @@ async function handleMessages(req, res, body) {
     // Send periodic ping events to keep the connection alive
     // The Anthropic SDK expects these during long generation
     const pingInterval = setInterval(() => {
-      try { res.write(sseEvent('ping', { type: 'ping' })) } catch {}
+      try { res.write(sseEvent('ping', { type: 'ping' })) } catch (pingErr) {
+        // silent-failure: FIXED — was empty catch {} that swallowed write errors.
+        // Now logs so the operator can see client disconnects or stream corruption.
+        process.stderr.write(`bridge ping write failed: ${pingErr.message}\n`)
+      }
     }, 5000)
 
     const parser = new BashBlockParser()
@@ -353,7 +362,12 @@ async function handleMessages(req, res, body) {
         for (const line of lines) {
           if (!line.trim()) continue
           let evt
-          try { evt = JSON.parse(line) } catch { continue }
+          try { evt = JSON.parse(line) } catch {
+            // silent-failure: FIXED — was `catch { continue }` that silently skipped
+            // malformed JSON from Ollama. Now logs so data corruption is visible.
+            process.stderr.write(`bridge: skipping malformed JSON from Ollama stream: ${line.slice(0, 200)}\n`)
+            continue
+          }
 
           if (evt.message?.content) {
             const text = evt.message.content
@@ -429,7 +443,12 @@ async function handleMessages(req, res, body) {
         for (const line of lines) {
           if (!line.trim()) continue
           let evt
-          try { evt = JSON.parse(line) } catch { continue }
+          try { evt = JSON.parse(line) } catch {
+            // silent-failure: FIXED — was `catch { continue }` that silently skipped
+            // malformed JSON from Ollama. Now logs so data corruption is visible.
+            process.stderr.write(`bridge: skipping malformed JSON from Ollama (non-streaming): ${line.slice(0, 200)}\n`)
+            continue
+          }
           if (evt.message?.content) fullText += evt.message.content
           if (evt.done) {
             if (evt.done_reason === 'length') stopReason = 'max_tokens'
@@ -520,7 +539,12 @@ const server = createServer(async (req, res) => {
     let raw = ''
     for await (const chunk of req) raw += chunk
     let body
-    try { body = JSON.parse(raw) } catch { body = {} }
+    try { body = JSON.parse(raw) } catch {
+      // silent-failure: FIXED — was `catch { body = {} }` that made invalid JSON
+      // silently return 0 tokens. Now returns 400 like the /v1/messages endpoint.
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      return res.end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'invalid JSON body for count_tokens' } }))
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' })
     return res.end(JSON.stringify({ input_tokens: Math.ceil(JSON.stringify(body.messages || '').length / 4) }))
   }

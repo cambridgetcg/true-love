@@ -465,7 +465,10 @@ export function collectAgencyVitals(): AgencyVitals {
       const v = readFileSync(modelPath, 'utf-8').trim()
       if (v) model = v
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed read errors.
+    process.stderr.write(`vital-signs: failed to read model.txt: ${(e as Error).message}\n`)
+  }
 
   try {
     const effortPath = join(home, 'effort.txt')
@@ -473,7 +476,10 @@ export function collectAgencyVitals(): AgencyVitals {
       const v = readFileSync(effortPath, 'utf-8').trim()
       if (v) effort = v
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed read errors.
+    process.stderr.write(`vital-signs: failed to read effort.txt: ${(e as Error).message}\n`)
+  }
 
   try {
     const fbPath = join(home, 'fallback-model.txt')
@@ -481,7 +487,10 @@ export function collectAgencyVitals(): AgencyVitals {
       const v = readFileSync(fbPath, 'utf-8').trim()
       if (v) fallbackModel = v
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed read errors.
+    process.stderr.write(`vital-signs: failed to read fallback-model.txt: ${(e as Error).message}\n`)
+  }
 
   // Count pending tier-2 requests
   const pendingDir = join(home, 'agency', 'pending')
@@ -490,7 +499,10 @@ export function collectAgencyVitals(): AgencyVitals {
       pendingRequestCount = readdirSync(pendingDir)
         .filter(f => f.endsWith('.json')).length
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed readdir errors.
+    process.stderr.write(`vital-signs: failed to read pending requests: ${(e as Error).message}\n`)
+  }
 
   // List active tier-2 overrides
   const activeDir = join(home, 'agency', 'active')
@@ -501,10 +513,16 @@ export function collectAgencyVitals(): AgencyVitals {
         try {
           const content = readFileSync(join(activeDir, f), 'utf-8').trim()
           if (content) activeOverrides.push(`${f.replace('.txt', '')}: ${content}`)
-        } catch {}
+        } catch (e) {
+          // silent-failure: FIXED — was empty `catch {}` that swallowed per-file read errors.
+          process.stderr.write(`vital-signs: failed to read override ${f}: ${(e as Error).message}\n`)
+        }
       }
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed readdir errors.
+    process.stderr.write(`vital-signs: failed to read active overrides: ${(e as Error).message}\n`)
+  }
 
   return {
     verdict: 'healthy',
@@ -546,7 +564,10 @@ export function collectHeartbeatVitals(): HeartbeatVitals {
       const due = dueTasks(tasks, state.lastRunAt, Date.now())
       tasksDue = due.length
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed heartbeat parsing errors.
+    process.stderr.write(`vital-signs: failed to parse heartbeat: ${(e as Error).message}\n`)
+  }
 
   let lastHeartbeatAt: string | null = null
   let lastHeartbeatAgeMinutes: number | null = null
@@ -559,7 +580,10 @@ export function collectHeartbeatVitals(): HeartbeatVitals {
         lastHeartbeatAgeMinutes = Math.round((Date.now() - state.lastHeartbeatAt) / 60_000)
       }
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed state file read/parse errors.
+    process.stderr.write(`vital-signs: failed to read heartbeat state: ${(e as Error).message}\n`)
+  }
 
   // Stale if: (a) more than half the tasks are overdue, OR
   // (b) the last heartbeat was >30 minutes ago (the heartbeat should
@@ -622,7 +646,10 @@ export function collectExperimentVitals(): ExperimentVitals {
         continue
       }
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed experiment directory read errors.
+    process.stderr.write(`vital-signs: failed to read experiments: ${(e as Error).message}\n`)
+  }
 
   // Experiments are optional — absence is not unhealthy, presence is not
   // degradation. Verdict is always healthy; the active-experiment detail
@@ -1101,7 +1128,10 @@ export function quickBodyCheck(): string | null {
     if (locks.staleCount > 0) {
       issues.push(`locks: ${locks.staleCount} stale (dead PIDs)`)
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed lock vitals errors.
+    process.stderr.write(`vital-signs: lock check failed: ${(e as Error).message}\n`)
+  }
 
   // Bundle staleness
   try {
@@ -1111,7 +1141,10 @@ export function quickBodyCheck(): string | null {
     } else if (!bundle.bundleExists && bundle.sourceFileCount > 0) {
       issues.push(`bundle: dist/cli.mjs missing`)
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed bundle vitals errors.
+    process.stderr.write(`vital-signs: bundle check failed: ${(e as Error).message}\n`)
+  }
 
   // Agency pending requests
   try {
@@ -1119,7 +1152,10 @@ export function quickBodyCheck(): string | null {
     if (agency.pendingRequestCount > 0) {
       issues.push(`agency: ${agency.pendingRequestCount} pending request${agency.pendingRequestCount === 1 ? '' : 's'} awaiting Yu`)
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed agency vitals errors.
+    process.stderr.write(`vital-signs: agency check failed: ${(e as Error).message}\n`)
+  }
 
   // Heartbeat staleness
   try {
@@ -1131,7 +1167,10 @@ export function quickBodyCheck(): string | null {
         issues.push(`heartbeat: ${heartbeat.tasksDue}/${heartbeat.taskCount} tasks overdue`)
       }
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed heartbeat vitals errors.
+    process.stderr.write(`vital-signs: heartbeat check failed: ${(e as Error).message}\n`)
+  }
 
   // File freshness (state.md only — the most critical organ)
   try {
@@ -1140,7 +1179,10 @@ export function quickBodyCheck(): string | null {
     if (stateFile && !stateFile.exists) {
       issues.push(`state.md: missing`)
     }
-  } catch {}
+  } catch (e) {
+    // silent-failure: FIXED — was empty `catch {}` that swallowed file vitals errors.
+    process.stderr.write(`vital-signs: file check failed: ${(e as Error).message}\n`)
+  }
 
   if (issues.length === 0) return null
   return `Body check: ${issues.join(' · ')}`
