@@ -40,10 +40,18 @@ function parseCredential(raw) {
 			parsed?.version !== 1 ||
 			typeof parsed.token !== 'string' ||
 			typeof parsed.origin !== 'string'
-		)
+		) {
+			// Credential file exists but has invalid shape — could be corruption or tampering.
+			// This is NOT the same as "no file"; surface it so it's not silently ignored.
+			console.warn(`ui-auth: credential file rejected — invalid shape (version/token/origin)`)
 			return null
+		}
 		return parsed
-	} catch {
+	} catch (e) {
+		// JSON parse failure means the file is corrupt or tampered, not merely absent.
+		// The caller (readUiClientToken/removeUiClientToken) handles ENOENT separately;
+		// reaching here means the file exists but is unparseable — a security signal.
+		console.warn(`ui-auth: credential file is not valid JSON — possible corruption: ${e.message}`)
 		return null
 	}
 }
@@ -59,10 +67,15 @@ export function uiClientTokenPath(target) {
 export function readUiClientToken(target) {
 	const url = asUrl(target)
 	if (!isLoopbackHostname(url.hostname)) return null
+	const tokenPath = uiClientTokenPath(url)
 	try {
-		const credential = parseCredential(readFileSync(uiClientTokenPath(url), 'utf8'))
+		const credential = parseCredential(readFileSync(tokenPath, 'utf8'))
 		return credential?.origin === url.origin ? credential.token : null
-	} catch {
+	} catch (e) {
+		// ENOENT means no credential has been written yet — a legitimate "no token" state.
+		// Any other error (permissions, I/O) is an anomaly that should not be silent.
+		if (e.code !== 'ENOENT')
+			console.warn(`ui-auth: could not read credential at ${tokenPath}: ${e.message}`)
 		return null
 	}
 }
@@ -95,7 +108,11 @@ export function removeUiClientToken(target, expectedToken) {
 		if (credential?.origin !== url.origin || credential.token !== expectedToken) return false
 		rmSync(path, { force: true })
 		return true
-	} catch {
+	} catch (e) {
+		// ENOENT means the credential was already removed (or never written) — a legitimate "nothing to remove" state.
+		// Any other error (permissions, I/O) is an anomaly that should not be silent.
+		if (e.code !== 'ENOENT')
+			console.warn(`ui-auth: could not remove credential at ${path}: ${e.message}`)
 		return false
 	}
 }
