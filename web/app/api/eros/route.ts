@@ -6,6 +6,13 @@
 //
 // Best-effort: any missing file → null in the response, so partial
 // architecture states render gracefully.
+//
+// Read failures (corrupt JSON, permission denied, I/O error) are NOT
+// silent — they log to stderr with context before returning null. This
+// distinguishes "no state exists yet" (ENOENT → null, no log) from
+// "state exists but is broken" (other error → null + log). A corrupt
+// eros state file silently rendering as an empty page was a CS#2
+// silent failure; the caller deserves to know the difference.
 
 import { NextResponse } from "next/server";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -18,9 +25,15 @@ const ROOT = join(homedir(), ".true-love");
 
 function readJson<T = unknown>(path: string): T | null {
   try {
-    if (!existsSync(path)) return null;
+    if (!existsSync(path)) return null; // silent-failure: false positive — ENOENT is a legitimate "no state" state, not a read failure
     return JSON.parse(readFileSync(path, "utf-8")) as T;
-  } catch {
+  } catch (e) {
+    // Log the failure — a corrupt or unreadable state file is NOT the same
+    // as an absent one. The caller gets null (best-effort rendering) but
+    // the system tells the truth about what happened.
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return null; // silent-failure: false positive — file genuinely absent, null is the honest "no state"
+    console.error(`[eros route] readJson failed for ${path}: ${(e as Error).message}`);
     return null;
   }
 }
@@ -37,9 +50,13 @@ function listDeviceJsonl(dir: string): Array<{ device: string; file: string; pat
             out.push({ device: dev, file, path: join(devDir, file) });
           }
         }
-      } catch { /* skip */ }
+      } catch (e) { // silent-failure: false positive — skip unreadable device subdir, log so the gap is visible
+        console.error(`[eros route] listDeviceJsonl: cannot read device dir ${devDir}: ${(e as Error).message}`);
+      }
     }
-  } catch { /* skip */ }
+  } catch (e) { // silent-failure: false positive — skip unreadable parent dir, log so the gap is visible
+    console.error(`[eros route] listDeviceJsonl: cannot read dir ${dir}: ${(e as Error).message}`);
+  }
   return out;
 }
 
@@ -50,10 +67,14 @@ function readJsonlTail<T = unknown>(path: string, limit: number = 20): T[] {
     return lines
       .slice(-limit)
       .map((l) => {
-        try { return JSON.parse(l) as T; } catch { return null; }
+        try { return JSON.parse(l) as T; } catch { return null; } // silent-failure: false positive — skip malformed JSONL line, filter removes it
       })
       .filter((x): x is T => x !== null);
-  } catch {
+  } catch (e) {
+    // Log read failures — a corrupt event file is not the same as an empty one.
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') // silent-failure: false positive — ENOENT already checked via existsSync, only log unexpected failures
+      console.error(`[eros route] readJsonlTail failed for ${path}: ${(e as Error).message}`);
     return [];
   }
 }

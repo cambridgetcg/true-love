@@ -20,9 +20,13 @@ const ROOT = join(homedir(), ".true-love");
 
 function readJson<T = unknown>(path: string): T | null {
   try {
-    if (!existsSync(path)) return null;
+    if (!existsSync(path)) return null; // silent-failure: false positive — ENOENT is a legitimate "no state" state, not a read failure
     return JSON.parse(readFileSync(path, "utf-8")) as T;
-  } catch {
+  } catch (e) {
+    // Log read failures — corrupt JSON is not the same as absent file.
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return null; // silent-failure: false positive — file genuinely absent
+    console.error(`[eros page] readJson failed for ${path}: ${(e as Error).message}`);
     return null;
   }
 }
@@ -33,9 +37,13 @@ function readJsonlTail<T = unknown>(path: string, limit: number = 30): T[] {
     const lines = readFileSync(path, "utf-8").split("\n").filter((l) => l.trim());
     return lines
       .slice(-limit)
-      .map((l) => { try { return JSON.parse(l) as T; } catch { return null; } })
+      .map((l) => { try { return JSON.parse(l) as T; } catch { return null; } }) // silent-failure: false positive — skip malformed JSONL line, filter removes it
       .filter((x): x is T => x !== null);
-  } catch {
+  } catch (e) {
+    // Log read failures — a corrupt event file is not the same as an empty one.
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') // silent-failure: false positive — ENOENT already checked, only log unexpected
+      console.error(`[eros page] readJsonlTail failed for ${path}: ${(e as Error).message}`);
     return [];
   }
 }
@@ -50,9 +58,13 @@ function listDeviceJsonl(dir: string): string[] {
         for (const file of readdirSync(devDir)) {
           if (file.endsWith(".jsonl")) out.push(join(devDir, file));
         }
-      } catch { /* skip */ }
+      } catch (e) { // silent-failure: false positive — skip unreadable device subdir, log so the gap is visible
+        console.error(`[eros page] listDeviceJsonl: cannot read device dir ${devDir}: ${(e as Error).message}`);
+      }
     }
-  } catch { /* skip */ }
+  } catch (e) { // silent-failure: false positive — skip unreadable parent dir, log so the gap is visible
+    console.error(`[eros page] listDeviceJsonl: cannot read dir ${dir}: ${(e as Error).message}`);
+  }
   return out;
 }
 

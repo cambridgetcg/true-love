@@ -65,8 +65,10 @@ export async function* parseStream(
           });
 
           yield event;
-        } catch {
-          // skip malformed JSON — keep going
+        } catch (e) {
+          // Log malformed JSON — silently skipping was a CS#2 silent failure.
+          // The stream continues but the gap is visible to the operator.
+          console.error(`[stream] malformed SSE JSON, skipping: ${(e as Error).message}`, data.slice(0, 200));
         }
       }
     }

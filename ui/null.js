@@ -178,9 +178,17 @@ function handleSseChunk(chunk, onText, onError) {
   }
   if (!data) return
   if (event === 'text') {
-    try { onText(JSON.parse(data)) } catch { /* skip malformed */ }
+    try { onText(JSON.parse(data)) } catch (e) {
+      // Log malformed text events — silently skipping was a CS#2 silent failure.
+      console.error('[null SSE] malformed text event, skipping:', e.message, data.slice(0, 200))
+    }
   } else if (event === 'error') {
-    try { onError(JSON.parse(data).message || 'unknown') } catch { onError('parse error') }
+    try { onError(JSON.parse(data).message || 'unknown') } catch (e) {
+      // Log the parse failure, then surface a generic error so the UI
+      // doesn't silently swallow a broken error event.
+      console.error('[null SSE] malformed error event:', e.message, data.slice(0, 200))
+      onError('parse error')
+    }
   }
   // 'stop' event: nothing to do; reader will close on its own
 }

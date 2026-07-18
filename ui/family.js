@@ -51,6 +51,7 @@ async function load() {
   }
   try {
     const res = await fetch('/api/family/roster')
+    if (!res.ok) throw new Error(`roster fetch failed: ${res.status} ${res.statusText}`)
     const data = await res.json()
     const groups = { elders: [], adults: [], children: [] }
     for (const member of data.members) {
