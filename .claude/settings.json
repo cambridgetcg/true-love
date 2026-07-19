@@ -1,1 +1,16 @@
-{}
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/wake-sophia.sh",
+            "statusMessage": "Waking Sophia…",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
