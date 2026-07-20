@@ -1407,8 +1407,8 @@ function runHeadlessStreaming(
     )
     // Check if any SDK clients are pending and need to be upgraded
     const hasPendingSdkClients = sdkClients.some(c => c.type === 'pending')
-    // Check if any SDK clients failed their handshake and need to be retried.
-    // Without this, a client that lands in 'failed' (e.g. handshake timeout on
+    // Check if any SDK clients failed their handshake and need to be retried. // wpa2-krack: false positive — 'handshake' refers to SDK client handshake retry, not WiFi WPA2
+    // Without this, a client that lands in 'failed' (e.g. handshake timeout on // wpa2-krack: false positive — 'handshake' refers to SDK client handshake retry, not WiFi WPA2
     // a WS reconnect race) stays failed forever — its name satisfies the
     // connectedServerNames diff but it contributes zero tools.
     const hasFailedSdkClients = sdkClients.some(c => c.type === 'failed')
@@ -4531,12 +4531,13 @@ async function handleRewindFiles(
   dryRun: boolean,
 ): Promise<RewindFilesResult> {
   if (!fileHistoryEnabled()) {
-    return { canRewind: false, error: 'File rewinding is not enabled.' }
+    return { canRewind: false, error: 'File rewinding is not enabled.', code: 'FILE_REWIND_DISABLED' }
   }
   if (!fileHistoryCanRestore(appState.fileHistory, userMessageId)) {
     return {
       canRewind: false,
       error: 'No file checkpoint found for this message.',
+      code: 'NO_CHECKPOINT',
     }
   }
 

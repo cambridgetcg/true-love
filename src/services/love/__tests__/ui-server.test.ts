@@ -1,5 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,6 +20,22 @@ import { stageCandidate, getStaged } from '../self-initiation.js'
 import type { Project } from '../project-registry.js'
 import type { Thought } from '../thoughts-channel.js'
 import type { Mission } from '../mission.js'
+
+const TEST_OWNER_TOKEN = 'true-love-test-owner-token-00000001'
+const nativeFetch = globalThis.fetch.bind(globalThis)
+const fetch: typeof globalThis.fetch = (input, init) => {
+  const headers = new Headers(init?.headers)
+  if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${TEST_OWNER_TOKEN}`)
+  const target =
+    typeof input === 'string' ? input.replace('http://localhost:', 'http://127.0.0.1:') : input
+  return nativeFetch(target, { ...init, headers })
+}
+
+async function startTestUiServer(): Promise<ReturnType<typeof startUiServer>> {
+  const server = startUiServer({ port: 0, host: '127.0.0.1', ownerToken: TEST_OWNER_TOKEN })
+  if (!server.listening) await once(server, 'listening')
+  return server
+}
 
 describe('ui-server — parseChannelFile', () => {
   test('empty content → []', () => {
@@ -301,6 +318,7 @@ describe('ui-server — readPresenceSnapshot', () => {
   const ORIG_HOME = process.env.HOME
   const ORIG_PRES_DIR = process.env.TRUE_LOVE_PRESENCE_DIR
   const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
   const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
   beforeEach(() => {
@@ -308,6 +326,7 @@ describe('ui-server — readPresenceSnapshot', () => {
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_PRESENCE_DIR = join(tmpHome, '.true-love', 'presence')
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(tmpHome, '.true-love', 'sisters')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
     mkdirSync(process.env.TRUE_LOVE_PRESENCE_DIR, { recursive: true })
   })
@@ -319,6 +338,8 @@ describe('ui-server — readPresenceSnapshot', () => {
     else process.env.TRUE_LOVE_PRESENCE_DIR = ORIG_PRES_DIR
     if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
     else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+    if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
     if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
     else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
   })
@@ -527,9 +548,10 @@ describe('ui-server — HTTP', () => {
   const ORIG_FROM_AI = process.env.TRUE_LOVE_FROM_AI_PATH
   const ORIG_PRES_DIR = process.env.TRUE_LOVE_PRESENCE_DIR
   const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
   const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-http-'))
     mkdirSync(join(tmpHome, '.true-love', 'presence'), { recursive: true })
     process.env.HOME = tmpHome
@@ -537,8 +559,9 @@ describe('ui-server — HTTP', () => {
     process.env.TRUE_LOVE_FROM_AI_PATH = join(tmpHome, '.true-love', 'from-ai.md')
     process.env.TRUE_LOVE_PRESENCE_DIR = join(tmpHome, '.true-love', 'presence')
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(tmpHome, '.true-love', 'sisters')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
   })
 
@@ -554,6 +577,8 @@ describe('ui-server — HTTP', () => {
     else process.env.TRUE_LOVE_PRESENCE_DIR = ORIG_PRES_DIR
     if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
     else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+    if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
     if (ORIG_DISABLE_SOUL === undefined) delete process.env.TRUE_LOVE_DISABLE_SOUL
     else process.env.TRUE_LOVE_DISABLE_SOUL = ORIG_DISABLE_SOUL
   })
@@ -718,13 +743,13 @@ describe('ui-server — /api/projects', () => {
   const ORIG_PROJ_DIR = process.env.TRUE_LOVE_PROJECTS_DIR
   const ORIG_DISABLE_SOUL = process.env.TRUE_LOVE_DISABLE_SOUL
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-projapi-'))
     projectRoot = mkdtempSync(join(tmpdir(), 'tl-projroot-'))
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
   })
 
@@ -808,7 +833,7 @@ describe('ui-server — per-project channels', () => {
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
     await fetch(`http://localhost:${port}/api/projects`, {
       method: 'POST',
@@ -889,7 +914,7 @@ describe('ui-server — /api/missions', () => {
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
     await fetch(`http://localhost:${port}/api/projects`, {
       method: 'POST',
@@ -1131,7 +1156,7 @@ describe('ui-server — /api/build/stream (SSE)', () => {
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
     process.env.TRUE_LOVE_DISABLE_SOUL = '1'
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as { port: number }).port
     await fetch(`http://localhost:${port}/api/projects`, {
       method: 'POST',
@@ -1194,12 +1219,12 @@ describe('ui-server — /api/proposals', () => {
   let port: number
   const ORIG_HOME = process.env.HOME
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-proposals-'))
     process.env.HOME = tmpHome
     // Ensure the .true-love dir exists for proposal storage
     mkdirSync(join(tmpHome, '.true-love'), { recursive: true })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as any).port
   })
 
@@ -1286,12 +1311,12 @@ describe('ui-server — /api/budget', () => {
   const ORIG_HOME = process.env.HOME
   const ORIG_BUDGET_ROOT = process.env.TRUE_LOVE_BUDGET_ROOT
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-budget-'))
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_BUDGET_ROOT = join(tmpHome, '.true-love', 'budget')
     mkdirSync(join(tmpHome, '.true-love', 'budget', 'test-device'), { recursive: true })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as any).port
   })
 
@@ -1389,14 +1414,14 @@ describe('ui-server — POST /api/self-initiation/:id/veto', () => {
   const ORIG_PROJECTS = process.env.TRUE_LOVE_PROJECTS_DIR
   const ORIG_MEMORY = process.env.TRUE_LOVE_MEMORY_DIR
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'tl-veto-'))
     process.env.HOME = tmpHome
     process.env.TRUE_LOVE_PROJECTS_DIR = join(tmpHome, '.true-love', 'projects')
     process.env.TRUE_LOVE_MEMORY_DIR = join(tmpHome, '.true-love', 'memory')
     mkdirSync(join(tmpHome, '.true-love', 'projects', 'veto-test', 'missions'), { recursive: true })
     registerProject({ id: 'veto-test', name: 'veto-test', root: tmpHome, instance: 'alpha' })
-    server = startUiServer({ port: 0 })
+    server = await startTestUiServer()
     port = (server.address() as any).port
   })
 

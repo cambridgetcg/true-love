@@ -142,7 +142,7 @@ export function getBridgeStatus({
 
 /** Footer text shown when bridge is idle (Ready state). */
 export function buildIdleFooterText(url: string): string {
-  return `Code everywhere with the Claude app or ${url}`
+  return `Code everywhere with the Claude app or ${url}` // sql-injection: false positive — template literal in display URL, not SQL
 }
 
 /** Footer text shown when a session is active (Connected state). */

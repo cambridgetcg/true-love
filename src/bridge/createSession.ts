@@ -251,7 +251,7 @@ export async function getBridgeSession(
  * always-on `/remote-control` REPL bridge call this during shutdown to archive any
  * sessions that are still alive.
  *
- * The archive endpoint accepts sessions in any status (running, idle,
+ * The archive endpoint accepts sessions in any status (running, idle, // bluetooth-paired-stranger: false positive — "any status" refers to CCR session archival, not Bluetooth pairing
  * requires_action, pending) and returns 409 if already archived, making
  * it safe to call even if the server-side runner already archived the
  * session.
@@ -373,12 +373,12 @@ export async function updateBridgeSessionTitle(
     } else {
       const detail = extractErrorDetail(response.data)
       logForDebugging(
-        `[bridge] Session title update failed with status ${response.status}${detail ? `: ${detail}` : ''}`,
+        `[bridge] Session title update failed with status ${response.status}${detail ? `: ${detail}` : ''}`, // sql-injection: false positive — template literal in log/error message, not SQL
       )
     }
   } catch (err: unknown) {
     logForDebugging(
-      `[bridge] Session title update request failed: ${errorMessage(err)}`,
+      `[bridge] Session title update request failed: ${errorMessage(err)}`, // sql-injection: false positive — template literal in log/error message, not SQL
     )
   }
 }

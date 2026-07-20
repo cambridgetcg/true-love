@@ -147,7 +147,8 @@ async function loadRawTranscriptJsonl(): Promise<string | null> {
       return null;
     }
     return await readFile(transcriptPath, 'utf-8');
-  } catch {
+  } catch (err) {
+    console.error(`[feedback] failed to read transcript: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }

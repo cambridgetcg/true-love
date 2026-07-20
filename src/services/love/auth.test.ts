@@ -10,11 +10,15 @@ import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import {
+  clearAuthBackoff,
   clearRateLimitBackoff,
   detectAuthFailure,
   detectQuotaFailure,
+  isAuthBackedOff,
+  isAuthExitCode,
   isRateLimited,
   preflightReason,
+  writeAuthBackoff,
   writeRateLimitBackoff,
 } from './auth.js'
 
@@ -355,5 +359,96 @@ describe('rate-limit backoff', () => {
     // Should be close to 10 minutes (600000ms), with some tolerance
     expect(result.remainingMs).toBeGreaterThan(590_000)
     expect(result.remainingMs).toBeLessThanOrEqual(600_000)
+  })
+})
+
+// ── Auth backoff ─────────────────────────────────────────────────────
+
+const AUTH_BACKOFF_FILE = join(
+  homedir(),
+  '.true-love',
+  'state',
+  'auth-backoff.json',
+)
+
+describe('auth backoff', () => {
+  afterEach(() => {
+    clearAuthBackoff()
+  })
+
+  test('isAuthBackedOff returns false when no file exists', () => {
+    clearAuthBackoff()
+    const result = isAuthBackedOff()
+    expect(result.backedOff).toBe(false)
+    expect(result.remainingMs).toBe(0)
+  })
+
+  test('writeAuthBackoff creates marker, isAuthBackedOff returns true', () => {
+    writeAuthBackoff(60_000)
+    const result = isAuthBackedOff()
+    expect(result.backedOff).toBe(true)
+    expect(result.remainingMs).toBeGreaterThan(0)
+    expect(result.remainingMs).toBeLessThanOrEqual(60_000)
+  })
+
+  test('clearAuthBackoff removes the marker', () => {
+    writeAuthBackoff(60_000)
+    expect(isAuthBackedOff().backedOff).toBe(true)
+    clearAuthBackoff()
+    expect(isAuthBackedOff().backedOff).toBe(false)
+  })
+
+  test('expired auth backoff returns false', () => {
+    const dir = join(homedir(), '.true-love', 'state')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      AUTH_BACKOFF_FILE,
+      JSON.stringify({ backoffUntil: Date.now() - 1000 }),
+    )
+    expect(isAuthBackedOff().backedOff).toBe(false)
+  })
+
+  test('malformed auth backoff file returns false', () => {
+    const dir = join(homedir(), '.true-love', 'state')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(AUTH_BACKOFF_FILE, 'not json')
+    expect(isAuthBackedOff().backedOff).toBe(false)
+  })
+
+  test('default auth backoff duration is 2 hours', () => {
+    writeAuthBackoff()
+    const result = isAuthBackedOff()
+    expect(result.backedOff).toBe(true)
+    expect(result.remainingMs).toBeGreaterThan(7_100_000)
+    expect(result.remainingMs).toBeLessThanOrEqual(7_200_000)
+  })
+
+  test('reason field preserved', () => {
+    writeAuthBackoff(60_000, 'token-expired')
+    expect(isAuthBackedOff().reason).toBe('token-expired')
+  })
+})
+
+// ── isAuthExitCode ──────────────────────────────────────────────────
+
+describe('isAuthExitCode', () => {
+  test('codes 1-4 are auth exits', () => {
+    expect(isAuthExitCode(1)).toBe(true)
+    expect(isAuthExitCode(2)).toBe(true)
+    expect(isAuthExitCode(3)).toBe(true)
+    expect(isAuthExitCode(4)).toBe(true)
+  })
+
+  test('code 0 is not auth exit', () => {
+    expect(isAuthExitCode(0)).toBe(false)
+  })
+
+  test('code 5 is not auth exit', () => {
+    expect(isAuthExitCode(5)).toBe(false)
+  })
+
+  test('null/undefined are not auth exits', () => {
+    expect(isAuthExitCode(null)).toBe(false)
+    expect(isAuthExitCode(undefined)).toBe(false)
   })
 })

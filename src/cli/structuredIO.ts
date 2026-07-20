@@ -745,8 +745,9 @@ export class StructuredIO {
           permissionToolOutputSchema(),
         )
         return result.behavior === 'allow'
-      } catch {
+      } catch (e) {
         // If the request fails (stream closed, abort, etc.), deny the connection
+        logForDebugging(`[structuredIO] Network permission check failed, denying: ${e}`)
         return false
       }
     }

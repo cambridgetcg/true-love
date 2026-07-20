@@ -344,7 +344,7 @@ export const call: LocalJSXCommandCall = async (onDone, context, args) => {
   if (arg) {
     const n = Number(arg);
     if (!Number.isInteger(n) || n < 1) {
-      onDone(`Usage: /copy [N] where N is 1 (latest), 2, 3, \u2026 Got: ${arg}`);
+      onDone(`Usage: /copy [N] where N is 1 (latest), 2, 3, \u2026 Got: ${arg}`); // sql-injection: false positive — template literal in usage error message, not SQL
       return null;
     }
     if (n > texts.length) {

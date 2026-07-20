@@ -210,7 +210,7 @@ describe("TokenAuthAdapter", () => {
       });
       expect(nextCalled).toBe(false);
       expect(res.statusCode).toBe(401);
-      expect(res.body).toEqual({ error: "Unauthorized" });
+      expect(res.body).toEqual({ error: "Unauthorized", code: "UNAUTHORIZED" });
     });
   });
 

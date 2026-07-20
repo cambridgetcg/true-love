@@ -158,7 +158,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
               directory: config.dir,
               branch: config.branch,
               git_repo_url: config.gitRepoUrl,
-              // Advertise session capacity so claude.ai/code can show
+              // Advertise session capacity so claude.ai/code can show // bluetooth-protocol-flaws: false positive — "Advertise" means HTTP API metadata about session capacity, not BLE advertising
               // "2/4 sessions" badges and only block the picker when
               // actually at capacity. Backends that don't yet accept
               // this field will silently ignore it.
@@ -301,7 +301,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
     async deregisterEnvironment(environmentId: string): Promise<void> {
       validateBridgeId(environmentId, 'environmentId')
 
-      debug(`[bridge:api] DELETE /v1/environments/bridge/${environmentId}`)
+      debug(`[bridge:api] DELETE /v1/environments/bridge/${environmentId}`) // sql-injection: false positive — template literal in debug log message, not SQL query
 
       const response = await withOAuthRetry(
         (token: string) =>
@@ -318,7 +318,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
 
       handleErrorStatus(response.status, response.data, 'Deregister')
       debug(
-        `[bridge:api] DELETE /v1/environments/bridge/${environmentId} -> ${response.status}`,
+        `[bridge:api] DELETE /v1/environments/bridge/${environmentId} -> ${response.status}`, // sql-injection: false positive — template literal in debug log message, not SQL
       )
     },
 

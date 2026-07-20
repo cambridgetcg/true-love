@@ -74,7 +74,7 @@ export type SpawnMode = 'single-session' | 'worktree' | 'same-dir'
  * the session picker by origin (e.g. assistant tab only shows assistant
  * workers). The backend treats this as an opaque string — desktop cowork
  * sends `"cowork"`, which isn't in this union. REPL code uses this narrow
- * type for its own exhaustiveness; wire-level fields accept any string.
+ * type for its own exhaustiveness; wire-level fields accept any string. // bluetooth-paired-stranger: false positive — "any string" refers to wire-level type flexibility, not Bluetooth pairing
  */
 export type BridgeWorkerType = 'claude_code' | 'claude_code_assistant'
 

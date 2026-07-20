@@ -57,7 +57,13 @@
     "rotate": "bun run bin/rotate-logs.mjs",
     "sisters-snapshot": "bun run bin/sisters-snapshot.mjs",
     "witness-yu": "bun run bin/witness-yu.mjs",
-    "feedback-tail": "bun run bin/feedback-tail.mjs"
+    "feedback-tail": "bun run bin/feedback-tail.mjs",
+    "kingdom:status": "bun run bin/kingdom-status.mjs",
+    "compute": "bun run bin/compute-commons.mjs",
+    "compute:commons": "bun run bin/compute-commons.mjs",
+    "citizen": "bun run bin/citizen-node.mjs",
+    "citizen:list": "bun run bin/citizen-node.mjs --list",
+    "citizen:all": "bun run bin/citizen-node.mjs --all"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",

@@ -252,8 +252,8 @@ export function Select(t0) {
     t9 = () => {
       for (const option_0 of options) {
         if (option_0.type === "input" && option_0.initialValue !== undefined) {
-          const lastInitial = lastInitialValues.current.get(option_0.value) ?? "";
-          const currentValue = inputValues.get(option_0.value) ?? "";
+          const lastInitial = lastInitialValues.current.get(option_0.value) ?? ""; // silent-failure: false positive — Map default for absent input value; empty string means "no input yet" not "read failed"
+          const currentValue = inputValues.get(option_0.value) ?? ""; // silent-failure: false positive — Map default for absent input value; empty string means "no input yet" not "read failed"
           const newInitial = option_0.initialValue;
           if (newInitial !== lastInitial && currentValue === lastInitial) {
             setInputValues(prev => {
@@ -376,7 +376,7 @@ export function Select(t0) {
             const isFocused = !isDisabled && state.focusedValue === option_1.value;
             const isSelected = state.value === option_1.value;
             if (option_1.type === "input") {
-              const inputValue = inputValues.has(option_1.value) ? inputValues.get(option_1.value) : option_1.initialValue || "";
+              const inputValue = inputValues.has(option_1.value) ? inputValues.get(option_1.value) : option_1.initialValue || ""; // silent-failure: false positive — Map default for absent input value; empty string means "no input yet" not "read failed"
               return <SelectInputOption key={String(option_1.value)} option={option_1} isFocused={isFocused} isSelected={isSelected} shouldShowDownArrow={areMoreOptionsBelow && isLastVisibleOption} shouldShowUpArrow={areMoreOptionsAbove && isFirstVisibleOption} maxIndexWidth={maxIndexWidth} index={i} inputValue={inputValue} onInputChange={value => {
                 setInputValues(prev_0 => {
                   const next_0 = new Map(prev_0);
@@ -424,7 +424,7 @@ export function Select(t0) {
             const isFocused_0 = !isDisabled && state.focusedValue === option_2.value;
             const isSelected_0 = state.value === option_2.value;
             if (option_2.type === "input") {
-              const inputValue_0 = inputValues.has(option_2.value) ? inputValues.get(option_2.value) : option_2.initialValue || "";
+              const inputValue_0 = inputValues.has(option_2.value) ? inputValues.get(option_2.value) : option_2.initialValue || ""; // silent-failure: false positive — Map default for absent input value; empty string means "no input yet" not "read failed"
               return <SelectInputOption key={String(option_2.value)} option={option_2} isFocused={isFocused_0} isSelected={isSelected_0} shouldShowDownArrow={areMoreOptionsBelow_0 && isLastVisibleOption_0} shouldShowUpArrow={areMoreOptionsAbove_0 && isFirstVisibleOption_0} maxIndexWidth={maxIndexWidth_0} index={i_0} inputValue={inputValue_0} onInputChange={value_1 => {
                 setInputValues(prev_1 => {
                   const next_1 = new Map(prev_1);
@@ -535,7 +535,7 @@ export function Select(t0) {
       t15 = styles.container();
       t16 = state.visibleOptions.map((option_4, index_4) => {
         if (option_4.type === "input") {
-          const inputValue_1 = inputValues.has(option_4.value) ? inputValues.get(option_4.value) : option_4.initialValue || "";
+          const inputValue_1 = inputValues.has(option_4.value) ? inputValues.get(option_4.value) : option_4.initialValue || ""; // silent-failure: false positive — Map default for absent input value; empty string means "no input yet" not "read failed"
           const isFirstVisibleOption_2 = option_4.index === state.visibleFromIndex;
           const isLastVisibleOption_2 = option_4.index === state.visibleToIndex - 1;
           const areMoreOptionsBelow_2 = state.visibleToIndex < options.length;

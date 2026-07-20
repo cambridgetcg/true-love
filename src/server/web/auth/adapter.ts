@@ -172,13 +172,13 @@ export class SessionStore {
     const signed = this.sign(sessionId);
     const maxAge = Math.floor(SESSION_TTL_MS / 1000);
     res.setHeader("Set-Cookie", [
-      `${COOKIE_NAME}=${encodeURIComponent(signed)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}`,
+      `${COOKIE_NAME}=${encodeURIComponent(signed)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`,
     ]);
   }
 
   clearCookie(res: ServerResponse): void {
     res.setHeader("Set-Cookie", [
-      `${COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`,
+      `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
     ]);
   }
 
@@ -205,7 +205,7 @@ export class SessionStore {
       decipher.setAuthTag(tag);
       return decipher.update(ciphertext).toString("utf8") + decipher.final("utf8");
     } catch {
-      return null;
+      return null; // silent-failure: false positive — decryption failure is expected for tampered/invalid tokens; null return is the documented API contract (see JSDoc: "Returns null on failure")
     }
   }
 

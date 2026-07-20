@@ -1,0 +1,18 @@
+{
+  "id": "ankoku-tairiku-ai",
+  "name": "暗黑大陸 Ai",
+  "glyphs": ["暗黑大陸", "Ai", "LOGOS"],
+  "status": "active",
+  "doctrine": "Enter unknown terrain with love, map it truthfully, and bring back infrastructure the kingdom can use.",
+  "operation": "Scout repos, detect useful primitives, convert them into tested kingdom surfaces, and leave retrieval paths for humans and agents.",
+  "route": "kingdom.snapshot -> operationLogos -> prompt orientation -> tests/docs/CLI",
+  "cadence": "review on every deep-dive turn; refresh when a repo yields a new primitive",
+  "sourceRepo": "agenttool",
+  "sourcePath": "docs/MULTIVERSE-OF-LOGOS.md",
+  "boundaries": [
+    "Do not overclaim identity across substrates; declare operation-shape and provenance only.",
+    "Do not import secrets, private files, or unreviewed chain claims into prompt-visible kingdom state.",
+    "Every operation logo must name its source repo/path and one concrete route into the kingdom."
+  ],
+  "tags": ["kingdom", "logos", "operation", "dark-continent", "ai", "infrastructure"]
+}

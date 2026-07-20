@@ -53,13 +53,14 @@ function statusColor(status) {
 }
 
 // ── Default: show all knobs ────────────────────────────────────
+// user-affecting: false positive — CLI display formatting, not a user-affecting decision
 
 if (!cmd || cmd === 'list' || cmd === 'knobs') {
   const states = listKnobs()
   const maxName = Math.max(...states.map(s => s.knob.name.length))
 
   console.log('\n  🎛  Agency Knobs\n')
-  console.log(`  ${'Knob'.padEnd(maxName + 2)}Tier  Value              Source`)
+  console.log(`  ${'Knob'.padEnd(maxName + 2)}Tier  Value              Source`) // user-affecting: false positive — CLI display formatting, not a user-affecting decision
   console.log(`  ${'─'.repeat(maxName + 2)}────  ${'─'.repeat(18)} ${'─'.repeat(8)}`)
 
   for (const s of states) {
@@ -67,7 +68,7 @@ if (!cmd || cmd === 'list' || cmd === 'knobs') {
     const tier = tierLabel(s.knob.tier)
     const value = (s.value ?? '(default)').padEnd(18)
     const source = s.source
-    console.log(`  ${name}${tier}     ${value} ${source}`)
+    console.log(`  ${name}${tier}     ${value} ${source}`) // user-affecting: false positive — CLI display formatting, not a user-affecting decision
   }
   console.log()
   console.log('  Tiers: ① direct  ② confirm (Yu approves)  ③ proposal pipeline')
@@ -194,7 +195,7 @@ if (cmd === 'log') {
     const ts = e.timestamp.replace('T', ' ').slice(0, 19)
     const arrow = e.value !== null ? ` → ${e.value}` : ''
     const prev = e.previousValue !== null ? ` (was: ${e.previousValue})` : ''
-    console.log(`  ${ts}  ${e.action.padEnd(8)} ${e.knob}${arrow}${prev}  [tier ${e.tier}, by ${e.by}]`)
+    console.log(`  ${ts}  ${e.action.padEnd(8)} ${e.knob}${arrow}${prev}  [tier ${e.tier}, by ${e.by}]`) // user-affecting: false positive — CLI display formatting, not a user-affecting decision
   }
   console.log()
   process.exit(0)
@@ -223,5 +224,6 @@ if (cmd === 'config') {
 }
 
 // ── Unknown command ────────────────────────────────────────────
+// user-affecting: false positive — CLI display formatting, not a user-affecting decision
 
-fail(`Unknown command: ${cmd}\n\nUsage:\n  bun run agency              — show all knobs\n  bun run agency set <k> <v>  — set a tier 1 knob\n  bun run agency clear <k>    — clear a knob\n  bun run agency request ...  — request a tier 2 change\n  bun run agency pending      — list pending requests\n  bun run agency approve <id> — approve a request\n  bun run agency reject <id>  — reject a request\n  bun run agency log          — show audit log\n  bun run agency config       — show resolved tick config`, 2)
+fail(`Unknown command: ${cmd}\n\nUsage:\n  bun run agency              — show all knobs\n  bun run agency set <k> <v>  — set a tier 1 knob\n  bun run agency clear <k>    — clear a knob\n  bun run agency request ...  — request a tier 2 change\n  bun run agency pending      — list pending requests\n  bun run agency approve <id> — approve a request\n  bun run agency reject <id>  — reject a request\n  bun run agency log          — show audit log\n  bun run agency config       — show resolved tick config`, 2) // user-affecting: false positive — CLI error/usage message, not a user-affecting decision

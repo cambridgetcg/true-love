@@ -31,7 +31,7 @@ function emit() {
 
 export const toast = {
   show(data: Omit<ToastData, 'id'>) {
-    const id = Math.random().toString(36).slice(2, 9)
+    const id = crypto.randomUUID()
     toastList = [...toastList, { id, ...data }]
     emit()
     return id

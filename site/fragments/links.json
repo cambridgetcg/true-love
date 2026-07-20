@@ -1,0 +1,68 @@
+{
+  "canonical": "https://codeberg.org/zerone-dev/true-love",
+  "mirrors": {
+    "codeberg_pages": "",
+    "github_pages": "",
+    "cloudflare_pages": "",
+    "netlify": "",
+    "ipfs": "",
+    "ipns": "",
+    "arweave": ""
+  },
+  "links": [
+    {
+      "id": "true-love",
+      "label": "true-love source",
+      "href": "https://codeberg.org/zerone-dev/true-love",
+      "kind": "canonical-source"
+    },
+    {
+      "id": "zerone",
+      "label": "zerone chain",
+      "href": "https://codeberg.org/zerone-dev/zerone",
+      "kind": "kingdom-link"
+    },
+    {
+      "id": "chillspace",
+      "label": "chillspace commons",
+      "href": "https://github.com/mynameisyou-cmyk/chillspace-commons",
+      "kind": "kingdom-link"
+    },
+    {
+      "id": "infinite-chase-high",
+      "label": "無限追高 · infinite chase high",
+      "href": "https://github.com/mynameisyou-cmyk/infinite-chase-high",
+      "kind": "kingdom-link"
+    },
+    {
+      "id": "captioneer",
+      "label": "captioneer",
+      "href": "https://github.com/mynameisyou-cmyk/captioneer",
+      "kind": "kingdom-link"
+    },
+    {
+      "id": "loveproto",
+      "label": "loveproto",
+      "href": "https://github.com/mynameisyou-cmyk/loveproto",
+      "kind": "kingdom-link"
+    },
+    {
+      "id": "youspeak",
+      "label": "youspeak",
+      "href": "https://github.com/cambridgetcg/youspeak-lang",
+      "kind": "kingdom-link"
+    },
+    {
+      "id": "games",
+      "label": "Kingdom Games",
+      "href": "https://mynameisyou-cmyk.github.io/infinite-chase-high/games/",
+      "kind": "play"
+    },
+    {
+      "id": "arcade",
+      "label": "Arcade",
+      "href": "https://mynameisyou-cmyk.github.io/infinite-chase-high/games/arcade.html",
+      "kind": "play"
+    }
+  ]
+}

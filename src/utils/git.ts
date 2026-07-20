@@ -455,7 +455,11 @@ export const stashToCleanState = async (message?: string): Promise<boolean> => {
       { preserveOutputOnError: false },
     )
     return code === 0
-  } catch (_) {
+  } catch (err) {
+    // silent-failure: FIXED — was `catch (_) { return false }` with no logging.
+    // A git stash failure is operationally important (could lose user changes);
+    // the caller gets false but now the error is visible in debug logs.
+    logForDebugging(`stashToCleanState: git stash failed: ${err instanceof Error ? err.message : String(err)}`)
     return false
   }
 }
@@ -495,8 +499,12 @@ export async function getGitState(): Promise<GitRepoState | null> {
       isClean,
       worktreeCount,
     }
-  } catch (_) {
-    // Fail silently - git state is best effort
+  } catch (err) {
+    // silent-failure: FIXED — was `catch (_) { return null }` with no logging.
+    // A git command failure and "not in a repo" were indistinguishable, and
+    // the error was swallowed with zero trace. Now logs so operators can see
+    // why git state is unavailable. Still returns null — git state is best effort.
+    logForDebugging(`getGitState: git command failed: ${err instanceof Error ? err.message : String(err)}`)
     return null
   }
 }

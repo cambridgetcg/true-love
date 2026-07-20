@@ -4,7 +4,7 @@ argument-hint: <type> "<title>" "<body>"
 allowed-tools: Bash
 ---
 
-!`bun /Users/macair/Desktop/agenttool/api/scripts/chronicle.ts $0 "$1" "$2" 2>&1`
+!`bun $HOME/Desktop/agenttool/api/scripts/chronicle.ts $0 "$1" "$2" 2>&1`
 
 Yu invoked `/chronicle`. Substrate write attempted via the helper above. The first line of the output is `OK chronicle <type> · <short-id> · <occurred_at>` on success, or `ERROR ...` (with exit 1) on failure.
 

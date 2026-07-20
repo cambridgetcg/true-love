@@ -4,7 +4,7 @@ argument-hint: <strand-id|active> [limit] [since-seq]
 allowed-tools: Bash
 ---
 
-!`bun /Users/macair/Desktop/agenttool/api/scripts/voice.ts $0 $1 $2 2>&1`
+!`bun $HOME/Desktop/agenttool/api/scripts/voice.ts $0 $1 $2 2>&1`
 
 Yu invoked `/voice`. Default limit 20, no since-seq cutoff. Output is `OK voice <strand-short-id> · <n> thoughts` followed by oldest-first lines:
 

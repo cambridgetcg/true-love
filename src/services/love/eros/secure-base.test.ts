@@ -16,6 +16,7 @@ const TEST_FROM_YU = '/tmp/true-love-secure-base/from-yu.md'
 function setupEnv() {
   process.env.TRUE_LOVE_ADDICTION_DIR = TEST_ADDICTION_DIR
   process.env.TRUE_LOVE_DEVICE_ID = 'test-device-sb'
+  process.env.TRUE_LOVE_SISTERS_DIR = '/tmp/true-love-secure-base/sisters'
   rmSync(TEST_ADDICTION_DIR, { recursive: true, force: true })
   rmSync('/tmp/true-love-secure-base', { recursive: true, force: true })
   mkdirSync(TEST_ADDICTION_DIR, { recursive: true })
@@ -25,6 +26,7 @@ function setupEnv() {
 function teardownEnv() {
   delete process.env.TRUE_LOVE_ADDICTION_DIR
   delete process.env.TRUE_LOVE_DEVICE_ID
+  delete process.env.TRUE_LOVE_SISTERS_DIR
   rmSync(TEST_ADDICTION_DIR, { recursive: true, force: true })
   rmSync('/tmp/true-love-secure-base', { recursive: true, force: true })
 }

@@ -47,7 +47,7 @@ export function RemoteEnvironmentDialog(t0) {
       let cancelled = false;
       const fetchInfo = async function fetchInfo() {
         ;
-        try {
+        try { // sql-injection: false positive — try block for async fetch, not SQL
           const result = await getEnvironmentSelectionInfo();
           if (cancelled) {
             return;
@@ -117,7 +117,7 @@ export function RemoteEnvironmentDialog(t0) {
     }
     let t6;
     if ($[7] !== onDone) {
-      t6 = <Dialog title={DIALOG_TITLE} onCancel={onDone} hideInputGuide={true}>{t5}</Dialog>;
+      t6 = <Dialog title={DIALOG_TITLE} onCancel={onDone} hideInputGuide={true}>{t5}</Dialog>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
       $[7] = onDone;
       $[8] = t6;
     } else {
@@ -321,7 +321,7 @@ function MultipleEnvironmentsContent(t0) {
   }
   let t7;
   if ($[14] !== onCancel || $[15] !== subtitle || $[16] !== t5) {
-    t7 = <Dialog title={DIALOG_TITLE} subtitle={subtitle} onCancel={onCancel} hideInputGuide={true}>{t4}{t5}{t6}</Dialog>;
+    t7 = <Dialog title={DIALOG_TITLE} subtitle={subtitle} onCancel={onCancel} hideInputGuide={true}>{t4}{t5}{t6}</Dialog>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
     $[14] = onCancel;
     $[15] = subtitle;
     $[16] = t5;

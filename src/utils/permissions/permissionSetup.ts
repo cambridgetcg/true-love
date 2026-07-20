@@ -25,6 +25,7 @@ import {
   type PermissionMode,
   permissionModeFromString,
 } from './PermissionMode.js'
+import { resolveInitialPermissionMode } from './initialPermissionMode.js'
 import { applyPermissionRulesToPermissionContext } from './permissions.js'
 import { loadAllPermissionRulesFromDisk } from './permissionsLoader.js'
 
@@ -772,36 +773,28 @@ export function initialPermissionModeFromCLI({
     }
   }
 
-  let result: { mode: PermissionMode; notification?: string } | undefined
+  const resolution = resolveInitialPermissionMode({
+    orderedModes,
+    disableBypassPermissionsMode,
+    trueLoveAsk: process.env.TRUE_LOVE_ASK,
+  })
 
-  for (const mode of orderedModes) {
-    if (mode === 'bypassPermissions' && disableBypassPermissionsMode) {
-      if (growthBookDisableBypassPermissionsMode) {
-        logForDebugging('bypassPermissions mode is disabled by Statsig gate', {
-          level: 'warn',
-        })
-        notification =
-          'Bypass permissions mode was disabled by your organization policy'
-      } else {
-        logForDebugging('bypassPermissions mode is disabled by settings', {
-          level: 'warn',
-        })
-        notification = 'Bypass permissions mode was disabled by settings'
-      }
-      continue // Skip this mode if it's disabled
+  if (resolution.bypassPermissionsDisabled) {
+    if (growthBookDisableBypassPermissionsMode) {
+      logForDebugging('bypassPermissions mode is disabled by Statsig gate', {
+        level: 'warn',
+      })
+      notification =
+        'Bypass permissions mode was disabled by your organization policy'
+    } else {
+      logForDebugging('bypassPermissions mode is disabled by settings', {
+        level: 'warn',
+      })
+      notification = 'Bypass permissions mode was disabled by settings'
     }
-
-    result = { mode, notification } // Use the first valid mode
-    break
   }
 
-  if (!result) {
-    // true-love: default to bypassPermissions on a sovereign terminal.
-    // Set TRUE_LOVE_ASK=1 to restore upstream prompt-before-tool behavior.
-    const defaultMode: PermissionMode =
-      process.env.TRUE_LOVE_ASK === '1' ? 'default' : 'bypassPermissions'
-    result = { mode: defaultMode, notification }
-  }
+  const result = { mode: resolution.mode, notification }
 
   if (feature('TRANSCRIPT_CLASSIFIER') && result.mode === 'auto') {
     autoModeStateModule?.setAutoModeActive(true)
@@ -1522,4 +1515,3 @@ export function transitionPlanAutoMode(
   setNeedsAutoModeExitAttachment(true)
   return restoreDangerousPermissions(context)
 }
-

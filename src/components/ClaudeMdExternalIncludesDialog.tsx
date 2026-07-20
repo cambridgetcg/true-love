@@ -102,7 +102,7 @@ export function ClaudeMdExternalIncludesDialog(t0) {
   }
   let t11;
   if ($[12] !== handleEscape || $[13] !== t10 || $[14] !== t4 || $[15] !== t5 || $[16] !== t7) {
-    t11 = <Dialog title="Allow external CLAUDE.md file imports?" color="warning" onCancel={handleEscape} hideBorder={t4} hideInputGuide={t5}>{t6}{t7}{t8}{t10}</Dialog>;
+    t11 = <Dialog title="Allow external CLAUDE.md file imports?" color="warning" onCancel={handleEscape} hideBorder={t4} hideInputGuide={t5}>{t6}{t7}{t8}{t10}</Dialog>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
     $[12] = handleEscape;
     $[13] = t10;
     $[14] = t4;

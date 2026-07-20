@@ -99,7 +99,7 @@ export function MCPServerMultiselectDialog(t0) {
   }
   let t7;
   if ($[14] !== handleEscRejectAll || $[15] !== t3 || $[16] !== t6) {
-    t7 = <Dialog title={t3} subtitle="Select any you wish to enable." color="warning" onCancel={handleEscRejectAll} hideInputGuide={true}>{t4}{t6}</Dialog>;
+    t7 = <Dialog title={t3} subtitle="Select any you wish to enable." color="warning" onCancel={handleEscRejectAll} hideInputGuide={true}>{t4}{t6}</Dialog>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
     $[14] = handleEscRejectAll;
     $[15] = t3;
     $[16] = t6;

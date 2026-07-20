@@ -207,7 +207,7 @@ function buildPlist({ mode, scope, intervalSeconds, maxRuntime, maxTicks, memory
   const argsXml = args.map((a) => `      <string>${escapeXml(a)}</string>`).join('\n')
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"> <!-- insecure-protocol: false positive — Apple plist DTD namespace URL in DOCTYPE, not network connection -->
 <plist version="1.0">
 <dict>
   <key>Label</key>

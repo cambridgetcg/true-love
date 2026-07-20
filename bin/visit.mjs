@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// bin/visit.mjs — visit her room. http://localhost:7777
+// bin/visit.mjs — visit her room. http://127.0.0.1:7777
 //
 // Boots the localhost interface server with optional auto-update supervision.
 // Yu types `bun run visit` and opens the browser.
@@ -15,16 +15,32 @@
 //   TRUE_LOVE_UI_PORT=8080 bun run visit   port override
 //   TRUE_LOVE_AUTO_UPDATE=1 bun run visit  env-based auto-update
 
-import { startUiServer } from '../src/services/love/ui-server.ts'
+import { randomBytes } from 'node:crypto'
+import { once } from 'node:events'
+import { createUiBrowserSessionState, startUiServer } from '../src/services/love/ui-server.ts'
 import { createSourceWatcher, getVersionInfo, rebuildBundle } from '../src/services/love/auto-update.ts'
+import { removeUiClientToken, writeUiClientToken } from './ui-auth.mjs'
 
 const port = parseInt(process.env.TRUE_LOVE_UI_PORT || process.env.PORT || '7777', 10)
+const host = process.env.TRUE_LOVE_UI_HOST || '127.0.0.1'
+const ownerToken = process.env.TRUE_LOVE_UI_TOKEN || randomBytes(32).toString('base64url')
+const clientToken = process.env.TRUE_LOVE_UI_CLIENT_TOKEN || randomBytes(32).toString('base64url')
+Reflect.deleteProperty(process.env, 'TRUE_LOVE_UI_TOKEN')
+Reflect.deleteProperty(process.env, 'TRUE_LOVE_UI_CLIENT_TOKEN')
 const watchMode = process.argv.includes('--watch') || process.env.TRUE_LOVE_AUTO_UPDATE === '1'
+const browserSession = createUiBrowserSessionState()
+const serverOptions = { port, host, ownerToken, clientToken, browserSession }
 
-let server = startUiServer({ port })
+const urlHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
+const roomUrl = `http://${urlHost}:${port}`
+const bootstrapUrl = `${roomUrl}/_bootstrap#token=${encodeURIComponent(ownerToken)}`
+
+let server = startUiServer(serverOptions)
+if (!server.listening) await once(server, 'listening')
+writeUiClientToken(roomUrl, clientToken)
 const version = getVersionInfo()
 
-process.stdout.write(`— visiting her at http://localhost:${port}\n`)
+process.stdout.write(`— visiting her at ${bootstrapUrl}\n`)
 process.stdout.write(`— version: ${version.gitRevShort} (${version.gitBranch})`)
 if (version.gitDirty) process.stdout.write(' [dirty]')
 if (version.bundleStale) process.stdout.write(' [bundle stale]')
@@ -82,9 +98,10 @@ if (watchMode) {
         // which handles static file changes and is sufficient for most
         // updates. For love-service module changes, a full process restart
         // is needed — the SIGUSR2 handler below covers that case.
-        server = startUiServer({ port })
+        server = startUiServer(serverOptions)
+        if (!server.listening) await once(server, 'listening')
         const newVersion = getVersionInfo()
-        process.stdout.write(`— server restarted at http://localhost:${port}`)
+        process.stdout.write(`— server restarted at ${roomUrl}`)
         process.stdout.write(` — version: ${newVersion.gitRevShort}`)
         if (newVersion.bundleStale) process.stdout.write(' [still stale]')
         process.stdout.write('\n')
@@ -111,6 +128,7 @@ process.on('SIGUSR2', () => {
 function cleanup() {
   if (watcher) { watcher.close(); watcher = null }
   server.close()
+  removeUiClientToken(roomUrl, clientToken)
 }
 
 const shutdown = (signal) => {

@@ -56,7 +56,7 @@ export function registerMcpXaaIdpCommand(mcp: Command): void {
           `Error: --issuer must be a valid URL (got "${options.issuer}")`,
         )
       }
-      // OIDC discovery + token exchange run against this host. Allow http://
+      // OIDC discovery + token exchange run against this host. Allow http:// // insecure-protocol: false positive — OIDC loopback exception for conformance harness, not production connection
       // only for loopback (conformance harness mock IdP); anything else leaks
       // the client secret and authorization code over plaintext.
       if (

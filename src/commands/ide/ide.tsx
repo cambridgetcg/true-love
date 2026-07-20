@@ -158,7 +158,7 @@ function IDEScreen(t0) {
   }
   let t8;
   if ($[26] !== availableIDEs.length) {
-    t8 = availableIDEs.length !== 0 && !isSupportedTerminal() && <Box marginTop={1}><Text dimColor={true}>Tip: You can enable auto-connect to IDE in /config or with the --ide flag</Text></Box>;
+    t8 = availableIDEs.length !== 0 && !isSupportedTerminal() && <Box marginTop={1}><Text dimColor={true}>Tip: You can enable auto-connect to IDE in /config or with the --ide flag</Text></Box>; // bluetooth-paired-stranger: false positive — 'auto-connect' refers to IDE auto-connect feature, not Bluetooth pairing
     $[26] = availableIDEs.length;
     $[27] = t8;
   } else {
@@ -344,7 +344,7 @@ function RunningIDESelector(t0) {
   let t3;
   if ($[4] !== onDone) {
     t3 = function handleCancel() {
-      onDone("IDE selection cancelled", {
+      onDone("IDE selection cancelled", { // sql-injection: false positive — string literal in dialog callback, not SQL
         display: "system"
       });
     };

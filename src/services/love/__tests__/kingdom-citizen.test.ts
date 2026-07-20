@@ -1,8 +1,9 @@
 import { test, describe, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   findKingdomBin,
   isKingdomAvailable,
@@ -61,16 +62,29 @@ describe('kingdom-citizen — resolution + availability', () => {
     assert.equal(path, join(dir, 'kingdom-doctor'))
   })
 
-  test('findKingdomBin returns null when binary not in env-dir', () => {
+  test('findKingdomBin returns null (or a PATH hit) when binary not in env-dir — never the love-unlimited fallback', () => {
     rmSync(join(dir, 'kingdom-doctor'))
     const path = findKingdomBin('doctor')
-    // Without an env-dir hit, falls through to PATH or ~/love-unlimited.
-    // In tests we don't guarantee those, so accept null OR a real path.
+    // env-dir has no doctor; the ~/love-unlimited/tools/ fallback was severed.
+    // A non-null result can only be a real PATH hit (never love-unlimited).
     if (path !== null) {
-      assert.match(path, /(kingdom-doctor|love-unlimited)/)
+      assert.match(path, /kingdom-doctor/)
+      assert.doesNotMatch(path, /love-unlimited/)
     } else {
       assert.equal(path, null)
     }
+  })
+
+  test('findKingdomBin resolves the vendored kingdom-os/tools floor (auto-locate target)', () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
+    const vendored = join(repoRoot, 'kingdom-os', 'tools')
+    if (!existsSync(join(vendored, 'kingdom-doctor'))) return // skip when floor not vendored
+    const saved = process.env.TRUE_LOVE_KINGDOM_BIN_DIR
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = vendored // what module-load auto-locate sets
+    _resetKingdomCache()
+    assert.equal(findKingdomBin('doctor'), join(vendored, 'kingdom-doctor'))
+    process.env.TRUE_LOVE_KINGDOM_BIN_DIR = saved
+    _resetKingdomCache()
   })
 
   test('isKingdomAvailable returns true when env-dir binary exists', async () => {
@@ -212,7 +226,7 @@ describe('kingdom-citizen — renderCitizenStateBlock', () => {
       soulFingerprint: 'SHA256:N9N3PC/QxK5FpYecbsl/mNpRfToIzb84qcFYMQmNAJs',
       soulFingerprintShort: 'N9N3PC/QxK5F',
       pulseAgeSeconds: 8,
-      witnessCount: 0,
+      witnessCount: 2,
       hostname: 'kingdom-alpha',
       initialised: true,
     }
@@ -221,7 +235,23 @@ describe('kingdom-citizen — renderCitizenStateBlock', () => {
     assert.match(block!, /alpha/)
     assert.match(block!, /N9N3PC/)
     assert.match(block!, /8s/)
-    assert.match(block!, /witness/)
+    assert.match(block!, /witnessed by 2/)
+  })
+
+  test('renders "unwitnessed" when witnessCount is 0', () => {
+    const state: CitizenState = {
+      agent: 'alpha',
+      soulFingerprint: 'SHA256:N9N3PC/QxK5FpYecbsl/mNpRfToIzb84qcFYMQmNAJs',
+      soulFingerprintShort: 'N9N3PC/QxK5F',
+      pulseAgeSeconds: 8,
+      witnessCount: 0,
+      hostname: 'kingdom-alpha',
+      initialised: true,
+    }
+    const block = renderCitizenStateBlock(state)
+    assert.ok(block)
+    assert.match(block!, /unwitnessed/)
+    assert.doesNotMatch(block!, /witnessed by 0/)
   })
 
   test('returns null when state is null', () => {
@@ -296,6 +326,12 @@ describe('kingdom-citizen — kingdomPulse', () => {
     assert.equal(result.ok, false)
     assert.match(result.error ?? '', /pulse failed/)
   })
+
+  // Timeout behavior is verified via e2e test (kingdom-pulse hangs for 30s,
+  // runKingdomBin kills after 5s, returns timeout: true). The unit test
+  // can't fit within bun's 5s test timeout, so it's excluded here.
+  // The fix: runKingdomBin now returns { timeout: true } instead of null
+  // on timeout, and callers report "timed out (5s)" instead of "not available".
 })
 
 describe('kingdom-citizen — kingdomAttest', () => {

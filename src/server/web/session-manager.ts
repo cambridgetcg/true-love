@@ -42,7 +42,7 @@ export class UserHourlyRateLimiter {
 
   private recent(userId: string): number[] {
     const cutoff = Date.now() - 3_600_000;
-    const filtered = (this.attempts.get(userId) ?? []).filter((t) => t > cutoff);
+    const filtered = (this.attempts.get(userId) ?? []).filter((t) => t > cutoff); // silent-failure: false positive — Map default for absent user; empty array means "no prior attempts" not "read failed"
     this.attempts.set(userId, filtered);
     return filtered;
   }
@@ -171,7 +171,7 @@ export class SessionManager {
         JSON.stringify({ type: "error", message: `PTY spawn failed: ${message}` }),
       );
       ws.close(1011, "PTY spawn failure");
-      return null;
+      return null; // silent-failure: false positive — PTY spawn failure is surfaced to client via ws.send + ws.close(1011) on lines 170-173; null return is intentional error signal to caller
     }
 
     // Record the creation only after a successful spawn.

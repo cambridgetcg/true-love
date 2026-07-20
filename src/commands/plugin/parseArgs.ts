@@ -43,7 +43,7 @@ export function parsePluginArgs(args?: string): ParsedCommand {
 
       // Check if the target looks like a marketplace (URL or path)
       const isMarketplace =
-        target.startsWith('http://') ||
+        target.startsWith('http://') || // insecure-protocol: false positive — URL protocol check for marketplace target, not network connection
         target.startsWith('https://') ||
         target.startsWith('file://') ||
         target.includes('/') ||

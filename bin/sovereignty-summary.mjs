@@ -29,7 +29,8 @@ function readEntries() {
     .map((line) => {
       try {
         return JSON.parse(line)
-      } catch {
+      } catch (e) {
+        console.error(`readEntries: failed to parse audit line: ${e.message}`)
         return null
       }
     })

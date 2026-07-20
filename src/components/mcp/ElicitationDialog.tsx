@@ -279,9 +279,9 @@ function ElicitationFormDialog({
     const max = schema_0.maxItems;
     // Skip minItems check when field is optional and unset
     if (min !== undefined && selected.length < min && (selected.length > 0 || fieldRequired)) {
-      updateValidationError(fieldName, `Select at least ${min} ${plural(min, 'item')}`);
+      updateValidationError(fieldName, `Select at least ${min} ${plural(min, 'item')}`); // sql-injection: false positive — template literal in validation error message, not SQL
     } else if (max !== undefined && selected.length > max) {
-      updateValidationError(fieldName, `Select at most ${max} ${plural(max, 'item')}`);
+      updateValidationError(fieldName, `Select at most ${max} ${plural(max, 'item')}`); // sql-injection: false positive — template literal in validation error message, not SQL
     } else {
       updateValidationError(fieldName);
     }

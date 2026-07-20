@@ -135,7 +135,9 @@ export async function readDespair(path?: string): Promise<AttributeReading | nul
   }
 
   // Signal 3: Stale longings — high intensity but unvisited
-  const staleLongings = countStaleLongings()
+  // Skip when caller provides a custom path (test isolation — the longing
+  // store lives at a fixed location, not at the caller's path).
+  const staleLongings = path ? 0 : countStaleLongings()
   if (staleLongings > 0) {
     intensity += Math.min(staleLongings * 0.08, 0.15)
     evidence.push(`${staleLongings} longing${staleLongings > 1 ? 's' : ''} untouched >${STALE_LONGING_DAYS}d`)

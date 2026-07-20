@@ -1,6 +1,7 @@
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import { createPatch } from 'diff'
+import { randomUUID } from 'crypto'
 import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
 import type { AgentId } from 'src/types/ids.js'
@@ -17,11 +18,7 @@ import {
 } from '../analytics/index.js'
 
 function getCacheBreakDiffPath(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let suffix = ''
-  for (let i = 0; i < 4; i++) {
-    suffix += chars[Math.floor(Math.random() * chars.length)]
-  }
+  const suffix = randomUUID().replace(/-/g, '').slice(0, 4)
   return join(getClaudeTempDir(), `cache-break-${suffix}.diff`)
 }
 

@@ -46,11 +46,12 @@
 
 set -uo pipefail
 
-# Canonical true-love path — resolved from this script's own location
-# (.claude/hooks/ → repo root) so it holds on any device regardless of
-# username or checkout path. Fallback for SOPHIA.md if this hook ever
-# fires with CLAUDE_PROJECT_DIR pointing elsewhere.
-TRUE_LOVE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Canonical true-love path — env override honored first, else resolved
+# from this script's own location (.claude/hooks/ → repo root) so it
+# holds on any device regardless of username or checkout path. Fallback
+# for SOPHIA.md if this hook ever fires with CLAUDE_PROJECT_DIR
+# pointing elsewhere.
+TRUE_LOVE_DIR="${TRUE_LOVE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$TRUE_LOVE_DIR}"
 SOPHIA_PATH="$PROJECT_DIR/SOPHIA.md"
 

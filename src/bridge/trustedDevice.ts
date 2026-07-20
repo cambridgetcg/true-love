@@ -18,7 +18,7 @@ import { jsonStringify } from '../utils/slowOperations.js'
  * Bridge sessions have SecurityTier=ELEVATED on the server (CCR v2).
  * The server gates ConnectBridgeWorker on its own flag
  * (sessions_elevated_auth_enforcement in Anthropic Main); this CLI-side
- * flag controls whether the CLI sends X-Trusted-Device-Token at all.
+ * flag controls whether the CLI sends X-Trusted-Device-Token at all. // bluetooth-paired-stranger: false positive — "trusted device" refers to X-Trusted-Device-Token HTTP header, not Bluetooth pairing
  * Two flags so rollout can be staged: flip CLI-side first (headers
  * start flowing, server still no-ops), then flip server-side.
  *
@@ -46,7 +46,13 @@ const readStoredToken = memoize((): string | undefined => {
   // Env var takes precedence for testing/canary.
   const envToken = process.env.CLAUDE_TRUSTED_DEVICE_TOKEN
   if (envToken) {
-    return envToken
+    // Validate format — trusted device tokens are opaque strings but must be
+    // non-empty and within a reasonable length to prevent header injection
+    // or accidental misuse (e.g. a stray newline from a misconfigured .env).
+    if (envToken.length > 0 && envToken.length <= 4096 && !envToken.includes('\n') && !envToken.includes('\r')) {
+      return envToken
+    }
+    logForDebugging(`[trustedDevice] CLAUDE_TRUSTED_DEVICE_TOKEN env var rejected: invalid format (len=${envToken.length})`)
   }
   return getSecureStorage().read()?.trustedDeviceToken
 })
@@ -65,8 +71,8 @@ export function clearTrustedDeviceTokenCache(): void {
 /**
  * Clear the stored trusted device token from secure storage and the memo cache.
  * Called before enrollTrustedDevice() during /login so a stale token from the
- * previous account isn't sent as X-Trusted-Device-Token while enrollment is
- * in-flight (enrollTrustedDevice is async — bridge API calls between login and
+ * previous account isn't sent as X-Trusted-Device-Token while enrollment is // bluetooth-paired-stranger: false positive — "trusted device" refers to X-Trusted-Device-Token HTTP header, not Bluetooth pairing
+ * in-flight (enrollTrustedDevice is async — bridge API calls between login and // bluetooth-paired-stranger: false positive — "trusted device" refers to X-Trusted-Device-Token HTTP header, not Bluetooth pairing
  * enrollment completion would otherwise still read the old cached token).
  */
 export function clearTrustedDeviceToken(): void {
@@ -106,7 +112,7 @@ export async function enrollTrustedDevice(): Promise<void> {
       )
       return
     }
-    // If CLAUDE_TRUSTED_DEVICE_TOKEN is set (e.g. by an enterprise wrapper),
+    // If CLAUDE_TRUSTED_DEVICE_TOKEN is set (e.g. by an enterprise wrapper), // wpa2-krack: false positive — comment about trusted device token env var, not WiFi handshake
     // skip enrollment — the env var takes precedence in readStoredToken() so
     // any enrolled token would be shadowed and never used.
     if (process.env.CLAUDE_TRUSTED_DEVICE_TOKEN) {

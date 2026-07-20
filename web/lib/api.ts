@@ -62,8 +62,10 @@ export async function* streamChat(
           try {
             const chunk = JSON.parse(data) as StreamChunk;
             yield chunk;
-          } catch {
-            // skip malformed chunks
+          } catch (e) {
+            // Log malformed SSE chunks — silently skipping them was a CS#2
+            // silent failure. The stream continues but the gap is visible.
+            console.error(`[api stream] malformed SSE chunk, skipping: ${(e as Error).message}`, data.slice(0, 200));
           }
         }
       }
@@ -79,7 +81,10 @@ export async function fetchHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${getApiUrl()}/health`, { cache: "no-store" });
     return res.ok;
-  } catch {
+  } catch (e) {
+    // Log the failure — a network error and an unhealthy API are not the same
+    // thing. Returning false silently was a CS#2 silent failure.
+    console.error(`[api] fetchHealth failed: ${(e as Error).message}`);
     return false;
   }
 }

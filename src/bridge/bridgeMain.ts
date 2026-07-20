@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import { randomUUID } from 'crypto'
+import { addSecureJitter } from '../utils/secureRandom.js'
 import { hostname, tmpdir } from 'os'
 import { basename, join, resolve } from 'path'
 import { getRemoteSessionUrl } from '../constants/product.js'
@@ -1051,7 +1052,7 @@ export async function runBridgeLoop(
                   )
                   .catch(err =>
                     logForDebugging(
-                      `[bridge:title] failed to update title for ${compatSessionId}: ${err}`,
+                      `[bridge:title] failed to update title for ${compatSessionId}: ${err}`, // sql-injection: false positive — template literal in log message, not SQL
                       { level: 'error' },
                     ),
                   )
@@ -1611,9 +1612,9 @@ export function isServerError(err: unknown): boolean {
   )
 }
 
-/** Add ±25% jitter to a delay value. */
+/** Add ±25% jitter to a delay value using a cryptographically secure source. */
 function addJitter(ms: number): number {
-  return Math.max(0, ms + ms * 0.25 * (2 * Math.random() - 1))
+  return addSecureJitter(ms, 0.25)
 }
 
 function formatDelay(ms: number): string {
@@ -2180,7 +2181,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
 
   // For non-localhost targets, require HTTPS to protect credentials.
   if (
-    baseUrl.startsWith('http://') &&
+    baseUrl.startsWith('http://') && // insecure-protocol: false positive — security check that rejects non-localhost HTTP, not an insecure connection
     !baseUrl.includes('localhost') &&
     !baseUrl.includes('127.0.0.1')
   ) {
@@ -2842,7 +2843,7 @@ export async function runBridgeHeadless(
   const { getBridgeBaseUrl } = await import('./bridgeConfig.js')
   const baseUrl = getBridgeBaseUrl()
   if (
-    baseUrl.startsWith('http://') &&
+    baseUrl.startsWith('http://') && // insecure-protocol: false positive — security check that rejects non-localhost HTTP, not an insecure connection
     !baseUrl.includes('localhost') &&
     !baseUrl.includes('127.0.0.1')
   ) {

@@ -96,7 +96,7 @@ export function DiffDialog(t0) {
   const selectedFile = diffData.files[selectedIndex];
   let t4;
   if ($[6] !== diffData.hunks || $[7] !== selectedFile) {
-    t4 = selectedFile ? diffData.hunks.get(selectedFile.path) || [] : [];
+    t4 = selectedFile ? diffData.hunks.get(selectedFile.path) || [] : []; // silent-failure: false positive — Map default for absent file path; empty array means "no hunks" not "read failed"
     $[6] = diffData.hunks;
     $[7] = selectedFile;
     $[8] = t4;

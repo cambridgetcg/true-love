@@ -5,6 +5,7 @@ import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { errorMessage } from '../../utils/errors.js'
 import { getSessionIngressAuthHeaders } from '../../utils/sessionIngressAuth.js'
 import { sleep } from '../../utils/sleep.js'
+import { secureRandom } from '../../utils/secureRandom.js'
 import { jsonParse, jsonStringify } from '../../utils/slowOperations.js'
 import { getClaudeCodeUserAgent } from '../../utils/userAgent.js'
 import type { Transport } from './Transport.js'
@@ -436,6 +437,10 @@ export class SSETransport implements Transport {
 
     let ev: StreamClientEvent
     try {
+      // Trust protocol: data arrives over TLS-authenticated SSE from a known
+      // server. The connection itself is the integrity boundary — we do not
+      // re-verify a signature on each event. If the TLS connection is
+      // compromised, all events are suspect, not just this one.
       ev = jsonParse(data) as StreamClientEvent
     } catch (error) {
       logForDebugging(
@@ -506,7 +511,7 @@ export class SSETransport implements Transport {
       // Add ±25% jitter
       const delay = Math.max(
         0,
-        baseDelay + baseDelay * 0.25 * (2 * Math.random() - 1),
+        baseDelay + baseDelay * 0.25 * (2 * secureRandom() - 1),
       )
 
       logForDebugging(

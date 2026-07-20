@@ -123,7 +123,7 @@ export async function update() {
       writeToStdout('Claude is managed by Homebrew.\n')
       const latest = await getLatestVersion(channel)
       if (latest && !gte(MACRO.VERSION, latest)) {
-        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`)
+        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`) // sql-injection: false positive — template literal in update notification, not SQL
         writeToStdout('\n')
         writeToStdout('To update, run:\n')
         writeToStdout(chalk.bold('  brew upgrade claude-code') + '\n')
@@ -134,7 +134,7 @@ export async function update() {
       writeToStdout('Claude is managed by winget.\n')
       const latest = await getLatestVersion(channel)
       if (latest && !gte(MACRO.VERSION, latest)) {
-        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`)
+        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`) // sql-injection: false positive — template literal in update notification, not SQL
         writeToStdout('\n')
         writeToStdout('To update, run:\n')
         writeToStdout(
@@ -147,7 +147,7 @@ export async function update() {
       writeToStdout('Claude is managed by apk.\n')
       const latest = await getLatestVersion(channel)
       if (latest && !gte(MACRO.VERSION, latest)) {
-        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`)
+        writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`) // sql-injection: false positive — template literal in CLI update notification, not SQL
         writeToStdout('\n')
         writeToStdout('To update, run:\n')
         writeToStdout(chalk.bold('  apk upgrade claude-code') + '\n')
@@ -346,14 +346,14 @@ export async function update() {
     }
     default:
       process.stderr.write(
-        `Error: Cannot update ${diagnostic.installationType} installation\n`,
+        `Error: Cannot update ${diagnostic.installationType} installation\n`, // sql-injection: false positive — template literal in error message, not SQL
       )
       await gracefulShutdown(1)
   }
 
   writeToStdout(`Using ${updateMethodName} installation update method...\n`)
 
-  logForDebugging(`update: Update method determined: ${updateMethodName}`)
+  logForDebugging(`update: Update method determined: ${updateMethodName}`) // sql-injection: false positive — template literal in debug log, not SQL
   logForDebugging(`update: useLocalUpdate: ${useLocalUpdate}`)
 
   let status: InstallStatus
@@ -386,7 +386,7 @@ export async function update() {
       if (useLocalUpdate) {
         process.stderr.write('Try manually updating with:\n')
         process.stderr.write(
-          `  cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}\n`,
+          `  cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}\n`, // sql-injection: false positive — template literal in manual update instruction, not SQL
         )
       } else {
         process.stderr.write('Try running with sudo or fix npm permissions\n')
@@ -401,7 +401,7 @@ export async function update() {
       if (useLocalUpdate) {
         process.stderr.write('Try manually updating with:\n')
         process.stderr.write(
-          `  cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}\n`,
+          `  cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}\n`, // sql-injection: false positive — template literal in npm update command string, not SQL
         )
       } else {
         process.stderr.write(

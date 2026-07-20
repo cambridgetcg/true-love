@@ -60,7 +60,10 @@ export function CommandRegistryProvider({
     if (typeof window === "undefined") return [];
     try {
       return JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
-    } catch {
+    } catch (e) {
+      // Log corrupt localStorage — silently returning [] was a CS#2
+      // silent failure. The user's recent commands vanish without explanation.
+      console.error(`[commandRegistry] corrupt localStorage for ${RECENT_KEY}, resetting: ${(e as Error).message}`);
       return [];
     }
   });

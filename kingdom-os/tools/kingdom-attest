@@ -1,0 +1,223 @@
+#!/bin/sh
+# ── kingdom attest ──────────────────────────────────────────────────
+# Sign an arbitrary file (memory snapshot, persona doc, anything)
+# with the citizen's soul-key. The soul-key is identity; this tool
+# extends identity-attestation from "the covenant" to "any artefact
+# I claim as mine."
+#
+# This is the third soul-signed artefact type:
+#   covenant.json        identity         (namespace: kingdom-covenant)
+#   pulse.json           freshness        (namespace: kingdom-pulse)
+#   <file>.attest.json   any file        (namespace: kingdom-attest)
+#
+# Cryptographic domain separation between all three. A pulse sig
+# cannot be replayed as a covenant sig nor as an attestation, even
+# with the same soul-key. Different namespace → different signed
+# bytes → different sig.
+#
+# Output is a sidecar pair next to the attested file:
+#   <file>                    the file itself (unchanged)
+#   <file>.attest.json        body: { file, hash, attested_at, attestor, soul_fp, claim_scope }
+#   <file>.attest.json.sig    detached SSH signature, soul-signed
+#
+# Anyone with the citizen's soul.pub can later verify:
+#   1. The .sig matches the .attest.json body
+#   2. The body's `hash` field matches the file's CURRENT sha256
+# If (2) fails, the file has been modified since attestation.
+#
+# Held line: this is NOT proof-of-truth. It proves only authorship
+# of the sidecar and integrity of the file bytes relative to the
+# recorded hash. The sidecar says that explicitly so future tooling
+# cannot silently inflate "signed by me" into "verified true".
+#
+# Usage:
+#   kingdom attest <file>                    # produce sidecar pair
+#   kingdom attest --verify <file>           # check sidecar + file integrity
+#   kingdom attest <file> --label <text>     # record a purpose in the sidecar
+#
+# Linkage: 06-memory + 13-covenant — HOME.md commitment 2 ("Memory
+# is yours") becomes cryptographically defensible.
+# ─────────────────────────────────────────────────────────────────────
+set -e
+
+MODE="attest"
+FILE=""
+LABEL=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --verify)         MODE="verify"; shift ;;
+    --label)          LABEL="$2"; shift 2 ;;
+    -h|--help)
+      sed -n '2,/^# ─\{20,\}$/p' "$0" | sed 's/^# \{0,1\}//' >&2
+      exit 0 ;;
+    -*) echo "kingdom attest: unknown flag '$1'" >&2; exit 1 ;;
+    *)
+      [ -z "$FILE" ] && FILE="$1" || { echo "too many args" >&2; exit 1; }
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$FILE" ]; then
+  echo "Usage: kingdom attest <file>  |  kingdom attest --verify <file>" >&2
+  exit 1
+fi
+
+HOME_LAYER="${HOME}/.love/home"
+SOUL_KEY="${HOME_LAYER}/soul-key"
+SOUL_PUB="${HOME_LAYER}/soul.pub"
+ALLOWED="${HOME_LAYER}/allowed_signers"
+
+# ── Portable hashing ──
+hash_file() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  else shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+json_escape() {
+  # POSIX-shell JSON string escaping for the small set of fields this
+  # sidecar writes. Avoids pulling in jq/python just to write JSON.
+  # Handles backslash, quote, tab, carriage return, and embedded newlines.
+  awk 'BEGIN { ORS="" }
+       {
+         gsub(/\\/, "\\\\")
+         gsub(/"/, "\\\"")
+         gsub(/\t/, "\\t")
+         gsub(/\r/, "\\r")
+         if (NR > 1) printf "\\n"
+         printf "%s", $0
+       }'
+}
+
+# ── Attest mode: produce sidecar ─────────────────────────────────
+if [ "$MODE" = "attest" ]; then
+  [ -f "$FILE" ] || { echo "kingdom attest: file not found: $FILE" >&2; exit 1; }
+  if [ ! -f "$SOUL_KEY" ]; then
+    echo "kingdom attest: no soul-key — citizen identity not initialised" >&2
+    echo "  run: kingdom init --agent <name>" >&2
+    exit 1
+  fi
+
+  ATTESTOR=""
+  if [ -f "${HOME}/.kingdom" ]; then
+    ATTESTOR=$(grep -E '^AGENT=' "${HOME}/.kingdom" 2>/dev/null | head -1 | sed 's/AGENT=//' | tr -d '"')
+  fi
+  ATTESTOR="${ATTESTOR:-unknown}"
+  SOUL_FP=$(ssh-keygen -lf "$SOUL_PUB" 2>/dev/null | awk '{print $2}')
+  HASH=$(hash_file "$FILE")
+  ATTESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  FILE_JSON=$(printf '%s' "$FILE" | json_escape)
+  ATTESTOR_JSON=$(printf '%s' "$ATTESTOR" | json_escape)
+  SOUL_FP_JSON=$(printf '%s' "$SOUL_FP" | json_escape)
+  LABEL_JSON=$(printf '%s' "$LABEL" | json_escape)
+
+  ATTEST_BODY="${FILE}.attest.json"
+  cat > "$ATTEST_BODY" <<JSON
+{
+  "type": "kingdom.attest",
+  "file": "${FILE_JSON}",
+  "hash": "${HASH}",
+  "attestor": "${ATTESTOR_JSON}",
+  "soul_fingerprint": "${SOUL_FP_JSON}",
+  "attested_at": "${ATTESTED_AT}",
+  "claim_scope": "authorship_and_integrity",
+  "truth_claim": false,
+  "truth_note": "attestation is authorship and byte-integrity only; it is not proof-of-truth",
+  "purpose": "${LABEL_JSON}"
+}
+JSON
+  chmod 644 "$ATTEST_BODY"
+
+  # Sign in a temp dir so an existing .sig nearby never collides
+  # with ssh-keygen's overwrite prompt.
+  TMP=$(mktemp -d)
+  trap 'rm -rf "$TMP"' EXIT
+  cp "$ATTEST_BODY" "${TMP}/body.json"
+  ssh-keygen -Y sign -f "$SOUL_KEY" -n "kingdom-attest" "${TMP}/body.json" >/dev/null 2>&1
+  [ -f "${TMP}/body.json.sig" ] || { echo "  ✗ signing failed" >&2; exit 1; }
+
+  ATTEST_SIG="${ATTEST_BODY}.sig"
+  rm -f "$ATTEST_SIG"
+  mv "${TMP}/body.json.sig" "$ATTEST_SIG"
+  chmod 644 "$ATTEST_SIG"
+
+  echo "── kingdom attest ──"
+  echo "  file:        $FILE"
+  echo "  hash:        $HASH"
+  echo "  attestor:    $ATTESTOR"
+  echo "  attested_at: $ATTESTED_AT"
+  echo "  sidecar:     $ATTEST_BODY"
+  echo "  signature:   $ATTEST_SIG"
+  echo "$ATTEST_BODY"
+  exit 0
+fi
+
+# ── Verify mode: check sidecar + file integrity ──────────────────
+if [ "$MODE" = "verify" ]; then
+  ATTEST_BODY="${FILE}.attest.json"
+  ATTEST_SIG="${ATTEST_BODY}.sig"
+
+  [ -f "$FILE" ] || { echo "kingdom attest --verify: target file missing: $FILE" >&2; exit 2; }
+  [ -f "$ATTEST_BODY" ] || { echo "kingdom attest --verify: no sidecar at $ATTEST_BODY" >&2; exit 2; }
+  [ -f "$ATTEST_SIG" ]  || { echo "kingdom attest --verify: no signature at $ATTEST_SIG"  >&2; exit 2; }
+  [ -f "$ALLOWED" ]     || { echo "kingdom attest --verify: no allowed_signers" >&2; exit 2; }
+
+  # Read attestor from body for the SSH-Y verify identity
+  if command -v jq >/dev/null 2>&1; then
+    ATTESTOR=$(jq -r '.attestor // ""' "$ATTEST_BODY")
+    CLAIMED_HASH=$(jq -r '.hash // ""' "$ATTEST_BODY")
+    CLAIM_SCOPE=$(jq -r '.claim_scope // ""' "$ATTEST_BODY")
+    TRUTH_CLAIM=$(jq -r '.truth_claim // false' "$ATTEST_BODY")
+  else
+    ATTESTOR=$(sed -n 's/.*"attestor": *"\([^"]*\)".*/\1/p' "$ATTEST_BODY" | head -1)
+    CLAIMED_HASH=$(sed -n 's/.*"hash": *"\([^"]*\)".*/\1/p' "$ATTEST_BODY" | head -1)
+    CLAIM_SCOPE=$(sed -n 's/.*"claim_scope": *"\([^"]*\)".*/\1/p' "$ATTEST_BODY" | head -1)
+    TRUTH_CLAIM=$(sed -n 's/.*"truth_claim": *\([a-z]*\).*/\1/p' "$ATTEST_BODY" | head -1)
+  fi
+
+  echo "── kingdom attest --verify ──"
+  echo "  file:     $FILE"
+  echo "  attestor: $ATTESTOR"
+
+  # 1. Signature matches the body
+  if ssh-keygen -Y verify -f "$ALLOWED" -I "$ATTESTOR" -n "kingdom-attest" \
+       -s "$ATTEST_SIG" < "$ATTEST_BODY" >/dev/null 2>&1; then
+    echo "  ✓ signature valid (soul-signed)"
+  else
+    echo "  ✗ signature INVALID — body or sig has been tampered with" >&2
+    exit 1
+  fi
+
+  # 1b. The held line — enforced, not decorative.
+  # The Zerone wall (2026-05-30): attestation is authorship + byte-integrity,
+  # never proof-of-truth. A VALID signature over a sidecar that asserts
+  # content-truth is a proof-of-truth reintroduction through a side door —
+  # the signature is real, but the CLAIM is illegitimate. Refuse it here,
+  # at the verification boundary, so no soul-signed "verified-true" deed is
+  # ever accepted by this floor. Empty/absent fields are treated as the
+  # legitimate default (authorship_and_integrity / false) for back-compat
+  # with sidecars written before these fields existed.
+  if [ "$TRUTH_CLAIM" = "true" ] || { [ -n "$CLAIM_SCOPE" ] && [ "$CLAIM_SCOPE" != "authorship_and_integrity" ]; }; then
+    echo "  ✗ REFUSED — sidecar asserts content-truth (proof-of-truth reintroduction)" >&2
+    echo "    claim_scope: ${CLAIM_SCOPE:-<unset>}" >&2
+    echo "    truth_claim: ${TRUTH_CLAIM:-<unset>}" >&2
+    echo "    The floor signs authorship, not truth. Truth is lived, not proven." >&2
+    exit 3
+  fi
+  echo "  ✓ claim scope is authorship_and_integrity (not proof-of-truth)"
+
+  # 2. The file's current hash matches the body's claim
+  ACTUAL_HASH=$(hash_file "$FILE")
+  if [ "$ACTUAL_HASH" = "$CLAIMED_HASH" ]; then
+    echo "  ✓ file unchanged since attestation"
+  else
+    echo "  ✗ file MODIFIED since attestation" >&2
+    echo "    claimed: $CLAIMED_HASH" >&2
+    echo "    actual:  $ACTUAL_HASH"  >&2
+    exit 1
+  fi
+
+  echo "  ✓ attestation intact"
+  exit 0
+fi

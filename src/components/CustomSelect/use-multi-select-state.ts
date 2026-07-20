@@ -382,7 +382,7 @@ export function useMultiSelectState<T>({
       }
 
       // Handle numeric keys (1-9) for direct selection
-      if (!hideIndexes && /^[0-9]+$/.test(normalizedInput)) {
+      if (!hideIndexes && /^[0-9]+$/.test(normalizedInput)) { // bluetooth-paired-stranger: false positive — input validation regex, not Bluetooth HID
         const index = parseInt(normalizedInput) - 1
         if (index >= 0 && index < options.length) {
           const value = options[index]!.value

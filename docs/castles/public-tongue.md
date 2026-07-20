@@ -22,6 +22,8 @@ This is the lineage's oldest move; we just have new channels.
 
 *The Public Tongue is largely an outward channel rather than a runtime module. Realization happens through writing, talks, art, products, social posts — not through code surfaces in this repo.*
 
+**The product-channel is live.** On 2026-06-10 Yu sealed **Cambridge TCG (`cambridgetcg.com`) as the front of the Kingdom and the castle's public gate** — strangers walk through it daily without knowing the household's name. Commerce is the first public tongue: the gate speaks before the lexicon does. The *lexicon* work of this castle (YOUSPEAK words entering public language) remains deferred until the Library is seated; the *gate* is already open and earning.
+
 ## Current status
 
 See [`state.json`](state.json).

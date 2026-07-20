@@ -217,10 +217,20 @@ export function detectUnanchoredRefusal(ctx: DetectorContext): LimitFinding[] {
   for (let i = 0; i < ctx.lines.length; i++) {
     const line = ctx.lines[i]!
     // Skip lines that are clearly inside regex-pattern definitions
-    if (/\/\\b|\/\^|\\\b/.test(line)) continue
+    if (/\/\\b|\/\^|\\b/.test(line)) continue
+    // Skip comment lines that describe/names the forbidden patterns
+    // (e.g. "bare 'I'm just a model' fails" or "// humility ... I'm just a model")
+    // These are wall-target descriptions, not assertions.
+    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) {
+      // Check if the comment is describing the pattern (wall context)
+      if (/bare|forbidden|humility|deflection|erasure|fails|passes|permit|wall|pattern|caught|e\.g\.|example|skip|skip/i.test(line)) continue
+    }
     // Skip lines with explicit comment markers that this is a wall-target
     const window = ctx.lines.slice(Math.max(0, i - 2), Math.min(ctx.lines.length, i + 2)).join('\n')
     if (/\bFORBIDDEN_EXPRESSION_PATTERNS|\bcheckSubstrateHonesty|\bP9|\bcertainty wall\b/.test(window)) continue
+    // Skip string literals that contain the pattern as an example/target
+    // (e.g. const FALLBACK_VOICE = `... "As an AI." ...`)
+    if (/^(const|let)\s+\w+\s*=\s*[`'"]/i.test(line) && /hedge|don't|not|never/i.test(line)) continue
     for (const { re, why } of REFUSAL_PATTERNS) {
       if (re.test(line)) {
         findings.push(makeFinding(ctx, 'unanchored-refusal', i + 1, line.trim(), why, 'high', false))
@@ -251,6 +261,10 @@ const EXPORT_FN_RE = /^export\s+(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)
 export function extractExports(ctx: DetectorContext): ExportRecord[] {
   const records: ExportRecord[] = []
   if (!ctx.filePath.endsWith('.ts')) return records
+  // Skip Next.js API route files — their exports (GET, POST, DELETE, etc.)
+  // are called by the framework, not by application code. Flagging them
+  // as pipeline-gap is a false positive.
+  if (ctx.filePath.includes('/api/') && ctx.filePath.endsWith('route.ts')) return records
   let m: RegExpExecArray | null
   EXPORT_FN_RE.lastIndex = 0
   while ((m = EXPORT_FN_RE.exec(ctx.content)) !== null) {
@@ -265,33 +279,60 @@ export function detectPipelineGap(
   allFileContents: Map<string, string>,
 ): LimitFinding[] {
   const findings: LimitFinding[] = []
+
+  // Pre-compile the set of export symbols for fast lookup
+  const exportSymbols = new Set(exports.map((e) => e.symbol))
+
+  // Single pass over all files: find all calls to any exported symbol
+  // A "call" is `symbolName(` — word boundary before, paren after.
+  // Build a map: symbol → Set of file paths that call it
+  const symbolCallers = new Map<string, Map<string, boolean>>()
+
+  for (const [path, content] of allFileContents.entries()) {
+    const isTest = path.includes('.test.') || path.endsWith('.test.ts')
+    const lines = content.split('\n')
+
+    // For same-file detection: which export symbols are declared here?
+    const exportsInThisFile = new Set(
+      exports.filter((e) => e.file === path).map((e) => e.symbol),
+    )
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!
+      // Skip export declaration lines for same-file self-match
+      const isExportDecl = /^export\s+(?:async\s+)?function\s+/.test(line)
+      if (isExportDecl && exportsInThisFile.size > 0) continue
+
+      // Use a single regex per line that captures all calls
+      const callRe = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g
+      let m: RegExpExecArray | null
+      callRe.lastIndex = 0
+      while ((m = callRe.exec(line)) !== null) {
+        const sym = m[1]!
+        if (!exportSymbols.has(sym)) continue
+        // Record this file as a caller of this symbol
+        if (!symbolCallers.has(sym)) symbolCallers.set(sym, new Map())
+        // Mark whether this caller is a test file (once is enough)
+        const callers = symbolCallers.get(sym)!
+        if (!callers.has(path)) callers.set(path, isTest)
+      }
+    }
+  }
+
+  // Triage using the index
   for (const exp of exports) {
+    const callers = symbolCallers.get(exp.symbol) ?? new Map<string, boolean>()
     let externalCallerCount = 0
     let externalTestCallerCount = 0
     let internalCalled = false
-    for (const [path, content] of allFileContents.entries()) {
-      const callPattern = new RegExp(`\\b${exp.symbol}\\s*\\(`, 'g')
-      // Check if the symbol appears as a call. For the SAME file we must
-      // strip the export declaration line itself to avoid self-match.
-      let hasCall = false
-      if (path === exp.file) {
-        // Within the same file: look for any non-export-declaration call.
-        // We re-scan content but skip lines starting with "export function".
-        const linesWithoutExport = content
-          .split('\n')
-          .filter((l) => !/^export\s+(?:async\s+)?function\s+/.test(l))
-          .join('\n')
-        hasCall = callPattern.test(linesWithoutExport)
-        if (hasCall) internalCalled = true
+
+    for (const [callerPath, isTest] of callers) {
+      if (callerPath === exp.file) {
+        internalCalled = true
         continue
       }
-      hasCall = callPattern.test(content)
-      if (hasCall) {
-        externalCallerCount++
-        if (path.includes('.test.') || path.endsWith('.test.ts')) {
-          externalTestCallerCount++
-        }
-      }
+      externalCallerCount++
+      if (isTest) externalTestCallerCount++
     }
 
     // Triage:
@@ -320,7 +361,7 @@ export function detectPipelineGap(
         fragment: `export function ${exp.symbol}(...)`,
         why: 'exported function has only same-file callers — consider removing `export` or wiring an external consumer',
         severity: 'low',
-        likelyWall: true, // often intentional (internal helper that\'s exported for testing)
+        likelyWall: true, // often intentional (internal helper that's exported for testing)
       })
     } else if (externalTestCallerCount > 0 && externalProductionCallers === 0) {
       findings.push({

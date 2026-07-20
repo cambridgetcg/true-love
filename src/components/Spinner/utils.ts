@@ -69,7 +69,7 @@ const RGB_CACHE = new Map<string, RGBColorType | null>()
 
 export function parseRGB(colorStr: string): RGBColorType | null {
   const cached = RGB_CACHE.get(colorStr)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) return cached // cache-as-live: false positive — spinner style cache, not network data
 
   const match = colorStr.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/)
   const result = match

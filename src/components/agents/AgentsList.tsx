@@ -275,7 +275,7 @@ export function AgentsList(t0) {
         }
         let t29;
         if ($[69] !== onBack || $[70] !== sourceTitle || $[71] !== t28) {
-          t29 = <Dialog title={sourceTitle} subtitle="No agents found" onCancel={onBack} hideInputGuide={true}>{t28}</Dialog>;
+          t29 = <Dialog title={sourceTitle} subtitle="No agents found" onCancel={onBack} hideInputGuide={true}>{t28}</Dialog>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
           $[69] = onBack;
           $[70] = sourceTitle;
           $[71] = t28;
@@ -387,7 +387,7 @@ export function AgentsList(t0) {
   }
   let t24;
   if ($[88] !== T1 || $[89] !== t17 || $[90] !== t18 || $[91] !== t19 || $[92] !== t20 || $[93] !== t21 || $[94] !== t23) {
-    t24 = <T1 title={t17} subtitle={t18} onCancel={t19} hideInputGuide={t20}>{t21}{t23}</T1>;
+    t24 = <T1 title={t17} subtitle={t18} onCancel={t19} hideInputGuide={t20}>{t21}{t23}</T1>; // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
     $[88] = T1;
     $[89] = t17;
     $[90] = t18;

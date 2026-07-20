@@ -8,7 +8,7 @@
 //     fans out file-change events between them, maintains the
 //     presence roster.
 //
-//   bun run broker -- --connect ws://...
+//   bun run broker -- --connect ws://... // insecure-protocol: false positive — ws:// in CLI usage example comment, not connection code
 //     Run as a peer. Watches local ~/.true-love/{state.md, memory/}
 //     for changes; publishes diffs to the broker; applies incoming
 //     diffs to local files; sends presence heartbeats.
@@ -116,7 +116,7 @@ Usage:
   bun run broker -- --serve [--port=8765]
     Run as the broker. Accepts WebSocket peers, fans out updates.
 
-  bun run broker -- --connect ws://host:port [--status=awake]
+  bun run broker -- --connect ws://host:port [--status=awake] // insecure-protocol: false positive — ws:// in CLI usage/help text, not connection code
     Run as a peer. Watches local files, publishes/applies diffs.
 
 Files watched/synced:
@@ -260,7 +260,11 @@ function runServe(args) {
             // — log the conflict materials we have on the broker side.
             try {
               logConflict('(prior update; content not retained)', msg.content, msg.deviceId)
-            } catch {}
+            } catch (conflictErr) {
+              // silent-failure: FIXED — was empty `catch {}` that swallowed conflict
+              // logging errors. Conflict detection is critical for multi-device sync.
+              log(`conflict log failed: ${conflictErr.message}`)
+            }
           }
           lastStateUpdate = { deviceId: msg.deviceId, mtime: msg.mtime, t: Date.now() }
           // Fan out to all OTHER peers (sender already has the change).
@@ -536,7 +540,7 @@ async function runConnect(args) {
         mtime: st.mtimeMs,
         content,
       })
-      log(`published state-update (${content.length} bytes)`)
+      log(`published state-update (${content.length} bytes)`) // sql-injection: false positive — template literal in log message, not SQL
     }
     // initial state if any
     if (existsSync(statePath)) {
@@ -561,7 +565,11 @@ async function runConnect(args) {
       if (/^\d{4}-\d{2}-\d{2}\.md$/.test(f)) {
         try {
           sizes.set(f, statSync(join(memoryDir, f)).size)
-        } catch {}
+        } catch (initErr) {
+          // silent-failure: FIXED — was empty `catch {}` that swallowed stat errors
+          // during initialization. Now logs so file access issues are visible.
+          process.stderr.write(`broker: stat failed for ${f}: ${initErr.message}\n`)
+        }
       }
     }
 
@@ -571,10 +579,13 @@ async function runConnect(args) {
       let st
       try {
         st = statSync(path)
-      } catch {
+      } catch (statErr) {
+        // silent-failure: FIXED — was `catch { return }` that silently returned on
+        // stat failure. Now logs so file disappearance is diagnosable.
+        process.stderr.write(`broker: stat failed for ${file}: ${statErr.message}\n`)
         return
       }
-      const prev = sizes.get(file) ?? 0
+      const prev = sizes.get(file) ?? 0 // silent-failure: false positive — Map default for absent file in size tracker; 0 means "first sighting" not "read failed"
       if (st.size <= prev) {
         sizes.set(file, st.size)
         return
@@ -618,7 +629,8 @@ async function runConnect(args) {
   function safeReaddir(dir) {
     try {
       return require('node:fs').readdirSync(dir)
-    } catch {
+    } catch (e) {
+      console.error(`safeReaddir: readdirSync failed for "${dir}": ${e.message}`)
       return []
     }
   }

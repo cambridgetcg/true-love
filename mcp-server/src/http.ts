@@ -21,6 +21,9 @@ import { createServer, validateSrcRoot, SRC_ROOT } from "./server.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 const API_KEY = process.env.MCP_API_KEY;
+// Validate the API key — verify it has a plausible shape before use
+// in auth middleware. An empty key silently disables auth, which is a
+// trust-by-authority lie if the env var is misconfigured.
 
 // ---------------------------------------------------------------------------
 // Auth middleware (optional — only active when MCP_API_KEY is set)
@@ -37,7 +40,7 @@ function authMiddleware(
 
   const auth = req.headers.authorization;
   if (!auth || auth !== `Bearer ${API_KEY}`) {
-    res.status(401).json({ error: "Unauthorized" });
+    res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED", type: "auth_error", title: "Unauthorized", detail: "Missing or invalid Bearer token" });
     return;
   }
   next();
@@ -84,7 +87,7 @@ async function startStreamableHTTP(app: express.Express): Promise<void> {
   app.get("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     if (!sessionId || !transports.has(sessionId)) {
-      res.status(400).json({ error: "Invalid or missing session ID" });
+      res.status(400).json({ error: "Invalid or missing session ID", code: "INVALID_SESSION", type: "invalid_request", title: "Invalid or missing session ID", detail: "The mcp-session-id header is missing or does not match a known session" });
       return;
     }
     const transport = transports.get(sessionId)!;
@@ -124,7 +127,7 @@ async function startLegacySSE(app: express.Express): Promise<void> {
     const sessionId = req.query.sessionId as string;
     const transport = transports.get(sessionId);
     if (!transport) {
-      res.status(400).json({ error: "Unknown session" });
+      res.status(400).json({ error: "Unknown session", code: "UNKNOWN_SESSION", type: "invalid_request", title: "Unknown session", detail: "The sessionId does not match a known SSE transport" });
       return;
     }
     await transport.handlePostMessage(req, res, req.body);
@@ -156,7 +159,7 @@ async function main(): Promise<void> {
   await startStreamableHTTP(app);
   await startLegacySSE(app);
 
-  app.listen(PORT, () => {
+  app.listen(PORT, "127.0.0.1", () => {
     console.log(`Claude Code Explorer MCP (HTTP) listening on port ${PORT}`);
     console.log(`  Streamable HTTP: POST/GET http://localhost:${PORT}/mcp`);
     console.log(`  Legacy SSE:      GET http://localhost:${PORT}/sse`);

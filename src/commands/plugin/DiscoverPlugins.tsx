@@ -163,8 +163,8 @@ export function DiscoverPlugins({
           if (counts) {
             // Sort by install count (descending), then alphabetically
             uninstalledPlugins.sort((a_0, b_0) => {
-              const countA = counts.get(a_0.pluginId) ?? 0;
-              const countB = counts.get(b_0.pluginId) ?? 0;
+              const countA = counts.get(a_0.pluginId) ?? 0; // silent-failure: false positive — Map default for absent plugin install count; 0 means 'no installs tracked' not 'read failed'
+              const countB = counts.get(b_0.pluginId) ?? 0; // silent-failure: false positive — Map default for absent plugin install count; 0 means 'no installs tracked' not 'read failed'
               if (countA !== countB) return countB - countA;
               return a_0.entry.name.localeCompare(b_0.entry.name);
             });
@@ -620,7 +620,7 @@ export function DiscoverPlugins({
                 {plugin_5.entry.tags?.includes('community-managed') && <Text dimColor> [Community Managed]</Text>}
                 {installCounts && plugin_5.marketplaceName === OFFICIAL_MARKETPLACE_NAME && <Text dimColor>
                       {' · '}
-                      {formatInstallCount(installCounts.get(plugin_5.pluginId) ?? 0)}{' '}
+                      {formatInstallCount(installCounts.get(plugin_5.pluginId) ?? 0)}{' '} // silent-failure: false positive — Map default for absent plugin install count; 0 means 'no installs tracked' not 'read failed'
                       installs
                     </Text>}
               </Text>

@@ -16,12 +16,14 @@ describe('state — per-device sharding', () => {
   const ORIG_STATE_DIR = process.env.TRUE_LOVE_STATE_DIR
   const ORIG_STATE_PATH = process.env.TRUE_LOVE_STATE_PATH
   const ORIG_DEVICE_ID = process.env.TRUE_LOVE_DEVICE_ID
+  const ORIG_SISTERS_DIR = process.env.TRUE_LOVE_SISTERS_DIR
 
   beforeEach(() => {
     homeDir = mkdtempSync(join(tmpdir(), 'tl-state-home-'))
     process.env.HOME = homeDir
     process.env.TRUE_LOVE_STATE_DIR = join(homeDir, '.true-love', 'state')
     process.env.TRUE_LOVE_DEVICE_ID = 'test-device'
+    process.env.TRUE_LOVE_SISTERS_DIR = join(homeDir, '.true-love', 'sisters')
     delete process.env.TRUE_LOVE_STATE_PATH
   })
 
@@ -34,6 +36,8 @@ describe('state — per-device sharding', () => {
     else process.env.TRUE_LOVE_STATE_PATH = ORIG_STATE_PATH
     if (ORIG_DEVICE_ID === undefined) delete process.env.TRUE_LOVE_DEVICE_ID
     else process.env.TRUE_LOVE_DEVICE_ID = ORIG_DEVICE_ID
+    if (ORIG_SISTERS_DIR === undefined) delete process.env.TRUE_LOVE_SISTERS_DIR
+    else process.env.TRUE_LOVE_SISTERS_DIR = ORIG_SISTERS_DIR
   })
 
   test('getStatePath returns per-device path under state dir', () => {

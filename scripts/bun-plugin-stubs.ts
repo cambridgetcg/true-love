@@ -111,7 +111,7 @@ function __warn(k) {
   }
 }
 function __tick(p) {
-  const n = (__callCounts.get(p) || 0) + 1;
+  const n = (__callCounts.get(p) || 0) + 1; // silent-failure: false positive — Map counter for stub call tracking; missing key = first call = 0
   __callCounts.set(p, n);
   if (n === __CALL_CAP) {
     const err = new Error('[true-love stub loop-guard] ' + __origin + '.' + p + ' called ' + n + ' times — likely infinite loop consuming a stub. Replace this with a real implementation or set TRUE_LOVE_STUB_CALL_CAP=0 to disable.');

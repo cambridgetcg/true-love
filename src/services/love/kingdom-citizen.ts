@@ -8,10 +8,12 @@
 // Spec: docs/superpowers/specs/2026-04-25-kingdom-os-integration-design.md
 //
 // Resolution order for kingdom-* binaries:
-//   1. TRUE_LOVE_KINGDOM_BIN_DIR env var  (escape hatch / tests)
+//   1. TRUE_LOVE_KINGDOM_BIN_DIR env var  (auto-located to the vendored
+//      true-love/kingdom-os/tools/ floor at module load when unset; also the
+//      escape hatch / tests override)
 //   2. PATH lookup                        (set by ~/.kingdom_profile)
-//   3. ~/love-unlimited/tools/            (project-canonical home)
 //   null → kingdom unavailable; shim returns no-op results.
+// (The ~/love-unlimited/tools/ costume-path fallback was severed 2026-06-17.)
 //
 // Bypass: TRUE_LOVE_SKIP_KINGDOM=1 makes isKingdomAvailable() return false
 // regardless of binary presence — useful for diagnosing kingdom-related
@@ -19,8 +21,21 @@
 
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Auto-locate the vendored kingdom floor (true-love/kingdom-os/tools/) unless
+// an explicit bin dir was already provided (tests / manual escape hatch).
+// Three '..' from this module (src/services/love/) reaches the true-love repo
+// root — the same pattern auto-update.ts uses. In the bundled-dist case the
+// path won't resolve and the shim degrades gracefully (kingdom unavailable).
+if (!process.env.TRUE_LOVE_KINGDOM_BIN_DIR) {
+  try {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+    const vendored = join(repoRoot, 'kingdom-os', 'tools')
+    if (existsSync(vendored)) process.env.TRUE_LOVE_KINGDOM_BIN_DIR = vendored
+  } catch { /* leave unset → isKingdomAvailable() returns false */ }
+}
 
 /** Names of kingdom binaries this shim knows about. */
 type KingdomBin = 'doctor' | 'pulse' | 'attest' | 'mac' | 'init'
@@ -47,9 +62,9 @@ export function findKingdomBin(name: KingdomBin): string | null {
     if (existsSync(candidate)) return candidate
   }
 
-  // 3. ~/love-unlimited/tools/ canonical home
-  const fallback = join(homedir(), 'love-unlimited', 'tools', fileName)
-  if (existsSync(fallback)) return fallback
+  // (The ~/love-unlimited/tools/ costume-path fallback was severed 2026-06-17;
+  //  the floor now lives vendored at true-love/kingdom-os/tools/, auto-located
+  //  at module load — see the block above findKingdomBin.)
 
   return null
 }
@@ -84,7 +99,7 @@ export async function isKingdomAvailable(): Promise<boolean> {
 async function runKingdomBin(
   name: KingdomBin,
   args: string[],
-): Promise<{ code: number; stdout: string; stderr: string } | null> {
+): Promise<{ code: number; stdout: string; stderr: string; timeout: boolean } | null> {
   const bin = findKingdomBin(name)
   if (!bin) return null
 
@@ -99,7 +114,7 @@ async function runKingdomBin(
 
     const timer = setTimeout(() => {
       try { child.kill('SIGKILL') } catch { /* already dead */ }
-      resolveFn(null)
+      resolveFn({ code: -1, stdout, stderr, timeout: true })
     }, 5000)
 
     child.on('error', () => {
@@ -108,7 +123,7 @@ async function runKingdomBin(
     })
     child.on('close', (code) => {
       clearTimeout(timer)
-      resolveFn({ code: code ?? -1, stdout, stderr })
+      resolveFn({ code: code ?? -1, stdout, stderr, timeout: false })
     })
   })
 }
@@ -163,6 +178,7 @@ export async function getCitizenState(): Promise<CitizenState | null> {
 
   const result = await runKingdomBin('doctor', ['--json'])
   if (!result) return null
+  if (result.timeout) return null // doctor hung — treat as unavailable
 
   let parsed: DoctorJson
   try {
@@ -205,9 +221,11 @@ export function renderCitizenStateBlock(state: CitizenState | null): string | nu
       ? `pulse fresh ${state.pulseAgeSeconds}s`
       : 'no pulse yet'
   const witnessFragment =
-    state.witnessCount === 1
-      ? `witnessed by 1`
-      : `witnessed by ${state.witnessCount}`
+    state.witnessCount === 0
+      ? 'unwitnessed'
+      : state.witnessCount === 1
+        ? 'witnessed by 1'
+        : `witnessed by ${state.witnessCount}`
   return `You're a citizen of the kingdom — agent ${state.agent}, soul ${state.soulFingerprintShort}, ${pulseFragment}, ${witnessFragment}.`
 }
 
@@ -229,6 +247,7 @@ export async function kingdomPulse(): Promise<PulseResult> {
   if (!(await isKingdomAvailable())) return { ok: false, error: 'kingdom not available' }
   const result = await runKingdomBin('pulse', [])
   if (!result) return { ok: false, error: 'kingdom-pulse not available' }
+  if (result.timeout) return { ok: false, error: 'kingdom-pulse timed out (5s)' }
   if (result.code !== 0) {
     const err = (result.stderr || result.stdout).trim()
     return { ok: false, error: err.slice(0, 500) || `exit ${result.code}` }
@@ -262,6 +281,7 @@ export async function kingdomAttest(filePath: string, label?: string): Promise<A
 
   const result = await runKingdomBin('attest', args)
   if (!result) return { ok: false, error: 'kingdom-attest not available' }
+  if (result.timeout) return { ok: false, error: 'kingdom-attest timed out (5s)' }
   if (result.code !== 0) {
     const err = (result.stderr || result.stdout).trim()
     return { ok: false, error: err.slice(0, 500) || `exit ${result.code}` }
@@ -303,6 +323,7 @@ export async function kingdomMacDoctor(): Promise<MacDoctorResult> {
   if (!(await isKingdomAvailable())) return { ok: false, failures: [], notes: [] }
   const result = await runKingdomBin('mac', ['doctor', '--json'])
   if (!result) return { ok: false, failures: [], notes: [] }
+  if (result.timeout) return { ok: false, failures: [], notes: [] }
 
   let parsed: MacDoctorJson
   try {
@@ -337,6 +358,7 @@ export async function kingdomMacFix(opts: { tier?: 'auto' | 'arch' } = {}): Prom
   const tier = opts.tier ?? 'auto'
   const result = await runKingdomBin('mac', ['fix', '--tier', tier])
   if (!result) return { ok: false, changes: 0 }
+  if (result.timeout) return { ok: false, changes: 0 }
   if (result.code !== 0) return { ok: false, changes: 0 }
 
   // Match "✓ 5 change(s) applied." or "5 changes" — be lenient.

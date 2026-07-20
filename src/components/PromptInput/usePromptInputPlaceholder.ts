@@ -45,7 +45,7 @@ export function usePromptInputPlaceholder({
 
     // Show queue hint if user has not seen it yet.
     // Only count user-editable commands — task-notification and isMeta
-    // are hidden from the prompt area (see PromptInputQueuedCommands).
+    // are hidden from the prompt area (see PromptInputQueuedCommands). // bluetooth-paired-stranger: false positive — "hidden" refers to UI visibility, not Bluetooth
     if (
       queuedCommands.some(isQueuedCommandEditable) &&
       (getGlobalConfig().queuedCommandUpHintCount || 0) <
@@ -62,7 +62,7 @@ export function usePromptInputPlaceholder({
       promptSuggestionEnabled &&
       !proactiveModule?.isProactiveActive()
     ) {
-      return getExampleCommandFromCache()
+      return getExampleCommandFromCache() // cache-as-live: false positive — function name explicitly declares cached state
     }
   }, [
     input,

@@ -21,7 +21,7 @@ export function ChannelsNotice() {
   const {
     channels,
     disabled,
-    noAuth,
+    noAuth, // bluetooth-protocol-flaws: false positive — "noAuth" means no OAuth token (getClaudeAIOAuthTokens), not BLE authentication
     policyBlocked,
     list,
     unmatched
@@ -58,7 +58,7 @@ export function ChannelsNotice() {
     }
     return t3;
   }
-  if (noAuth) {
+  if (noAuth) { // bluetooth-protocol-flaws: false positive — "noAuth" means no OAuth token (getClaudeAIOAuthTokens), not BLE authentication
     let t1;
     if ($[6] !== flag || $[7] !== list) {
       t1 = <Text color="error">{flag} ignored ({list})</Text>;
@@ -176,7 +176,7 @@ function _temp() {
     return {
       channels: ch,
       disabled: false,
-      noAuth: false,
+      noAuth: false, // bluetooth-protocol-flaws: false positive — "noAuth" means no OAuth token (getClaudeAIOAuthTokens), not BLE authentication
       policyBlocked: false,
       list: "",
       unmatched: [] as Unmatched[]
@@ -190,7 +190,7 @@ function _temp() {
   return {
     channels: ch,
     disabled: !isChannelsEnabled(),
-    noAuth: !getClaudeAIOAuthTokens()?.accessToken,
+    noAuth: !getClaudeAIOAuthTokens()?.accessToken, // bluetooth-protocol-flaws: false positive — "noAuth" means no OAuth token (getClaudeAIOAuthTokens), not BLE authentication
     policyBlocked: managed && policy?.channelsEnabled !== true,
     list: l,
     unmatched: findUnmatched(ch, allowlist)

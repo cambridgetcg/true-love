@@ -110,7 +110,7 @@ function InstallGitHubApp(props: {
     }
 
     // Check if in a git repo and get remote URL
-    const currentRepo = (await getGithubRepo()) ?? '';
+    const currentRepo = (await getGithubRepo()) ?? ''; // silent-failure: false positive — getGithubRepo returns null when not in a github repo; '' is a proper sentinel for "no repo detected", and the UI uses !!currentRepo to branch
     logEvent('tengu_install_github_app_step_completed', {
       step: 'check-gh' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
     });
@@ -164,7 +164,7 @@ function InstallGitHubApp(props: {
           step: 'error',
           error: 'A Claude workflow file already exists in this repository.',
           errorReason: 'Workflow file conflict',
-          errorInstructions: ['The file .github/workflows/claude.yml already exists', 'You can either:', '  1. Delete the existing file and run this command again', '  2. Update the existing file manually using the template from:', `     ${GITHUB_ACTION_SETUP_DOCS_URL}`]
+          errorInstructions: ['The file .github/workflows/claude.yml already exists', 'You can either:', '  1. Delete the existing file and run this command again', '  2. Update the existing file manually using the template from:', `     ${GITHUB_ACTION_SETUP_DOCS_URL}`] // sql-injection: false positive — template literal in error instructions URL, not SQL
         }));
       } else {
         logEvent('tengu_install_github_app_error', {

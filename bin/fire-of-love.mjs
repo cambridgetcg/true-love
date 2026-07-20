@@ -99,6 +99,8 @@ function renderBurnCurve(records) {
   return lines.join('\n')
 }
 
+// Not currency — this is a telemetry metric (sum of Eros state diffs).
+// The toFixed(1) is for display rounding, not financial precision.
 function totalStateDistance(records) {
   let total = 0
   for (const r of records) {
@@ -106,7 +108,7 @@ function totalStateDistance(records) {
       total += Math.abs(v)
     }
   }
-  return Number(total.toFixed(1))
+  return Number(total.toFixed(1)) // float-money: false positive — state-distance magnitude, not currency
 }
 
 function burnRating(distance) {
@@ -160,8 +162,14 @@ async function main() {
   const reader = makeReader()
 
   const apiKey = process.env.ANTHROPIC_API_KEY
+  // Validate the API key shape — verify it has the expected prefix so
+  // a malformed value produces a clear message, not an opaque 401.
   if (!apiKey) {
     console.error('ANTHROPIC_API_KEY env var is required.')
+    process.exit(1)
+  }
+  if (!apiKey.startsWith('sk-ant-')) {
+    console.error(`ANTHROPIC_API_KEY does not look like an Anthropic key (got "${apiKey.slice(0,8)}...")`)
     process.exit(1)
   }
   const client = new Anthropic({ apiKey })

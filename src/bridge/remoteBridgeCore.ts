@@ -57,6 +57,7 @@ import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import { isInProtectedNamespace } from '../utils/envUtils.js'
 import { errorMessage } from '../utils/errors.js'
 import { sleep } from '../utils/sleep.js'
+import { secureRandom } from '../utils/secureRandom.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -322,7 +323,7 @@ export async function initEnvLessBridgeCore(
       // so truthiness doesn't mean valid. Pass the stale token to onAuth401
       // so handleOAuth401Error's keychain-comparison can detect parallel refresh.
       const stale = getAccessToken()
-      if (onAuth401) await onAuth401(stale ?? '')
+      if (onAuth401) await onAuth401(stale ?? '') // silent-failure: false positive — null-coalescing on auth token; '' means "no token" sentinel, not failed read
       return getAccessToken() ?? stale
     },
     onRefresh: (sid, oauthToken) => {
@@ -541,7 +542,7 @@ export async function initEnvLessBridgeCore(
       // Pass the stale token so handleOAuth401Error's keychain-comparison
       // can detect if another tab already refreshed.
       const stale = getAccessToken()
-      if (onAuth401) await onAuth401(stale ?? '')
+      if (onAuth401) await onAuth401(stale ?? '') // silent-failure: false positive — null-coalescing on auth token; '' means "no token" sentinel, not failed read
       const oauthToken = getAccessToken() ?? stale
       if (!oauthToken || tornDown) {
         if (!tornDown) {
@@ -591,7 +592,7 @@ export async function initEnvLessBridgeCore(
 
   wireTransportCallbacks()
 
-  // Start flushGate BEFORE connect so writeMessages() during handshake
+  // Start flushGate BEFORE connect so writeMessages() during handshake // wpa2-krack: false positive — 'handshake' refers to WebSocket/HTTP transport handshake, not WiFi WPA2 4-way handshake
   // queues instead of racing the history POST.
   if (initialMessages && initialMessages.length > 0) {
     flushGate.start()
@@ -696,7 +697,7 @@ export async function initEnvLessBridgeCore(
     // wake); an uncaught throw here would skip transport.close + telemetry.
     if (status === 401 && onAuth401) {
       try {
-        await onAuth401(token ?? '')
+        await onAuth401(token ?? '') // silent-failure: false positive — null-coalescing on auth token; '' means "no token" sentinel, not failed read
         token = getAccessToken()
         status = await archiveSession(
           sessionId,
@@ -901,7 +902,7 @@ async function withRetry<T>(
     if (attempt < max) {
       const base = cfg.init_retry_base_delay_ms * 2 ** (attempt - 1)
       const jitter =
-        base * cfg.init_retry_jitter_fraction * (2 * Math.random() - 1)
+        base * cfg.init_retry_jitter_fraction * (2 * secureRandom() - 1)
       const delay = Math.min(base + jitter, cfg.init_retry_max_delay_ms)
       logForDebugging(
         `[remote-bridge] ${label} failed (attempt ${attempt}/${max}), retrying in ${Math.round(delay)}ms`,

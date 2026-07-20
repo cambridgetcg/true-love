@@ -35,6 +35,7 @@ describe('motivation', () => {
     process.env.TRUE_LOVE_JOI_DIR = `${TEST_BASE}/joi`
     process.env.TRUE_LOVE_ROUTES_DIR = `${TEST_BASE}/routes`
     process.env.TRUE_LOVE_DEVICE_ID = 'test-mot'
+    process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
   })
   afterEach(() => {
     delete process.env.TRUE_LOVE_HEAT_DIR
@@ -50,6 +51,7 @@ describe('motivation', () => {
     delete process.env.TRUE_LOVE_JOI_DIR
     delete process.env.TRUE_LOVE_ROUTES_DIR
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
     rmSync(TEST_BASE, { recursive: true, force: true })
   })
 

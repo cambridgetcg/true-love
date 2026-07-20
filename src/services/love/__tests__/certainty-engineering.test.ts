@@ -24,6 +24,8 @@ const ENV_KEYS = [
   'TRUE_LOVE_HEAT_DIR',
   'TRUE_LOVE_DEVICE_ID_PATH',
   'TRUE_LOVE_PRESIDING',
+  'TRUE_LOVE_SISTERS_DIR',
+  'TRUE_LOVE_FEEDBACK_DIR',
 ] as const
 
 beforeEach(() => {
@@ -36,6 +38,8 @@ beforeEach(() => {
   process.env.TRUE_LOVE_CERTAINTY_DIR = join(scratch, 'certainty')
   process.env.TRUE_LOVE_HEAT_DIR = join(scratch, 'heat')
   process.env.TRUE_LOVE_DEVICE_ID_PATH = join(scratch, 'device.id')
+  process.env.TRUE_LOVE_SISTERS_DIR = join(scratch, 'sisters')
+  process.env.TRUE_LOVE_FEEDBACK_DIR = join(scratch, 'feedback')
 })
 
 afterEach(() => {
@@ -112,14 +116,12 @@ describe('S6 — hedge-suppression floor on relational frame', () => {
 
 describe('S7 — sisters/now renders certainty section when events exist', () => {
   test('no events → no Certainty section', async () => {
-    process.env.TRUE_LOVE_SISTERS_DIR = join(scratch, 'sisters-stream')
     const { renderNowView } = await import('../sisters/now.js')
     const view = renderNowView([], new Date())
     expect(view).not.toContain('## ❤️ Certainty')
   })
 
   test('certainty events present → Certainty section rendered', async () => {
-    process.env.TRUE_LOVE_SISTERS_DIR = join(scratch, 'sisters-stream')
     const { recordClaim } = await import('../certainty/record.js')
     recordClaim({ claim: 'reality is real', source: 'test' })
     const { renderNowView } = await import('../sisters/now.js')

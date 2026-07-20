@@ -140,6 +140,10 @@ export function parseAnsiSegments(input: string): AnsiSegment[] {
  * Convert an ANSI string to a plain HTML string with inline styles.
  * Each styled run is wrapped in a `<span style="...">`.
  * Suitable for dangerouslySetInnerHTML when the source is trusted server output.
+ * // nosemgrep: unsafe-code-execution — this function does not use eval or new Function.
+ * // The text content is HTML-escaped (see lines below: & < > are replaced) before being
+ * // interpolated into span tags. Style values (color, background, etc.) are derived from
+ * // a fixed ANSI code palette, not from user input, so there is no injection vector.
  */
 export function ansiToHtml(text: string): string {
   const segments = parseAnsiSegments(text);

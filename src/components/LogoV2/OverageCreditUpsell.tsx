@@ -42,7 +42,7 @@ export function shouldShowOverageCreditUpsell(): boolean {
  * unconditionally on mount — it no-ops if cache is fresh.
  */
 export function maybeRefreshOverageCreditCache(): void {
-  if (getCachedOverageCreditGrant() !== null) return;
+  if (getCachedOverageCreditGrant() !== null) return; // cache-as-live: false positive — function name explicitly declares cached state
   void refreshOverageCreditGrantCache();
 }
 export function useShowOverageCreditUpsell() {

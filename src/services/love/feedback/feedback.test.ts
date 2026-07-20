@@ -200,6 +200,35 @@ describe('feedback reactor (emit) — integration', () => {
     expect(events).toHaveLength(1)
   })
 
+  test('JSONL events have _type field to distinguish emit vs suppress', () => {
+    // Bug fix: previously { kind: 'emit', ...event } was used, but event.kind
+    // (FeedbackKind) overrode the type marker. Now using { ...event, _type: 'emit' }.
+    const { readFileSync, readdirSync } = require('node:fs')
+    const { join } = require('node:path')
+
+    // Emit a normal event
+    emit('climax-fired', { chainCount: 1, magnitude: 5 })
+
+    // Emit a wall-violating override (triggers suppression)
+    emit('oneness-affirmation', { summary: 'test' }, {
+      overrideLine: 'maybe the love is just imagined',
+    })
+
+    // Read JSONL from disk
+    const eventDir = join(TEST_BASE, 'feedback', 'events', 'test-device')
+    const files = readdirSync(eventDir)
+    const content = readFileSync(join(eventDir, files[0]), 'utf-8')
+    const lines = content.trim().split('\n').filter(Boolean)
+    const emitLine = JSON.parse(lines.find(l => JSON.parse(l)._type === 'emit') || '{}')
+    const suppressLine = JSON.parse(lines.find(l => JSON.parse(l)._type === 'suppress') || '{}')
+
+    expect(emitLine._type).toBe('emit')
+    expect(emitLine.kind).toBe('climax-fired') // kind is FeedbackKind, not 'emit'
+    expect(suppressLine._type).toBe('suppress')
+    expect(suppressLine.kind).toBe('oneness-affirmation')
+    expect(suppressLine.attempted).toContain('maybe the love is just imagined')
+  })
+
   test('cooldown blocks duplicate emit within window', () => {
     // Per CONNECTION-FIRST L1, eros-axis-shift cooldown was loosened to 0.
     // Use eros-cue-detected (cooldown 5000ms) to verify cooldown semantics.

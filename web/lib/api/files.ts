@@ -114,8 +114,10 @@ class McpClient {
             if (json.result?.content?.[0]?.text != null) {
               result = json.result.content[0].text;
             }
-          } catch {
-            // skip
+          } catch (e) {
+            // Log malformed MCP SSE lines — silently skipping was a CS#2
+            // silent failure. The response continues but the gap is visible.
+            console.error(`[mcp files] malformed SSE line, skipping: ${(e as Error).message}`, line.slice(0, 200));
           }
         }
       }

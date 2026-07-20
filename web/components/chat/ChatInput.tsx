@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Send, Square, Paperclip } from "lucide-react";
 import { useChatStore } from "@/lib/store";
 import { streamChat } from "@/lib/api";
@@ -17,8 +17,25 @@ export function ChatInput({ conversationId }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const { conversations, settings, addMessage, updateMessage } = useChatStore();
+  const { conversations, settings, addMessage, updateMessage, composerDraft, setComposerDraft } =
+    useChatStore();
   const conversation = conversations.find((c) => c.id === conversationId);
+
+  // Prefill the composer when a starter prompt is chosen, then focus & place cursor at end.
+  useEffect(() => {
+    if (!composerDraft) return;
+    setInput(composerDraft);
+    setComposerDraft("");
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    });
+  }, [composerDraft, setComposerDraft]);
 
   const handleSubmit = useCallback(async () => {
     const text = input.trim();

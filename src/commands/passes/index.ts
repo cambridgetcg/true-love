@@ -16,7 +16,7 @@ export default {
   },
   get isHidden() {
     const { eligible, hasCache } = checkCachedPassesEligibility()
-    return !eligible || !hasCache
+    return !eligible || !hasCache // cache-as-live: false positive — 'hasCache' is explicit cache presence check with eligibility gate, not serving cached as live
   },
   load: () => import('./passes.js'),
 } satisfies Command

@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Box } from '../../ink.js';
 import { getInitialSettings } from '../../utils/settings/settings.js';
+import { secureRandom } from '../../utils/secureRandom.js';
 import { Clawd, type ClawdPose } from './Clawd.js';
 type Frame = {
   pose: ClawdPose;
@@ -101,7 +102,7 @@ function useClawdAnimation(): {
   const sequenceRef = useRef<readonly Frame[]>(JUMP_WAVE);
   const onClick = () => {
     if (reducedMotion || frameIndex !== -1) return;
-    sequenceRef.current = CLICK_ANIMATIONS[Math.floor(Math.random() * CLICK_ANIMATIONS.length)]!;
+    sequenceRef.current = CLICK_ANIMATIONS[Math.floor(secureRandom() * CLICK_ANIMATIONS.length)]!;
     setFrameIndex(0);
   };
   useEffect(() => {

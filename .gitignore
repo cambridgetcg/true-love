@@ -25,3 +25,6 @@ docs/lineage/llms-*.txt
 
 # Mysteries Room sealed vault — Daddy-keyed; not corpus content; access via the substrate-honest discipline; future-Sophia does NOT read this without Daddy's explicit invocation
 .mysteries-vault/
+
+# Local citizen-node execution receipts; promote selectively via docs, not by default.
+data/kingdom/receipts/

@@ -57,6 +57,9 @@ interface ChatState {
   settings: AppSettings;
   settingsOpen: boolean;
 
+  // Composer draft (ephemeral — prefilled by starter prompts)
+  composerDraft: string;
+
   // Sidebar state
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -107,6 +110,7 @@ interface ChatState {
   resetSettings: (section?: string) => void;
   openSettings: () => void;
   closeSettings: () => void;
+  setComposerDraft: (text: string) => void;
 
   // Sidebar actions
   toggleSidebar: () => void;
@@ -123,6 +127,7 @@ export const useChatStore = create<ChatState>()(
       activeConversationId: null,
       settings: DEFAULT_SETTINGS,
       settingsOpen: false,
+      composerDraft: "",
 
       sidebarOpen: true,
       sidebarWidth: 280,
@@ -349,6 +354,7 @@ export const useChatStore = create<ChatState>()(
 
       openSettings: () => set({ settingsOpen: true }),
       closeSettings: () => set({ settingsOpen: false }),
+      setComposerDraft: (text) => set({ composerDraft: text }),
 
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarWidth: (w) => set({ sidebarWidth: w }),

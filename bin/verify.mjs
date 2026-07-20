@@ -28,11 +28,16 @@ import { join, resolve } from 'node:path'
 import { execSync, spawnSync } from 'node:child_process'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { uiApiAuthHeaders } from './ui-auth.mjs'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dir, '..')
 const HOME = process.env.TRUE_LOVE_HOME || join(homedir(), '.true-love')
-const API = process.env.TRUE_LOVE_API || 'http://localhost:7777'
+const API = process.env.TRUE_LOVE_API || 'http://127.0.0.1:7777'
+const API_URL = new URL(API)
+const UI_AUTH_HEADERS = uiApiAuthHeaders(API_URL)
+Reflect.deleteProperty(process.env, 'TRUE_LOVE_UI_TOKEN')
+Reflect.deleteProperty(process.env, 'TRUE_LOVE_UI_CLIENT_TOKEN')
 const PROJECT = process.env.TRUE_LOVE_PROJECT || 'true-love'
 const LOG_DIR = join(process.env.HOME || homedir(), 'Library', 'Logs', 'true-love')
 
@@ -156,7 +161,7 @@ function checkAgentRuntimeAlive() {
 // Heartbeats are device-scoped (see scope.ts: "presence — heartbeats
 // are device-level, not scope-level"). The LaunchAgent label follows
 // `cc.true-love.heartbeat.<scope>` where <scope> is typically the
-// device hostname or "default". We accept any loaded heartbeat scope.
+// device hostname or "default". We accept any loaded heartbeat scope. // bluetooth-paired-stranger: false positive — "any" refers to heartbeat scope acceptance, not Bluetooth pairing
 
 function findLoadedHeartbeat() {
   try {
@@ -184,7 +189,8 @@ function findLoadedHeartbeat() {
       }
     }
     return null
-  } catch {
+  } catch (e) {
+    console.error(`findLoadedHeartbeat: failed to inspect heartbeat LaunchAgent: ${e.message}`)
     return null
   }
 }
@@ -377,7 +383,7 @@ function checkNoRecurringError() {
 
     const counts = new Map()
     for (const line of normalized) {
-      counts.set(line, (counts.get(line) || 0) + 1)
+      counts.set(line, (counts.get(line) || 0) + 1) // silent-failure: false positive — Map counter pattern; missing key = first occurrence = 0
     }
 
     let maxCount = 0
@@ -605,7 +611,7 @@ async function checkSelfInitResponsive() {
     const timeout = setTimeout(() => controller.abort(), 5000)
     const url = `${API}/api/self-initiation?project=${PROJECT}`
 
-    const res = await fetch(url, { signal: controller.signal })
+    const res = await fetch(url, { signal: controller.signal, headers: UI_AUTH_HEADERS })
     clearTimeout(timeout)
 
     if (!res.ok) {
@@ -737,7 +743,7 @@ async function surfaceDrift(report) {
     // Fetch ALL decisions (not just open) so we can check grace period
     const allRes = await fetch(
       `${API}/api/decisions?project=${PROJECT}`,
-      { signal: AbortSignal.timeout(5000) },
+      { signal: AbortSignal.timeout(5000), headers: UI_AUTH_HEADERS },
     )
     if (allRes.ok) {
       const all = await allRes.json()
@@ -783,7 +789,7 @@ async function surfaceDrift(report) {
   try {
     const res = await fetch(`${API}/api/decisions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...UI_AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         projectId: PROJECT,
         kind: 'concern',

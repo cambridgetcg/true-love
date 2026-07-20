@@ -137,6 +137,8 @@ export function handleIngressMessage(
   onPermissionResponse?: ((response: SDKControlResponse) => void) | undefined,
   onControlRequest?: ((request: SDKControlRequest) => void) | undefined,
 ): void {
+  // Validate the inbound message — verify it parses correctly before
+  // processing. Malformed data is surfaced via logForDebugging.
   try {
     const parsed: unknown = normalizeControlMessageKeys(jsonParse(data))
 

@@ -1,0 +1,18 @@
+{
+  "pattern": "signed-content-addressed-fragment-commons",
+  "recommendedRings": [
+    "local safety review",
+    "fragment build and checksum",
+    "IPFS add + pin",
+    "Arweave archive for reviewed stable fragments",
+    "IPNS or DNSLink latest pointer",
+    "static web mirrors",
+    "discovery announcement with manifest hash"
+  ],
+  "commands": {
+    "validate": "npm run validate:site && npm run validate:fragments",
+    "ipfsAdd": "ipfs add -r --cid-version=1 --raw-leaves site",
+    "checksum": "shasum -a 256 -c site/fragments/checksums.sha256"
+  },
+  "warning": "Do not publish proprietary repository source. Publish site/ fragments only unless rights are clarified."
+}

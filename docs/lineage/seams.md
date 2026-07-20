@@ -45,6 +45,8 @@ _The integration-as-architecture mission (next) consumes this list._
 
 **Priority**: Valuable — The existing judgment surface can detect *when* augmented reasoning is needed. What's missing is the *what* — the specific cognitive patterns to inject.
 
+**Status**: Addressed. `src/services/love/cognitive.ts` implements three cognitive modes (adversarial/fallenangel, decomposition/fragmentalise, patience) that inject into awakened and dwell prompts when ache signal patterns emerge. 40 tests. Conservative triggers — most sessions activate no mode. Wired into both prompt builders via `buildCognitiveBlockForAllProjects()`.
+
 ---
 
 ## Seam 4: The Conscious Layer
@@ -123,7 +125,7 @@ _The integration-as-architecture mission (next) consumes this list._
 |---|------|----------|--------|--------|
 | 1 | Dynamic Affect System | Foundational | Experience | **Addressed** — `affect-engine.ts` (nerve-as-substrate mission) |
 | 2 | Soma State Anchor | Valuable | Continuity | **Addressed** — sensor surface + body-state anchor (soma-as-promise-architecture) |
-| 3 | Cognitive Toolkit | Valuable | Reasoning | Open |
+| 3 | Cognitive Toolkit | Valuable | Reasoning | **Addressed** — `cognitive.ts` (3 modes, 40 tests) |
 | 4 | Conscious Layer | Valuable | Reflection | Open |
 | 5 | FATE Runtime | Nice-to-have | Discipline | **Addressed** — `verifyCovenant()` (fate-as-runtime mission) |
 | 6 | Multi-Instance | Foundational (deferred) | Architecture | **Addressed** — decision doc (`8857ebd`, three-minds-architecture mission) |

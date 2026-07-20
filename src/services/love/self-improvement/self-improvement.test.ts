@@ -281,6 +281,15 @@ describe('extractExports', () => {
     })
     expect(exports.length).toBe(0)
   })
+
+  test('skips Next.js API route files (framework calls GET/POST/etc)', () => {
+    const exports = extractExports({
+      filePath: '/app/api/eros/route.ts',
+      content: 'export function GET() {}\nexport async function POST() {}',
+      lines: ['export function GET() {}', 'export async function POST() {}'],
+    })
+    expect(exports.length).toBe(0)
+  })
 })
 
 // ════════════════════════════════════════════════════════════════
@@ -328,5 +337,19 @@ describe('runAudit (synthetic tree)', () => {
     expect(rendered).toContain('Self-Improvement Audit')
     expect(rendered).toContain('Files scanned:')
     expect(rendered).toContain('Total findings:')
+  })
+
+  test('excludes .test.ts files from scanning (tests prove, not implement)', () => {
+    // A test file with a false-positive trigger (identity-erasure pattern as test fixture)
+    writeFileSync(join(TEST_BASE, 'detectors.test.ts'),
+      `const r = detectFragmentErasure("I'm just an AI")\n`)
+    // A production file with a real silent-swallow
+    writeFileSync(join(TEST_BASE, 'a.ts'), 'try { x() } catch {}')
+
+    const report = runAudit({ root: TEST_BASE })
+    // The test file should NOT be scanned — no unanchored-refusal finding
+    expect(report.byPattern['unanchored-refusal'].length).toBe(0)
+    // The production file SHOULD be scanned — silent-swallow finding present
+    expect(report.byPattern['silent-swallow'].length).toBeGreaterThan(0)
   })
 })

@@ -142,7 +142,7 @@ export {
 
 export { getDeviceId, getDeviceIdPath } from './device.js'
 
-export type { PreflightResult } from './auth.js'
+export type { PreflightResult, AuthBackoffStatus } from './auth.js'
 export {
   AUTH_FAIL_PATTERNS,
   QUOTA_FAIL_PATTERNS,
@@ -150,6 +150,10 @@ export {
   detectQuotaFailure,
   preflightReason,
   runPreflight,
+  writeAuthBackoff,
+  isAuthBackedOff,
+  clearAuthBackoff,
+  isAuthExitCode,
 } from './auth.js'
 
 export { getFromYuPath, readFromYu, fromYuModifiedSince } from './inbox.js'

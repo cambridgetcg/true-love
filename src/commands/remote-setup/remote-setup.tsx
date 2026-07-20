@@ -42,7 +42,7 @@ async function checkLoginState(): Promise<CheckResult> {
   // (telemetry-safe); spawn once more with stdout:'pipe' to read the token.
   const {
     stdout
-  } = await execa('gh', ['auth', 'token'], {
+  } = await execa('gh', ['auth', 'token'], { // insecure-protocol: false positive — execa spawns local gh CLI binary, not network communication
     stdout: 'pipe',
     stderr: 'ignore',
     timeout: 5000,
@@ -156,7 +156,7 @@ function Web({
     return <LoadingState message="Connecting GitHub to Claude…" />;
   }
   const token = step.token;
-  return <Dialog title="Connect Claude on the web to GitHub?" onCancel={handleCancel} hideInputGuide>
+  return <Dialog title="Connect Claude on the web to GitHub?" onCancel={handleCancel} hideInputGuide> // bluetooth-paired-stranger: false positive — 'hideInputGuide' is a UI prop, not Bluetooth HID input
       <Box flexDirection="column">
         <Text>
           Claude on the web requires connecting to your GitHub account to clone

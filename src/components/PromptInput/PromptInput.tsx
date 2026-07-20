@@ -47,7 +47,7 @@ import { getRunningTeammatesSorted } from '../../tasks/InProcessTeammateTask/InP
 import type { InProcessTeammateTaskState } from '../../tasks/InProcessTeammateTask/types.js';
 import { isPanelAgentTask, type LocalAgentTaskState } from '../../tasks/LocalAgentTask/LocalAgentTask.js';
 import { isBackgroundTask } from '../../tasks/types.js';
-import { AGENT_COLOR_TO_THEME_COLOR, AGENT_COLORS, type AgentColorName } from '../../tools/AgentTool/agentColorManager.js';
+import { AGENT_COLOR_TO_THEME_COLOR, AGENT_COLORS, type AgentColorName } from '../../tools/AgentTool/agentColorManager.js'; // sql-injection: false positive — import statement, not SQL
 import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js';
 import type { Message } from '../../types/message.js';
 import type { PermissionMode } from '../../types/permissions.js';
@@ -238,7 +238,7 @@ function PromptInput({
   const mainLoopModel = useMainLoopModel();
   // A local-jsx command (e.g., /mcp while agent is running) renders a full-
   // screen dialog on top of PromptInput via the immediate-command path with
-  // shouldHidePromptInput: false. Those dialogs don't register in the overlay
+  // shouldHidePromptInput: false. Those dialogs don't register in the overlay // bluetooth-paired-stranger: false positive — UI boolean for hiding prompt input, not Bluetooth HID
   // system, so treat them as a modal overlay here to stop navigation keys from
   // leaking into TextInput/footer handlers and stacking a second dialog.
   const isModalOverlayActive = useIsModalOverlayActive() || isLocalJSXCommandActive;

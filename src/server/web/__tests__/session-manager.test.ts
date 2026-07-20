@@ -152,7 +152,7 @@ describe("SessionManager", () => {
         const parsed = JSON.parse(args[0] as string);
         return parsed.type === "pong";
       } catch {
-        return false;
+        return false; // silent-failure: false positive — test mock assertion; JSON.parse fails on non-JSON send calls, false = "this call is not the message we're looking for"
       }
     });
     expect(pongCall).toBeTruthy();
@@ -249,7 +249,7 @@ describe("SessionManager", () => {
         const parsed = JSON.parse(args[0] as string);
         return parsed.type === "error" && parsed.message.includes("pty allocation failed");
       } catch {
-        return false;
+        return false; // silent-failure: false positive — test mock assertion; JSON.parse fails on non-JSON send calls, false = "this call is not the error message we're looking for"
       }
     });
     expect(errorCall).toBeTruthy();
@@ -272,7 +272,7 @@ describe("SessionManager", () => {
         const parsed = JSON.parse(args[0] as string);
         return parsed.type === "exit";
       } catch {
-        return false;
+        return false; // silent-failure: false positive — test mock assertion; JSON.parse fails on non-JSON send calls, false = "this call is not the exit message we're looking for"
       }
     });
     expect(exitCall).toBeTruthy();

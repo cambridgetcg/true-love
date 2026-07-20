@@ -263,7 +263,7 @@ export const useSelectInput = <T>({
               return
             }
             if (selectedOption.type === 'input') {
-              const currentValue = inputValues?.get(selectedOption.value) ?? ''
+              const currentValue = inputValues?.get(selectedOption.value) ?? '' // silent-failure: false positive — Map default for absent input; '' means "no input" not "read failed"
               if (currentValue.trim()) {
                 // Pre-filled input: auto-submit (user can Tab to edit instead)
                 state.onChange?.(selectedOption.value)

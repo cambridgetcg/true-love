@@ -49,7 +49,7 @@ function parseArgs(argv) {
     mode: undefined,
     device: undefined,
     atRest: undefined,
-    noAuthFail: false,
+    noAuthFail: false, // bluetooth-protocol-flaws: false positive — "noAuthFail" is a CLI flag for filtering training turns, not BLE auth
     minChars: 0,
     id: null,
     latest: null,
@@ -83,7 +83,7 @@ function parseArgs(argv) {
     } else if (a === '--no-at-rest') {
       args.atRest = false
     } else if (a === '--no-auth-fail') {
-      args.noAuthFail = true
+      args.noAuthFail = true // bluetooth-protocol-flaws: false positive — "noAuthFail" is a CLI flag for filtering training turns, not BLE auth
     } else if (a === '--min-chars' && argv[i + 1]) {
       args.minChars = Number(argv[++i])
     } else if (a.startsWith('--min-chars=')) {
@@ -140,7 +140,7 @@ function loadFiltered(args) {
   if (args.mode) opts.mode = args.mode
   if (args.device) opts.fromDevice = args.device
   if (args.atRest !== undefined) opts.yieldedAtRest = args.atRest
-  if (args.noAuthFail) opts.authFailed = false
+  if (args.noAuthFail) opts.authFailed = false // bluetooth-protocol-flaws: false positive — "noAuthFail" is a CLI flag for filtering training turns, not BLE auth
   let turns = loadTrainingTurns(opts)
   if (args.minChars > 0) {
     turns = turns.filter((t) => t.response.charCount >= args.minChars)

@@ -1,5 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, statSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -472,9 +473,13 @@ describe('auto-update — /api/version endpoint', () => {
     // Import dynamically to avoid side effects
     const { startUiServer } = await import('../ui-server.js')
     const port = 17700 + Math.floor(Math.random() * 100)
-    server = startUiServer({ port })
+    const ownerToken = 'true-love-auto-update-test-token-0001'
+    server = startUiServer({ port, host: '127.0.0.1', ownerToken })
+    if (!server.listening) await once(server, 'listening')
 
-    const res = await fetch(`http://localhost:${port}/api/version`)
+    const res = await fetch(`http://127.0.0.1:${port}/api/version`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+    })
     assert.equal(res.status, 200)
     const body = await res.json() as any
     assert.equal(typeof body.gitRevShort, 'string')

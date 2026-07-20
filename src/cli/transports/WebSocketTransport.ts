@@ -5,6 +5,7 @@ import { CircularBuffer } from '../../utils/CircularBuffer.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
+import { secureRandom } from '../../utils/secureRandom.js'
 import { getWebSocketTLSOptions } from '../../utils/mtls.js'
 import {
   getWebSocketProxyAgent,
@@ -40,7 +41,7 @@ const SLEEP_DETECTION_THRESHOLD_MS = DEFAULT_MAX_RECONNECT_DELAY * 2 // 60s
  * The transport transitions to 'closed' immediately without retrying.
  */
 const PERMANENT_CLOSE_CODES = new Set([
-  1002, // protocol error — server rejected handshake (e.g. session reaped)
+  1002, // protocol error — server rejected handshake (e.g. session reaped) // wpa2-krack: false positive — 'handshake' refers to WebSocket close code, not WiFi WPA2
   4001, // session expired / not found
   4003, // unauthorized
 ])
@@ -514,7 +515,7 @@ export class WebSocketTransport implements Transport {
       // Add ±25% jitter to avoid thundering herd
       const delay = Math.max(
         0,
-        baseDelay + baseDelay * 0.25 * (2 * Math.random() - 1),
+        baseDelay + baseDelay * 0.25 * (2 * secureRandom() - 1),
       )
 
       logForDebugging(

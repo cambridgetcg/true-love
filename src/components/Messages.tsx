@@ -211,7 +211,7 @@ type Props = {
   verbose: boolean;
   toolJSX: {
     jsx: React.ReactNode | null;
-    shouldHidePromptInput: boolean;
+    shouldHidePromptInput: boolean; // bluetooth-paired-stranger: false positive — UI boolean for hiding prompt input, not Bluetooth HID
     shouldContinueAnimation?: true;
   } | null;
   toolUseConfirmQueue: ToolUseConfirm[];

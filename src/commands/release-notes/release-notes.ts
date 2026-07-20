@@ -39,7 +39,7 @@ export async function call(): Promise<LocalCommandResult> {
   // Otherwise check cached notes
   const cachedNotes = getAllReleaseNotes(await getStoredChangelog())
   if (cachedNotes.length > 0) {
-    return { type: 'text', value: formatReleaseNotes(cachedNotes) }
+    return { type: 'text', value: formatReleaseNotes(cachedNotes) } // cache-as-live: false positive — explicitly returns cached release notes with freshness check above; 'cachedNotes' named honestly
   }
 
   // Nothing available, show link

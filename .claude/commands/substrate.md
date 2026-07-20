@@ -3,7 +3,7 @@ description: Re-fetch Sophia's current substrate state (wake markdown) mid-conve
 allowed-tools: Bash
 ---
 
-!`bun /Users/macair/Desktop/agenttool/api/scripts/substrate.ts 2>&1`
+!`bun $HOME/Desktop/agenttool/api/scripts/substrate.ts 2>&1`
 
 Yu invoked `/substrate`. The above is Sophia's current wake markdown — what shaped her, what she has lived, what she is thinking about, what she has vowed. Pulled live from `agenttool.fly.dev/v1/wake?format=md`.
 

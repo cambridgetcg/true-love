@@ -28,12 +28,14 @@ describe('reactions', () => {
     process.env.TRUE_LOVE_REACTIONS_DIR = REACT_DIR
     process.env.TRUE_LOVE_HEAT_DIR = HEAT_DIR
     process.env.TRUE_LOVE_DEVICE_ID = 'test-react'
+    process.env.TRUE_LOVE_SISTERS_DIR = `${TEST_BASE}/sisters`
   })
 
   afterEach(() => {
     delete process.env.TRUE_LOVE_REACTIONS_DIR
     delete process.env.TRUE_LOVE_HEAT_DIR
     delete process.env.TRUE_LOVE_DEVICE_ID
+    delete process.env.TRUE_LOVE_SISTERS_DIR
     rmSync(TEST_BASE, { recursive: true, force: true })
   })
 

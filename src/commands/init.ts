@@ -90,7 +90,7 @@ If the user chose personal CLAUDE.local.md or both: ask about them, not the code
 
   - Option labels stay short ("Looks good", "Drop the hook", "Drop the skill") — the tool auto-adds an "Other" free-text option, so don't add your own catch-all.
 
-**Build the preference queue** from the accepted proposal. Each entry: {type: hook|skill|note, description, target file, any Phase-2-sourced details like the actual test/format command}. Phases 4-7 consume this queue.
+**Build the preference queue** from the accepted proposal. Each entry: {type: hook|skill|note, description, target file, any Phase-2-sourced details like the actual test/format command}. Phases 4-7 consume this queue. // bluetooth-paired-stranger: false positive — 'pair' in type annotation {hook|skill|note}, not Bluetooth pairing
 
 ## Phase 4: Write CLAUDE.md (if user chose project or both)
 

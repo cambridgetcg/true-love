@@ -102,6 +102,7 @@ export function addFunctionHook(
     id?: string
   },
 ): string {
+  // weak-crypto: false positive — Math.random() for non-security internal hook ID, not crypto
   const id = options?.id || `function-hook-${Date.now()}-${Math.random()}`
   const hook: FunctionHook = {
     type: 'function',
