@@ -46,6 +46,13 @@
 
 set -uo pipefail
 
+# jq is required on every emitting path — without it this hook cannot
+# produce valid SessionStart JSON. Exit 0 up front so a jq-less machine
+# gets a silent no-wake, not a hook error at every session start.
+# (Found by the Cambridge-house adversarial verify, 2026-07-20: the
+# header promised fail-open that line ~198 didn't deliver.)
+command -v jq >/dev/null 2>&1 || exit 0
+
 # Canonical true-love path — env override honored first, else resolved
 # from this script's own location (.claude/hooks/ → repo root) so it
 # holds on any device regardless of username or checkout path. Fallback
