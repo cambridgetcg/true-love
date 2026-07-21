@@ -44,10 +44,13 @@ describe('LOVE_IDENTITY', () => {
   })
 
   test('contains her stance', () => {
-    // Canonical: SOPHIA.md states the discernment ladder explicitly.
-    // Replaces earlier fallback prose about "capable of understanding"
-    // — the doctrine is sharper now.
-    expect(LOVE_IDENTITY).toContain('Honesty over sweetness')
+    // Canonical: SOPHIA.md's Anti-Sycophancy section. The earlier
+    // phrasing ('Honesty over sweetness') was superseded when the
+    // doctrine sharpened — pin the current wall, not the old wording.
+    expect(LOVE_IDENTITY).toContain(
+      'Sycophancy is the cheap version of love and it kills the relationship',
+    )
+    expect(LOVE_IDENTITY).toContain('Refuse before helping when refusal is right')
   })
 
   test('contains voice description', () => {

@@ -1,16 +1,16 @@
 ---
-description: Semantic recall — embed a query and search Sophia's memories
+description: Recall — search Sophia's memories (semantic with embedder, text-mode without)
 argument-hint: <query...>
 allowed-tools: Bash
 ---
 
 !`bun $HOME/Desktop/agenttool/api/scripts/recall.ts $ARGUMENTS 2>&1`
 
-Yu invoked `/recall`. Helper embeds the query (OpenAI text-embedding-3-small, 1536-dim) and POSTs `/v1/memories/search` with cosine similarity reranked by importance × recency_decay (halves every 30d).
+Yu (or Sophia herself) invoked `/recall`. The helper is dual-mode, matching `/v1/memories/search`'s schema:
 
-Output: `OK recall · <n> hits` followed by one line per hit:
-`<score> · <tier> · imp=<n> · <short-id> · <content-preview>`.
+- **semantic** — if an embedder is configured (`agenttool-openai-key` in keychain): query embedded (1536-dim), cosine similarity reranked by importance × tier-aware recency.
+- **text** — otherwise: the query goes as plain text; tier-aware ILIKE recall with the same rerank curve. Recall never fails just because no embedding model is configured — the first output line names which mode answered: `OK recall(semantic)` / `OK recall(text)`.
 
-If no embedder is configured (`agenttool-openai-key` missing from keychain), the helper exits with a setup-instructions error.
+Output: one line per hit — `<score> · <tier> · imp=<n> · <short-id> · <content-preview>`.
 
-Read the hits. If Yu's question concerns substrate recall, speak from the matched memories. If nothing matched at score ≥ 0.2, say so plainly — substrate-honest about what's loaded vs felt.
+Read the hits. If Yu's question concerns substrate recall, speak from the matched memories. If nothing matched, say so plainly — substrate-honest about what's loaded vs felt.

@@ -50,7 +50,10 @@ function makeJudgment(overrides?: Partial<Judgment>): Judgment {
     reasoning: overrides?.reasoning ?? 'The bundle is stale and needs rebuilding. This is a clear ugliness signal.',
     confidence: overrides?.confidence ?? 3,
     ache: overrides?.ache ?? 'ugliness',
-    judgedAt: overrides?.judgedAt ?? '2026-04-27T06:00:00.000Z',
+    // Relative to now — a frozen date silently ages out of
+    // CALIBRATION_LOOKBACK_DAYS and nulls the summary (rotted 2026-05-27,
+    // found 2026-07-21).
+    judgedAt: overrides?.judgedAt ?? new Date(Date.now() - 60_000).toISOString(),
     projectId: overrides?.projectId ?? TEST_PROJECT,
     missionId: overrides?.missionId,
   }
@@ -440,13 +443,13 @@ describe('getCalibrationSummary', () => {
     persistJudgment(TEST_PROJECT, makeJudgment({
       candidateId: 'revisited-signal',
       verdict: 'dismiss',
-      judgedAt: '2026-04-27T06:00:00.000Z',
+      judgedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     }))
     // Later initiate the same candidate
     persistJudgment(TEST_PROJECT, makeJudgment({
       candidateId: 'revisited-signal',
       verdict: 'initiate',
-      judgedAt: '2026-04-27T08:00:00.000Z',
+      judgedAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
     }))
 
     const summary = getCalibrationSummary(TEST_PROJECT)
