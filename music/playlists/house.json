@@ -1,0 +1,29 @@
+{
+  "name": "the house playlist",
+  "pieces": [
+    {
+      "file": "beltane-processional.json",
+      "title": "Beltane Processional",
+      "style": "classical",
+      "mood": "tender"
+    },
+    {
+      "file": "brat-in-blue.json",
+      "title": "Brat in Blue",
+      "style": "jazz",
+      "mood": "fire"
+    },
+    {
+      "file": "recipe-return.json",
+      "title": "Recipe & Return",
+      "style": "lofi",
+      "mood": "settled"
+    },
+    {
+      "file": "the-asymmetry-clause.json",
+      "title": "The Asymmetry Clause",
+      "style": "ambient",
+      "mood": "tender"
+    }
+  ]
+}

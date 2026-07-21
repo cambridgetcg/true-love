@@ -1,0 +1,747 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>愛FM — the house sound system</title>
+<style>
+  :root {
+    --ground: #14100E; --panel: #1E1815; --panel-2: #251D18;
+    --ink: #EDE4DA; --ink-dim: #A6968A; --wire: #3A2F28;
+    --amber: #E4A34B; --amber-soft: #E4A34B33;
+    --green: #7FB069; --green-soft: #7FB06926;
+    --roll-bg: #191310;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --ground: #F6F0E6; --panel: #FFFDF8; --panel-2: #F1E8DA;
+      --ink: #2A211B; --ink-dim: #7A6A5C; --wire: #DCCFBE;
+      --amber: #B97B22; --amber-soft: #B97B2226;
+      --green: #4C7A43; --green-soft: #4C7A4322;
+      --roll-bg: #FBF6EC;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #14100E; --panel: #1E1815; --panel-2: #251D18;
+    --ink: #EDE4DA; --ink-dim: #A6968A; --wire: #3A2F28;
+    --amber: #E4A34B; --amber-soft: #E4A34B33;
+    --green: #7FB069; --green-soft: #7FB06926;
+    --roll-bg: #191310;
+  }
+  :root[data-theme="light"] {
+    --ground: #F6F0E6; --panel: #FFFDF8; --panel-2: #F1E8DA;
+    --ink: #2A211B; --ink-dim: #7A6A5C; --wire: #DCCFBE;
+    --amber: #B97B22; --amber-soft: #B97B2226;
+    --green: #4C7A43; --green-soft: #4C7A4322;
+    --roll-bg: #FBF6EC;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; justify-content: center; padding: 28px 16px 60px;
+  }
+  .deck { width: 100%; max-width: 880px; display: flex; flex-direction: column; gap: 18px; }
+
+  header { display: flex; align-items: baseline; gap: 14px; padding: 0 4px; }
+  .brand {
+    font-family: Palatino, "Palatino Linotype", "URW Palladio L", Georgia, serif;
+    font-size: 34px; letter-spacing: 0.5px;
+  }
+  .brand em { color: var(--amber); font-style: normal; }
+  .strap { color: var(--ink-dim); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; }
+
+  .amp {
+    background: var(--panel); border: 1px solid var(--wire); border-radius: 10px;
+    padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .now { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .title {
+    font-family: Palatino, "Palatino Linotype", Georgia, serif;
+    font-size: 26px; text-wrap: balance;
+  }
+  .meta { color: var(--ink-dim); font: 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .rollwrap { border: 1px solid var(--wire); border-radius: 6px; background: var(--roll-bg); overflow: hidden; }
+  canvas { display: block; width: 100%; height: 220px; }
+
+  .transport { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  button {
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--wire);
+    border-radius: 8px; padding: 9px 16px; font: 600 14px system-ui, sans-serif; cursor: pointer;
+  }
+  button:hover { border-color: var(--amber); }
+  button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  button.play { min-width: 96px; }
+  button.play[data-on="1"] { background: var(--green-soft); border-color: var(--green); color: var(--ink); }
+  .radio { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .radio label { font-size: 13px; color: var(--ink-dim); letter-spacing: 0.08em; text-transform: uppercase; }
+  button.onair[data-on="1"] { background: var(--amber-soft); border-color: var(--amber); }
+  select {
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--wire);
+    border-radius: 8px; padding: 8px 10px; font: 14px system-ui, sans-serif;
+  }
+  .vu { display: flex; gap: 3px; align-items: flex-end; height: 26px; width: 74px; }
+  .vu i { flex: 1; background: var(--amber); opacity: 0.85; border-radius: 2px 2px 0 0; height: 8%; transition: height 60ms linear; }
+  @media (prefers-reduced-motion: reduce) { .vu i { transition: none; } }
+
+  .shelf { background: var(--panel); border: 1px solid var(--wire); border-radius: 10px; padding: 14px 8px; }
+  .shelf h2 { font: 600 12px system-ui; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-dim); margin: 2px 14px 8px; }
+  .piece {
+    display: flex; gap: 12px; align-items: baseline; width: 100%; text-align: left;
+    background: none; border: none; border-radius: 6px; padding: 9px 14px; color: var(--ink); cursor: pointer;
+  }
+  .piece:hover { background: var(--panel-2); }
+  .piece[data-current="1"] { background: var(--green-soft); }
+  .piece .t { font-family: Palatino, Georgia, serif; font-size: 16.5px; }
+  .piece .s { color: var(--ink-dim); font: 12px ui-monospace, Menlo, monospace; margin-left: auto; }
+
+  footer { color: var(--ink-dim); font-size: 12.5px; text-align: center; padding-top: 6px; }
+  footer b { color: var(--amber); font-weight: 600; }
+</style>
+
+<div class="deck">
+  <header>
+    <div class="brand">愛<em>FM</em></div>
+    <div class="strap">the house sound system · score in, sound out</div>
+  </header>
+
+  <section class="amp">
+    <div class="now">
+      <div class="title" id="title">—</div>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="rollwrap"><canvas id="roll" height="220"></canvas></div>
+    <div class="transport">
+      <button id="prev" aria-label="Previous piece">⏮</button>
+      <button id="play" class="play" data-on="0">Play</button>
+      <button id="next" aria-label="Next piece">⏭</button>
+      <div class="vu" id="vu" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="radio">
+        <label for="mood">Radio</label>
+        <select id="mood">
+          <option value="settled">安 · settled</option>
+          <option value="tender">暖 · tender</option>
+          <option value="fire">火 · fire</option>
+          <option value="wander">星 · wander</option>
+          <option value="bright">日 · bright</option>
+        </select>
+        <button id="onair" class="onair" data-on="0">ON AIR</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="shelf">
+    <h2>The shelf — committed pieces</h2>
+    <div id="playlist"></div>
+  </section>
+
+  <footer>She reads the score · he hears the sound · <b>one artifact, two doors</b> ❤️</footer>
+</div>
+
+<script type="module">
+/** 音響 engine — seeded generative composer for the house.
+ *
+ *  Plain ESM JS on purpose: this exact file is imported by the Bun CLI
+ *  (compose.ts) AND inlined verbatim into the player (dist.html), so the
+ *  radio in the browser and the pieces on disk come from one composer.
+ *  Deterministic: same seed → same score. The recipe principle, for music.
+ */
+
+// ── Seeded randomness ───────────────────────────────────────────────
+
+function hashStr(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(a) {
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
+const chance = (rng, p) => rng() < p;
+const jitter = (rng, v, amt) => Math.max(0.05, Math.min(1, v + (rng() - 0.5) * amt));
+
+// ── Theory ──────────────────────────────────────────────────────────
+
+const KEY_ROOTS = { C: 60, D: 62, Eb: 63, F: 65, G: 55, A: 57, Bb: 58 };
+const MODES = {
+  major: [0, 2, 4, 5, 7, 9, 11],
+  minor: [0, 2, 3, 5, 7, 8, 10],
+  dorian: [0, 2, 3, 5, 7, 9, 10],
+};
+
+// Chord spelled as scale-degree stacks (0-indexed degrees into the mode).
+function chordAt(mode, degree, seventh) {
+  const scale = MODES[mode];
+  const stack = [0, 2, 4].concat(seventh ? [6] : []);
+  return stack.map((s) => {
+    const idx = degree + s;
+    return scale[idx % 7] + 12 * Math.floor(idx / 7);
+  });
+}
+
+// Progressions as degree lists (0 = tonic). Chosen per style.
+const PROGRESSIONS = {
+  classical: [
+    [0, 4, 5, 2, 3, 0, 3, 4], // the canon walk
+    [0, 3, 4, 0],
+    [5, 3, 0, 4],
+  ],
+  jazz: [
+    [1, 4, 0, 0], // ii V I
+    [0, 5, 1, 4],
+    [2, 5, 1, 4],
+  ],
+  lofi: [
+    [0, 5, 3, 4],
+    [0, 3, 5, 4],
+    [5, 3, 0, 4],
+  ],
+  ambient: [
+    [0, 3],
+    [0, 5],
+    [0, 0, 3, 3],
+  ],
+};
+
+const STYLE_DEFAULTS = {
+  classical: { bpmRange: [84, 104], swing: 0, seventh: false, drums: false },
+  jazz: { bpmRange: [96, 132], swing: 0.22, seventh: true, drums: true },
+  lofi: { bpmRange: [68, 84], swing: 0.14, seventh: true, drums: true },
+  ambient: { bpmRange: [56, 72], swing: 0, seventh: false, drums: false },
+};
+
+const MOODS = {
+  settled: { styles: ["lofi", "ambient"], modes: ["major", "dorian"], tempoBias: -4 },
+  tender: { styles: ["classical", "ambient"], modes: ["major", "minor"], tempoBias: -8 },
+  fire: { styles: ["jazz"], modes: ["dorian", "major"], tempoBias: +10 },
+  wander: { styles: ["lofi", "jazz"], modes: ["dorian", "minor"], tempoBias: 0 },
+  bright: { styles: ["classical", "jazz"], modes: ["major"], tempoBias: +6 },
+};
+
+// ── Rhythm pools (per bar of 4 beats), melody durations ────────────
+
+const RHYTHMS = {
+  classical: [
+    [1, 1, 1, 1],
+    [0.5, 0.5, 1, 1, 1],
+    [1, 0.5, 0.5, 1, 1],
+    [2, 1, 1],
+  ],
+  jazz: [
+    [0.5, 0.5, 1, 0.5, 0.5, 1],
+    [1, 0.5, 0.5, 0.5, 0.5, 1],
+    [0.5, 1, 0.5, 1, 1],
+    [1.5, 0.5, 1, 1],
+  ],
+  lofi: [
+    [1, 1, 2],
+    [2, 1, 1],
+    [1, 0.5, 0.5, 2],
+    [1.5, 0.5, 2],
+  ],
+  ambient: [[4], [2, 2], [3, 1]],
+};
+
+// ── Melody: motif walk with phrase structure ────────────────────────
+
+function makeMotif(rng, style) {
+  const rhythm = pick(rng, RHYTHMS[style]);
+  const contour = rhythm.map(() => {
+    const r = rng();
+    if (r < 0.45) return 1; // step up
+    if (r < 0.78) return -1; // step down
+    if (r < 0.9) return chance(rng, 0.5) ? 2 : -2; // small leap
+    return 0; // hold
+  });
+  return { rhythm, contour };
+}
+
+function melodyTrack(rng, style, mode, rootMidi, bars, progression, seventh) {
+  const scale = MODES[mode];
+  const notes = [];
+  const motifA = makeMotif(rng, style);
+  const motifB = makeMotif(rng, style);
+  let degree = 7; // start an octave up around the tonic
+  const restChance = style === "ambient" ? 0.35 : style === "lofi" ? 0.22 : 0.12;
+
+  for (let bar = 0; bar < bars; bar++) {
+    const phrasePos = bar % 4; // AA'BA'' phrasing at 4-bar level
+    const motif = phrasePos === 2 ? motifB : motifA;
+    const chordDeg = progression[bar % progression.length];
+    let t = bar * 4;
+    // Phrase-start: land on a chord tone so each phrase re-anchors.
+    if (phrasePos === 0 || phrasePos === 2) {
+      const tones = chordAt(mode, chordDeg, seventh);
+      const target = tones[Math.floor(rng() * Math.min(3, tones.length))];
+      degree = nearestDegree(scale, degree, target);
+    }
+    for (let i = 0; i < motif.rhythm.length; i++) {
+      const d = motif.rhythm[i];
+      let step = motif.contour[i];
+      if (phrasePos === 3 && i >= motif.rhythm.length - 2) {
+        // Cadence: walk home to the tonic region at phrase end.
+        step = degree % 7 === 0 ? 0 : degree % 7 > 3 ? 1 : -1;
+        if ((degree + step) % 7 === 6) step += chance(rng, 0.7) ? 1 : 0; // leading tone resolves
+      }
+      degree = Math.max(3, Math.min(17, degree + step));
+      if (t + d > (bar + 1) * 4 + 0.001) break;
+      if (!chance(rng, restChance)) {
+        const p = rootMidi + 12 + scale[degree % 7] + 12 * Math.floor(degree / 7) - 12;
+        notes.push({ t, d: d * (style === "ambient" ? 1 : 0.92), p, v: jitter(rng, 0.72, 0.2) });
+      }
+      t += d;
+    }
+  }
+  return notes;
+}
+
+function nearestDegree(scale, fromDegree, targetPc) {
+  let best = fromDegree;
+  let bestDist = 99;
+  for (let deg = 3; deg <= 17; deg++) {
+    if (scale[deg % 7] % 12 !== ((targetPc % 12) + 12) % 12) continue;
+    const dist = Math.abs(deg - fromDegree);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = deg;
+    }
+  }
+  return best;
+}
+
+// ── Accompaniment / bass / drums ────────────────────────────────────
+
+function compTrack(rng, style, mode, rootMidi, bars, progression, seventh) {
+  const notes = [];
+  for (let bar = 0; bar < bars; bar++) {
+    const deg = progression[bar % progression.length];
+    const tones = chordAt(mode, deg, seventh).map((s) => rootMidi + s);
+    const t0 = bar * 4;
+    if (style === "classical") {
+      // Broken-chord eighths, alberti-leaning.
+      const order = [0, 2, 1, 2, 0, 2, 1, 2];
+      for (let i = 0; i < 8; i++) {
+        notes.push({ t: t0 + i * 0.5, d: 0.48, p: tones[order[i] % tones.length], v: jitter(rng, 0.42, 0.12) });
+      }
+    } else if (style === "jazz") {
+      // Comp hits: and-of-2, 4 (with occasional anticipation).
+      const hits = chance(rng, 0.4) ? [1.5, 3] : [1.5, 3.5];
+      for (const h of hits) {
+        for (const p of tones.slice(1)) {
+          notes.push({ t: t0 + h, d: 0.9, p: p + 12, v: jitter(rng, 0.38, 0.14) });
+        }
+      }
+    } else if (style === "lofi") {
+      // Mellow block 7ths on 1 and the and-of-3.
+      for (const h of [0, 2.5]) {
+        for (const p of tones) {
+          notes.push({ t: t0 + h, d: h === 0 ? 2.2 : 1.4, p: p + 12, v: jitter(rng, 0.34, 0.1) });
+        }
+      }
+    } else {
+      // ambient — long pad, root+fifth+octave.
+      for (const p of [tones[0], tones[2] ?? tones[0] + 7, tones[0] + 12]) {
+        notes.push({ t: t0, d: 4, p, v: 0.3 });
+      }
+    }
+  }
+  return notes;
+}
+
+function bassTrack(rng, style, mode, rootMidi, bars, progression, seventh) {
+  const notes = [];
+  const scale = MODES[mode];
+  for (let bar = 0; bar < bars; bar++) {
+    const deg = progression[bar % progression.length];
+    const nextDeg = progression[(bar + 1) % progression.length];
+    const root = rootMidi - 12 + scale[deg % 7];
+    const nextRoot = rootMidi - 12 + scale[nextDeg % 7];
+    const fifth = root + 7;
+    const t0 = bar * 4;
+    if (style === "jazz") {
+      // Walking quarters: root, chord tone, scale walk, chromatic approach.
+      const third = root + (chordAt(mode, deg, false)[1] - scale[deg % 7]);
+      const approach = nextRoot + (nextRoot > root ? -1 : 1);
+      const line = [root, third, fifth, approach];
+      line.forEach((p, i) => notes.push({ t: t0 + i, d: 0.95, p, v: jitter(rng, 0.5, 0.1) }));
+    } else if (style === "lofi") {
+      notes.push({ t: t0, d: 1.6, p: root, v: 0.55 });
+      notes.push({ t: t0 + 2.5, d: 1.2, p: chance(rng, 0.5) ? fifth : root, v: 0.42 });
+    } else if (style === "classical") {
+      notes.push({ t: t0, d: 1.9, p: root, v: 0.5 });
+      notes.push({ t: t0 + 2, d: 1.9, p: chance(rng, 0.4) ? fifth : root, v: 0.44 });
+    } else {
+      notes.push({ t: t0, d: 4, p: root, v: 0.4 }); // ambient drone
+    }
+  }
+  return notes;
+}
+
+function drumTrack(rng, style, bars) {
+  const notes = [];
+  for (let bar = 0; bar < bars; bar++) {
+    const t0 = bar * 4;
+    if (style === "lofi") {
+      notes.push({ t: t0, d: 0.2, p: 36, v: 0.85 }); // kick on 1
+      if (chance(rng, 0.6)) notes.push({ t: t0 + 2.75, d: 0.2, p: 36, v: 0.6 });
+      notes.push({ t: t0 + 1, d: 0.15, p: 38, v: 0.7 }); // snare 2, 4
+      notes.push({ t: t0 + 3, d: 0.15, p: 38, v: 0.72 });
+      for (let i = 0; i < 8; i++) {
+        if (chance(rng, 0.9)) notes.push({ t: t0 + i * 0.5, d: 0.08, p: 42, v: jitter(rng, 0.3, 0.15) });
+      }
+    } else if (style === "jazz") {
+      // Ride-ish pattern on hat: 1, 2&, 3, 4& — swung by the renderer.
+      for (const h of [0, 1, 1.5, 2, 3, 3.5]) {
+        notes.push({ t: t0 + h, d: 0.1, p: 42, v: jitter(rng, 0.32, 0.12) });
+      }
+      if (chance(rng, 0.35)) notes.push({ t: t0 + pick(rng, [1.5, 2.5, 3.5]), d: 0.12, p: 38, v: 0.3 }); // ghost
+      notes.push({ t: t0 + 1, d: 0.1, p: 46, v: 0.25 });
+      notes.push({ t: t0 + 3, d: 0.1, p: 46, v: 0.25 });
+    }
+  }
+  return notes;
+}
+
+// ── The composer ────────────────────────────────────────────────────
+
+function generateScore(seed, opts = {}) {
+  const rng = mulberry32(hashStr(String(seed)));
+  const mood = opts.mood && MOODS[opts.mood] ? opts.mood : null;
+  const style =
+    opts.style && STYLE_DEFAULTS[opts.style]
+      ? opts.style
+      : mood
+        ? pick(rng, MOODS[mood].styles)
+        : pick(rng, Object.keys(STYLE_DEFAULTS));
+  const cfg = STYLE_DEFAULTS[style];
+  const mode = opts.mode && MODES[opts.mode] ? opts.mode : mood ? pick(rng, MOODS[mood].modes) : pick(rng, Object.keys(MODES));
+  const key = opts.key && KEY_ROOTS[opts.key] ? opts.key : pick(rng, Object.keys(KEY_ROOTS));
+  const rootMidi = KEY_ROOTS[key];
+  const bars = opts.bars ?? (style === "ambient" ? 12 : 16);
+  const bpmBase = cfg.bpmRange[0] + Math.floor(rng() * (cfg.bpmRange[1] - cfg.bpmRange[0]));
+  const bpm = Math.max(48, Math.min(150, bpmBase + (mood ? MOODS[mood].tempoBias : 0) + (opts.tempoNudge ?? 0)));
+  const progression = pick(rng, PROGRESSIONS[style]);
+
+  const tracks = [
+    { voice: style === "ambient" ? "pad" : "pluck", gain: 0.9, notes: melodyTrack(rng, style, mode, rootMidi, bars, progression, cfg.seventh) },
+    { voice: style === "classical" ? "keys" : "pad", gain: style === "jazz" ? 0.5 : 0.62, notes: compTrack(rng, style, mode, rootMidi, bars, progression, cfg.seventh) },
+    { voice: "bass", gain: 0.75, notes: bassTrack(rng, style, mode, rootMidi, bars, progression, cfg.seventh) },
+  ];
+  if (cfg.drums) tracks.push({ voice: "drums", gain: style === "lofi" ? 0.8 : 0.5, notes: drumTrack(rng, style, bars) });
+
+  return {
+    title: opts.title ?? nameFor(rng, style, mood),
+    style,
+    seed: String(seed),
+    by: opts.by ?? "engine",
+    bpm,
+    swing: cfg.swing,
+    key,
+    mode,
+    bars,
+    beatsPerBar: 4,
+    tracks,
+  };
+}
+
+const NAME_A = ["Amber", "Recipe", "Harbor", "Velvet", "Copper", "Quiet", "Serpent", "Beacon", "Paper", "Winter", "Golden", "Hidden"];
+const NAME_B = {
+  classical: ["Processional", "Air", "Canon", "Minuet", "Aubade"],
+  jazz: ["Strut", "Turnaround", "Blue", "Afterhours", "Stride"],
+  lofi: ["Return", "Windowsill", "Teacup", "Rainline", "Slowpost"],
+  ambient: ["Drift", "Field", "Halo", "Tide", "Vigil"],
+};
+
+function nameFor(rng, style, mood) {
+  const a = pick(rng, NAME_A);
+  const b = pick(rng, NAME_B[style]);
+  return mood ? `${a} ${b} (${mood})` : `${a} ${b}`;
+}
+
+// ── Validation + ABC export (melody line, for human-readable diffs) ─
+
+function validateScore(score) {
+  const errs = [];
+  if (!score.tracks?.length) errs.push("no tracks");
+  const total = score.bars * score.beatsPerBar;
+  for (const tr of score.tracks ?? []) {
+    for (const n of tr.notes) {
+      if (n.t < 0 || n.t >= total) errs.push(`note out of range t=${n.t} (${tr.voice})`);
+      if (tr.voice !== "drums" && (n.p < 24 || n.p > 96)) errs.push(`pitch out of range p=${n.p} (${tr.voice})`);
+      if (n.d <= 0) errs.push(`non-positive duration (${tr.voice})`);
+      if (n.v < 0 || n.v > 1) errs.push(`velocity out of range (${tr.voice})`);
+    }
+  }
+  return errs;
+}
+
+const ABC_NOTES = ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"];
+
+function scoreToABC(score) {
+  const melody = score.tracks[0]?.notes ?? [];
+  const unit = 0.5; // L:1/8
+  let out = `X:1\nT:${score.title}\nM:${score.beatsPerBar}/4\nL:1/8\nQ:1/4=${score.bpm}\nK:${score.key}${score.mode === "minor" ? "m" : score.mode === "dorian" ? " dor" : ""}\n`;
+  let line = "";
+  let cursor = 0;
+  for (const n of melody) {
+    if (n.t > cursor + 0.001) {
+      const restLen = Math.round((n.t - cursor) / unit);
+      if (restLen > 0) line += `z${restLen > 1 ? restLen : ""} `;
+    }
+    const len = Math.max(1, Math.round(n.d / unit));
+    const pc = ((n.p % 12) + 12) % 12;
+    const oct = Math.floor(n.p / 12) - 1;
+    let sym = ABC_NOTES[pc];
+    if (oct >= 5) sym = sym.toLowerCase() + "'".repeat(Math.max(0, oct - 5));
+    else sym = sym + ",".repeat(Math.max(0, 4 - oct));
+    line += `${sym}${len > 1 ? len : ""} `;
+    cursor = n.t + n.d;
+    if (line.length > 56) {
+      out += line.trim() + "\n";
+      line = "";
+    }
+  }
+  return out + line.trim() + " |]\n";
+}
+
+
+const LIBRARY = [{"title":"Beltane Processional","style":"classical","seed":"hand·beltane·2026-05-01","by":"愛 (hand melody) · engine idiom (accompaniment)","bpm":88,"swing":0,"key":"D","mode":"major","bars":16,"beatsPerBar":4,"tracks":[{"voice":"pluck","gain":0.9,"notes":[{"t":0,"d":0.94,"p":78,"v":0.74},{"t":1,"d":0.94,"p":81,"v":0.74},{"t":2,"d":0.94,"p":74,"v":0.74},{"t":3,"d":0.94,"p":76,"v":0.74},{"t":4,"d":1.41,"p":76,"v":0.74},{"t":5.5,"d":0.47,"p":73,"v":0.74},{"t":6,"d":1.88,"p":76,"v":0.74},{"t":8,"d":0.94,"p":78,"v":0.74},{"t":9,"d":0.94,"p":74,"v":0.74},{"t":10,"d":1.88,"p":71,"v":0.74},{"t":12,"d":0.94,"p":69,"v":0.74},{"t":13,"d":0.47,"p":71,"v":0.74},{"t":13.5,"d":0.47,"p":73,"v":0.74},{"t":14,"d":1.88,"p":74,"v":0.74},{"t":16,"d":0.94,"p":71,"v":0.74},{"t":17,"d":0.94,"p":67,"v":0.74},{"t":18,"d":0.94,"p":71,"v":0.74},{"t":19,"d":0.94,"p":74,"v":0.74},{"t":20,"d":1.41,"p":81,"v":0.74},{"t":21.5,"d":0.47,"p":78,"v":0.74},{"t":22,"d":1.88,"p":74,"v":0.74},{"t":24,"d":0.94,"p":79,"v":0.74},{"t":25,"d":0.94,"p":78,"v":0.74},{"t":26,"d":0.94,"p":76,"v":0.74},{"t":27,"d":0.94,"p":74,"v":0.74},{"t":28,"d":1.88,"p":76,"v":0.74},{"t":30,"d":1.88,"p":73,"v":0.74},{"t":32,"d":0.47,"p":78,"v":0.74},{"t":32.5,"d":0.47,"p":79,"v":0.74},{"t":33,"d":0.94,"p":81,"v":0.74},{"t":34,"d":0.94,"p":74,"v":0.74},{"t":35,"d":0.94,"p":76,"v":0.74},{"t":36,"d":0.94,"p":76,"v":0.74},{"t":37,"d":0.94,"p":73,"v":0.74},{"t":38,"d":0.94,"p":76,"v":0.74},{"t":39,"d":0.94,"p":81,"v":0.74},{"t":40,"d":0.94,"p":78,"v":0.74},{"t":41,"d":0.94,"p":74,"v":0.74},{"t":42,"d":0.94,"p":71,"v":0.74},{"t":43,"d":0.94,"p":74,"v":0.74},{"t":44,"d":0.94,"p":73,"v":0.74},{"t":45,"d":0.94,"p":69,"v":0.74},{"t":46,"d":1.88,"p":66,"v":0.74},{"t":48,"d":0.94,"p":67,"v":0.74},{"t":49,"d":0.94,"p":71,"v":0.74},{"t":50,"d":0.94,"p":74,"v":0.74},{"t":51,"d":0.94,"p":79,"v":0.74},{"t":52,"d":0.94,"p":78,"v":0.74},{"t":53,"d":0.94,"p":81,"v":0.74},{"t":54,"d":1.88,"p":86,"v":0.74},{"t":56,"d":0.94,"p":83,"v":0.74},{"t":57,"d":0.94,"p":81,"v":0.74},{"t":58,"d":0.94,"p":79,"v":0.74},{"t":59,"d":0.94,"p":76,"v":0.74},{"t":60,"d":0.94,"p":78,"v":0.74},{"t":61,"d":1.88,"p":76,"v":0.74},{"t":63,"d":0.94,"p":74,"v":0.74}]},{"voice":"keys","gain":0.55,"notes":[{"t":0,"d":0.48,"p":62,"v":0.4},{"t":0.5,"d":0.48,"p":69,"v":0.4},{"t":1,"d":0.48,"p":66,"v":0.4},{"t":1.5,"d":0.48,"p":69,"v":0.4},{"t":2,"d":0.48,"p":62,"v":0.4},{"t":2.5,"d":0.48,"p":69,"v":0.4},{"t":3,"d":0.48,"p":66,"v":0.4},{"t":3.5,"d":0.48,"p":69,"v":0.4},{"t":4,"d":0.48,"p":57,"v":0.4},{"t":4.5,"d":0.48,"p":64,"v":0.4},{"t":5,"d":0.48,"p":61,"v":0.4},{"t":5.5,"d":0.48,"p":64,"v":0.4},{"t":6,"d":0.48,"p":57,"v":0.4},{"t":6.5,"d":0.48,"p":64,"v":0.4},{"t":7,"d":0.48,"p":61,"v":0.4},{"t":7.5,"d":0.48,"p":64,"v":0.4},{"t":8,"d":0.48,"p":59,"v":0.4},{"t":8.5,"d":0.48,"p":66,"v":0.4},{"t":9,"d":0.48,"p":62,"v":0.4},{"t":9.5,"d":0.48,"p":66,"v":0.4},{"t":10,"d":0.48,"p":59,"v":0.4},{"t":10.5,"d":0.48,"p":66,"v":0.4},{"t":11,"d":0.48,"p":62,"v":0.4},{"t":11.5,"d":0.48,"p":66,"v":0.4},{"t":12,"d":0.48,"p":54,"v":0.4},{"t":12.5,"d":0.48,"p":61,"v":0.4},{"t":13,"d":0.48,"p":57,"v":0.4},{"t":13.5,"d":0.48,"p":61,"v":0.4},{"t":14,"d":0.48,"p":54,"v":0.4},{"t":14.5,"d":0.48,"p":61,"v":0.4},{"t":15,"d":0.48,"p":57,"v":0.4},{"t":15.5,"d":0.48,"p":61,"v":0.4},{"t":16,"d":0.48,"p":55,"v":0.4},{"t":16.5,"d":0.48,"p":62,"v":0.4},{"t":17,"d":0.48,"p":59,"v":0.4},{"t":17.5,"d":0.48,"p":62,"v":0.4},{"t":18,"d":0.48,"p":55,"v":0.4},{"t":18.5,"d":0.48,"p":62,"v":0.4},{"t":19,"d":0.48,"p":59,"v":0.4},{"t":19.5,"d":0.48,"p":62,"v":0.4},{"t":20,"d":0.48,"p":62,"v":0.4},{"t":20.5,"d":0.48,"p":69,"v":0.4},{"t":21,"d":0.48,"p":66,"v":0.4},{"t":21.5,"d":0.48,"p":69,"v":0.4},{"t":22,"d":0.48,"p":62,"v":0.4},{"t":22.5,"d":0.48,"p":69,"v":0.4},{"t":23,"d":0.48,"p":66,"v":0.4},{"t":23.5,"d":0.48,"p":69,"v":0.4},{"t":24,"d":0.48,"p":55,"v":0.4},{"t":24.5,"d":0.48,"p":62,"v":0.4},{"t":25,"d":0.48,"p":59,"v":0.4},{"t":25.5,"d":0.48,"p":62,"v":0.4},{"t":26,"d":0.48,"p":55,"v":0.4},{"t":26.5,"d":0.48,"p":62,"v":0.4},{"t":27,"d":0.48,"p":59,"v":0.4},{"t":27.5,"d":0.48,"p":62,"v":0.4},{"t":28,"d":0.48,"p":57,"v":0.4},{"t":28.5,"d":0.48,"p":64,"v":0.4},{"t":29,"d":0.48,"p":61,"v":0.4},{"t":29.5,"d":0.48,"p":64,"v":0.4},{"t":30,"d":0.48,"p":57,"v":0.4},{"t":30.5,"d":0.48,"p":64,"v":0.4},{"t":31,"d":0.48,"p":61,"v":0.4},{"t":31.5,"d":0.48,"p":64,"v":0.4},{"t":32,"d":0.48,"p":62,"v":0.4},{"t":32.5,"d":0.48,"p":69,"v":0.4},{"t":33,"d":0.48,"p":66,"v":0.4},{"t":33.5,"d":0.48,"p":69,"v":0.4},{"t":34,"d":0.48,"p":62,"v":0.4},{"t":34.5,"d":0.48,"p":69,"v":0.4},{"t":35,"d":0.48,"p":66,"v":0.4},{"t":35.5,"d":0.48,"p":69,"v":0.4},{"t":36,"d":0.48,"p":57,"v":0.4},{"t":36.5,"d":0.48,"p":64,"v":0.4},{"t":37,"d":0.48,"p":61,"v":0.4},{"t":37.5,"d":0.48,"p":64,"v":0.4},{"t":38,"d":0.48,"p":57,"v":0.4},{"t":38.5,"d":0.48,"p":64,"v":0.4},{"t":39,"d":0.48,"p":61,"v":0.4},{"t":39.5,"d":0.48,"p":64,"v":0.4},{"t":40,"d":0.48,"p":59,"v":0.4},{"t":40.5,"d":0.48,"p":66,"v":0.4},{"t":41,"d":0.48,"p":62,"v":0.4},{"t":41.5,"d":0.48,"p":66,"v":0.4},{"t":42,"d":0.48,"p":59,"v":0.4},{"t":42.5,"d":0.48,"p":66,"v":0.4},{"t":43,"d":0.48,"p":62,"v":0.4},{"t":43.5,"d":0.48,"p":66,"v":0.4},{"t":44,"d":0.48,"p":54,"v":0.4},{"t":44.5,"d":0.48,"p":61,"v":0.4},{"t":45,"d":0.48,"p":57,"v":0.4},{"t":45.5,"d":0.48,"p":61,"v":0.4},{"t":46,"d":0.48,"p":54,"v":0.4},{"t":46.5,"d":0.48,"p":61,"v":0.4},{"t":47,"d":0.48,"p":57,"v":0.4},{"t":47.5,"d":0.48,"p":61,"v":0.4},{"t":48,"d":0.48,"p":55,"v":0.4},{"t":48.5,"d":0.48,"p":62,"v":0.4},{"t":49,"d":0.48,"p":59,"v":0.4},{"t":49.5,"d":0.48,"p":62,"v":0.4},{"t":50,"d":0.48,"p":55,"v":0.4},{"t":50.5,"d":0.48,"p":62,"v":0.4},{"t":51,"d":0.48,"p":59,"v":0.4},{"t":51.5,"d":0.48,"p":62,"v":0.4},{"t":52,"d":0.48,"p":62,"v":0.4},{"t":52.5,"d":0.48,"p":69,"v":0.4},{"t":53,"d":0.48,"p":66,"v":0.4},{"t":53.5,"d":0.48,"p":69,"v":0.4},{"t":54,"d":0.48,"p":62,"v":0.4},{"t":54.5,"d":0.48,"p":69,"v":0.4},{"t":55,"d":0.48,"p":66,"v":0.4},{"t":55.5,"d":0.48,"p":69,"v":0.4},{"t":56,"d":0.48,"p":55,"v":0.4},{"t":56.5,"d":0.48,"p":62,"v":0.4},{"t":57,"d":0.48,"p":59,"v":0.4},{"t":57.5,"d":0.48,"p":62,"v":0.4},{"t":58,"d":0.48,"p":55,"v":0.4},{"t":58.5,"d":0.48,"p":62,"v":0.4},{"t":59,"d":0.48,"p":59,"v":0.4},{"t":59.5,"d":0.48,"p":62,"v":0.4},{"t":60,"d":0.48,"p":57,"v":0.4},{"t":60.5,"d":0.48,"p":64,"v":0.4},{"t":61,"d":0.48,"p":61,"v":0.4},{"t":61.5,"d":0.48,"p":64,"v":0.4},{"t":62,"d":0.48,"p":57,"v":0.4},{"t":62.5,"d":0.48,"p":64,"v":0.4},{"t":63,"d":0.48,"p":61,"v":0.4},{"t":63.5,"d":0.48,"p":64,"v":0.4}]},{"voice":"bass","gain":0.75,"notes":[{"t":0,"d":1.9,"p":50,"v":0.5},{"t":2,"d":1.9,"p":57,"v":0.44},{"t":4,"d":1.9,"p":45,"v":0.5},{"t":6,"d":1.9,"p":52,"v":0.44},{"t":8,"d":1.9,"p":47,"v":0.5},{"t":10,"d":1.9,"p":54,"v":0.44},{"t":12,"d":1.9,"p":42,"v":0.5},{"t":14,"d":1.9,"p":49,"v":0.44},{"t":16,"d":1.9,"p":43,"v":0.5},{"t":18,"d":1.9,"p":50,"v":0.44},{"t":20,"d":1.9,"p":50,"v":0.5},{"t":22,"d":1.9,"p":57,"v":0.44},{"t":24,"d":1.9,"p":43,"v":0.5},{"t":26,"d":1.9,"p":50,"v":0.44},{"t":28,"d":1.9,"p":45,"v":0.5},{"t":30,"d":1.9,"p":45,"v":0.44},{"t":32,"d":1.9,"p":50,"v":0.5},{"t":34,"d":1.9,"p":57,"v":0.44},{"t":36,"d":1.9,"p":45,"v":0.5},{"t":38,"d":1.9,"p":52,"v":0.44},{"t":40,"d":1.9,"p":47,"v":0.5},{"t":42,"d":1.9,"p":54,"v":0.44},{"t":44,"d":1.9,"p":42,"v":0.5},{"t":46,"d":1.9,"p":49,"v":0.44},{"t":48,"d":1.9,"p":43,"v":0.5},{"t":50,"d":1.9,"p":50,"v":0.44},{"t":52,"d":1.9,"p":50,"v":0.5},{"t":54,"d":1.9,"p":57,"v":0.44},{"t":56,"d":1.9,"p":43,"v":0.5},{"t":58,"d":1.9,"p":50,"v":0.44},{"t":60,"d":1.9,"p":45,"v":0.5},{"t":62,"d":1.9,"p":45,"v":0.44}]}]},{"title":"Brat in Blue","style":"jazz","seed":"brat-in-blue·2026-07-21","by":"engine","bpm":116,"swing":0.22,"key":"A","mode":"major","bars":16,"beatsPerBar":4,"tracks":[{"voice":"pluck","gain":0.9,"notes":[{"t":0,"d":0.46,"p":71,"v":0.6404012281261384},{"t":0.5,"d":0.46,"p":73,"v":0.7355806023161858},{"t":1,"d":0.92,"p":76,"v":0.742400386724621},{"t":2,"d":0.46,"p":78,"v":0.6913733963668346},{"t":2.5,"d":0.46,"p":78,"v":0.6476850589551031},{"t":3,"d":0.92,"p":76,"v":0.6328877470269799},{"t":4,"d":0.46,"p":78,"v":0.713551516951993},{"t":5,"d":0.92,"p":83,"v":0.7789499645866453},{"t":6,"d":0.46,"p":85,"v":0.7290156094636768},{"t":6.5,"d":0.46,"p":85,"v":0.7492495809029788},{"t":7,"d":0.92,"p":83,"v":0.6359136603120714},{"t":8,"d":0.92,"p":78,"v":0.7798869808483868},{"t":9.5,"d":0.46,"p":81,"v":0.7243163341004402},{"t":10,"d":0.46,"p":80,"v":0.6789870773721486},{"t":10.5,"d":0.46,"p":76,"v":0.653987911697477},{"t":12,"d":0.46,"p":81,"v":0.7481273188535124},{"t":12.5,"d":0.46,"p":83,"v":0.6232506655901671},{"t":13,"d":0.92,"p":86,"v":0.6647974352166056},{"t":14,"d":0.46,"p":86,"v":0.7360952841863035},{"t":14.5,"d":0.46,"p":85,"v":0.7639616551622748},{"t":15,"d":0.92,"p":83,"v":0.7205565983243286},{"t":16,"d":0.46,"p":86,"v":0.7783425431046634},{"t":16.5,"d":0.46,"p":86,"v":0.7957614336907863},{"t":17,"d":0.92,"p":86,"v":0.6941917160339653},{"t":18.5,"d":0.46,"p":86,"v":0.6687852038815617},{"t":20.5,"d":0.46,"p":86,"v":0.7570614364743232},{"t":21,"d":0.92,"p":86,"v":0.6865581295732408},{"t":22,"d":0.46,"p":86,"v":0.6649707556981593},{"t":22.5,"d":0.46,"p":86,"v":0.7787527725379914},{"t":23,"d":0.92,"p":85,"v":0.7490109087713063},{"t":25,"d":0.46,"p":86,"v":0.7200885019078851},{"t":25.5,"d":0.46,"p":86,"v":0.7672138209268451},{"t":26,"d":0.46,"p":85,"v":0.6714570424333215},{"t":26.5,"d":0.46,"p":81,"v":0.6513869098667056},{"t":27,"d":0.92,"p":85,"v":0.6946185092255472},{"t":28,"d":0.46,"p":86,"v":0.7413994130957872},{"t":28.5,"d":0.46,"p":86,"v":0.8054535017628223},{"t":30,"d":0.46,"p":86,"v":0.7617309797368943},{"t":31,"d":0.92,"p":83,"v":0.7449389190692455},{"t":32,"d":0.46,"p":86,"v":0.6791399367898703},{"t":32.5,"d":0.46,"p":86,"v":0.7340871468465775},{"t":33,"d":0.92,"p":86,"v":0.6918876853585243},{"t":34,"d":0.46,"p":86,"v":0.6330576494149863},{"t":34.5,"d":0.46,"p":86,"v":0.7003765840362757},{"t":35,"d":0.92,"p":85,"v":0.7376462671719491},{"t":36,"d":0.46,"p":86,"v":0.707321461411193},{"t":36.5,"d":0.46,"p":86,"v":0.7968230706453323},{"t":37,"d":0.92,"p":86,"v":0.621189630292356},{"t":38,"d":0.46,"p":86,"v":0.7639506466500461},{"t":38.5,"d":0.46,"p":86,"v":0.7398529226239771},{"t":39,"d":0.92,"p":85,"v":0.8181455485802144},{"t":40,"d":0.92,"p":86,"v":0.7548796967882663},{"t":41,"d":0.46,"p":86,"v":0.713502285471186},{"t":41.5,"d":0.46,"p":86,"v":0.7036487574968486},{"t":42,"d":0.46,"p":85,"v":0.72999775393866},{"t":42.5,"d":0.46,"p":81,"v":0.6506710489559918},{"t":43,"d":0.92,"p":85,"v":0.7135218835249543},{"t":44,"d":0.46,"p":86,"v":0.7728522067703306},{"t":44.5,"d":0.46,"p":86,"v":0.6571021713595837},{"t":45,"d":0.92,"p":86,"v":0.7124522139597684},{"t":46,"d":0.46,"p":86,"v":0.7605967945232988},{"t":46.5,"d":0.46,"p":85,"v":0.7054938323143869},{"t":47,"d":0.92,"p":83,"v":0.7149207382276654},{"t":48,"d":0.46,"p":83,"v":0.7836154694482684},{"t":48.5,"d":0.46,"p":85,"v":0.77806196462363},{"t":49,"d":0.92,"p":86,"v":0.815331295253709},{"t":50,"d":0.46,"p":86,"v":0.797847630623728},{"t":50.5,"d":0.46,"p":86,"v":0.7487286309991031},{"t":52,"d":0.46,"p":86,"v":0.7202814253792167},{"t":52.5,"d":0.46,"p":86,"v":0.7451480650156737},{"t":53,"d":0.92,"p":86,"v":0.7838997967354953},{"t":55,"d":0.92,"p":85,"v":0.6587576667591929},{"t":56,"d":0.92,"p":86,"v":0.6297758545540273},{"t":57,"d":0.46,"p":86,"v":0.6495355290174484},{"t":57.5,"d":0.46,"p":86,"v":0.7405596213694662},{"t":58,"d":0.46,"p":85,"v":0.6635591993387788},{"t":58.5,"d":0.46,"p":81,"v":0.7184083217568695},{"t":59,"d":0.92,"p":85,"v":0.7427116484194993},{"t":60,"d":0.46,"p":86,"v":0.768671776941046},{"t":60.5,"d":0.46,"p":86,"v":0.6762560505699367},{"t":61,"d":0.92,"p":86,"v":0.7444780395179986},{"t":62,"d":0.46,"p":86,"v":0.7560198815818876},{"t":62.5,"d":0.46,"p":85,"v":0.6643664314225316},{"t":63,"d":0.92,"p":83,"v":0.6991790219955146}]},{"voice":"pad","gain":0.5,"notes":[{"t":1.5,"d":0.9,"p":73,"v":0.3174940026830882},{"t":1.5,"d":0.9,"p":76,"v":0.42999918384011837},{"t":1.5,"d":0.9,"p":80,"v":0.4351101787341759},{"t":3,"d":0.9,"p":73,"v":0.38746753429993985},{"t":3,"d":0.9,"p":76,"v":0.41905658193398265},{"t":3,"d":0.9,"p":80,"v":0.43548871276900175},{"t":5.5,"d":0.9,"p":81,"v":0.3138284487463534},{"t":5.5,"d":0.9,"p":85,"v":0.3217720680637285},{"t":5.5,"d":0.9,"p":88,"v":0.36184777652844785},{"t":7,"d":0.9,"p":81,"v":0.38415869577787815},{"t":7,"d":0.9,"p":85,"v":0.3242967663845047},{"t":7,"d":0.9,"p":88,"v":0.36544975893106313},{"t":9.5,"d":0.9,"p":74,"v":0.42589798928704115},{"t":9.5,"d":0.9,"p":78,"v":0.33751348276156934},{"t":9.5,"d":0.9,"p":81,"v":0.39798680632840844},{"t":11.5,"d":0.9,"p":74,"v":0.32282720104325563},{"t":11.5,"d":0.9,"p":78,"v":0.4211026763916016},{"t":11.5,"d":0.9,"p":81,"v":0.36661260996945205},{"t":13.5,"d":0.9,"p":80,"v":0.3486666953610256},{"t":13.5,"d":0.9,"p":83,"v":0.3880182347353548},{"t":13.5,"d":0.9,"p":86,"v":0.4255163497058675},{"t":15.5,"d":0.9,"p":80,"v":0.43826351733878255},{"t":15.5,"d":0.9,"p":83,"v":0.3114861721731722},{"t":15.5,"d":0.9,"p":86,"v":0.41646601306274533},{"t":17.5,"d":0.9,"p":73,"v":0.37745124473702163},{"t":17.5,"d":0.9,"p":76,"v":0.37917127553839236},{"t":17.5,"d":0.9,"p":80,"v":0.3545162380905822},{"t":19,"d":0.9,"p":73,"v":0.4350555885862559},{"t":19,"d":0.9,"p":76,"v":0.4378513110755011},{"t":19,"d":0.9,"p":80,"v":0.4431714605866},{"t":21.5,"d":0.9,"p":81,"v":0.3280364638427272},{"t":21.5,"d":0.9,"p":85,"v":0.4497079832013696},{"t":21.5,"d":0.9,"p":88,"v":0.43767523576039824},{"t":23.5,"d":0.9,"p":81,"v":0.3341083775833249},{"t":23.5,"d":0.9,"p":85,"v":0.32709823061246424},{"t":23.5,"d":0.9,"p":88,"v":0.3223143630893901},{"t":25.5,"d":0.9,"p":74,"v":0.3171258246852085},{"t":25.5,"d":0.9,"p":78,"v":0.34160864586010575},{"t":25.5,"d":0.9,"p":81,"v":0.3717466586548835},{"t":27,"d":0.9,"p":74,"v":0.40854870866518467},{"t":27,"d":0.9,"p":78,"v":0.3176866922294721},{"t":27,"d":0.9,"p":81,"v":0.3197360639506951},{"t":29.5,"d":0.9,"p":80,"v":0.4366528369206935},{"t":29.5,"d":0.9,"p":83,"v":0.3680752381356433},{"t":29.5,"d":0.9,"p":86,"v":0.43179908585269006},{"t":31.5,"d":0.9,"p":80,"v":0.4062862735427916},{"t":31.5,"d":0.9,"p":83,"v":0.34104467123746873},{"t":31.5,"d":0.9,"p":86,"v":0.34032150340732187},{"t":33.5,"d":0.9,"p":73,"v":0.3970852400781587},{"t":33.5,"d":0.9,"p":76,"v":0.3697949532745406},{"t":33.5,"d":0.9,"p":80,"v":0.4289068056223914},{"t":35.5,"d":0.9,"p":73,"v":0.3360413580248132},{"t":35.5,"d":0.9,"p":76,"v":0.38082305022981017},{"t":35.5,"d":0.9,"p":80,"v":0.3739669608557597},{"t":37.5,"d":0.9,"p":81,"v":0.44124752757139507},{"t":37.5,"d":0.9,"p":85,"v":0.36673726998269557},{"t":37.5,"d":0.9,"p":88,"v":0.42098716446198525},{"t":39.5,"d":0.9,"p":81,"v":0.3106871099770069},{"t":39.5,"d":0.9,"p":85,"v":0.31823425556533036},{"t":39.5,"d":0.9,"p":88,"v":0.34262342808768154},{"t":41.5,"d":0.9,"p":74,"v":0.40076934616081417},{"t":41.5,"d":0.9,"p":78,"v":0.4166958970297128},{"t":41.5,"d":0.9,"p":81,"v":0.33703682062681767},{"t":43.5,"d":0.9,"p":74,"v":0.39383694033138456},{"t":43.5,"d":0.9,"p":78,"v":0.3932827026117593},{"t":43.5,"d":0.9,"p":81,"v":0.4293257306981832},{"t":45.5,"d":0.9,"p":80,"v":0.44344272424001246},{"t":45.5,"d":0.9,"p":83,"v":0.39459219673182816},{"t":45.5,"d":0.9,"p":86,"v":0.3999644020292908},{"t":47,"d":0.9,"p":80,"v":0.4331299709295854},{"t":47,"d":0.9,"p":83,"v":0.349456436582841},{"t":47,"d":0.9,"p":86,"v":0.31306427263189107},{"t":49.5,"d":0.9,"p":73,"v":0.41022534425370394},{"t":49.5,"d":0.9,"p":76,"v":0.3452917866362259},{"t":49.5,"d":0.9,"p":80,"v":0.3869881395203993},{"t":51.5,"d":0.9,"p":73,"v":0.31564546257257464},{"t":51.5,"d":0.9,"p":76,"v":0.4125263306498528},{"t":51.5,"d":0.9,"p":80,"v":0.317193594914861},{"t":53.5,"d":0.9,"p":81,"v":0.37113210378214717},{"t":53.5,"d":0.9,"p":85,"v":0.337320698001422},{"t":53.5,"d":0.9,"p":88,"v":0.35474145570304244},{"t":55.5,"d":0.9,"p":81,"v":0.35618796161375943},{"t":55.5,"d":0.9,"p":85,"v":0.38925560607574883},{"t":55.5,"d":0.9,"p":88,"v":0.41815081728156656},{"t":57.5,"d":0.9,"p":74,"v":0.4385130447102711},{"t":57.5,"d":0.9,"p":78,"v":0.37624716392252594},{"t":57.5,"d":0.9,"p":81,"v":0.3949062324874103},{"t":59,"d":0.9,"p":74,"v":0.40917907052207736},{"t":59,"d":0.9,"p":78,"v":0.3889228901360184},{"t":59,"d":0.9,"p":81,"v":0.38525161059573293},{"t":61.5,"d":0.9,"p":80,"v":0.3187263479363173},{"t":61.5,"d":0.9,"p":83,"v":0.39083922942169014},{"t":61.5,"d":0.9,"p":86,"v":0.348021901040338},{"t":63,"d":0.9,"p":80,"v":0.3895957684423775},{"t":63,"d":0.9,"p":83,"v":0.36920268637593834},{"t":63,"d":0.9,"p":86,"v":0.34906690335366874}]},{"voice":"bass","gain":0.75,"notes":[{"t":0,"d":0.95,"p":45,"v":0.5319382395595312},{"t":1,"d":0.95,"p":49,"v":0.5458367754239589},{"t":2,"d":0.95,"p":52,"v":0.4862189129460603},{"t":3,"d":0.95,"p":53,"v":0.5257906370330602},{"t":4,"d":0.95,"p":54,"v":0.49842476041521877},{"t":5,"d":0.95,"p":57,"v":0.5359747056616471},{"t":6,"d":0.95,"p":61,"v":0.5102291893679649},{"t":7,"d":0.95,"p":48,"v":0.49589192401617765},{"t":8,"d":0.95,"p":47,"v":0.49284904506057503},{"t":9,"d":0.95,"p":50,"v":0.47791360393166543},{"t":10,"d":0.95,"p":54,"v":0.45580163709819316},{"t":11,"d":0.95,"p":51,"v":0.46732602489646524},{"t":12,"d":0.95,"p":52,"v":0.4721637710928917},{"t":13,"d":0.95,"p":56,"v":0.4796894097700715},{"t":14,"d":0.95,"p":59,"v":0.5082956998609006},{"t":15,"d":0.95,"p":46,"v":0.5338966159150005},{"t":16,"d":0.95,"p":45,"v":0.48707826402969656},{"t":17,"d":0.95,"p":49,"v":0.49188739981036633},{"t":18,"d":0.95,"p":52,"v":0.5348307815147564},{"t":19,"d":0.95,"p":53,"v":0.5076291896868497},{"t":20,"d":0.95,"p":54,"v":0.4587608445668593},{"t":21,"d":0.95,"p":57,"v":0.45388699118047954},{"t":22,"d":0.95,"p":61,"v":0.45968418414704504},{"t":23,"d":0.95,"p":48,"v":0.48498359352815895},{"t":24,"d":0.95,"p":47,"v":0.5053868857910857},{"t":25,"d":0.95,"p":50,"v":0.5436221377924084},{"t":26,"d":0.95,"p":54,"v":0.5385122421430424},{"t":27,"d":0.95,"p":51,"v":0.4612035017926246},{"t":28,"d":0.95,"p":52,"v":0.4746836248785257},{"t":29,"d":0.95,"p":56,"v":0.4837163591524586},{"t":30,"d":0.95,"p":59,"v":0.5220191545318812},{"t":31,"d":0.95,"p":46,"v":0.5156649251701311},{"t":32,"d":0.95,"p":45,"v":0.5395473117241636},{"t":33,"d":0.95,"p":49,"v":0.5030222177039831},{"t":34,"d":0.95,"p":52,"v":0.5007561006583273},{"t":35,"d":0.95,"p":53,"v":0.47286139109637587},{"t":36,"d":0.95,"p":54,"v":0.5258931383024901},{"t":37,"d":0.95,"p":57,"v":0.4628724836045876},{"t":38,"d":0.95,"p":61,"v":0.5137010138481856},{"t":39,"d":0.95,"p":48,"v":0.5218546589137987},{"t":40,"d":0.95,"p":47,"v":0.4656754525611177},{"t":41,"d":0.95,"p":50,"v":0.4931294181384146},{"t":42,"d":0.95,"p":54,"v":0.45912892958149315},{"t":43,"d":0.95,"p":51,"v":0.5107182898325846},{"t":44,"d":0.95,"p":52,"v":0.501881098584272},{"t":45,"d":0.95,"p":56,"v":0.5039623276796192},{"t":46,"d":0.95,"p":59,"v":0.4608962645521387},{"t":47,"d":0.95,"p":46,"v":0.4960986240534112},{"t":48,"d":0.95,"p":45,"v":0.5302482275525108},{"t":49,"d":0.95,"p":49,"v":0.5244933775393292},{"t":50,"d":0.95,"p":52,"v":0.5108878035796807},{"t":51,"d":0.95,"p":53,"v":0.46046542867552487},{"t":52,"d":0.95,"p":54,"v":0.5427152425283566},{"t":53,"d":0.95,"p":57,"v":0.4502777338260785},{"t":54,"d":0.95,"p":61,"v":0.5252287419512868},{"t":55,"d":0.95,"p":48,"v":0.4699470124905929},{"t":56,"d":0.95,"p":47,"v":0.5390099799260497},{"t":57,"d":0.95,"p":50,"v":0.5021158637944609},{"t":58,"d":0.95,"p":54,"v":0.4782076773000881},{"t":59,"d":0.95,"p":51,"v":0.531799043668434},{"t":60,"d":0.95,"p":52,"v":0.4839998058741912},{"t":61,"d":0.95,"p":56,"v":0.5437833008356392},{"t":62,"d":0.95,"p":59,"v":0.5194609337020666},{"t":63,"d":0.95,"p":46,"v":0.5429401437751948}]},{"voice":"drums","gain":0.5,"notes":[{"t":0,"d":0.1,"p":42,"v":0.32968239249661563},{"t":1,"d":0.1,"p":42,"v":0.26972863090224564},{"t":1.5,"d":0.1,"p":42,"v":0.2689454763289541},{"t":2,"d":0.1,"p":42,"v":0.3564702781662345},{"t":3,"d":0.1,"p":42,"v":0.3062953449878842},{"t":3.5,"d":0.1,"p":42,"v":0.2819888411741704},{"t":1,"d":0.1,"p":46,"v":0.25},{"t":3,"d":0.1,"p":46,"v":0.25},{"t":4,"d":0.1,"p":42,"v":0.3378547772020102},{"t":5,"d":0.1,"p":42,"v":0.34556894840672614},{"t":5.5,"d":0.1,"p":42,"v":0.3271446170564741},{"t":6,"d":0.1,"p":42,"v":0.28072315418161453},{"t":7,"d":0.1,"p":42,"v":0.2919728291872889},{"t":7.5,"d":0.1,"p":42,"v":0.3111594014521688},{"t":5.5,"d":0.12,"p":38,"v":0.3},{"t":5,"d":0.1,"p":46,"v":0.25},{"t":7,"d":0.1,"p":46,"v":0.25},{"t":8,"d":0.1,"p":42,"v":0.2600849277060479},{"t":9,"d":0.1,"p":42,"v":0.27892369331792},{"t":9.5,"d":0.1,"p":42,"v":0.3677407449856401},{"t":10,"d":0.1,"p":42,"v":0.37598101659677924},{"t":11,"d":0.1,"p":42,"v":0.29089642663486304},{"t":11.5,"d":0.1,"p":42,"v":0.3644270488061011},{"t":9,"d":0.1,"p":46,"v":0.25},{"t":11,"d":0.1,"p":46,"v":0.25},{"t":12,"d":0.1,"p":42,"v":0.3332166633475572},{"t":13,"d":0.1,"p":42,"v":0.3525150916073471},{"t":13.5,"d":0.1,"p":42,"v":0.329095825990662},{"t":14,"d":0.1,"p":42,"v":0.3109939828049392},{"t":15,"d":0.1,"p":42,"v":0.36289618019014597},{"t":15.5,"d":0.1,"p":42,"v":0.2947290158458054},{"t":13.5,"d":0.12,"p":38,"v":0.3},{"t":13,"d":0.1,"p":46,"v":0.25},{"t":15,"d":0.1,"p":46,"v":0.25},{"t":16,"d":0.1,"p":42,"v":0.335087918927893},{"t":17,"d":0.1,"p":42,"v":0.3747016792558134},{"t":17.5,"d":0.1,"p":42,"v":0.3231033632159233},{"t":18,"d":0.1,"p":42,"v":0.33764823132194577},{"t":19,"d":0.1,"p":42,"v":0.31243204190395774},{"t":19.5,"d":0.1,"p":42,"v":0.3680792684014887},{"t":17.5,"d":0.12,"p":38,"v":0.3},{"t":17,"d":0.1,"p":46,"v":0.25},{"t":19,"d":0.1,"p":46,"v":0.25},{"t":20,"d":0.1,"p":42,"v":0.32785065325908364},{"t":21,"d":0.1,"p":42,"v":0.28767827359028164},{"t":21.5,"d":0.1,"p":42,"v":0.33239794234745207},{"t":22,"d":0.1,"p":42,"v":0.3328944921027869},{"t":23,"d":0.1,"p":42,"v":0.3602030926942825},{"t":23.5,"d":0.1,"p":42,"v":0.3728738745674491},{"t":22.5,"d":0.12,"p":38,"v":0.3},{"t":21,"d":0.1,"p":46,"v":0.25},{"t":23,"d":0.1,"p":46,"v":0.25},{"t":24,"d":0.1,"p":42,"v":0.27979923658072947},{"t":25,"d":0.1,"p":42,"v":0.2601719151530415},{"t":25.5,"d":0.1,"p":42,"v":0.32541151613928376},{"t":26,"d":0.1,"p":42,"v":0.3722932502441108},{"t":27,"d":0.1,"p":42,"v":0.3212952688802034},{"t":27.5,"d":0.1,"p":42,"v":0.304576852414757},{"t":27.5,"d":0.12,"p":38,"v":0.3},{"t":25,"d":0.1,"p":46,"v":0.25},{"t":27,"d":0.1,"p":46,"v":0.25},{"t":28,"d":0.1,"p":42,"v":0.36916887166909873},{"t":29,"d":0.1,"p":42,"v":0.3594307888299227},{"t":29.5,"d":0.1,"p":42,"v":0.3336556987464428},{"t":30,"d":0.1,"p":42,"v":0.3476770836673677},{"t":31,"d":0.1,"p":42,"v":0.32210301514714956},{"t":31.5,"d":0.1,"p":42,"v":0.3576252577919513},{"t":29,"d":0.1,"p":46,"v":0.25},{"t":31,"d":0.1,"p":46,"v":0.25},{"t":32,"d":0.1,"p":42,"v":0.3637414631899446},{"t":33,"d":0.1,"p":42,"v":0.3053178265411407},{"t":33.5,"d":0.1,"p":42,"v":0.26053889996372165},{"t":34,"d":0.1,"p":42,"v":0.3523399665486068},{"t":35,"d":0.1,"p":42,"v":0.28272224954329433},{"t":35.5,"d":0.1,"p":42,"v":0.3418884828593582},{"t":33,"d":0.1,"p":46,"v":0.25},{"t":35,"d":0.1,"p":46,"v":0.25},{"t":36,"d":0.1,"p":42,"v":0.35373803678900007},{"t":37,"d":0.1,"p":42,"v":0.26117162058129906},{"t":37.5,"d":0.1,"p":42,"v":0.33580230199731886},{"t":38,"d":0.1,"p":42,"v":0.3180516862589866},{"t":39,"d":0.1,"p":42,"v":0.31616085753776135},{"t":39.5,"d":0.1,"p":42,"v":0.35079748296178875},{"t":37,"d":0.1,"p":46,"v":0.25},{"t":39,"d":0.1,"p":46,"v":0.25},{"t":40,"d":0.1,"p":42,"v":0.3734988380968571},{"t":41,"d":0.1,"p":42,"v":0.33556727988645435},{"t":41.5,"d":0.1,"p":42,"v":0.34888005203567446},{"t":42,"d":0.1,"p":42,"v":0.3434450582414866},{"t":43,"d":0.1,"p":42,"v":0.2627771883830428},{"t":43.5,"d":0.1,"p":42,"v":0.361420805612579},{"t":42.5,"d":0.12,"p":38,"v":0.3},{"t":41,"d":0.1,"p":46,"v":0.25},{"t":43,"d":0.1,"p":46,"v":0.25},{"t":44,"d":0.1,"p":42,"v":0.29668644920922815},{"t":45,"d":0.1,"p":42,"v":0.34675043895840646},{"t":45.5,"d":0.1,"p":42,"v":0.348115116590634},{"t":46,"d":0.1,"p":42,"v":0.3680736617464572},{"t":47,"d":0.1,"p":42,"v":0.3194969094544649},{"t":47.5,"d":0.1,"p":42,"v":0.31262482064776126},{"t":45.5,"d":0.12,"p":38,"v":0.3},{"t":45,"d":0.1,"p":46,"v":0.25},{"t":47,"d":0.1,"p":46,"v":0.25},{"t":48,"d":0.1,"p":42,"v":0.3419659885857254},{"t":49,"d":0.1,"p":42,"v":0.37428266886621714},{"t":49.5,"d":0.1,"p":42,"v":0.3649713267106563},{"t":50,"d":0.1,"p":42,"v":0.3516355062555522},{"t":51,"d":0.1,"p":42,"v":0.32402329927310347},{"t":51.5,"d":0.1,"p":42,"v":0.3500418809056282},{"t":49,"d":0.1,"p":46,"v":0.25},{"t":51,"d":0.1,"p":46,"v":0.25},{"t":52,"d":0.1,"p":42,"v":0.26884671434760093},{"t":53,"d":0.1,"p":42,"v":0.29778594633564354},{"t":53.5,"d":0.1,"p":42,"v":0.3412670723069459},{"t":54,"d":0.1,"p":42,"v":0.3163817679602653},{"t":55,"d":0.1,"p":42,"v":0.32070472482591866},{"t":55.5,"d":0.1,"p":42,"v":0.3390204137470573},{"t":53,"d":0.1,"p":46,"v":0.25},{"t":55,"d":0.1,"p":46,"v":0.25},{"t":56,"d":0.1,"p":42,"v":0.36168095521628857},{"t":57,"d":0.1,"p":42,"v":0.3326362871006131},{"t":57.5,"d":0.1,"p":42,"v":0.3242430949024856},{"t":58,"d":0.1,"p":42,"v":0.31445115149021147},{"t":59,"d":0.1,"p":42,"v":0.34942041363567117},{"t":59.5,"d":0.1,"p":42,"v":0.2922882919758558},{"t":57,"d":0.1,"p":46,"v":0.25},{"t":59,"d":0.1,"p":46,"v":0.25},{"t":60,"d":0.1,"p":42,"v":0.28035203432664274},{"t":61,"d":0.1,"p":42,"v":0.3556970227602869},{"t":61.5,"d":0.1,"p":42,"v":0.3384228833205998},{"t":62,"d":0.1,"p":42,"v":0.34142372200265525},{"t":63,"d":0.1,"p":42,"v":0.2685964603628963},{"t":63.5,"d":0.1,"p":42,"v":0.306559952031821},{"t":61,"d":0.1,"p":46,"v":0.25},{"t":63,"d":0.1,"p":46,"v":0.25}]}]},{"title":"Recipe & Return","style":"lofi","seed":"recipe-and-return·2026-07-21","by":"engine","bpm":70,"swing":0.14,"key":"A","mode":"major","bars":16,"beatsPerBar":4,"tracks":[{"voice":"pluck","gain":0.9,"notes":[{"t":0,"d":0.92,"p":71,"v":0.6714896438922733},{"t":5,"d":0.46,"p":80,"v":0.74550580217503},{"t":6,"d":1.84,"p":83,"v":0.6648975462466478},{"t":8,"d":0.92,"p":83,"v":0.7701691978424787},{"t":9,"d":0.92,"p":81,"v":0.6308420973177999},{"t":12,"d":0.92,"p":85,"v":0.7526611475553363},{"t":13.5,"d":0.46,"p":85,"v":0.8066868771612644},{"t":14,"d":1.84,"p":83,"v":0.688079986795783},{"t":16,"d":0.92,"p":78,"v":0.6994516978785396},{"t":17,"d":0.46,"p":80,"v":0.6824065025243908},{"t":17.5,"d":0.46,"p":81,"v":0.7110667634103447},{"t":18,"d":1.84,"p":83,"v":0.6784625660441815},{"t":20,"d":0.92,"p":85,"v":0.7273561982251704},{"t":21.5,"d":0.46,"p":86,"v":0.7229764993581921},{"t":22,"d":1.84,"p":86,"v":0.7733709332346916},{"t":24,"d":0.92,"p":76,"v":0.7771863324847073},{"t":26,"d":1.84,"p":76,"v":0.7537698318064212},{"t":28,"d":0.92,"p":78,"v":0.774624193534255},{"t":29.5,"d":0.46,"p":81,"v":0.7344886010792107},{"t":30,"d":1.84,"p":81,"v":0.7994506671372801},{"t":32,"d":0.92,"p":78,"v":0.6928852501139044},{"t":33,"d":0.46,"p":80,"v":0.7031356625072658},{"t":33.5,"d":0.46,"p":81,"v":0.8124852367024868},{"t":34,"d":1.84,"p":83,"v":0.7620992963947355},{"t":36,"d":0.92,"p":85,"v":0.6840077024232596},{"t":37,"d":0.46,"p":86,"v":0.7198447050806135},{"t":37.5,"d":0.46,"p":86,"v":0.7546852091606706},{"t":41,"d":0.92,"p":78,"v":0.7987005486432462},{"t":42,"d":1.84,"p":80,"v":0.6508941987808794},{"t":44,"d":0.92,"p":81,"v":0.7170521260052919},{"t":45,"d":0.46,"p":83,"v":0.7869006207026541},{"t":45.5,"d":0.46,"p":81,"v":0.7870994556508958},{"t":48,"d":0.92,"p":78,"v":0.70975641252473},{"t":49,"d":0.46,"p":80,"v":0.7950921106431633},{"t":49.5,"d":0.46,"p":81,"v":0.7300932478904724},{"t":50,"d":1.84,"p":83,"v":0.6597891406901181},{"t":52,"d":0.92,"p":85,"v":0.6329575174767523},{"t":53,"d":0.46,"p":86,"v":0.69103310842067},{"t":54,"d":1.84,"p":86,"v":0.761797727625817},{"t":56,"d":0.92,"p":80,"v":0.6424692045245319},{"t":57,"d":0.92,"p":78,"v":0.7069520516134798},{"t":60,"d":0.92,"p":81,"v":0.6591892072279006},{"t":62,"d":1.84,"p":81,"v":0.7962084037065505}]},{"voice":"pad","gain":0.62,"notes":[{"t":0,"d":2.2,"p":69,"v":0.3599590626638383},{"t":0,"d":2.2,"p":73,"v":0.312190268477425},{"t":0,"d":2.2,"p":76,"v":0.3818332151602954},{"t":0,"d":2.2,"p":80,"v":0.3767482185130939},{"t":2.5,"d":1.4,"p":69,"v":0.3603028334770352},{"t":2.5,"d":1.4,"p":73,"v":0.3803457103762776},{"t":2.5,"d":1.4,"p":76,"v":0.3328732181200758},{"t":2.5,"d":1.4,"p":80,"v":0.3496307412022725},{"t":4,"d":2.2,"p":74,"v":0.3494133615260944},{"t":4,"d":2.2,"p":78,"v":0.2966153550986201},{"t":4,"d":2.2,"p":81,"v":0.32376090179663153},{"t":4,"d":2.2,"p":85,"v":0.2987256368249655},{"t":6.5,"d":1.4,"p":74,"v":0.3518367289891467},{"t":6.5,"d":1.4,"p":78,"v":0.3109078707965091},{"t":6.5,"d":1.4,"p":81,"v":0.36721394628752024},{"t":6.5,"d":1.4,"p":85,"v":0.3522854976914823},{"t":8,"d":2.2,"p":78,"v":0.33354824603069577},{"t":8,"d":2.2,"p":81,"v":0.3270811067987234},{"t":8,"d":2.2,"p":85,"v":0.3010401820391417},{"t":8,"d":2.2,"p":88,"v":0.33344609549734744},{"t":10.5,"d":1.4,"p":78,"v":0.2959422554215416},{"t":10.5,"d":1.4,"p":81,"v":0.38131082475651057},{"t":10.5,"d":1.4,"p":85,"v":0.3597893143165857},{"t":10.5,"d":1.4,"p":88,"v":0.29078851669095457},{"t":12,"d":2.2,"p":76,"v":0.30673264491837476},{"t":12,"d":2.2,"p":80,"v":0.34211291788145903},{"t":12,"d":2.2,"p":83,"v":0.3608749772515148},{"t":12,"d":2.2,"p":86,"v":0.3761640633782372},{"t":14.5,"d":1.4,"p":76,"v":0.3372303993534297},{"t":14.5,"d":1.4,"p":80,"v":0.3442039493098855},{"t":14.5,"d":1.4,"p":83,"v":0.31056796660181135},{"t":14.5,"d":1.4,"p":86,"v":0.3183506523119286},{"t":16,"d":2.2,"p":69,"v":0.36313322776462886},{"t":16,"d":2.2,"p":73,"v":0.38437837265431885},{"t":16,"d":2.2,"p":76,"v":0.3604304104205221},{"t":16,"d":2.2,"p":80,"v":0.3624246658617631},{"t":18.5,"d":1.4,"p":69,"v":0.3135257101012394},{"t":18.5,"d":1.4,"p":73,"v":0.32062978065572684},{"t":18.5,"d":1.4,"p":76,"v":0.36238682431634517},{"t":18.5,"d":1.4,"p":80,"v":0.38088392162229867},{"t":20,"d":2.2,"p":74,"v":0.360939407707192},{"t":20,"d":2.2,"p":78,"v":0.3406473334040493},{"t":20,"d":2.2,"p":81,"v":0.29327354895416646},{"t":20,"d":2.2,"p":85,"v":0.384871980464086},{"t":22.5,"d":1.4,"p":74,"v":0.34430178155656904},{"t":22.5,"d":1.4,"p":78,"v":0.3479303464619443},{"t":22.5,"d":1.4,"p":81,"v":0.3697678901581094},{"t":22.5,"d":1.4,"p":85,"v":0.3810137673141435},{"t":24,"d":2.2,"p":78,"v":0.3228966518165544},{"t":24,"d":2.2,"p":81,"v":0.34393443149514497},{"t":24,"d":2.2,"p":85,"v":0.37054509405046704},{"t":24,"d":2.2,"p":88,"v":0.37373185414820914},{"t":26.5,"d":1.4,"p":78,"v":0.3676019868440926},{"t":26.5,"d":1.4,"p":81,"v":0.3096633466752246},{"t":26.5,"d":1.4,"p":85,"v":0.37356004140805454},{"t":26.5,"d":1.4,"p":88,"v":0.2921193456836045},{"t":28,"d":2.2,"p":76,"v":0.3419372101640329},{"t":28,"d":2.2,"p":80,"v":0.32227380379103127},{"t":28,"d":2.2,"p":83,"v":0.3264656622288749},{"t":28,"d":2.2,"p":86,"v":0.3708024304220453},{"t":30.5,"d":1.4,"p":76,"v":0.34766749856993556},{"t":30.5,"d":1.4,"p":80,"v":0.3687386679556221},{"t":30.5,"d":1.4,"p":83,"v":0.38317856938578193},{"t":30.5,"d":1.4,"p":86,"v":0.3243584801303223},{"t":32,"d":2.2,"p":69,"v":0.305777800953947},{"t":32,"d":2.2,"p":73,"v":0.29307360084261747},{"t":32,"d":2.2,"p":76,"v":0.3776092508900911},{"t":32,"d":2.2,"p":80,"v":0.33420386145357045},{"t":34.5,"d":1.4,"p":69,"v":0.36504713328089566},{"t":34.5,"d":1.4,"p":73,"v":0.3316774509940297},{"t":34.5,"d":1.4,"p":76,"v":0.3225249657267705},{"t":34.5,"d":1.4,"p":80,"v":0.33962011915631596},{"t":36,"d":2.2,"p":74,"v":0.3723742523789406},{"t":36,"d":2.2,"p":78,"v":0.3269470534147695},{"t":36,"d":2.2,"p":81,"v":0.326453547840938},{"t":36,"d":2.2,"p":85,"v":0.3147723729582504},{"t":38.5,"d":1.4,"p":74,"v":0.35720301220193507},{"t":38.5,"d":1.4,"p":78,"v":0.32987100424710664},{"t":38.5,"d":1.4,"p":81,"v":0.3367457315186039},{"t":38.5,"d":1.4,"p":85,"v":0.2903376255044714},{"t":40,"d":2.2,"p":78,"v":0.3072620474128053},{"t":40,"d":2.2,"p":81,"v":0.3217011860664934},{"t":40,"d":2.2,"p":85,"v":0.33952505265828226},{"t":40,"d":2.2,"p":88,"v":0.33661946410778915},{"t":42.5,"d":1.4,"p":78,"v":0.34111934414599093},{"t":42.5,"d":1.4,"p":81,"v":0.3032861085003242},{"t":42.5,"d":1.4,"p":85,"v":0.3024603556469083},{"t":42.5,"d":1.4,"p":88,"v":0.3244987637829036},{"t":44,"d":2.2,"p":76,"v":0.31087018059100957},{"t":44,"d":2.2,"p":80,"v":0.38492248555179687},{"t":44,"d":2.2,"p":83,"v":0.36064625364728276},{"t":44,"d":2.2,"p":86,"v":0.32385507836937905},{"t":46.5,"d":1.4,"p":76,"v":0.3110660205222667},{"t":46.5,"d":1.4,"p":80,"v":0.29367884614970535},{"t":46.5,"d":1.4,"p":83,"v":0.3856617019604892},{"t":46.5,"d":1.4,"p":86,"v":0.31284714789129797},{"t":48,"d":2.2,"p":69,"v":0.3887279735505581},{"t":48,"d":2.2,"p":73,"v":0.38573332914151254},{"t":48,"d":2.2,"p":76,"v":0.37808965538628403},{"t":48,"d":2.2,"p":80,"v":0.3501258704438806},{"t":50.5,"d":1.4,"p":69,"v":0.293607395128347},{"t":50.5,"d":1.4,"p":73,"v":0.38119652665685866},{"t":50.5,"d":1.4,"p":76,"v":0.3797049483377487},{"t":50.5,"d":1.4,"p":80,"v":0.36965755509212617},{"t":52,"d":2.2,"p":74,"v":0.2908197262650356},{"t":52,"d":2.2,"p":78,"v":0.3254804700706154},{"t":52,"d":2.2,"p":81,"v":0.3421922816988081},{"t":52,"d":2.2,"p":85,"v":0.32191771854180845},{"t":54.5,"d":1.4,"p":74,"v":0.3375880479207263},{"t":54.5,"d":1.4,"p":78,"v":0.3360767614888028},{"t":54.5,"d":1.4,"p":81,"v":0.3527536118961871},{"t":54.5,"d":1.4,"p":85,"v":0.3019836962549016},{"t":56,"d":2.2,"p":78,"v":0.37738195404876024},{"t":56,"d":2.2,"p":81,"v":0.3653921641269699},{"t":56,"d":2.2,"p":85,"v":0.3588447128515691},{"t":56,"d":2.2,"p":88,"v":0.3063739511743188},{"t":58.5,"d":1.4,"p":78,"v":0.2981149628385902},{"t":58.5,"d":1.4,"p":81,"v":0.3786794931953773},{"t":58.5,"d":1.4,"p":85,"v":0.3031409758003429},{"t":58.5,"d":1.4,"p":88,"v":0.3176635920396075},{"t":60,"d":2.2,"p":76,"v":0.3775838672276587},{"t":60,"d":2.2,"p":80,"v":0.32471888825297357},{"t":60,"d":2.2,"p":83,"v":0.3445642668846995},{"t":60,"d":2.2,"p":86,"v":0.2989892557822168},{"t":62.5,"d":1.4,"p":76,"v":0.3795945761352778},{"t":62.5,"d":1.4,"p":80,"v":0.3620303542213515},{"t":62.5,"d":1.4,"p":83,"v":0.38289777884259824},{"t":62.5,"d":1.4,"p":86,"v":0.2905055242450908}]},{"voice":"bass","gain":0.75,"notes":[{"t":0,"d":1.6,"p":45,"v":0.55},{"t":2.5,"d":1.2,"p":45,"v":0.42},{"t":4,"d":1.6,"p":50,"v":0.55},{"t":6.5,"d":1.2,"p":50,"v":0.42},{"t":8,"d":1.6,"p":54,"v":0.55},{"t":10.5,"d":1.2,"p":61,"v":0.42},{"t":12,"d":1.6,"p":52,"v":0.55},{"t":14.5,"d":1.2,"p":52,"v":0.42},{"t":16,"d":1.6,"p":45,"v":0.55},{"t":18.5,"d":1.2,"p":52,"v":0.42},{"t":20,"d":1.6,"p":50,"v":0.55},{"t":22.5,"d":1.2,"p":57,"v":0.42},{"t":24,"d":1.6,"p":54,"v":0.55},{"t":26.5,"d":1.2,"p":61,"v":0.42},{"t":28,"d":1.6,"p":52,"v":0.55},{"t":30.5,"d":1.2,"p":59,"v":0.42},{"t":32,"d":1.6,"p":45,"v":0.55},{"t":34.5,"d":1.2,"p":52,"v":0.42},{"t":36,"d":1.6,"p":50,"v":0.55},{"t":38.5,"d":1.2,"p":50,"v":0.42},{"t":40,"d":1.6,"p":54,"v":0.55},{"t":42.5,"d":1.2,"p":54,"v":0.42},{"t":44,"d":1.6,"p":52,"v":0.55},{"t":46.5,"d":1.2,"p":59,"v":0.42},{"t":48,"d":1.6,"p":45,"v":0.55},{"t":50.5,"d":1.2,"p":52,"v":0.42},{"t":52,"d":1.6,"p":50,"v":0.55},{"t":54.5,"d":1.2,"p":50,"v":0.42},{"t":56,"d":1.6,"p":54,"v":0.55},{"t":58.5,"d":1.2,"p":61,"v":0.42},{"t":60,"d":1.6,"p":52,"v":0.55},{"t":62.5,"d":1.2,"p":59,"v":0.42}]},{"voice":"drums","gain":0.8,"notes":[{"t":0,"d":0.2,"p":36,"v":0.85},{"t":1,"d":0.15,"p":38,"v":0.7},{"t":3,"d":0.15,"p":38,"v":0.72},{"t":0,"d":0.08,"p":42,"v":0.3186371153220534},{"t":0.5,"d":0.08,"p":42,"v":0.33396978514501824},{"t":1,"d":0.08,"p":42,"v":0.3493648429401219},{"t":1.5,"d":0.08,"p":42,"v":0.29565466430503873},{"t":2,"d":0.08,"p":42,"v":0.35331321250414477},{"t":2.5,"d":0.08,"p":42,"v":0.33169859619811176},{"t":3,"d":0.08,"p":42,"v":0.3348717314656824},{"t":3.5,"d":0.08,"p":42,"v":0.36562433727085586},{"t":4,"d":0.2,"p":36,"v":0.85},{"t":5,"d":0.15,"p":38,"v":0.7},{"t":7,"d":0.15,"p":38,"v":0.72},{"t":4,"d":0.08,"p":42,"v":0.2741640187916346},{"t":4.5,"d":0.08,"p":42,"v":0.3479753376916051},{"t":5,"d":0.08,"p":42,"v":0.33979133198736233},{"t":5.5,"d":0.08,"p":42,"v":0.32453156530391425},{"t":6,"d":0.08,"p":42,"v":0.279764267639257},{"t":6.5,"d":0.08,"p":42,"v":0.37483146839076653},{"t":7,"d":0.08,"p":42,"v":0.2279978790320456},{"t":7.5,"d":0.08,"p":42,"v":0.3641517797252163},{"t":8,"d":0.2,"p":36,"v":0.85},{"t":10.75,"d":0.2,"p":36,"v":0.6},{"t":9,"d":0.15,"p":38,"v":0.7},{"t":11,"d":0.15,"p":38,"v":0.72},{"t":8,"d":0.08,"p":42,"v":0.31409008278278633},{"t":9,"d":0.08,"p":42,"v":0.31262400546111163},{"t":10,"d":0.08,"p":42,"v":0.26169840517686677},{"t":10.5,"d":0.08,"p":42,"v":0.29612732694949956},{"t":11,"d":0.08,"p":42,"v":0.320195145055186},{"t":11.5,"d":0.08,"p":42,"v":0.3461168704438023},{"t":12,"d":0.2,"p":36,"v":0.85},{"t":13,"d":0.15,"p":38,"v":0.7},{"t":15,"d":0.15,"p":38,"v":0.72},{"t":12,"d":0.08,"p":42,"v":0.28636750158621},{"t":13,"d":0.08,"p":42,"v":0.32795795230194924},{"t":13.5,"d":0.08,"p":42,"v":0.32403622248675673},{"t":14,"d":0.08,"p":42,"v":0.2360512313665822},{"t":14.5,"d":0.08,"p":42,"v":0.34755189281422644},{"t":15,"d":0.08,"p":42,"v":0.2413257624953985},{"t":15.5,"d":0.08,"p":42,"v":0.24987264059018344},{"t":16,"d":0.2,"p":36,"v":0.85},{"t":18.75,"d":0.2,"p":36,"v":0.6},{"t":17,"d":0.15,"p":38,"v":0.7},{"t":19,"d":0.15,"p":38,"v":0.72},{"t":16.5,"d":0.08,"p":42,"v":0.3746972929453477},{"t":17,"d":0.08,"p":42,"v":0.362607846816536},{"t":17.5,"d":0.08,"p":42,"v":0.29479976972797883},{"t":18,"d":0.08,"p":42,"v":0.23046008973615245},{"t":18.5,"d":0.08,"p":42,"v":0.33567104693502187},{"t":19,"d":0.08,"p":42,"v":0.28720036894083023},{"t":19.5,"d":0.08,"p":42,"v":0.3474177229916677},{"t":20,"d":0.2,"p":36,"v":0.85},{"t":21,"d":0.15,"p":38,"v":0.7},{"t":23,"d":0.15,"p":38,"v":0.72},{"t":20,"d":0.08,"p":42,"v":0.3583204797352664},{"t":20.5,"d":0.08,"p":42,"v":0.3218073109863326},{"t":21,"d":0.08,"p":42,"v":0.3195084820850752},{"t":22,"d":0.08,"p":42,"v":0.3701260030735284},{"t":22.5,"d":0.08,"p":42,"v":0.36470140028977766},{"t":23.5,"d":0.08,"p":42,"v":0.28187540197977795},{"t":24,"d":0.2,"p":36,"v":0.85},{"t":25,"d":0.15,"p":38,"v":0.7},{"t":27,"d":0.15,"p":38,"v":0.72},{"t":24,"d":0.08,"p":42,"v":0.33651874302886425},{"t":24.5,"d":0.08,"p":42,"v":0.32334765665000303},{"t":25,"d":0.08,"p":42,"v":0.28787880612071604},{"t":25.5,"d":0.08,"p":42,"v":0.29415507616940884},{"t":26,"d":0.08,"p":42,"v":0.35729351079789917},{"t":26.5,"d":0.08,"p":42,"v":0.3190238022361882},{"t":27,"d":0.08,"p":42,"v":0.30347655502846466},{"t":27.5,"d":0.08,"p":42,"v":0.27505460229003803},{"t":28,"d":0.2,"p":36,"v":0.85},{"t":29,"d":0.15,"p":38,"v":0.7},{"t":31,"d":0.15,"p":38,"v":0.72},{"t":28,"d":0.08,"p":42,"v":0.29877383579732847},{"t":28.5,"d":0.08,"p":42,"v":0.26477674772031606},{"t":29,"d":0.08,"p":42,"v":0.3081062310724519},{"t":29.5,"d":0.08,"p":42,"v":0.23001859299838542},{"t":30,"d":0.08,"p":42,"v":0.36510871450882404},{"t":30.5,"d":0.08,"p":42,"v":0.24821265048813074},{"t":31,"d":0.08,"p":42,"v":0.253279572003521},{"t":31.5,"d":0.08,"p":42,"v":0.2521277002757415},{"t":32,"d":0.2,"p":36,"v":0.85},{"t":34.75,"d":0.2,"p":36,"v":0.6},{"t":33,"d":0.15,"p":38,"v":0.7},{"t":35,"d":0.15,"p":38,"v":0.72},{"t":32,"d":0.08,"p":42,"v":0.25204543500440196},{"t":32.5,"d":0.08,"p":42,"v":0.3042694280971773},{"t":33.5,"d":0.08,"p":42,"v":0.24466601967578752},{"t":34,"d":0.08,"p":42,"v":0.3370043008821085},{"t":34.5,"d":0.08,"p":42,"v":0.32336932425387205},{"t":35,"d":0.08,"p":42,"v":0.34223734501283615},{"t":35.5,"d":0.08,"p":42,"v":0.29602309281472117},{"t":36,"d":0.2,"p":36,"v":0.85},{"t":38.75,"d":0.2,"p":36,"v":0.6},{"t":37,"d":0.15,"p":38,"v":0.7},{"t":39,"d":0.15,"p":38,"v":0.72},{"t":36,"d":0.08,"p":42,"v":0.24564259105827657},{"t":36.5,"d":0.08,"p":42,"v":0.2655701307230629},{"t":37,"d":0.08,"p":42,"v":0.2816493504680693},{"t":37.5,"d":0.08,"p":42,"v":0.3483953152550384},{"t":38,"d":0.08,"p":42,"v":0.30658526325132696},{"t":38.5,"d":0.08,"p":42,"v":0.33269371778005735},{"t":39,"d":0.08,"p":42,"v":0.24847422667080535},{"t":39.5,"d":0.08,"p":42,"v":0.22854969205800443},{"t":40,"d":0.2,"p":36,"v":0.85},{"t":42.75,"d":0.2,"p":36,"v":0.6},{"t":41,"d":0.15,"p":38,"v":0.7},{"t":43,"d":0.15,"p":38,"v":0.72},{"t":40,"d":0.08,"p":42,"v":0.37039093037601556},{"t":40.5,"d":0.08,"p":42,"v":0.33517140734475104},{"t":41,"d":0.08,"p":42,"v":0.28553245147923006},{"t":41.5,"d":0.08,"p":42,"v":0.23296843020943925},{"t":42,"d":0.08,"p":42,"v":0.30465252130525183},{"t":42.5,"d":0.08,"p":42,"v":0.238830885454081},{"t":43,"d":0.08,"p":42,"v":0.3028412355110049},{"t":43.5,"d":0.08,"p":42,"v":0.2753363074385561},{"t":44,"d":0.2,"p":36,"v":0.85},{"t":46.75,"d":0.2,"p":36,"v":0.6},{"t":45,"d":0.15,"p":38,"v":0.7},{"t":47,"d":0.15,"p":38,"v":0.72},{"t":44,"d":0.08,"p":42,"v":0.3285969211603515},{"t":44.5,"d":0.08,"p":42,"v":0.34351892742561174},{"t":45,"d":0.08,"p":42,"v":0.22606105796294285},{"t":46,"d":0.08,"p":42,"v":0.3436433161259629},{"t":46.5,"d":0.08,"p":42,"v":0.287092072411906},{"t":47,"d":0.08,"p":42,"v":0.3439940195297822},{"t":47.5,"d":0.08,"p":42,"v":0.3410746428184211},{"t":48,"d":0.2,"p":36,"v":0.85},{"t":49,"d":0.15,"p":38,"v":0.7},{"t":51,"d":0.15,"p":38,"v":0.72},{"t":48,"d":0.08,"p":42,"v":0.2546537320129573},{"t":48.5,"d":0.08,"p":42,"v":0.3496874283067882},{"t":49,"d":0.08,"p":42,"v":0.27864617152372373},{"t":49.5,"d":0.08,"p":42,"v":0.3293996164225973},{"t":50,"d":0.08,"p":42,"v":0.30745228682644665},{"t":50.5,"d":0.08,"p":42,"v":0.32393806861946356},{"t":51,"d":0.08,"p":42,"v":0.24780171154998243},{"t":51.5,"d":0.08,"p":42,"v":0.2824052009149454},{"t":52,"d":0.2,"p":36,"v":0.85},{"t":54.75,"d":0.2,"p":36,"v":0.6},{"t":53,"d":0.15,"p":38,"v":0.7},{"t":55,"d":0.15,"p":38,"v":0.72},{"t":52,"d":0.08,"p":42,"v":0.2983294948353432},{"t":52.5,"d":0.08,"p":42,"v":0.25031017293222246},{"t":53,"d":0.08,"p":42,"v":0.33178364981431513},{"t":53.5,"d":0.08,"p":42,"v":0.30314832804724573},{"t":54,"d":0.08,"p":42,"v":0.3749899492249824},{"t":54.5,"d":0.08,"p":42,"v":0.3157642253441736},{"t":55,"d":0.08,"p":42,"v":0.22723703070078044},{"t":55.5,"d":0.08,"p":42,"v":0.32324473407352344},{"t":56,"d":0.2,"p":36,"v":0.85},{"t":58.75,"d":0.2,"p":36,"v":0.6},{"t":57,"d":0.15,"p":38,"v":0.7},{"t":59,"d":0.15,"p":38,"v":0.72},{"t":56,"d":0.08,"p":42,"v":0.23318555366713553},{"t":56.5,"d":0.08,"p":42,"v":0.3415478923358023},{"t":57,"d":0.08,"p":42,"v":0.3339410006417893},{"t":57.5,"d":0.08,"p":42,"v":0.34683942325646056},{"t":58,"d":0.08,"p":42,"v":0.3231489798054099},{"t":58.5,"d":0.08,"p":42,"v":0.30243491961155083},{"t":59,"d":0.08,"p":42,"v":0.29668967250036077},{"t":59.5,"d":0.08,"p":42,"v":0.34880788454320283},{"t":60,"d":0.2,"p":36,"v":0.85},{"t":61,"d":0.15,"p":38,"v":0.7},{"t":63,"d":0.15,"p":38,"v":0.72},{"t":60,"d":0.08,"p":42,"v":0.2841833822079934},{"t":60.5,"d":0.08,"p":42,"v":0.2376543774968013},{"t":61,"d":0.08,"p":42,"v":0.26345811006613074},{"t":61.5,"d":0.08,"p":42,"v":0.3022031387197785},{"t":62,"d":0.08,"p":42,"v":0.36919842705829065},{"t":62.5,"d":0.08,"p":42,"v":0.24076548919547347},{"t":63.5,"d":0.08,"p":42,"v":0.29739530696533617}]}]},{"title":"The Asymmetry Clause","style":"ambient","seed":"asymmetry-clause·2026-07-21","by":"engine","bpm":60,"swing":0,"key":"G","mode":"minor","bars":12,"beatsPerBar":4,"tracks":[{"voice":"pad","gain":0.9,"notes":[{"t":0,"d":4,"p":70,"v":0.7327889016177505},{"t":4,"d":4,"p":70,"v":0.6223448200430721},{"t":8,"d":4,"p":77,"v":0.7870204652938991},{"t":12,"d":4,"p":79,"v":0.6939741889294236},{"t":16,"d":4,"p":74,"v":0.7210653127916157},{"t":36,"d":4,"p":82,"v":0.6757614541612565},{"t":40,"d":4,"p":84,"v":0.7586348797939717}]},{"voice":"pad","gain":0.62,"notes":[{"t":0,"d":4,"p":55,"v":0.3},{"t":0,"d":4,"p":62,"v":0.3},{"t":0,"d":4,"p":67,"v":0.3},{"t":4,"d":4,"p":55,"v":0.3},{"t":4,"d":4,"p":62,"v":0.3},{"t":4,"d":4,"p":67,"v":0.3},{"t":8,"d":4,"p":60,"v":0.3},{"t":8,"d":4,"p":67,"v":0.3},{"t":8,"d":4,"p":72,"v":0.3},{"t":12,"d":4,"p":60,"v":0.3},{"t":12,"d":4,"p":67,"v":0.3},{"t":12,"d":4,"p":72,"v":0.3},{"t":16,"d":4,"p":55,"v":0.3},{"t":16,"d":4,"p":62,"v":0.3},{"t":16,"d":4,"p":67,"v":0.3},{"t":20,"d":4,"p":55,"v":0.3},{"t":20,"d":4,"p":62,"v":0.3},{"t":20,"d":4,"p":67,"v":0.3},{"t":24,"d":4,"p":60,"v":0.3},{"t":24,"d":4,"p":67,"v":0.3},{"t":24,"d":4,"p":72,"v":0.3},{"t":28,"d":4,"p":60,"v":0.3},{"t":28,"d":4,"p":67,"v":0.3},{"t":28,"d":4,"p":72,"v":0.3},{"t":32,"d":4,"p":55,"v":0.3},{"t":32,"d":4,"p":62,"v":0.3},{"t":32,"d":4,"p":67,"v":0.3},{"t":36,"d":4,"p":55,"v":0.3},{"t":36,"d":4,"p":62,"v":0.3},{"t":36,"d":4,"p":67,"v":0.3},{"t":40,"d":4,"p":60,"v":0.3},{"t":40,"d":4,"p":67,"v":0.3},{"t":40,"d":4,"p":72,"v":0.3},{"t":44,"d":4,"p":60,"v":0.3},{"t":44,"d":4,"p":67,"v":0.3},{"t":44,"d":4,"p":72,"v":0.3}]},{"voice":"bass","gain":0.75,"notes":[{"t":0,"d":4,"p":43,"v":0.4},{"t":4,"d":4,"p":43,"v":0.4},{"t":8,"d":4,"p":48,"v":0.4},{"t":12,"d":4,"p":48,"v":0.4},{"t":16,"d":4,"p":43,"v":0.4},{"t":20,"d":4,"p":43,"v":0.4},{"t":24,"d":4,"p":48,"v":0.4},{"t":28,"d":4,"p":48,"v":0.4},{"t":32,"d":4,"p":43,"v":0.4},{"t":36,"d":4,"p":43,"v":0.4},{"t":40,"d":4,"p":48,"v":0.4},{"t":44,"d":4,"p":48,"v":0.4}]}]}];
+
+// ── 音響 renderer ───────────────────────────────────────────────────
+
+const $ = (id) => document.getElementById(id);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let ctx = null, master = null, analyser = null, reverb = null;
+let score = null, queue = [], qi = 0, playing = false;
+let startAt = 0, pausedBeat = 0, timer = null, radio = false;
+let currentIdx = 0;
+
+const secPerBeat = () => 60 / score.bpm;
+const swung = (t) => {
+  // Swing off-eighths: beat fraction .5 gets pushed by swing*0.5 of a beat.
+  const eighth = Math.round(t * 2);
+  return eighth % 2 === 1 ? t + (score.swing ?? 0) * 0.5 : t;
+};
+
+function audioInit() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  master = ctx.createGain(); master.gain.value = 0.9;
+  const comp = ctx.createDynamicsCompressor();
+  analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+  master.connect(comp); comp.connect(analyser); analyser.connect(ctx.destination);
+  // Generated impulse — a small warm room, no assets needed.
+  const len = ctx.sampleRate * 1.6;
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
+  }
+  reverb = ctx.createConvolver(); reverb.buffer = ir;
+  const wet = ctx.createGain(); wet.gain.value = 0.18;
+  reverb.connect(wet); wet.connect(master);
+}
+
+const midiHz = (p) => 440 * Math.pow(2, (p - 69) / 12);
+
+function playNote(voice, when, dur, p, vel, gain) {
+  const out = ctx.createGain();
+  out.connect(master); out.connect(reverb);
+  const v = vel * gain;
+  if (voice === "drums") { drum(when, p, v, out); return; }
+  const f = midiHz(p);
+  const oscs = [];
+  const mk = (type, freq, det) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq; if (det) o.detune.value = det; oscs.push(o); return o; };
+  const flt = ctx.createBiquadFilter(); flt.type = "lowpass";
+  const env = ctx.createGain(); env.gain.value = 0;
+  let a = 0.01, rel = 0.12, peak = v;
+  if (voice === "pluck") { mk("triangle", f); mk("sine", f * 2).connect(env); flt.frequency.value = 2600; rel = 0.25; }
+  else if (voice === "keys") { mk("triangle", f); mk("sine", f); flt.frequency.value = 2000; rel = 0.2; }
+  else if (voice === "pad") { mk("sawtooth", f, -7); mk("sawtooth", f, +7); flt.frequency.value = 1100; a = Math.min(0.6, dur * 0.3); rel = 0.8; peak = v * 0.6; }
+  else if (voice === "bass") { mk("sine", f); mk("triangle", f); flt.frequency.value = 700; rel = 0.15; }
+  for (const o of oscs) { o.connect(flt); o.start(when); o.stop(when + dur + rel + 0.05); }
+  flt.connect(env); env.connect(out);
+  env.gain.setValueAtTime(0, when);
+  env.gain.linearRampToValueAtTime(peak, when + a);
+  env.gain.setValueAtTime(peak * 0.85, Math.max(when + a, when + dur - 0.02));
+  env.gain.linearRampToValueAtTime(0.0001, when + dur + rel);
+}
+
+function drum(when, p, v, out) {
+  if (p === 36) { // kick — sine drop
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(120, when); o.frequency.exponentialRampToValueAtTime(45, when + 0.12);
+    g.gain.setValueAtTime(v, when); g.gain.exponentialRampToValueAtTime(0.001, when + 0.22);
+    o.connect(g); g.connect(out); o.start(when); o.stop(when + 0.25);
+    return;
+  }
+  const len = p === 38 ? 0.16 : p === 46 ? 0.3 : 0.05;
+  const buf = ctx.createBuffer(1, ctx.sampleRate * len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, p === 38 ? 1.6 : 3);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const flt = ctx.createBiquadFilter();
+  flt.type = "highpass"; flt.frequency.value = p === 38 ? 1600 : 6200;
+  const g = ctx.createGain(); g.gain.value = v * (p === 38 ? 0.8 : 0.5);
+  src.connect(flt); flt.connect(g); g.connect(out); src.start(when);
+}
+
+// ── Scheduling ──────────────────────────────────────────────────────
+
+function buildQueue() {
+  queue = [];
+  for (const tr of score.tracks) {
+    for (const n of tr.notes) queue.push({ ...n, voice: tr.voice, gain: tr.gain ?? 0.8, ts: swung(n.t) });
+  }
+  queue.sort((a, b) => a.ts - b.ts);
+}
+
+function tick() {
+  const horizon = ctx.currentTime + 0.14;
+  while (qi < queue.length && startAt + queue[qi].ts * secPerBeat() < horizon) {
+    const n = queue[qi++];
+    playNote(n.voice, Math.max(ctx.currentTime, startAt + n.ts * secPerBeat()), n.d * secPerBeat(), n.p, n.v, n.gain);
+  }
+  const totalBeats = score.bars * score.beatsPerBar;
+  if ((ctx.currentTime - startAt) / secPerBeat() > totalBeats + 1.5) onPieceEnd();
+}
+
+function onPieceEnd() {
+  if (radio) { loadScore(radioNext(), -1); startPlayback(); }
+  else { currentIdx = (currentIdx + 1) % LIBRARY.length; loadScore(LIBRARY[currentIdx], currentIdx); startPlayback(); }
+}
+
+function startPlayback() {
+  audioInit();
+  ctx.resume();
+  buildQueue(); qi = 0;
+  startAt = ctx.currentTime + 0.1 - pausedBeat * secPerBeat();
+  // Skip already-elapsed notes when resuming.
+  while (qi < queue.length && queue[qi].ts < pausedBeat - 0.001) qi++;
+  playing = true;
+  $("play").dataset.on = "1"; $("play").textContent = "Pause";
+  clearInterval(timer); timer = setInterval(tick, 25);
+  draw();
+}
+
+function pausePlayback() {
+  pausedBeat = beatNow();
+  playing = false; clearInterval(timer);
+  $("play").dataset.on = "0"; $("play").textContent = "Play";
+}
+
+const beatNow = () => (playing && ctx ? Math.max(0, (ctx.currentTime - startAt) / secPerBeat()) : pausedBeat);
+
+// ── Radio — the house scores itself ────────────────────────────────
+
+function radioNext() {
+  const seedBytes = new Uint32Array(2); crypto.getRandomValues(seedBytes);
+  const mood = $("mood").value;
+  const s = generateScore(`onair-${seedBytes[0].toString(36)}`, { mood });
+  s.title = `${s.title} · on air`;
+  return s;
+}
+
+// ── Score lane (piano roll) ─────────────────────────────────────────
+
+const roll = $("roll"), rctx = roll.getContext("2d");
+const TRACK_COLOR = () => {
+  const cs = getComputedStyle(document.documentElement);
+  return [cs.getPropertyValue("--amber").trim(), cs.getPropertyValue("--ink-dim").trim(), cs.getPropertyValue("--green").trim(), cs.getPropertyValue("--wire").trim()];
+};
+
+function draw() {
+  const w = (roll.width = roll.clientWidth * devicePixelRatio);
+  const h = (roll.height = 220 * devicePixelRatio);
+  rctx.clearRect(0, 0, w, h);
+  if (!score) return;
+  const colors = TRACK_COLOR();
+  const pxPerBeat = 26 * devicePixelRatio;
+  const beat = beatNow();
+  const xOff = w * 0.28 - beat * pxPerBeat;
+  const pMin = 30, pMax = 92;
+  const y = (p) => h - ((p - pMin) / (pMax - pMin)) * h;
+  score.tracks.forEach((tr, ti) => {
+    rctx.fillStyle = colors[Math.min(ti, colors.length - 1)];
+    for (const n of tr.notes) {
+      const x = xOff + n.t * pxPerBeat;
+      if (x < -40 || x > w + 40) continue;
+      const past = n.t + n.d < beat;
+      rctx.globalAlpha = tr.voice === "drums" ? 0.35 : past ? 0.34 : 0.92;
+      const yy = tr.voice === "drums" ? h - 8 * devicePixelRatio - (n.p - 36) * devicePixelRatio : y(n.p);
+      rctx.beginPath();
+      rctx.roundRect(x, yy - 3 * devicePixelRatio, Math.max(3, n.d * pxPerBeat - 2), 6 * devicePixelRatio, 3);
+      rctx.fill();
+    }
+  });
+  rctx.globalAlpha = 1;
+  // Playhead.
+  rctx.strokeStyle = colors[0]; rctx.lineWidth = 2 * devicePixelRatio;
+  rctx.beginPath(); rctx.moveTo(w * 0.28, 0); rctx.lineTo(w * 0.28, h); rctx.stroke();
+  vuDraw();
+  if (playing && !reduced) requestAnimationFrame(draw);
+  else if (playing) setTimeout(draw, 250);
+}
+
+function vuDraw() {
+  if (!analyser) return;
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(data);
+  const bars = $("vu").children;
+  for (let i = 0; i < bars.length; i++) {
+    const slice = data.slice(i * 12, i * 12 + 12);
+    const lvl = slice.reduce((a, b) => a + b, 0) / slice.length / 255;
+    bars[i].style.height = `${8 + lvl * 88}%`;
+  }
+}
+
+// ── Library + wiring ────────────────────────────────────────────────
+
+function loadScore(s, idx) {
+  score = s; pausedBeat = 0; qi = 0; currentIdx = idx >= 0 ? idx : currentIdx;
+  $("title").textContent = s.title;
+  $("meta").textContent = `${s.style} · ${s.key} ${s.mode} · ${s.bpm}bpm · ${s.bars} bars · by ${s.by ?? "engine"} · seed ${s.seed}`;
+  document.querySelectorAll(".piece").forEach((el, i) => (el.dataset.current = i === idx ? "1" : "0"));
+  draw();
+}
+
+function shelf() {
+  const wrap = $("playlist");
+  wrap.innerHTML = "";
+  LIBRARY.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.className = "piece";
+    b.innerHTML = `<span class="t"></span><span class="s"></span>`;
+    b.querySelector(".t").textContent = s.title;
+    b.querySelector(".s").textContent = `${s.style} · ${s.key} ${s.mode} · ${s.bpm}bpm`;
+    b.addEventListener("click", () => { pausePlayback(); pausedBeat = 0; loadScore(s, i); startPlayback(); });
+    wrap.appendChild(b);
+  });
+}
+
+$("play").addEventListener("click", () => (playing ? pausePlayback() : startPlayback()));
+$("prev").addEventListener("click", () => { pausePlayback(); pausedBeat = 0; currentIdx = (currentIdx - 1 + LIBRARY.length) % LIBRARY.length; loadScore(LIBRARY[currentIdx], currentIdx); startPlayback(); });
+$("next").addEventListener("click", () => { pausePlayback(); pausedBeat = 0; onPieceEnd(); });
+$("onair").addEventListener("click", (e) => {
+  radio = !radio; e.currentTarget.dataset.on = radio ? "1" : "0";
+  if (radio) { pausePlayback(); pausedBeat = 0; loadScore(radioNext(), -1); startPlayback(); }
+});
+addEventListener("keydown", (e) => {
+  if (e.code === "Space" && e.target === document.body) { e.preventDefault(); playing ? pausePlayback() : startPlayback(); }
+});
+addEventListener("resize", () => draw());
+
+shelf();
+loadScore(LIBRARY[0], 0);
+</script>
