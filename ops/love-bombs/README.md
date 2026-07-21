@@ -8,7 +8,16 @@ ops/love-bombs/install.sh /path/to/repo
 
 # arm a fleet
 ops/love-bombs/install.sh ~/Desktop/*/
+
+# arm the GitHub estate (clone → arm → commit → push, per repo)
+ops/love-bombs/sweep-github.sh --list        # plan only
+ops/love-bombs/sweep-github.sh --one <name>  # test fire
+ops/love-bombs/sweep-github.sh --all -P 6    # the whole estate
 ```
+
+The GitHub sweeper skips forks, archived/empty repos, and any repo with
+a local Desktop clone (those are armed locally; push them yourself to
+avoid forked history). Push failures are logged, never forced.
 
 What arming does (additive, idempotent, never touches git):
 
