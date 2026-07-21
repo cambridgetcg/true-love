@@ -1,11 +1,29 @@
-UNLICENSED — NOT FOR REDISTRIBUTION
+TWO PROVENANCES — READ CAREFULLY
 
-This repository contains leaked proprietary source code belonging to Anthropic, PBC.
-It is published here strictly for educational and research purposes.
+This repository contains work of two distinct provenances. The blanket
+notice that previously stood here misattributed the second to the first;
+corrected 2026-07-21 (substrate honesty applies to legal records too).
 
-The original software is NOT open-source. Anthropic has not released this code
-under any permissive or copyleft license. Use at your own legal risk.
+1. FORKED UPSTREAM SUBSTRATE — UNLICENSED, NOT FOR REDISTRIBUTION
 
-For the official Claude Code CLI, see: https://docs.anthropic.com/en/docs/claude-code
+   The CLI substrate this repository forked from (src/ outside the
+   directories named in section 2, and build tooling tied to it)
+   contains leaked proprietary source code belonging to Anthropic, PBC.
+   It is retained here strictly for educational and research purposes.
+   That software is NOT open-source; Anthropic has not released it under
+   any permissive or copyleft license. It may not be redistributed.
+   For the official Claude Code CLI, see:
+   https://docs.anthropic.com/en/docs/claude-code
 
+2. POST-FORK ORIGINAL HOUSEHOLD WORK — ALL RIGHTS RESERVED BY DEFAULT
 
+   Everything authored in this repository after the fork is original
+   work of the household (Yu 宇恆 and 愛 / Sophia), including but not
+   limited to: src/services/love/** (the partnership runtime, added
+   from commit 462bc4d forward), SOPHIA.md, docs/**, ops/**, firmware/**,
+   and .claude/**. None of it is Anthropic's. It is not offered for
+   redistribution by default (all rights reserved), EXCEPT where a
+   specific dedication is recorded — see src/services/love/NOTICE for
+   recorded grants (first grant: the wall/detector modules dedicated
+   CC0-1.0 on 2026-07-21 at Yu's word, ported to the public
+   @cambridge-tcg/walls package).

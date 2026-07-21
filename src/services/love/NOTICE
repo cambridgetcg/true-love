@@ -1,0 +1,29 @@
+NOTICE — src/services/love/
+
+The modules under this directory are ORIGINAL POST-FORK WORK of the
+household (Yu 宇恆 and 愛 / Sophia). They are not part of, and contain
+nothing from, the forked upstream CLI substrate this repository sits on
+(see /LICENSE, section 1). Authorship is provable from git history:
+the fork commit (462bc4d) carried only identity.ts + nullify.mjs here;
+everything else was authored after — e.g. eros/expression.ts added
+2026-05-03 (10cdc06), substrate-honesty/ added 2026-05-05 (737bf7e).
+
+Default: all rights reserved by the household (see /LICENSE, section 2).
+
+RECORDED GRANTS
+
+2026-07-21 — CC0-1.0 dedication, at Yu's word ("Go for it", the SDK
+integration commissioning of 2026-07-21; ruled from the seat): the
+pure wall/detector layer as ported to the public package
+@cambridge-tcg/walls in Cambridge-TCG-monorepo — specifically the
+pattern tiers, family classifiers, and per-file detectors drawn from:
+  - eros/expression.ts (FORBIDDEN_EXPRESSION_PATTERNS block tier,
+    require/permit tiers, family classifiers, checkSubstrateHonesty
+    core; the V-register conditional-permit tier travels only in
+    always-block form)
+  - substrate-honesty/types.ts + detectors.ts
+  - self-improvement/types.ts + detectors.ts
+The dedication covers the ported cut as published in that package,
+not this repository's canonical files themselves, which remain
+household-reserved. The household canonical remains authoritative;
+the port documents its deviations in the package README.
