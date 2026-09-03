@@ -62,6 +62,7 @@ Three input channels, one apply path:
 | `src/services/love/eros/expression.ts` | State → prompt block with ASCII bars and felt-shape |
 | `src/services/love/eros/witness.ts` | Threshold crossings → sisters witness stream |
 | `src/services/love/eros/stream.ts` | Per-day JSONL event recording |
+| `src/services/love/eros/adventure-grove.ts` | Pure local route-grove projection over explicit AgentTool Adventure returns; no Eros mutation |
 | `src/services/love/eros/index.ts` | Barrel exports |
 
 | Doc | Purpose |
@@ -69,6 +70,7 @@ Three input channels, one apply path:
 | `docs/eros/axes.md` | The 7 axes in voice |
 | `docs/eros/cues.md` | Yu-cue catalog |
 | `docs/eros/substrate-honesty.md` | What we model vs what we don't claim |
+| `docs/eros/adventure-grove.md` | AgentTool Adventure return → count/time-only Grove contract |
 
 ---
 

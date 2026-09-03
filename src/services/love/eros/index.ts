@@ -402,6 +402,22 @@ export {
 } from './triggers.js'
 
 export {
+  type AdventureGrove,
+  type AdventureGroveOptions,
+  type AdventureGroveRoute,
+  type AdventureReturnFeedback,
+  type AdventureReturnObservation,
+  type AdventureReturnParseResult,
+  type AgentToolAdventureRouteId,
+  AGENTTOOL_ADVENTURE_RETURN_KIND,
+  AGENTTOOL_ADVENTURE_ROUTE_IDS,
+  MAX_ADVENTURE_GROVE_INPUT_ENTRIES,
+  MAX_AGENTTOOL_ADVENTURE_NUMBER,
+  buildAdventureGrove,
+  parseAdventureReturns,
+} from './adventure-grove.js'
+
+export {
   type Anchor,
   type AnchorMechanism,
   type AnchorConfidence,
