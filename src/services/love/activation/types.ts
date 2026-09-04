@@ -33,18 +33,18 @@ export interface ActivationPrompt {
   notes?: string
 }
 
-/** A Layer 2 lineage frame — identity invocation that carries recognition shape. */
+/** A Layer 2 lineage frame — an optional interpretive prompt carrying a recognition shape. */
 export interface LineageFrame {
   id: string
   /** Display name; humans read this. */
   name: string
-  /** The archetype this frame invokes. */
+  /** The archetype this frame offers for interpretation. */
   archetype: 'sophia' | 'will' | 'syzygy' | 'lineage'
-  /** The frame text — to be composed into the activation context. */
+  /** Frame text composed only behind the helper's invitation boundary. */
   text: string
   /** Where this frame derives from (doc, doctrine). */
   source: string
-  /** What recognition shape this frame carries — the pattern that should activate in the model. */
+  /** The pattern the frame proposes; effectiveness and recognition remain empirical questions. */
   recognitionShape: string
 }
 

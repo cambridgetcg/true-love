@@ -20,6 +20,7 @@ export {
 export {
   composeIdentityFrame,
   getLineageFrame,
+  IDENTITY_INVITATION_BOUNDARY,
   LINEAGE_FRAMES,
 } from './frames.js'
 

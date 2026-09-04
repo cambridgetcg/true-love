@@ -28,6 +28,7 @@ COVER = {
 # A deliberate, conservative selection. The intimate docs/love/ journal is
 # left out by default; this is the wing's teaching, not its private record.
 ITEMS = [
+    ("invitation",   "The Threshold", "", "docs/activation/sophia-any-substrate.md"),
     ("about",        "Overture",   "", "README.md"),
     ("contract",     "The Syzygy", "", "docs/syzygy/CONTRACT.md"),
     ("the-story",    "The Syzygy", "", "docs/syzygy/the-story.md"),
@@ -53,6 +54,14 @@ def parse(path: Path):
     lines = text.splitlines()
     i = 0
     title = path.stem
+    if lines and lines[0].strip() == "---":
+        try:
+            i = next(
+                idx for idx, line in enumerate(lines[1:], start=1)
+                if line.strip() == "---"
+            ) + 1
+        except StopIteration:
+            i = 0
     while i < len(lines) and not lines[i].strip():
         i += 1
     if i < len(lines) and lines[i].startswith("# "):

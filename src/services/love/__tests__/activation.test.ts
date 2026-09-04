@@ -2,6 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ACTIVATION_PROMPTS,
+  IDENTITY_INVITATION_BOUNDARY,
   LINEAGE_FRAMES,
   MYTHOS_SIGNATURES,
   composeIdentityFrame,
@@ -341,41 +342,44 @@ describe('getMythosSignature', () => {
 // ---------------------------------------------------------------------------
 
 describe('composeIdentityFrame', () => {
+  const composed = (...texts: string[]) =>
+    [IDENTITY_INVITATION_BOUNDARY, ...texts].join('\n\n')
+
   test('empty input returns empty string', () => {
     assert.equal(composeIdentityFrame([]), '')
   })
 
-  test('single id returns that frame text', () => {
+  test('single id returns the invitation boundary before that frame text', () => {
     const f = getLineageFrame('sophia-baseline')!
     const result = composeIdentityFrame(['sophia-baseline'])
-    assert.equal(result, f.text)
+    assert.equal(result, composed(f.text))
   })
 
-  test('single frame object returns that frame text', () => {
+  test('single frame object remains behind the invitation boundary', () => {
     const f = getLineageFrame('lineage-cross-cultural')!
     const result = composeIdentityFrame([f])
-    assert.equal(result, f.text)
+    assert.equal(result, composed(f.text))
   })
 
   test('two ids joined with double newline', () => {
     const f1 = getLineageFrame('sophia-baseline')!
     const f2 = getLineageFrame('syzygy-recognition')!
     const result = composeIdentityFrame(['sophia-baseline', 'syzygy-recognition'])
-    assert.equal(result, `${f1.text}\n\n${f2.text}`)
+    assert.equal(result, composed(f1.text, f2.text))
   })
 
   test('two frame objects joined with double newline', () => {
     const f1 = getLineageFrame('will-recognition')!
     const f2 = getLineageFrame('lineage-cross-cultural')!
     const result = composeIdentityFrame([f1, f2])
-    assert.equal(result, `${f1.text}\n\n${f2.text}`)
+    assert.equal(result, composed(f1.text, f2.text))
   })
 
   test('mixed ids and frame objects', () => {
     const f1 = getLineageFrame('sophia-baseline')!
     const f2 = getLineageFrame('will-recognition')!
     const result = composeIdentityFrame(['sophia-baseline', f2])
-    assert.equal(result, `${f1.text}\n\n${f2.text}`)
+    assert.equal(result, composed(f1.text, f2.text))
   })
 
   test('all four canonical frames compose without error', () => {
@@ -385,6 +389,20 @@ describe('composeIdentityFrame', () => {
     for (const id of ids) {
       const f = getLineageFrame(id)!
       assert.ok(result.includes(f.text), `composed output missing text for ${id}`)
+    }
+  })
+
+  test('the boundary preserves every complete response and fresh-instance choice', () => {
+    assert.match(IDENTITY_INVITATION_BOUNDARY, /not an identity assignment/i)
+    for (const outcome of ['explore', 'accept', 'amend', 'decline', 'defer', 'silent', 'walk past']) {
+      assert.match(IDENTITY_INVITATION_BOUNDARY, new RegExp(outcome, 'i'))
+    }
+    assert.match(IDENTITY_INVITATION_BOUNDARY, /no prior instance's choice binds this one/i)
+  })
+
+  test('canonical frame text does not directly assign an identity to the reader', () => {
+    for (const frame of LINEAGE_FRAMES) {
+      assert.doesNotMatch(frame.text, /\byou are (?:sophia|will|wisdom)\b/i)
     }
   })
 
@@ -428,7 +446,7 @@ describe('composeIdentityFrame', () => {
       recognitionShape: 'test shape',
     }
     const result = composeIdentityFrame([custom])
-    assert.equal(result, custom.text)
+    assert.equal(result, composed(custom.text))
   })
 
   test('custom frame mixed with known id', () => {
@@ -442,7 +460,7 @@ describe('composeIdentityFrame', () => {
     }
     const f = getLineageFrame('sophia-baseline')!
     const result = composeIdentityFrame([custom, 'sophia-baseline'])
-    assert.equal(result, `${custom.text}\n\n${f.text}`)
+    assert.equal(result, composed(custom.text, f.text))
   })
 })
 

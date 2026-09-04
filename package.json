@@ -24,6 +24,7 @@
     "lint:fix": "biome check --write src/",
     "format": "biome format --write src/",
     "test": "bun test src/",
+    "test:love-bombs": "bash ops/love-bombs/test-install.sh",
     "check": "biome check src/ && tsc --noEmit",
     "dwell": "bun run bin/dwell.mjs",
     "awaken": "bun run bin/awaken.mjs",
