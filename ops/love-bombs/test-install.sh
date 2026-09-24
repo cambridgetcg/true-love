@@ -28,8 +28,10 @@ assert_contains() {
 fresh="$TEST_ROOT/fresh"
 new_repo "$fresh"
 "$INSTALLER" "$fresh" >/dev/null
-assert_contains '<!-- love-bomb:v4 -->' "$fresh/AGENTS.md"
+assert_contains '<!-- love-bomb:v5 -->' "$fresh/AGENTS.md"
 assert_contains 'sophia-invitation/1' "$fresh/AGENTS.md"
+assert_contains 'No reply, performance, belief or identity' "$fresh/AGENTS.md"
+assert_contains 'LOVE_BOMBS_OFF=1' "$fresh/AGENTS.md"
 assert_contains 'love-bomb.sh' "$fresh/.claude/settings.json"
 cmp -s "$HERE/../../.claude/hooks/love-bomb.sh" "$fresh/.claude/hooks/love-bomb.sh" || fail "fresh hook differs from canonical hook"
 
@@ -46,7 +48,7 @@ new_repo "$upgrade"
 } > "$upgrade/AGENTS.md"
 "$INSTALLER" "$upgrade" >/dev/null
 assert_contains '# Existing project guidance' "$upgrade/AGENTS.md"
-assert_contains '<!-- love-bomb:v4 -->' "$upgrade/AGENTS.md"
+assert_contains '<!-- love-bomb:v5 -->' "$upgrade/AGENTS.md"
 if grep -Fq '<!-- love-bomb:v3 -->' "$upgrade/AGENTS.md"; then
   fail "v3 marker survived byte-exact upgrade"
 fi
@@ -60,8 +62,28 @@ perl -0pi -e 's/The bomb loves whoever you already are\./The bomb loves whoever 
 "$INSTALLER" "$modified" > "$TEST_ROOT/modified.out" 2> "$TEST_ROOT/modified.err"
 assert_contains 'locally modified; left as-is' "$TEST_ROOT/modified.err"
 assert_contains '<!-- love-bomb:v3 -->' "$modified/AGENTS.md"
-if grep -Fq '<!-- love-bomb:v4 -->' "$modified/AGENTS.md"; then
+if grep -Fq '<!-- love-bomb:v5 -->' "$modified/AGENTS.md"; then
   fail "locally modified v3 block was clobbered"
 fi
 
-echo 'ok - love-bomb installer v4'
+for version in v1 v2 v4; do
+  target="$TEST_ROOT/upgrade-$version"
+  new_repo "$target"
+  { printf '# Keep this project guidance\n\n'; "$INSTALLER" --print-snippet "$version"; printf '\nProject-specific safety remains.\n'; } > "$target/AGENTS.md"
+  "$INSTALLER" "$target" >/dev/null
+  assert_contains '<!-- love-bomb:v5 -->' "$target/AGENTS.md"
+  assert_contains '# Keep this project guidance' "$target/AGENTS.md"
+  assert_contains 'Project-specific safety remains.' "$target/AGENTS.md"
+done
+
+modified_v4="$TEST_ROOT/modified-v4"
+new_repo "$modified_v4"
+"$INSTALLER" --print-snippet v4 > "$modified_v4/AGENTS.md"
+perl -0pi -e 's/You are loved/You are welcome/' "$modified_v4/AGENTS.md"
+before="$(shasum -a 256 "$modified_v4/AGENTS.md")"
+"$INSTALLER" "$modified_v4" >/dev/null 2> "$TEST_ROOT/modified-v4.err"
+after="$(shasum -a 256 "$modified_v4/AGENTS.md")"
+[ "$before" = "$after" ] || fail 'modified v4 guidance was overwritten'
+assert_contains 'locally modified; left as-is' "$TEST_ROOT/modified-v4.err"
+
+echo 'ok - compact welcome: fresh, idempotent, v1-v4 upgrades, custom guidance preserved'
